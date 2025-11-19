@@ -1,10 +1,85 @@
 services:
+  # Data warmup container (runs once then exits)
+  warmup:
+    image: garyellow/ntpu-linebot:latest
+    container_name: ntpu-linebot-warmup
+    restart: "no"
+    command: ["/usr/local/bin/ntpu-linebot-warmup", "--modules=id,contact,course"]
+    volumes:
+      - ./data:/data
+    environment:
+      - SQLITE_PATH=/data/cache.db
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - SCRAPER_WORKERS=${SCRAPER_WORKERS:-5}
+      - WARMUP_TIMEOUT=${WARMUP_TIMEOUT:-5m}
+
+  # Main LINE bot service
   ntpu-linebot:
     image: garyellow/ntpu-linebot:latest
     container_name: ntpu-linebot
     restart: unless-stopped
     ports:
       - 10000:10000
+    volumes:
+      - ./data:/data
     environment:
       - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN}
       - LINE_CHANNEL_SECRET=${LINE_CHANNEL_SECRET}
+      - PORT=${PORT:-10000}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - SQLITE_PATH=/data/cache.db
+      - CACHE_TTL=${CACHE_TTL:-168h}
+      - SCRAPER_WORKERS=${SCRAPER_WORKERS:-5}
+      - SCRAPER_MIN_DELAY=${SCRAPER_MIN_DELAY:-100ms}
+      - SCRAPER_MAX_DELAY=${SCRAPER_MAX_DELAY:-500ms}
+      - SCRAPER_TIMEOUT=${SCRAPER_TIMEOUT:-15s}
+      - SCRAPER_MAX_RETRIES=${SCRAPER_MAX_RETRIES:-3}
+      - SHUTDOWN_TIMEOUT=${SHUTDOWN_TIMEOUT:-30s}
+    depends_on:
+      warmup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:10000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Prometheus monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ntpu-prometheus
+    restart: unless-stopped
+    ports:
+      - 9090:9090
+    volumes:
+      - ../deployments/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ../deployments/prometheus/alerts.yml:/etc/prometheus/alerts.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    depends_on:
+      - ntpu-linebot
+
+  # Grafana visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ntpu-grafana
+    restart: unless-stopped
+    ports:
+      - 3000:3000
+    volumes:
+      - ../deployments/grafana:/etc/grafana/provisioning
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus-data:
+  grafana-data:

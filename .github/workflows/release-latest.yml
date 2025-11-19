@@ -9,12 +9,11 @@ on:
     branches:
       - main
     paths:
-      - app.py
-      - ntpu_linebot/**/*.py
-      - pyproject.toml
-      - poetry.lock
-      - Dockerfile
-      - .github/workflows/*.yml
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Dockerfile'
+      - '.github/workflows/*.yml'
 
 concurrency:
   group: release-latest

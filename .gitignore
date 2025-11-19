@@ -24,4 +24,25 @@
 # Go workspace file
 go.work
 
+# SQLite database files
+*.db
+*.db-shm
+*.db-wal
+data/
+
+# Coverage reports
+coverage.out
+coverage.html
+
+# Build artifacts
+bin/
+dist/
+
+# IDE
+.vscode/
+.idea/
+
+# Environment files
+.env
+
 # End of https://www.toptal.com/developers/gitignore/api/go
