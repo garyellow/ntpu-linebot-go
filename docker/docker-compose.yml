@@ -22,6 +22,14 @@ services:
       - 10000:10000
     volumes:
       - ./data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
     environment:
       - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN}
       - LINE_CHANNEL_SECRET=${LINE_CHANNEL_SECRET}
@@ -53,8 +61,8 @@ services:
     ports:
       - 9090:9090
     volumes:
-      - ../deployments/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ../deployments/prometheus/alerts.yml:/etc/prometheus/alerts.yml
+      - ../deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ../deploy/prometheus/alerts.yml:/etc/prometheus/alerts.yml
       - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -72,10 +80,10 @@ services:
     ports:
       - 3000:3000
     volumes:
-      - ../deployments/grafana:/etc/grafana/provisioning
+      - ../deploy/grafana:/etc/grafana/provisioning
       - grafana-data:/var/lib/grafana
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
       - GF_USERS_ALLOW_SIGN_UP=false
     depends_on:
       - prometheus

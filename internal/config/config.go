@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -52,7 +53,7 @@ func Load() (*Config, error) {
 		ShutdownTimeout: getDurationEnv("SHUTDOWN_TIMEOUT", 30*time.Second),
 
 		// SQLite Configuration
-		SQLitePath: getEnv("SQLITE_PATH", "/data/cache.db"),
+		SQLitePath: getEnv("SQLITE_PATH", getDefaultDBPath()),
 		CacheTTL:   getDurationEnv("CACHE_TTL", 168*time.Hour), // 7 days
 
 		// Scraper Configuration
@@ -123,4 +124,12 @@ func getDurationEnv(key string, defaultValue time.Duration) time.Duration {
 		}
 	}
 	return defaultValue
+}
+
+// getDefaultDBPath returns platform-specific default database path
+func getDefaultDBPath() string {
+	if runtime.GOOS == "windows" {
+		return "./data/cache.db"
+	}
+	return "/data/cache.db"
 }

@@ -1,5 +1,8 @@
 # Build stage
-FROM golang:1.23-alpine AS builder
+# Note: Using modernc.org/sqlite (pure Go) instead of mattn/go-sqlite3 (CGO)
+# This allows CGO_ENABLED=0 for truly static binaries and cross-compilation
+# Trade-off: Slightly lower performance but better portability
+FROM golang:1.25-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git

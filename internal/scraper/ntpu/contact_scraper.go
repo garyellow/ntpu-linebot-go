@@ -15,17 +15,36 @@ import (
 )
 
 const (
-	// Base URL for contact search
-	contactBaseURL     = "https://sea.cc.ntpu.edu.tw"
 	contactSearchPath  = "/pls/ld/CAMPUS_DIR_M.pq"
 	administrativePath = "/pls/ld/CAMPUS_DIR_M.p1?kind=1"
 	academicPath       = "/pls/ld/CAMPUS_DIR_M.p1?kind=2"
 )
 
+// getWorkingSEABaseURL attempts to find a working SEA base URL with failover support
+func getWorkingSEABaseURL(ctx context.Context, client *scraper.Client) (string, error) {
+	baseURL, err := client.TryFailoverURLs(ctx, "sea")
+	if err != nil {
+		// Fallback to all configured URLs
+		urls := client.GetBaseURLs("sea")
+		if len(urls) > 0 {
+			return urls[0], nil // Return first URL as last resort
+		}
+		return "", fmt.Errorf("no SEA URLs available: %w", err)
+	}
+	return baseURL, nil
+}
+
 // ScrapeContacts scrapes contacts by search term
-// URL: https://sea.cc.ntpu.edu.tw/pls/ld/CAMPUS_DIR_M.pq?q={searchTerm}
+// URL: {baseURL}/pls/ld/CAMPUS_DIR_M.pq?q={searchTerm}
 // The search term must be URL-encoded in Big5 encoding
+// Supports automatic URL failover across multiple SEA endpoints
 func ScrapeContacts(ctx context.Context, client *scraper.Client, searchTerm string) ([]*storage.Contact, error) {
+	// Get working base URL with failover support
+	contactBaseURL, err := getWorkingSEABaseURL(ctx, client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get working SEA URL: %w", err)
+	}
+
 	// Encode search term to Big5
 	big5Encoded, err := encodeToBig5(searchTerm)
 	if err != nil {
@@ -152,19 +171,29 @@ func generateUID(parts ...string) string {
 }
 
 // ScrapeAdministrativeContacts scrapes all administrative contacts
+// Supports automatic URL failover across multiple SEA endpoints
 func ScrapeAdministrativeContacts(ctx context.Context, client *scraper.Client) ([]*storage.Contact, error) {
+	contactBaseURL, err := getWorkingSEABaseURL(ctx, client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get working SEA URL: %w", err)
+	}
 	url := contactBaseURL + administrativePath
-	return scrapeContactPages(ctx, client, url)
+	return scrapeContactPages(ctx, client, contactBaseURL, url)
 }
 
 // ScrapeAcademicContacts scrapes all academic contacts
+// Supports automatic URL failover across multiple SEA endpoints
 func ScrapeAcademicContacts(ctx context.Context, client *scraper.Client) ([]*storage.Contact, error) {
+	contactBaseURL, err := getWorkingSEABaseURL(ctx, client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get working SEA URL: %w", err)
+	}
 	url := contactBaseURL + academicPath
-	return scrapeContactPages(ctx, client, url)
+	return scrapeContactPages(ctx, client, contactBaseURL, url)
 }
 
 // scrapeContactPages scrapes contact information from department listing pages
-func scrapeContactPages(ctx context.Context, client *scraper.Client, url string) ([]*storage.Contact, error) {
+func scrapeContactPages(ctx context.Context, client *scraper.Client, contactBaseURL, url string) ([]*storage.Contact, error) {
 	doc, err := client.GetDocument(ctx, url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch contact pages: %w", err)

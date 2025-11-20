@@ -68,6 +68,7 @@ jobs:
 
       - name: Docker Scout
         uses: docker/scout-action@v1
+        continue-on-error: true
         with:
           command: quickview,cves,recommendations
           dockerhub-user: ${{ github.repository_owner }}

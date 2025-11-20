@@ -2,8 +2,9 @@ package scraper
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"math"
-	"math/rand"
 	"sync"
 	"time"
 )
@@ -93,7 +94,13 @@ func (rl *RateLimiter) randomDelay() time.Duration {
 	}
 
 	delta := rl.maxDelay - rl.minDelay
-	random := time.Duration(rand.Int63n(int64(delta)))
+	var b [8]byte
+	_, _ = rand.Read(b[:])
+	randomValue := int64(binary.LittleEndian.Uint64(b[:]))
+	if randomValue < 0 {
+		randomValue = -randomValue
+	}
+	random := time.Duration(randomValue % int64(delta))
 	return rl.minDelay + random
 }
 
@@ -124,7 +131,13 @@ func RetryWithBackoff(ctx context.Context, maxRetries int, initialDelay, maxDela
 		}
 
 		// Add jitter (±25%)
-		jitter := time.Duration(rand.Int63n(int64(delay) / 2))
+		var b [8]byte
+		_, _ = rand.Read(b[:])
+		jitterValue := int64(binary.LittleEndian.Uint64(b[:]))
+		if jitterValue < 0 {
+			jitterValue = -jitterValue
+		}
+		jitter := time.Duration(jitterValue % (int64(delay) / 2))
 		delay = delay - delay/4 + jitter
 
 		// Wait for delay or context cancellation

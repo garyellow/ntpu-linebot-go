@@ -32,6 +32,11 @@ func InitSchema(db *sql.DB) error {
 		return err
 	}
 
+	// Create stickers table
+	if err := createStickersTable(db); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -108,6 +113,27 @@ func createCoursesTable(db *sql.DB) error {
 
 	if _, err := db.Exec(query); err != nil {
 		return fmt.Errorf("failed to create courses table: %w", err)
+	}
+
+	return nil
+}
+
+func createStickersTable(db *sql.DB) error {
+	query := `
+	CREATE TABLE IF NOT EXISTS stickers (
+		url TEXT PRIMARY KEY,
+		source TEXT NOT NULL CHECK(source IN ('spy_family', 'ichigo', 'fallback')),
+		cached_at INTEGER NOT NULL,
+		success_count INTEGER DEFAULT 0,
+		failure_count INTEGER DEFAULT 0
+	);
+	CREATE INDEX IF NOT EXISTS idx_stickers_source ON stickers(source);
+	CREATE INDEX IF NOT EXISTS idx_stickers_cached_at ON stickers(cached_at);
+	CREATE INDEX IF NOT EXISTS idx_stickers_success_rate ON stickers(success_count DESC, failure_count ASC);
+	`
+
+	if _, err := db.Exec(query); err != nil {
+		return fmt.Errorf("failed to create stickers table: %w", err)
 	}
 
 	return nil

@@ -7,11 +7,6 @@ import (
 	"time"
 )
 
-// StudentRepository provides CRUD operations for students table
-type StudentRepository struct {
-	db *DB
-}
-
 // SaveStudent inserts or updates a student record
 func (db *DB) SaveStudent(student *Student) error {
 	query := `
@@ -59,11 +54,19 @@ func (db *DB) GetStudentByID(id string) (*Student, error) {
 	return &student, nil
 }
 
-// SearchStudentsByName searches students by partial name match
+// SearchStudentsByName searches students by partial name match (max 1000 results)
 func (db *DB) SearchStudentsByName(name string) ([]Student, error) {
-	query := `SELECT id, name, department, year, cached_at FROM students WHERE name LIKE ?`
+	// Validate input to prevent SQL injection (even though we use prepared statements)
+	if len(name) > 100 {
+		return nil, fmt.Errorf("search term too long")
+	}
 
-	rows, err := db.conn.Query(query, "%"+name+"%")
+	// Sanitize search term to prevent SQL LIKE special character issues
+	sanitized := sanitizeSearchTerm(name)
+
+	query := `SELECT id, name, department, year, cached_at FROM students WHERE name LIKE ? ESCAPE '\' ORDER BY year DESC, id DESC LIMIT 1000`
+
+	rows, err := db.conn.Query(query, "%"+sanitized+"%")
 	if err != nil {
 		return nil, fmt.Errorf("failed to search students by name: %w", err)
 	}
@@ -214,11 +217,19 @@ func (db *DB) GetContactByUID(uid string) (*Contact, error) {
 	return &contact, nil
 }
 
-// SearchContactsByName searches contacts by partial name match
+// SearchContactsByName searches contacts by partial name match (max 500 results)
 func (db *DB) SearchContactsByName(name string) ([]Contact, error) {
-	query := `SELECT uid, name, title, organization, phone, email, cached_at FROM contacts WHERE name LIKE ?`
+	// Validate input
+	if len(name) > 100 {
+		return nil, fmt.Errorf("search term too long")
+	}
 
-	rows, err := db.conn.Query(query, "%"+name+"%")
+	// Sanitize search term to prevent SQL LIKE special character issues
+	sanitized := sanitizeSearchTerm(name)
+
+	query := `SELECT uid, name, title, organization, phone, email, cached_at FROM contacts WHERE name LIKE ? ESCAPE '\' ORDER BY type, name LIMIT 500`
+
+	rows, err := db.conn.Query(query, "%"+sanitized+"%")
 	if err != nil {
 		return nil, fmt.Errorf("failed to search contacts by name: %w", err)
 	}
@@ -390,11 +401,19 @@ func (db *DB) GetCourseByUID(uid string) (*Course, error) {
 	return &course, nil
 }
 
-// SearchCoursesByTitle searches courses by partial title match
+// SearchCoursesByTitle searches courses by partial title match (max 500 results)
 func (db *DB) SearchCoursesByTitle(title string) ([]Course, error) {
-	query := `SELECT uid, title, teachers, times, locations, year, term, cached_at FROM courses WHERE title LIKE ?`
+	// Validate input
+	if len(title) > 100 {
+		return nil, fmt.Errorf("search term too long")
+	}
 
-	rows, err := db.conn.Query(query, "%"+title+"%")
+	// Sanitize search term to prevent SQL LIKE special character issues
+	sanitized := sanitizeSearchTerm(title)
+
+	query := `SELECT uid, title, teachers, times, locations, year, term, cached_at FROM courses WHERE title LIKE ? ESCAPE '\' ORDER BY year DESC, term DESC LIMIT 500`
+
+	rows, err := db.conn.Query(query, "%"+sanitized+"%")
 	if err != nil {
 		return nil, fmt.Errorf("failed to search courses by title: %w", err)
 	}
@@ -403,11 +422,19 @@ func (db *DB) SearchCoursesByTitle(title string) ([]Course, error) {
 	return scanCourses(rows)
 }
 
-// SearchCoursesByTeacher searches courses by teacher name
+// SearchCoursesByTeacher searches courses by teacher name (max 500 results)
 func (db *DB) SearchCoursesByTeacher(teacher string) ([]Course, error) {
-	query := `SELECT uid, title, teachers, times, locations, year, term, cached_at FROM courses WHERE teachers LIKE ?`
+	// Validate input
+	if len(teacher) > 100 {
+		return nil, fmt.Errorf("search term too long")
+	}
 
-	rows, err := db.conn.Query(query, "%"+teacher+"%")
+	// Sanitize search term to prevent SQL LIKE special character issues
+	sanitized := sanitizeSearchTerm(teacher)
+
+	query := `SELECT uid, title, teachers, times, locations, year, term, cached_at FROM courses WHERE teachers LIKE ? ESCAPE '\' ORDER BY year DESC, term DESC LIMIT 500`
+
+	rows, err := db.conn.Query(query, "%"+sanitized+"%")
 	if err != nil {
 		return nil, fmt.Errorf("failed to search courses by teacher: %w", err)
 	}
@@ -499,4 +526,162 @@ func scanCourses(rows *sql.Rows) ([]Course, error) {
 	}
 
 	return courses, nil
+}
+
+// StickerRepository provides CRUD operations for stickers table
+
+// SaveSticker inserts or updates a sticker record
+func (db *DB) SaveSticker(sticker *Sticker) error {
+	query := `
+		INSERT INTO stickers (url, source, cached_at, success_count, failure_count)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(url) DO UPDATE SET
+			source = excluded.source,
+			cached_at = excluded.cached_at,
+			success_count = excluded.success_count,
+			failure_count = excluded.failure_count
+	`
+	_, err := db.conn.Exec(query,
+		sticker.URL,
+		sticker.Source,
+		time.Now().Unix(),
+		sticker.SuccessCount,
+		sticker.FailureCount,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to save sticker: %w", err)
+	}
+	return nil
+}
+
+// GetAllStickers retrieves all stickers from database and validates cache freshness (7 days TTL)
+func (db *DB) GetAllStickers() ([]Sticker, error) {
+	query := `SELECT url, source, cached_at, success_count, failure_count FROM stickers`
+
+	rows, err := db.conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all stickers: %w", err)
+	}
+	defer rows.Close()
+
+	var stickers []Sticker
+	ttl := int64(168 * 60 * 60) // 7 days in seconds
+	currentTime := time.Now().Unix()
+
+	for rows.Next() {
+		var sticker Sticker
+		if err := rows.Scan(&sticker.URL, &sticker.Source, &sticker.CachedAt, &sticker.SuccessCount, &sticker.FailureCount); err != nil {
+			return nil, fmt.Errorf("failed to scan sticker row: %w", err)
+		}
+		// Only include non-expired stickers
+		if sticker.CachedAt+ttl > currentTime {
+			stickers = append(stickers, sticker)
+		}
+	}
+
+	return stickers, nil
+}
+
+// GetStickersBySource retrieves stickers by source type and validates TTL
+func (db *DB) GetStickersBySource(source string) ([]Sticker, error) {
+	query := `SELECT url, source, cached_at, success_count, failure_count FROM stickers WHERE source = ?`
+
+	rows, err := db.conn.Query(query, source)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stickers by source: %w", err)
+	}
+	defer rows.Close()
+
+	var stickers []Sticker
+	ttl := int64(168 * 60 * 60) // 7 days in seconds
+	currentTime := time.Now().Unix()
+
+	for rows.Next() {
+		var sticker Sticker
+		if err := rows.Scan(&sticker.URL, &sticker.Source, &sticker.CachedAt, &sticker.SuccessCount, &sticker.FailureCount); err != nil {
+			return nil, fmt.Errorf("failed to scan sticker row: %w", err)
+		}
+		// Only include non-expired stickers
+		if sticker.CachedAt+ttl > currentTime {
+			stickers = append(stickers, sticker)
+		}
+	}
+
+	return stickers, nil
+}
+
+// UpdateStickerSuccess increments the success count for a sticker
+func (db *DB) UpdateStickerSuccess(url string) error {
+	query := `UPDATE stickers SET success_count = success_count + 1 WHERE url = ?`
+
+	_, err := db.conn.Exec(query, url)
+	if err != nil {
+		return fmt.Errorf("failed to update sticker success count: %w", err)
+	}
+	return nil
+}
+
+// UpdateStickerFailure increments the failure count for a sticker
+func (db *DB) UpdateStickerFailure(url string) error {
+	query := `UPDATE stickers SET failure_count = failure_count + 1 WHERE url = ?`
+
+	_, err := db.conn.Exec(query, url)
+	if err != nil {
+		return fmt.Errorf("failed to update sticker failure count: %w", err)
+	}
+	return nil
+}
+
+// CleanupExpiredStickers removes stickers older than 7 days TTL
+func (db *DB) CleanupExpiredStickers() error {
+	ttl := time.Duration(168 * time.Hour) // 7 days
+	query := `DELETE FROM stickers WHERE cached_at < ?`
+	expiryTime := time.Now().Add(-ttl).Unix()
+
+	result, err := db.conn.Exec(query, expiryTime)
+	if err != nil {
+		return fmt.Errorf("failed to cleanup expired stickers: %w", err)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected > 0 {
+		fmt.Printf("Cleaned up %d expired stickers\n", rowsAffected)
+	}
+
+	return nil
+}
+
+// CountStickers returns the total number of stickers
+func (db *DB) CountStickers() (int, error) {
+	query := `SELECT COUNT(*) FROM stickers`
+
+	var count int
+	err := db.conn.QueryRow(query).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count stickers: %w", err)
+	}
+	return count, nil
+}
+
+// GetStickerStats returns statistics about sticker sources
+func (db *DB) GetStickerStats() (map[string]int, error) {
+	query := `SELECT source, COUNT(*) as count FROM stickers GROUP BY source`
+
+	rows, err := db.conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sticker stats: %w", err)
+	}
+	defer rows.Close()
+
+	stats := make(map[string]int)
+	for rows.Next() {
+		var source string
+		var count int
+		if err := rows.Scan(&source, &count); err != nil {
+			return nil, fmt.Errorf("failed to scan sticker stats row: %w", err)
+		}
+		stats[source] = count
+	}
+
+	return stats, nil
 }

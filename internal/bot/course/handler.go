@@ -7,26 +7,29 @@ import (
 	"strings"
 	"time"
 
+	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper/ntpu"
+	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
-	"github.com/garyellow/ntpu-linebot-go/pkg/lineutil"
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
 // Handler handles course-related queries
 type Handler struct {
-	db      *storage.DB
-	scraper *scraper.Client
-	metrics *metrics.Metrics
-	logger  *logger.Logger
+	db             *storage.DB
+	scraper        *scraper.Client
+	metrics        *metrics.Metrics
+	logger         *logger.Logger
+	stickerManager *sticker.Manager
 }
 
 const (
 	moduleName = "course"
 	splitChar  = "$"
+	senderName = "課程魔法師"
 )
 
 // Valid keywords for course queries
@@ -52,12 +55,13 @@ func buildRegex(keywords []string) *regexp.Regexp {
 }
 
 // NewHandler creates a new course handler
-func NewHandler(db *storage.DB, scraper *scraper.Client, metrics *metrics.Metrics, logger *logger.Logger) *Handler {
+func NewHandler(db *storage.DB, scraper *scraper.Client, metrics *metrics.Metrics, logger *logger.Logger, stickerManager *sticker.Manager) *Handler {
 	return &Handler{
-		db:      db,
-		scraper: scraper,
-		metrics: metrics,
-		logger:  logger,
+		db:             db,
+		scraper:        scraper,
+		metrics:        metrics,
+		logger:         logger,
+		stickerManager: stickerManager,
 	}
 }
 
@@ -144,7 +148,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 		log.WithError(err).Error("Failed to query cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
 		return []messaging_api.MessageInterface{
-			lineutil.ErrorMessage(fmt.Errorf("資料庫查詢失敗")),
+			lineutil.ErrorMessageWithDetail("查詢課程時發生問題"),
 		}
 	}
 
@@ -164,7 +168,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 		log.WithError(err).Errorf("Failed to scrape course UID: %s", uid)
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
 		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessage(fmt.Sprintf("❌ 查無課程編號 %s\n\n請確認課程編號是否正確", uid)),
+			lineutil.NewTextMessageWithSender(fmt.Sprintf("❌ 查無課程編號 %s\n\n請確認課程編號是否正確", uid), senderName, h.stickerManager.GetRandomSticker()),
 		}
 	}
 
@@ -188,23 +192,24 @@ func (h *Handler) handleCourseTitleSearch(ctx context.Context, title string) []m
 		log.WithError(err).Error("Failed to search courses in cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
 		return []messaging_api.MessageInterface{
-			lineutil.ErrorMessage(fmt.Errorf("資料庫查詢失敗")),
+			lineutil.ErrorMessageWithDetail("搜尋課程時發生問題"),
 		}
 	}
 
 	if len(courses) > 0 {
 		h.metrics.RecordCacheHit(moduleName)
-		log.Infof("Cache hit for course title search: %s", title)
+		log.Infof("Found %d courses for title: %s", len(courses), title)
 		return h.formatCourseListResponse(courses)
 	}
 
-	// Cache miss - inform user that scraping all courses is expensive
+	// No results found
 	h.metrics.RecordCacheMiss(moduleName)
+	log.Infof("No courses found for title: %s", title)
 	return []messaging_api.MessageInterface{
-		lineutil.NewTextMessage(fmt.Sprintf(
-			"🔍 查無包含「%s」的課程\n\n提示：課程資料尚未完整建立快取。\n請使用課程編號查詢，或稍後再試。",
+		lineutil.NewTextMessageWithSender(fmt.Sprintf(
+			"🔍 查無包含「%s」的課程\n\n請確認課程名稱是否正確，或使用課程編號查詢。",
 			title,
-		)),
+		), senderName, h.stickerManager.GetRandomSticker()),
 	}
 }
 
@@ -219,21 +224,23 @@ func (h *Handler) handleTeacherSearch(ctx context.Context, teacherName string) [
 		log.WithError(err).Error("Failed to search courses by teacher")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
 		return []messaging_api.MessageInterface{
-			lineutil.ErrorMessage(fmt.Errorf("資料庫查詢失敗")),
+			lineutil.ErrorMessageWithDetail("搜尋教師課程時發生問題"),
 		}
 	}
 
 	if len(courses) == 0 {
+		h.metrics.RecordCacheMiss(moduleName)
+		log.Infof("No courses found for teacher: %s", teacherName)
 		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessage(fmt.Sprintf(
-				"🔍 查無教師「%s」的授課課程\n\n提示：課程資料尚未完整建立快取。\n請使用課程編號查詢，或稍後再試。",
+			lineutil.NewTextMessageWithSender(fmt.Sprintf(
+				"🔍 查無教師「%s」的授課課程\n\n請確認教師姓名是否正確，或使用課程編號查詢。",
 				teacherName,
-			)),
+			), senderName, h.stickerManager.GetRandomSticker()),
 		}
 	}
 
 	h.metrics.RecordCacheHit(moduleName)
-	log.Infof("Cache hit for teacher search: %s", teacherName)
+	log.Infof("Found %d courses for teacher: %s", len(courses), teacherName)
 	return h.formatCourseListResponse(courses)
 }
 
@@ -241,7 +248,7 @@ func (h *Handler) handleTeacherSearch(ctx context.Context, teacherName string) [
 func (h *Handler) formatCourseResponse(course *storage.Course, fromCache bool) []messaging_api.MessageInterface {
 	// Format course information
 	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("📚 課程資訊\n\n"))
+	builder.WriteString("📚 課程資訊\n\n")
 	builder.WriteString(fmt.Sprintf("課程名稱：%s\n", course.Title))
 	builder.WriteString(fmt.Sprintf("課程編號：%s\n", course.UID))
 	builder.WriteString(fmt.Sprintf("學年學期：%d 學年第 %d 學期\n", course.Year, course.Term))
@@ -267,7 +274,7 @@ func (h *Handler) formatCourseResponse(course *storage.Course, fromCache bool) [
 	}
 
 	messages := []messaging_api.MessageInterface{
-		lineutil.NewTextMessage(builder.String()),
+		lineutil.NewTextMessageWithSender(builder.String(), senderName, h.stickerManager.GetRandomSticker()),
 	}
 
 	// Add detail URL button if available
@@ -291,7 +298,7 @@ func (h *Handler) formatCourseResponse(course *storage.Course, fromCache bool) [
 func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging_api.MessageInterface {
 	if len(courses) == 0 {
 		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessage("🔍 查無課程資料"),
+			lineutil.NewTextMessageWithSender("🔍 查無課程資料", senderName, h.stickerManager.GetRandomSticker()),
 		}
 	}
 
@@ -337,7 +344,7 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 			builder.WriteString("💡 提示：輸入課程編號可查看詳細資訊")
 		}
 
-		messages = append(messages, lineutil.NewTextMessage(builder.String()))
+		messages = append(messages, lineutil.NewTextMessageWithSender(builder.String(), senderName, h.stickerManager.GetRandomSticker()))
 	}
 
 	return messages

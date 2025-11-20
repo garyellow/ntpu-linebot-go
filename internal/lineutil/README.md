@@ -1,6 +1,6 @@
 # lineutil - LINE Message Builder Utility
 
-這個套件提供了便於建立 LINE 訊息的工具函式,使用 LINE Bot SDK v8。
+便於建立 LINE 訊息的工具函式，使用 LINE Bot SDK v8。
 
 ## 功能特色
 

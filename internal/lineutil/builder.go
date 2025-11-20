@@ -26,18 +26,66 @@ type QuickReplyItem struct {
 // Action is an alias for the LINE SDK action interface for convenience.
 type Action = messaging_api.ActionInterface
 
-// NewTextMessage creates a simple text message.
+// NewTextMessage creates a simple text message without sender information.
 // The text parameter is the message content to send.
+// LINE API limits: max 5000 characters per text message
 func NewTextMessage(text string) messaging_api.MessageInterface {
-	return &messaging_api.TextMessage{
+	return NewTextMessageWithSender(text, "", "")
+}
+
+// NewImageMessage creates an image message with the given URLs.
+// The originalContentURL is the full-size image URL, and previewImageURL is the thumbnail.
+// LINE API requires both URLs to be HTTPS.
+func NewImageMessage(originalContentURL, previewImageURL string) messaging_api.MessageInterface {
+	return &messaging_api.ImageMessage{
+		OriginalContentUrl: originalContentURL,
+		PreviewImageUrl:    previewImageURL,
+	}
+}
+
+// NewTextMessageWithSender creates a text message with sender information (name and icon).
+// The text parameter is the message content, senderName is the displayed name,
+// and stickerIconURL is the icon image URL (e.g., random sticker).
+// LINE API limits: max 5000 characters per text message
+func NewTextMessageWithSender(text, senderName, stickerIconURL string) *messaging_api.TextMessage {
+	// Validate and truncate if necessary
+	if len(text) > 5000 {
+		text = TruncateText(text, 4997) + "..."
+	}
+
+	msg := &messaging_api.TextMessage{
 		Text: text,
 	}
+
+	// Add sender information if provided
+	if senderName != "" || stickerIconURL != "" {
+		msg.Sender = &messaging_api.Sender{}
+		if senderName != "" {
+			msg.Sender.Name = senderName
+		}
+		if stickerIconURL != "" {
+			msg.Sender.IconUrl = stickerIconURL
+		}
+	}
+
+	return msg
 }
 
 // NewCarouselTemplate creates a carousel template message with multiple columns.
 // The altText is displayed in push notifications and chat lists.
 // The columns parameter contains the carousel columns to display.
+// LINE API limits: max 10 columns, each with max 4 actions
 func NewCarouselTemplate(altText string, columns []CarouselColumn) messaging_api.MessageInterface {
+	// Validate column count (LINE API limit: max 10 columns)
+	if len(columns) > 10 {
+		columns = columns[:10]
+	}
+
+	// Validate altText length (max 400 characters)
+	if len(altText) > 400 {
+		altText = TruncateText(altText, 397) + "..."
+	}
+
 	templateColumns := make([]messaging_api.CarouselColumn, len(columns))
 
 	for i, col := range columns {
@@ -70,7 +118,40 @@ func NewCarouselTemplate(altText string, columns []CarouselColumn) messaging_api
 // NewButtonsTemplate creates a buttons template message.
 // The altText is displayed in push notifications and chat lists.
 // The title is the template title, text is the message content, and actions are the buttons.
+// LINE API limits: max 4 actions, text max 160 chars (no image) or 60 chars (with image)
 func NewButtonsTemplate(altText, title, text string, actions []Action) messaging_api.MessageInterface {
+	return NewButtonsTemplateWithImage(altText, title, text, "", actions)
+}
+
+// NewButtonsTemplateWithImage creates a buttons template message with an optional thumbnail image.
+// The altText is displayed in push notifications and chat lists.
+// The title is the template title, text is the message content, thumbnailImageURL is optional image.
+// LINE API limits: max 4 actions, text max 60 chars (with image) or 160 chars (no image)
+func NewButtonsTemplateWithImage(altText, title, text, thumbnailImageURL string, actions []Action) messaging_api.MessageInterface {
+	// Validate action count (LINE API limit: max 4 actions)
+	if len(actions) > 4 {
+		actions = actions[:4]
+	}
+
+	// Validate text length based on whether image is present
+	maxTextLen := 160
+	if thumbnailImageURL != "" {
+		maxTextLen = 60
+	}
+	if len(text) > maxTextLen {
+		text = TruncateText(text, maxTextLen-3) + "..."
+	}
+
+	// Validate title length (max 40 characters)
+	if len(title) > 40 {
+		title = TruncateText(title, 37) + "..."
+	}
+
+	// Validate altText length (max 400 characters)
+	if len(altText) > 400 {
+		altText = TruncateText(altText, 397) + "..."
+	}
+
 	template := &messaging_api.ButtonsTemplate{
 		Text:    text,
 		Actions: actions,
@@ -78,6 +159,10 @@ func NewButtonsTemplate(altText, title, text string, actions []Action) messaging
 
 	if title != "" {
 		template.Title = title
+	}
+
+	if thumbnailImageURL != "" {
+		template.ThumbnailImageUrl = thumbnailImageURL
 	}
 
 	return &messaging_api.TemplateMessage{
@@ -89,7 +174,13 @@ func NewButtonsTemplate(altText, title, text string, actions []Action) messaging
 // NewQuickReply creates a quick reply message component.
 // The items parameter contains the quick reply buttons to display.
 // Returns a QuickReply object that can be attached to text or template messages.
+// LINE API limits: max 13 items
 func NewQuickReply(items []QuickReplyItem) *messaging_api.QuickReply {
+	// Validate item count (LINE API limit: max 13 items)
+	if len(items) > 13 {
+		items = items[:13]
+	}
+
 	quickReplyItems := make([]messaging_api.QuickReplyItem, len(items))
 
 	for i, item := range items {
@@ -140,6 +231,16 @@ func NewPostbackAction(label, data string) Action {
 	}
 }
 
+// NewPostbackActionWithDisplayText creates a postback action with custom display text.
+// The label is displayed on the button, displayText is shown when clicked, data is sent as postback.
+func NewPostbackActionWithDisplayText(label, displayText, data string) Action {
+	return &messaging_api.PostbackAction{
+		Label:       label,
+		DisplayText: displayText,
+		Data:        data,
+	}
+}
+
 // NewURIAction creates a URI action that opens a URL when clicked.
 // The label is displayed on the button, and uri is the URL to open.
 func NewURIAction(label, uri string) Action {
@@ -149,10 +250,28 @@ func NewURIAction(label, uri string) Action {
 	}
 }
 
-// ErrorMessage creates a generic error message for any error.
-// The err parameter is the error to display.
+// NewClipboardAction creates a clipboard action that copies text when clicked.
+// The label is displayed on the button, and clipboardText is the text to copy.
+func NewClipboardAction(label, clipboardText string) Action {
+	return &messaging_api.ClipboardAction{
+		Label:         label,
+		ClipboardText: clipboardText,
+	}
+}
+
+// ErrorMessage creates a user-friendly error message.
+// The err parameter is the internal error (technical details are hidden from users).
+// This provides a consistent error experience without exposing implementation details.
 func ErrorMessage(err error) messaging_api.MessageInterface {
-	return NewTextMessage(fmt.Sprintf("❌ 發生錯誤：%s\n\n請稍後再試或聯絡管理員。", err.Error()))
+	// Log the actual error internally (caller should log)
+	// But show user-friendly message to end users
+	return NewTextMessage("❌ 系統暫時無法處理您的請求\n\n請稍後再試，或聯絡管理員協助。\n\n如問題持續發生，請提供查詢內容以便我們協助處理。")
+}
+
+// ErrorMessageWithDetail creates an error message with additional context for debugging.
+// Use this when you want to show users what went wrong while keeping it user-friendly.
+func ErrorMessageWithDetail(userMessage string) messaging_api.MessageInterface {
+	return NewTextMessage(fmt.Sprintf("❌ %s\n\n請稍後再試，或聯絡管理員協助。", userMessage))
 }
 
 // ServiceUnavailableMessage creates a message indicating the service is unavailable.

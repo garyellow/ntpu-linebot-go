@@ -1,0 +1,176 @@
+# https://taskfile.dev
+
+version: '3'
+
+vars:
+  BINARY_SERVER: ntpu-linebot
+  BINARY_WARMUP: ntpu-linebot-warmup
+  BUILD_DIR: bin
+  LDFLAGS: -s -w
+  COVERAGE_FILE: coverage.out
+
+env:
+  CGO_ENABLED: 0
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list-all
+    silent: true
+
+  # Development tasks
+  dev:
+    desc: Run server in development mode
+    cmds:
+      - go run ./cmd/server
+
+  warmup:
+    desc: Run data warmup tool
+    cmds:
+      - go run ./cmd/warmup --modules=id,contact,course
+
+  verify:
+    desc: Run data consistency verification
+    cmds:
+      - go run ./cmd/verify
+
+  # Build tasks
+  build:
+    desc: Build all binaries (server + warmup)
+    deps: [build:server, build:warmup]
+
+  build:server:
+    desc: Build server binary
+    sources:
+      - cmd/server/**/*.go
+      - internal/**/*.go
+      - pkg/**/*.go
+    generates:
+      - "{{.BUILD_DIR}}/{{.BINARY_SERVER}}{{if eq OS \"windows\"}}.exe{{end}}"
+    cmds:
+      - go build -ldflags="{{.LDFLAGS}}" -o {{.BUILD_DIR}}/{{.BINARY_SERVER}}{{if eq OS "windows"}}.exe{{end}} ./cmd/server
+    silent: false
+
+  build:warmup:
+    desc: Build warmup binary
+    sources:
+      - cmd/warmup/**/*.go
+      - internal/**/*.go
+      - pkg/**/*.go
+    generates:
+      - "{{.BUILD_DIR}}/{{.BINARY_WARMUP}}{{if eq OS \"windows\"}}.exe{{end}}"
+    cmds:
+      - go build -ldflags="{{.LDFLAGS}}" -o {{.BUILD_DIR}}/{{.BINARY_WARMUP}}{{if eq OS "windows"}}.exe{{end}} ./cmd/warmup
+
+  # Test tasks
+  test:
+    desc: Run all tests
+    cmds:
+      - go test -v -coverprofile={{.COVERAGE_FILE}} -covermode=atomic ./...
+
+  test:short:
+    desc: Run tests (skip long-running tests)
+    cmds:
+      - go test -v -short ./...
+
+  test:coverage:
+    desc: Run tests and show coverage report
+    deps: [test]
+    cmds:
+      - go tool cover -func={{.COVERAGE_FILE}} | grep total
+      - go tool cover -html={{.COVERAGE_FILE}} -o coverage.html
+      - cmd: echo "Coverage report generated at coverage.html"
+        platforms: [linux, darwin]
+      - cmd: Write-Host "Coverage report generated at coverage.html"
+        platforms: [windows]
+
+  # Quality tasks
+  lint:
+    desc: Run all linters
+    cmds:
+      - task: lint:go
+
+  lint:go:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run --timeout=5m ./...
+
+  fmt:
+    desc: Format all Go code
+    cmds:
+      - gofmt -w .
+
+  # Docker tasks
+  docker:build:
+    desc: Build Docker image
+    cmds:
+      - docker build -t ntpu-linebot:latest .
+
+  docker:run:
+    desc: Run Docker container locally
+    deps: [docker:build]
+    cmds:
+      - cmd: docker run -d --name ntpu-linebot -p 10000:10000 -v {{.PWD}}/data:/data -e LINE_CHANNEL_ACCESS_TOKEN=%LINE_CHANNEL_ACCESS_TOKEN% -e LINE_CHANNEL_SECRET=%LINE_CHANNEL_SECRET% ntpu-linebot:latest
+        platforms: [windows]
+      - cmd: docker run -d --name ntpu-linebot -p 10000:10000 -v $(pwd)/data:/data -e LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN} -e LINE_CHANNEL_SECRET=${LINE_CHANNEL_SECRET} ntpu-linebot:latest
+        platforms: [linux, darwin]
+
+  docker:stop:
+    desc: Stop and remove Docker container
+    cmds:
+      - docker stop ntpu-linebot
+      - docker rm ntpu-linebot
+    ignore_error: true
+
+  # Docker Compose tasks
+  compose:up:
+    desc: Start all services with docker-compose
+    dir: docker
+    cmds:
+      - docker-compose up -d
+
+  compose:down:
+    desc: Stop all services
+    dir: docker
+    cmds:
+      - docker-compose down
+
+  compose:logs:
+    desc: Show docker-compose logs
+    dir: docker
+    cmds:
+      - docker-compose logs -f {{.CLI_ARGS}}
+
+  # Dependency tasks
+  deps:
+    desc: Download and tidy dependencies
+    cmds:
+      - go mod download
+      - go mod tidy
+
+  # Tool installation tasks
+  tools:
+    desc: Install development tools
+    cmds:
+      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+  # Cleanup tasks
+  clean:
+    desc: Remove build artifacts and cache
+    cmds:
+      - cmd: powershell -Command "Remove-Item -Recurse -Force {{.BUILD_DIR}} -ErrorAction SilentlyContinue; Remove-Item {{.COVERAGE_FILE}} -ErrorAction SilentlyContinue; Remove-Item *.db -ErrorAction SilentlyContinue"
+        platforms: [windows]
+      - cmd: rm -rf {{.BUILD_DIR}} {{.COVERAGE_FILE}} *.db
+        platforms: [linux, darwin]
+      - go clean -cache -testcache -modcache
+
+  # CI/CD tasks
+  ci:
+    desc: Run all CI checks (lint, test, build)
+    cmds:
+      - go mod verify
+      - task: fmt
+      - task: lint
+      - task: test
+      - task: build

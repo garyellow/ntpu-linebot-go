@@ -14,8 +14,6 @@ import (
 )
 
 const (
-	// Base URL for course search
-	courseBaseURL   = "https://sea.cc.ntpu.edu.tw"
 	courseQueryPath = "/pls/dev_stud/course_query_all.queryByKeyword"
 )
 
@@ -26,10 +24,17 @@ var AllEduCodes = []string{"U", "M", "N", "P"}
 var classroomRegex = regexp.MustCompile(`(?:教室|上課地點)[:：為](.*?)(?:$|[ .，。；【])`)
 
 // ScrapeCourses scrapes courses by year, term, and optional filters
-// URL: https://sea.cc.ntpu.edu.tw/pls/dev_stud/course_query_all.queryByKeyword
+// URL: {baseURL}/pls/dev_stud/course_query_all.queryByKeyword
 // Parameters: qYear, qTerm, courseno (optional), seq1=A, seq2=M
+// Supports automatic URL failover across multiple SEA endpoints
 func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, title string) ([]*storage.Course, error) {
 	courses := make([]*storage.Course, 0)
+
+	// Get working base URL with failover support
+	courseBaseURL, err := getWorkingSEABaseURL(ctx, client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get working SEA URL: %w", err)
+	}
 
 	// Build base URL and parameters
 	baseParams := fmt.Sprintf("?qYear=%d&qTerm=%d&seq1=A&seq2=M", year, term)
@@ -41,7 +46,7 @@ func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, 
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch courses: %w", err)
 		}
-		return parseCoursesPage(doc, year, term), nil
+		return parseCoursesPage(doc, courseBaseURL, year, term), nil
 	}
 
 	// Otherwise, iterate through all education codes
@@ -53,7 +58,7 @@ func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, 
 			return nil, fmt.Errorf("failed to fetch courses for code %s: %w", eduCode, err)
 		}
 
-		pageCourses := parseCoursesPage(doc, year, term)
+		pageCourses := parseCoursesPage(doc, courseBaseURL, year, term)
 		courses = append(courses, pageCourses...)
 	}
 
@@ -62,9 +67,16 @@ func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, 
 
 // ScrapeCourseByUID scrapes a specific course by its UID (year+term+no)
 // Example UID: 11312U123 (year=113, term=1, no=2U123)
+// Supports automatic URL failover across multiple SEA endpoints
 func ScrapeCourseByUID(ctx context.Context, client *scraper.Client, uid string) (*storage.Course, error) {
 	if len(uid) < 5 {
 		return nil, fmt.Errorf("invalid course UID: %s", uid)
+	}
+
+	// Get working base URL with failover support
+	courseBaseURL, err := getWorkingSEABaseURL(ctx, client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get working SEA URL: %w", err)
 	}
 
 	// Parse UID
@@ -92,7 +104,7 @@ func ScrapeCourseByUID(ctx context.Context, client *scraper.Client, uid string) 
 		return nil, fmt.Errorf("failed to fetch course: %w", err)
 	}
 
-	courses := parseCoursesPage(doc, year, term)
+	courses := parseCoursesPage(doc, courseBaseURL, year, term)
 	if len(courses) == 0 {
 		return nil, fmt.Errorf("course not found: %s", uid)
 	}
@@ -101,7 +113,7 @@ func ScrapeCourseByUID(ctx context.Context, client *scraper.Client, uid string) 
 }
 
 // parseCoursesPage extracts course information from a search result page
-func parseCoursesPage(doc *goquery.Document, year, term int) []*storage.Course {
+func parseCoursesPage(doc *goquery.Document, courseBaseURL string, year, term int) []*storage.Course {
 	courses := make([]*storage.Course, 0)
 	cachedAt := time.Now().Unix()
 
@@ -125,7 +137,7 @@ func parseCoursesPage(doc *goquery.Document, year, term int) []*storage.Course {
 		title, detailURL, note, location := parseTitleField(tds.Eq(7))
 
 		// Extract teachers and teacher URLs (field 8)
-		teachers, teacherURLs := parseTeacherField(tds.Eq(8))
+		teachers, teacherURLs := parseTeacherField(tds.Eq(8), courseBaseURL)
 
 		// Extract times and locations (field 13)
 		times, locations := parseTimeLocationField(tds.Eq(13))
@@ -158,11 +170,9 @@ func parseCoursesPage(doc *goquery.Document, year, term int) []*storage.Course {
 			CachedAt:  cachedAt,
 		}
 
-		// Also store teacher URLs in Note if needed (or extend storage model)
-		if len(teacherURLs) > 0 {
-			// For now, we'll just keep them in memory
-			// Could extend storage.Course to include TeacherURLs []string
-		}
+		// Note: teacherURLs are currently not stored in the database
+		// Could extend storage.Course to include TeacherURLs []string if needed
+		_ = teacherURLs
 
 		courses = append(courses, course)
 	})
@@ -203,7 +213,7 @@ func parseTitleField(td *goquery.Selection) (title, detailURL, note, location st
 }
 
 // parseTeacherField parses the teacher field to extract teacher names and URLs
-func parseTeacherField(td *goquery.Selection) (teachers []string, teacherURLs []string) {
+func parseTeacherField(td *goquery.Selection, courseBaseURL string) (teachers []string, teacherURLs []string) {
 	teachers = make([]string, 0)
 	teacherURLs = make([]string, 0)
 

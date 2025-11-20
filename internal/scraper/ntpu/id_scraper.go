@@ -12,16 +12,17 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 )
 
-// Department code mappings (學部 - Undergraduate)
+// Department code mappings (大學部)
+// Note: "法律" and base codes for 社學/社工 require 3rd digit from student ID
 var DepartmentCodes = map[string]string{
-	"法律": "71",
+	"法律": "71", // Base code, requires 3rd digit: 712(法學)/714(司法)/716(財法)
 	"法學": "712",
 	"司法": "714",
 	"財法": "716",
 	"公行": "72",
 	"經濟": "73",
-	"社學": "742",
-	"社工": "744",
+	"社學": "742", // Full 3-digit code
+	"社工": "744", // Full 3-digit code
 	"財政": "75",
 	"不動": "76",
 	"會計": "77",
@@ -37,7 +38,7 @@ var DepartmentCodes = map[string]string{
 	"電機": "87",
 }
 
-// Full department name mappings (學部)
+// Full department name mappings (大學部)
 var FullDepartmentCodes = map[string]string{
 	"法律學系":       "71",
 	"法學組":        "712",
@@ -123,16 +124,35 @@ func reverseMap(m map[string]string) map[string]string {
 }
 
 const (
-	// Base URL for student search
-	baseURL           = "https://lms.ntpu.edu.tw"
 	studentSearchPath = "/portfolio/search.php"
 )
 
+// getWorkingBaseURL attempts to find a working LMS base URL with failover support
+func getWorkingBaseURL(ctx context.Context, client *scraper.Client) (string, error) {
+	baseURL, err := client.TryFailoverURLs(ctx, "lms")
+	if err != nil {
+		// Fallback to all configured URLs
+		urls := client.GetBaseURLs("lms")
+		if len(urls) > 0 {
+			return urls[0], nil // Return first URL as last resort
+		}
+		return "", fmt.Errorf("no LMS URLs available: %w", err)
+	}
+	return baseURL, nil
+}
+
 // ScrapeStudentsByYear scrapes students by year and department code
-// URL: https://lms.ntpu.edu.tw/portfolio/search.php?fmScope=2&page=1&fmKeyword=4{year}{deptCode}
+// URL: {baseURL}/portfolio/search.php?fmScope=2&page=1&fmKeyword=4{year}{deptCode}
 // Returns a list of students matching the criteria
+// Supports automatic URL failover across multiple LMS endpoints
 func ScrapeStudentsByYear(ctx context.Context, client *scraper.Client, year int, deptCode string) ([]*storage.Student, error) {
 	students := make([]*storage.Student, 0)
+
+	// Get working base URL with failover support
+	baseURL, err := getWorkingBaseURL(ctx, client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get working LMS URL: %w", err)
+	}
 
 	// Build search keyword: 4{year}{deptCode}
 	// Example: 411271 for year 112, department 71 (法律)
@@ -215,8 +235,15 @@ func parseStudentPage(doc *goquery.Document, year int, deptCode string) []*stora
 }
 
 // ScrapeStudentByID scrapes a specific student by their student ID
-// URL: https://lms.ntpu.edu.tw/portfolio/search.php?fmScope=2&page=1&fmKeyword={studentID}
+// URL: {baseURL}/portfolio/search.php?fmScope=2&page=1&fmKeyword={studentID}
+// Supports automatic URL failover across multiple LMS endpoints
 func ScrapeStudentByID(ctx context.Context, client *scraper.Client, studentID string) (*storage.Student, error) {
+	// Get working base URL with failover support
+	baseURL, err := getWorkingBaseURL(ctx, client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get working LMS URL: %w", err)
+	}
+
 	url := fmt.Sprintf("%s%s?fmScope=2&page=1&fmKeyword=%s", baseURL, studentSearchPath, studentID)
 
 	doc, err := client.GetDocument(ctx, url)
@@ -288,40 +315,74 @@ func determineDepartment(studentID string) string {
 	isMaster := studentID[0] == '7'
 	isPhD := studentID[0] == '8'
 
-	// Extract department code
+	// Extract department code based on ID length
+	// Both 8-digit and 9-digit use 2-digit base department code
+	// 8-digit (year<=99): Type(1) + Year(2) + Dept(2) + Group?(1) + Serial(2)
+	//   Example: 4 + 10 + 71 + 2 + 01 → need to check if 71/74 then extract position [5]
+	// 9-digit (year>=100): Type(1) + Year(3) + Dept(2) + Group?(1) + Serial(3)
+	//   Example: 4 + 107 + 71 + 2 + 001 → need to check if 71/74 then extract position [6]
 	var deptCode string
 	if isOver99 {
-		deptCode = studentID[4:6] // Positions 4-5
+		// 9-digit: dept code is 2-digit at positions [4:6]
+		deptCode = studentID[4:6] // e.g., "71", "74", "79", "87"
 	} else {
-		deptCode = studentID[3:5] // Positions 3-4
+		// 8-digit: dept code is 2-digit at positions [3:5]
+		deptCode = studentID[3:5] // e.g., "71", "74", "79"
 	}
 
-	// Handle special cases
-	if isMaster {
-		if name, ok := MasterDepartmentNames[deptCode]; ok {
-			return name
+	// Handle Master's and PhD programs (always use first 2 digits of dept code)
+	if isMaster || isPhD {
+		// Graduate programs only use 2-digit department codes
+		baseDept := deptCode
+		if len(deptCode) > 2 {
+			baseDept = deptCode[:2]
 		}
-		return "未知碩士班"
-	}
 
-	if isPhD {
-		if name, ok := PhDDepartmentNames[deptCode]; ok {
+		if isMaster {
+			if name, ok := MasterDepartmentNames[baseDept]; ok {
+				return name
+			}
+			return "未知碩士班"
+		}
+
+		if name, ok := PhDDepartmentNames[baseDept]; ok {
 			return name
 		}
 		return "未知博士班"
 	}
 
-	// Handle 社學 (742) - needs 3rd digit
-	if deptCode == "74" {
-		if isOver99 && len(studentID) > 6 {
-			deptCode += string(studentID[6])
-		} else if len(studentID) > 5 {
-			deptCode += string(studentID[5])
+	// Undergraduate: For dept 71/74, need to extract 3rd digit
+	// Both 8-digit and 9-digit formats require this
+	if deptCode == "71" || deptCode == "74" {
+		// Extract the 3rd digit (group identifier)
+		// 8-digit: position [5], 9-digit: position [6]
+		thirdDigitPos := 5
+		if isOver99 {
+			thirdDigitPos = 6
 		}
+		if len(studentID) > thirdDigitPos {
+			deptCode += string(studentID[thirdDigitPos])
+		}
+		// Now deptCode is 3-digit: 712(法學), 714(司法), 716(財法), 742(社學), 744(社工)
 	}
 
-	// Undergraduate
-	if name, ok := DepartmentNames[deptCode]; ok {
+	// Undergraduate lookup with 2 or 3-digit code
+	// For 3-digit codes (71x, 74x), try exact match first, then fall back to 2-digit base
+	name, ok := DepartmentNames[deptCode]
+	if !ok && len(deptCode) == 3 {
+		// Try 2-digit base code if 3-digit lookup fails
+		// e.g., "712" → "71", "742" → "74", "790" → "79"
+		baseDept := deptCode[:2]
+		name, ok = DepartmentNames[baseDept]
+	}
+
+	if ok {
+		// Python logic: if department[0:2] == DEPARTMENT_CODE["法律"]
+		// All 71x departments (712/714/716) return unified "法律系"
+		if strings.HasPrefix(deptCode, "71") {
+			return "法律系"
+		}
+		// 742/744 have specific names in DepartmentNames (社學/社工)
 		return name + "系"
 	}
 

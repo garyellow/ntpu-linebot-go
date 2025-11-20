@@ -3,7 +3,8 @@ package lineutil_test
 import (
 	"fmt"
 
-	"github.com/garyellow/ntpu-linebot-go/pkg/lineutil"
+	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
+	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
 // ExampleNewTextMessage demonstrates creating a simple text message.
@@ -100,7 +101,7 @@ func ExampleTruncateText() {
 
 // ExampleSplitMessages demonstrates splitting messages into batches.
 func ExampleSplitMessages() {
-	messages := []interface{}{
+	messages := []messaging_api.MessageInterface{
 		lineutil.NewTextMessage("Message 1"),
 		lineutil.NewTextMessage("Message 2"),
 		lineutil.NewTextMessage("Message 3"),
@@ -110,13 +111,7 @@ func ExampleSplitMessages() {
 		lineutil.NewTextMessage("Message 7"),
 	}
 
-	// Convert to MessageInterface slice
-	var msgInterfaces []interface{}
-	for _, msg := range messages {
-		msgInterfaces = append(msgInterfaces, msg)
-	}
-
-	batches := lineutil.SplitMessages(msgInterfaces, 5)
+	batches := lineutil.SplitMessages(messages, 5)
 	fmt.Printf("Total batches: %d, First batch size: %d, Second batch size: %d",
 		len(batches), len(batches[0]), len(batches[1]))
 	// Output: Total batches: 2, First batch size: 5, Second batch size: 2

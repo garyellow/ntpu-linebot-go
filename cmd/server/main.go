@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"sync"
 	"syscall"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
+	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 	"github.com/garyellow/ntpu-linebot-go/internal/webhook"
 	"github.com/gin-gonic/gin"
@@ -63,6 +65,23 @@ func main() {
 	)
 	log.Info("Scraper client created")
 
+	// Create sticker manager with database and scraper client
+	stickerManager := sticker.NewManager(db, scraperClient, log)
+	log.Info("Sticker manager created")
+
+	// Load stickers in background (non-blocking)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+
+		log.Info("Loading stickers...")
+		if err := stickerManager.LoadStickers(ctx); err != nil {
+			log.WithError(err).Warn("Failed to load stickers, using fallback avatars")
+		} else {
+			log.WithField("count", stickerManager.Count()).Info("Stickers loaded successfully")
+		}
+	}()
+
 	// Create webhook handler
 	webhookHandler, err := webhook.NewHandler(
 		cfg.LineChannelSecret,
@@ -71,6 +90,7 @@ func main() {
 		scraperClient,
 		m,
 		log,
+		stickerManager,
 	)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to create webhook handler")
@@ -92,7 +112,7 @@ func main() {
 	router.Use(loggingMiddleware(log))
 
 	// Setup routes
-	setupRoutes(router, webhookHandler, db, registry)
+	setupRoutes(router, webhookHandler, db, registry, scraperClient, stickerManager)
 
 	// Create HTTP server
 	server := &http.Server{
@@ -103,11 +123,32 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	// Start system metrics updater goroutine
+	// Start background goroutines
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go updateSystemMetrics(ctx, m, log)
+	var wg sync.WaitGroup
+
+	// System metrics updater
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		updateSystemMetrics(ctx, m, log)
+	}()
+
+	// Cache cleanup goroutine
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		cleanupExpiredCache(ctx, db, cfg.CacheTTL, log)
+	}()
+
+	// Sticker refresh goroutine (every 24 hours)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		refreshStickers(ctx, stickerManager, log)
+	}()
 
 	// Start server in goroutine
 	go func() {
@@ -127,6 +168,20 @@ func main() {
 	// Cancel context to stop metrics updater
 	cancel()
 
+	// Wait for goroutines to finish (with timeout)
+	goDone := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(goDone)
+	}()
+
+	select {
+	case <-goDone:
+		log.Info("All background goroutines stopped")
+	case <-time.After(5 * time.Second):
+		log.Warn("Timeout waiting for goroutines to stop")
+	}
+
 	// Create shutdown context with timeout
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer shutdownCancel()
@@ -145,30 +200,62 @@ func main() {
 }
 
 // setupRoutes configures all HTTP routes
-func setupRoutes(router *gin.Engine, webhookHandler *webhook.Handler, db *storage.DB, registry *prometheus.Registry) {
+func setupRoutes(router *gin.Engine, webhookHandler *webhook.Handler, db *storage.DB, registry *prometheus.Registry, scraperClient *scraper.Client, stickerManager *sticker.Manager) {
 	// Root endpoint - redirect to GitHub
 	router.GET("/", func(c *gin.Context) {
 		c.Redirect(http.StatusMovedPermanently, "https://github.com/garyellow/ntpu-linebot-go")
 	})
 
 	// Health check endpoints
+	// Liveness Probe - checks if the application is alive (minimal check)
 	router.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	router.GET("/healthy", func(c *gin.Context) {
+	// Readiness Probe - checks if the application is ready to serve traffic (full dependency check)
+	router.GET("/ready", func(c *gin.Context) {
 		// Check database connection
 		if err := db.Conn().Ping(); err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"status": "unhealthy",
-				"error":  "database connection failed",
+				"status": "not ready",
+				"reason": "database unavailable",
 			})
 			return
 		}
 
+		// Check scraper URLs availability
+		checkCtx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+		defer cancel()
+
+		seaAvailable := false
+		lmsAvailable := false
+
+		if _, err := scraperClient.TryFailoverURLs(checkCtx, "sea"); err == nil {
+			seaAvailable = true
+		}
+		if _, err := scraperClient.TryFailoverURLs(checkCtx, "lms"); err == nil {
+			lmsAvailable = true
+		}
+
+		// Check cache data availability
+		studentCount, _ := db.CountStudents()
+		contactCount, _ := db.CountContacts()
+		courseCount, _ := db.CountCourses()
+		stickerCount := stickerManager.Count()
+
 		c.JSON(http.StatusOK, gin.H{
-			"status":   "healthy",
+			"status":   "ready",
 			"database": "connected",
+			"scrapers": gin.H{
+				"sea": seaAvailable,
+				"lms": lmsAvailable,
+			},
+			"cache": gin.H{
+				"students": studentCount,
+				"contacts": contactCount,
+				"courses":  courseCount,
+				"stickers": stickerCount,
+			},
 		})
 	})
 
@@ -233,5 +320,115 @@ func updateSystemMetrics(ctx context.Context, m *metrics.Metrics, log *logger.Lo
 				WithField("memory_mb", memoryBytes/1024/1024).
 				Debug("Updated system metrics")
 		}
+	}
+}
+
+// cleanupExpiredCache periodically removes expired cache entries from database
+func cleanupExpiredCache(ctx context.Context, db *storage.DB, ttl time.Duration, log *logger.Logger) {
+	// Run cleanup every 12 hours
+	ticker := time.NewTicker(12 * time.Hour)
+	defer ticker.Stop()
+
+	// Run initial cleanup after 5 minutes
+	initialDelay := time.NewTimer(5 * time.Minute)
+	defer initialDelay.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-initialDelay.C:
+			performCacheCleanup(db, ttl, log)
+		case <-ticker.C:
+			performCacheCleanup(db, ttl, log)
+		}
+	}
+}
+
+// performCacheCleanup executes cache cleanup operation
+func performCacheCleanup(db *storage.DB, ttl time.Duration, log *logger.Logger) {
+	log.Info("Starting cache cleanup...")
+
+	var totalDeleted int
+
+	// Cleanup students
+	if err := db.DeleteExpiredStudents(ttl); err != nil {
+		log.WithError(err).Error("Failed to cleanup expired students")
+	} else {
+		count, _ := db.CountStudents()
+		log.WithField("remaining", count).Debug("Students cleanup complete")
+	}
+
+	// Cleanup contacts
+	if err := db.DeleteExpiredContacts(ttl); err != nil {
+		log.WithError(err).Error("Failed to cleanup expired contacts")
+	} else {
+		count, _ := db.CountContacts()
+		log.WithField("remaining", count).Debug("Contacts cleanup complete")
+	}
+
+	// Cleanup courses
+	if err := db.DeleteExpiredCourses(ttl); err != nil {
+		log.WithError(err).Error("Failed to cleanup expired courses")
+	} else {
+		count, _ := db.CountCourses()
+		log.WithField("remaining", count).Debug("Courses cleanup complete")
+	}
+
+	// Cleanup stickers
+	if err := db.CleanupExpiredStickers(); err != nil {
+		log.WithError(err).Error("Failed to cleanup expired stickers")
+	} else {
+		count, _ := db.CountStickers()
+		log.WithField("remaining", count).Debug("Stickers cleanup complete")
+	}
+
+	// Run SQLite VACUUM to reclaim space (optional, may be slow)
+	if _, err := db.Conn().Exec("VACUUM"); err != nil {
+		log.WithError(err).Warn("Failed to vacuum database")
+	} else {
+		log.Debug("Database vacuumed successfully")
+	}
+
+	log.WithField("total_deleted", totalDeleted).Info("Cache cleanup complete")
+}
+
+// refreshStickers periodically refreshes stickers from web sources
+func refreshStickers(ctx context.Context, stickerManager *sticker.Manager, log *logger.Logger) {
+	// Refresh stickers every 24 hours
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
+	// Run initial refresh after 1 hour (to let server stabilize)
+	initialDelay := time.NewTimer(1 * time.Hour)
+	defer initialDelay.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-initialDelay.C:
+			performStickerRefresh(ctx, stickerManager, log)
+		case <-ticker.C:
+			performStickerRefresh(ctx, stickerManager, log)
+		}
+	}
+}
+
+// performStickerRefresh executes sticker refresh operation
+func performStickerRefresh(ctx context.Context, stickerManager *sticker.Manager, log *logger.Logger) {
+	log.Info("Starting periodic sticker refresh...")
+
+	refreshCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
+	if err := stickerManager.RefreshStickers(refreshCtx); err != nil {
+		log.WithError(err).Error("Failed to refresh stickers")
+	} else {
+		count := stickerManager.Count()
+		stats, _ := stickerManager.GetStats()
+		log.WithField("count", count).
+			WithField("stats", stats).
+			Info("Sticker refresh complete")
 	}
 }

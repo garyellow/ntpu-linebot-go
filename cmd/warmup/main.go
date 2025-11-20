@@ -14,6 +14,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper/ntpu"
+	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 )
 
@@ -93,6 +94,12 @@ func main() {
 	// Track statistics
 	stats := &moduleStats{}
 
+	// Warmup sticker module first (always runs)
+	if err := warmupStickerModule(ctx, db, scraperClient, log); err != nil {
+		log.WithError(err).Error("Sticker module warmup failed")
+		// Continue with other modules
+	}
+
 	// Execute warmup for each module
 	startTime := time.Now()
 	for _, module := range moduleList {
@@ -155,6 +162,11 @@ func resetCache(db *storage.DB) error {
 	// Delete all courses
 	if _, err := db.Conn().Exec("DELETE FROM courses"); err != nil {
 		return fmt.Errorf("failed to delete courses: %w", err)
+	}
+
+	// Delete all stickers
+	if _, err := db.Conn().Exec("DELETE FROM stickers"); err != nil {
+		return fmt.Errorf("failed to delete stickers: %w", err)
 	}
 
 	return nil
@@ -300,16 +312,41 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 	return nil
 }
 
+// warmupStickerModule warms up the sticker cache by fetching from web sources
+func warmupStickerModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger) error {
+	log.Info("Fetching stickers from web sources...")
+
+	// Create sticker manager
+	manager := sticker.NewManager(db, client, log)
+
+	// Fetch and save stickers (this will scrape Spy Family + Ichigo Production websites)
+	if err := manager.FetchAndSaveStickers(ctx); err != nil {
+		return fmt.Errorf("failed to fetch stickers: %w", err)
+	}
+
+	// Query final count
+	dbStickers, err := db.GetAllStickers()
+	if err != nil {
+		return fmt.Errorf("failed to query stickers: %w", err)
+	}
+
+	log.WithField("count", len(dbStickers)).Info("Sticker module complete")
+	fmt.Printf("✓ Sticker module: %d stickers cached\n", len(dbStickers))
+	return nil
+}
+
 // warmupCourseModule warms up the course module cache
 func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *moduleStats) error {
 	log.Info("Scraping Course module...")
 
-	// Terms to scrape: 113-1, 113-2, 112-2
+	// Scrape ALL courses (all education codes) for recent terms
+	// This ensures that title/teacher search will work without cache miss
 	type term struct {
 		year int
 		term int
 	}
 
+	// Scrape current and recent terms: 113-1, 113-2, 112-2
 	terms := []term{
 		{year: 113, term: 1},
 		{year: 113, term: 2},
@@ -321,8 +358,9 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 	for _, t := range terms {
 		log.WithField("year", t.year).
 			WithField("term", t.term).
-			Info("Scraping courses for term")
+			Info("Scraping ALL courses for term (this may take a while)...")
 
+		// Scrape all courses (empty title = scrape all education codes)
 		courses, err := ntpu.ScrapeCourses(ctx, client, t.year, t.term, "")
 		if err != nil {
 			log.WithError(err).

@@ -1,0 +1,138 @@
+groups:
+  - name: ntpu_linebot_alerts
+    interval: 30s
+    rules:
+      # Scraper high failure rate (adjusted to 30% threshold)
+      - alert: ScraperHighFailureRate
+        expr: |
+          (
+            sum(rate(ntpu_scraper_errors_total[5m])) by (module)
+            /
+            sum(rate(ntpu_scraper_requests_total[5m])) by (module)
+          ) > 0.3
+        for: 3m
+        labels:
+          severity: warning
+          component: scraper
+        annotations:
+          summary: "High scraper failure rate for {{ $labels.module }}"
+          description: "Scraper error rate for {{ $labels.module }} is {{ $value | humanizePercentage }} (threshold: 30%)"
+
+      # Webhook high latency (adjusted to 3s threshold)
+      - alert: WebhookHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le, event_type)
+          ) > 3
+        for: 5m
+        labels:
+          severity: warning
+          component: webhook
+        annotations:
+          summary: "High webhook latency for {{ $labels.event_type }}"
+          description: "Webhook P95 latency for {{ $labels.event_type }} is {{ $value }}s (threshold: 3s)"
+
+      # Service down
+      - alert: ServiceDown
+        expr: up{job="ntpu-linebot"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: service
+        annotations:
+          summary: "NTPU LINE bot service is down"
+          description: "The NTPU LINE bot service has been unreachable for more than 2 minutes"
+
+      # High memory usage (80% of available memory)
+      - alert: HighMemoryUsage
+        expr: |
+          (
+            go_memstats_alloc_bytes{job="ntpu-linebot"}
+            /
+            go_memstats_sys_bytes{job="ntpu-linebot"}
+          ) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is {{ $value | humanizePercentage }} of system memory (threshold: 80%)"
+
+      # Critical memory usage
+      - alert: CriticalMemoryUsage
+        expr: go_memstats_alloc_bytes{job="ntpu-linebot"} > 1024 * 1024 * 1024
+        for: 3m
+        labels:
+          severity: critical
+          component: system
+        annotations:
+          summary: "Critical memory usage detected"
+          description: "Memory usage is {{ $value | humanize1024 }}B (threshold: 1GB)"
+
+      # Scraper high latency
+      - alert: ScraperHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(ntpu_scraper_duration_seconds_bucket[5m])) by (le, module)
+          ) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: scraper
+        annotations:
+          summary: "High scraper latency for {{ $labels.module }}"
+          description: "Scraper P95 latency for {{ $labels.module }} is {{ $value }}s (threshold: 10s)"
+
+      # Cache low hit rate (70% threshold, 10 min duration)
+      - alert: CacheLowHitRate
+        expr: |
+          (
+            sum(rate(ntpu_cache_hits_total[15m])) by (module)
+            /
+            (
+              sum(rate(ntpu_cache_hits_total[15m])) by (module)
+              +
+              sum(rate(ntpu_cache_misses_total[15m])) by (module)
+            )
+          ) < 0.7
+        for: 10m
+        labels:
+          severity: info
+          component: cache
+        annotations:
+          summary: "Low cache hit rate for {{ $labels.module }}"
+          description: "Cache hit rate for {{ $labels.module }} is {{ $value | humanizePercentage }} (threshold: 70%)"
+
+      # High goroutine count
+      - alert: HighGoroutineCount
+        expr: go_goroutines{job="ntpu-linebot"} > 1000
+        for: 10m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High number of goroutines"
+          description: "Goroutine count is {{ $value }} (threshold: 1000), possible goroutine leak"
+
+      # Database connection issues
+      - alert: DatabaseConnectionError
+        expr: increase(ntpu_cache_errors_total{error_type="database"}[5m]) > 10
+        for: 3m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "Database connection errors detected"
+          description: "Database errors increased by {{ $value }} in last 5 minutes"
+
+      # Sticker loading failures
+      - alert: StickerLoadingFailure
+        expr: ntpu_sticker_manager_stickers_count{job="ntpu-linebot"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: sticker
+        annotations:
+          summary: "No stickers loaded"
+          description: "Sticker manager has 0 stickers loaded, using fallback mode"

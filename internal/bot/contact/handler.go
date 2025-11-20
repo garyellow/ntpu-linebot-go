@@ -7,26 +7,47 @@ import (
 	"strings"
 	"time"
 
+	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper/ntpu"
+	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
-	"github.com/garyellow/ntpu-linebot-go/pkg/lineutil"
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
 // Handler handles contact-related queries
 type Handler struct {
-	db      *storage.DB
-	scraper *scraper.Client
-	metrics *metrics.Metrics
-	logger  *logger.Logger
+	db             *storage.DB
+	scraper        *scraper.Client
+	metrics        *metrics.Metrics
+	logger         *logger.Logger
+	stickerManager *sticker.Manager
 }
 
 const (
 	moduleName = "contact"
 	splitChar  = "$"
+	senderName = "聯繫魔法師"
+
+	// Emergency phone numbers (without hyphens for clipboard copy)
+	// 三峽校區
+	sanxiaNormalPhone    = "0286741111" // 總機
+	sanxia24HPhone       = "0226731949" // 24H緊急行政電話
+	sanxiaEmergencyPhone = "0226711234" // 24H急難救助電話（校安中心）
+	sanxiaGatePhone      = "0226733920" // 大門哨所
+	sanxiaDormPhone      = "0286716784" // 宿舍夜間緊急電話
+
+	// 臺北校區
+	taipeiNormalPhone    = "0225024654" // 總機
+	taipeiEmergencyPhone = "0225023671" // 24H急難救助電話
+
+	// 其他常用電話
+	policePhone   = "110"        // 警察局24H緊急救助
+	firePhone     = "119"        // 消防局(含救護車)24H緊急救助
+	policeStation = "0226730561" // 北大派出所
+	homHospital   = "0226723456" // 恩主公醫院
 )
 
 // Valid keywords for contact queries
@@ -37,13 +58,6 @@ var (
 	}
 
 	contactRegex = buildRegex(validContactKeywords)
-
-	// Emergency contact constants
-	sanxiaNormalPhone    = "02-8674-1111"
-	sanxia24HPhone       = "02-2673-2123"
-	sanxiaEmergencyPhone = "02-2671-0310"
-	taipeiNormalPhone    = "02-2502-4654"
-	taipeiEmergencyPhone = "02-2388-9996"
 )
 
 // buildRegex creates a regex pattern from keywords
@@ -53,12 +67,13 @@ func buildRegex(keywords []string) *regexp.Regexp {
 }
 
 // NewHandler creates a new contact handler
-func NewHandler(db *storage.DB, scraper *scraper.Client, metrics *metrics.Metrics, logger *logger.Logger) *Handler {
+func NewHandler(db *storage.DB, scraper *scraper.Client, metrics *metrics.Metrics, logger *logger.Logger, stickerManager *sticker.Manager) *Handler {
 	return &Handler{
-		db:      db,
-		scraper: scraper,
-		metrics: metrics,
-		logger:  logger,
+		db:             db,
+		scraper:        scraper,
+		metrics:        metrics,
+		logger:         logger,
+		stickerManager: stickerManager,
 	}
 }
 
@@ -127,36 +142,81 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 
 // handleEmergencyPhones returns emergency phone numbers
 func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
-	text := fmt.Sprintf(`🚨 緊急聯絡電話
+	// Format phone numbers for display (add hyphens)
+	formatPhone := func(phone string) string {
+		if len(phone) == 10 {
+			return phone[:2] + "-" + phone[2:6] + "-" + phone[6:]
+		} else if len(phone) == 3 {
+			return phone // 110, 119
+		}
+		return phone
+	}
+
+	// Main emergency info message
+	mainText := fmt.Sprintf(`🚨 緊急聯絡電話
 
 【三峽校區】
-一般電話：%s
+總機：%s
 24H 緊急行政：%s
 24H 急難救助：%s
+大門哨所：%s
+宿舍夜間緊急：%s
 
-【台北校區】
-一般電話：%s
-24H 急難救助：%s
+【臺北校區】
+總機：%s
+24H 急難救助：%s`,
+		formatPhone(sanxiaNormalPhone),
+		formatPhone(sanxia24HPhone),
+		formatPhone(sanxiaEmergencyPhone),
+		formatPhone(sanxiaGatePhone),
+		formatPhone(sanxiaDormPhone),
+		formatPhone(taipeiNormalPhone),
+		formatPhone(taipeiEmergencyPhone),
+	)
 
-更多資訊請參考：
-https://new.ntpu.edu.tw/safety`,
-		sanxiaNormalPhone,
-		sanxia24HPhone,
-		sanxiaEmergencyPhone,
-		taipeiNormalPhone,
-		taipeiEmergencyPhone,
+	// Other emergency services
+	otherText := fmt.Sprintf(`🚑 其他緊急服務
+
+警察局：%s
+消防局/救護車：%s
+北大派出所：%s
+恩主公醫院：%s
+
+ℹ️ 行動電話收訊不良時請改撥 112`,
+		formatPhone(policePhone),
+		formatPhone(firePhone),
+		formatPhone(policeStation),
+		formatPhone(homHospital),
 	)
 
 	return []messaging_api.MessageInterface{
+		// Main message with quick copy buttons
 		lineutil.NewButtonsTemplate(
-			"緊急電話",
-			"緊急聯絡電話",
-			"點擊查看更多資訊",
+			"🚨 緊急電話",
+			"校園緊急聯絡電話",
+			"快速複製電話號碼",
 			[]lineutil.Action{
+				lineutil.NewClipboardAction("複製三峽24H行政", sanxia24HPhone),
+				lineutil.NewClipboardAction("複製三峽24H急難", sanxiaEmergencyPhone),
+				lineutil.NewClipboardAction("複製臺北24H急難", taipeiEmergencyPhone),
 				lineutil.NewURIAction("查看校園安全網", "https://new.ntpu.edu.tw/safety"),
 			},
 		),
-		lineutil.NewTextMessage(text),
+		// Detailed campus phone numbers
+		lineutil.NewTextMessageWithSender(mainText, senderName, h.stickerManager.GetRandomSticker()),
+		// Other emergency services
+		lineutil.NewButtonsTemplate(
+			"🚑 其他緊急服務",
+			"其他常用緊急電話",
+			"快速複製或撥打",
+			[]lineutil.Action{
+				lineutil.NewURIAction("撥打 110 警察", "tel:"+policePhone),
+				lineutil.NewURIAction("撥打 119 消防/救護", "tel:"+firePhone),
+				lineutil.NewClipboardAction("複製北大派出所", policeStation),
+				lineutil.NewClipboardAction("複製恩主公醫院", homHospital),
+			},
+		),
+		lineutil.NewTextMessageWithSender(otherText, senderName, h.stickerManager.GetRandomSticker()),
 	}
 }
 
@@ -171,7 +231,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 		log.WithError(err).Error("Failed to search contacts in cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
 		return []messaging_api.MessageInterface{
-			lineutil.ErrorMessage(fmt.Errorf("資料庫查詢失敗")),
+			lineutil.ErrorMessageWithDetail("查詢聯絡資訊時發生問題"),
 		}
 	}
 
@@ -191,7 +251,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 		log.WithError(err).Errorf("Failed to scrape contacts for: %s", searchTerm)
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
 		return []messaging_api.MessageInterface{
-			lineutil.ErrorMessage(fmt.Errorf("無法取得聯絡資料")),
+			lineutil.ErrorMessageWithDetail("無法取得聯絡資料，可能是網路問題或資料來源暫時無法使用"),
 		}
 	}
 
@@ -204,7 +264,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	if len(contacts) == 0 {
 		h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
 		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessage(fmt.Sprintf("🔍 查無包含「%s」的聯絡資料\n\n請確認關鍵字是否正確", searchTerm)),
+			lineutil.NewTextMessageWithSender(fmt.Sprintf("🔍 查無包含「%s」的聯絡資料\n\n請確認關鍵字是否正確", searchTerm), senderName, h.stickerManager.GetRandomSticker()),
 		}
 	}
 
@@ -223,7 +283,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_api.MessageInterface {
 	if len(contacts) == 0 {
 		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessage("🔍 查無聯絡資料"),
+			lineutil.NewTextMessageWithSender("🔍 查無聯絡資料", senderName, h.stickerManager.GetRandomSticker()),
 		}
 	}
 
@@ -269,7 +329,7 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 			builder.WriteString("\n")
 		}
 
-		messages = append(messages, lineutil.NewTextMessage(builder.String()))
+		messages = append(messages, lineutil.NewTextMessageWithSender(builder.String(), senderName, h.stickerManager.GetRandomSticker()))
 	}
 
 	// Format individuals
@@ -308,7 +368,7 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 				builder.WriteString("\n")
 			}
 
-			messages = append(messages, lineutil.NewTextMessage(builder.String()))
+			messages = append(messages, lineutil.NewTextMessageWithSender(builder.String(), senderName, h.stickerManager.GetRandomSticker()))
 		}
 	}
 

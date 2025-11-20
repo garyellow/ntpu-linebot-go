@@ -17,10 +17,15 @@ type DB struct {
 
 // New creates a new database connection and initializes the schema
 func New(dbPath string) (*DB, error) {
-	// Ensure directory exists
-	dir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create database directory: %w", err)
+	// Ensure directory exists (skip for in-memory database)
+	if dbPath != ":memory:" {
+		dir := filepath.Dir(dbPath)
+		// Only create directory if it's not empty and not current directory
+		if dir != "" && dir != "." {
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				return nil, fmt.Errorf("failed to create database directory: %w", err)
+			}
+		}
 	}
 
 	// Open database connection
@@ -32,6 +37,30 @@ func New(dbPath string) (*DB, error) {
 	// Set connection pool settings
 	conn.SetMaxOpenConns(25)
 	conn.SetMaxIdleConns(5)
+
+	// Enable WAL mode for better concurrency
+	if _, err := conn.Exec("PRAGMA journal_mode=WAL"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
+	}
+
+	// Set busy timeout to 5 seconds
+	if _, err := conn.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to set busy timeout: %w", err)
+	}
+
+	// Enable foreign keys
+	if _, err := conn.Exec("PRAGMA foreign_keys=ON"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
+	}
+
+	// Set synchronous mode to NORMAL for better performance
+	if _, err := conn.Exec("PRAGMA synchronous=NORMAL"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to set synchronous mode: %w", err)
+	}
 
 	// Test connection
 	if err := conn.Ping(); err != nil {
@@ -89,4 +118,11 @@ func (db *DB) Query(query string, args ...interface{}) (*sql.Rows, error) {
 // QueryRow executes a query that returns at most one row
 func (db *DB) QueryRow(query string, args ...interface{}) *sql.Row {
 	return db.conn.QueryRow(query, args...)
+}
+
+// NewTestDB creates an in-memory database for testing.
+// This ensures consistent test data isolation across all test files.
+// The database is automatically cleaned up when closed.
+func NewTestDB() (*DB, error) {
+	return New(":memory:")
 }

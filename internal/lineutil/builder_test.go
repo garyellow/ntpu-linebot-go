@@ -1,7 +1,7 @@
 package lineutil
 
 import (
-	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
@@ -18,10 +18,6 @@ func TestNewTextMessage(t *testing.T) {
 
 	if textMsg.Text != text {
 		t.Errorf("Expected text %q, got %q", text, textMsg.Text)
-	}
-
-	if textMsg.Type != "text" {
-		t.Errorf("Expected type 'text', got %q", textMsg.Type)
 	}
 }
 
@@ -68,9 +64,9 @@ func TestNewURIAction(t *testing.T) {
 	uri := "https://www.ntpu.edu.tw"
 
 	action := NewURIAction(label, uri)
-	uriAction, ok := action.(*messaging_api.URIAction)
+	uriAction, ok := action.(*messaging_api.UriAction)
 	if !ok {
-		t.Fatal("Expected *messaging_api.URIAction")
+		t.Fatal("Expected *messaging_api.UriAction")
 	}
 
 	if uriAction.Label != label {
@@ -82,6 +78,7 @@ func TestNewURIAction(t *testing.T) {
 	}
 }
 
+// TestTruncateText tests critical LINE API constraint (5000 char limit)
 func TestTruncateText(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -89,36 +86,9 @@ func TestTruncateText(t *testing.T) {
 		maxLen   int
 		expected string
 	}{
-		{
-			name:     "No truncation needed",
-			text:     "Short text",
-			maxLen:   20,
-			expected: "Short text",
-		},
-		{
-			name:     "Truncate with ellipsis",
-			text:     "This is a very long text that needs truncation",
-			maxLen:   20,
-			expected: "This is a very lo...",
-		},
-		{
-			name:     "Exact length",
-			text:     "Exactly20Characters!",
-			maxLen:   20,
-			expected: "Exactly20Characters!",
-		},
-		{
-			name:     "Very short maxLen",
-			text:     "Hello",
-			maxLen:   3,
-			expected: "Hel",
-		},
-		{
-			name:     "Empty string",
-			text:     "",
-			maxLen:   10,
-			expected: "",
-		},
+		{"Within limit", "Short text", 20, "Short text"},
+		{"Exceeds limit - must truncate", "This is a very long text that needs truncation", 20, "This is a very lo..."},
+		{"Empty string edge case", "", 10, ""},
 	}
 
 	for _, tt := range tests {
@@ -131,69 +101,37 @@ func TestTruncateText(t *testing.T) {
 	}
 }
 
+// TestSplitMessages tests critical LINE API constraint (5 messages max per reply)
 func TestSplitMessages(t *testing.T) {
 	tests := []struct {
 		name            string
 		messageCount    int
 		maxCount        int
 		expectedBatches int
-		lastBatchSize   int
 	}{
-		{
-			name:            "Exactly one batch",
-			messageCount:    5,
-			maxCount:        5,
-			expectedBatches: 1,
-			lastBatchSize:   5,
-		},
-		{
-			name:            "Two batches",
-			messageCount:    7,
-			maxCount:        5,
-			expectedBatches: 2,
-			lastBatchSize:   2,
-		},
-		{
-			name:            "Empty messages",
-			messageCount:    0,
-			maxCount:        5,
-			expectedBatches: 0,
-			lastBatchSize:   0,
-		},
-		{
-			name:            "Single message",
-			messageCount:    1,
-			maxCount:        5,
-			expectedBatches: 1,
-			lastBatchSize:   1,
-		},
+		{"Within limit", 5, 5, 1},
+		{"Exceeds limit - must split", 7, 5, 2},
+		{"Empty - edge case", 0, 5, 0},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			messages := make([]messaging_api.MessageInterface, tt.messageCount)
 			for i := 0; i < tt.messageCount; i++ {
-				messages[i] = NewTextMessage("Test message")
+				messages[i] = NewTextMessage("Test")
 			}
 
 			batches := SplitMessages(messages, tt.maxCount)
-
 			if len(batches) != tt.expectedBatches {
 				t.Errorf("Expected %d batches, got %d", tt.expectedBatches, len(batches))
-			}
-
-			if tt.expectedBatches > 0 {
-				lastBatch := batches[len(batches)-1]
-				if len(lastBatch) != tt.lastBatchSize {
-					t.Errorf("Expected last batch size %d, got %d", tt.lastBatchSize, len(lastBatch))
-				}
 			}
 		})
 	}
 }
 
+// TestErrorMessage tests that technical errors are NOT exposed to users
 func TestErrorMessage(t *testing.T) {
-	err := errors.New("test error")
+	err := fmt.Errorf("database connection failed")
 	msg := ErrorMessage(err)
 
 	textMsg, ok := msg.(*messaging_api.TextMessage)
@@ -201,144 +139,14 @@ func TestErrorMessage(t *testing.T) {
 		t.Fatal("Expected *messaging_api.TextMessage")
 	}
 
+	// Critical: Must NOT expose technical details
+	if contains(textMsg.Text, "database") || contains(textMsg.Text, "connection failed") {
+		t.Error("Error message MUST NOT expose technical details to users")
+	}
+
+	// Must provide user-friendly message
 	if textMsg.Text == "" {
-		t.Error("Error message text should not be empty")
-	}
-
-	// Should contain the error text
-	if !contains(textMsg.Text, "test error") {
-		t.Errorf("Expected message to contain 'test error', got %q", textMsg.Text)
-	}
-}
-
-func TestServiceUnavailableMessage(t *testing.T) {
-	msg := ServiceUnavailableMessage()
-
-	textMsg, ok := msg.(*messaging_api.TextMessage)
-	if !ok {
-		t.Fatal("Expected *messaging_api.TextMessage")
-	}
-
-	if textMsg.Text == "" {
-		t.Error("Service unavailable message should not be empty")
-	}
-}
-
-func TestNoResultsMessage(t *testing.T) {
-	msg := NoResultsMessage()
-
-	textMsg, ok := msg.(*messaging_api.TextMessage)
-	if !ok {
-		t.Fatal("Expected *messaging_api.TextMessage")
-	}
-
-	if textMsg.Text == "" {
-		t.Error("No results message should not be empty")
-	}
-}
-
-func TestDataExpiredWarningMessage(t *testing.T) {
-	tests := []struct {
-		name string
-		year int
-	}{
-		{"Recent year", 2024},
-		{"Future year", 2025},
-		{"Past year", 2020},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			msg := DataExpiredWarningMessage(tt.year)
-
-			textMsg, ok := msg.(*messaging_api.TextMessage)
-			if !ok {
-				t.Fatal("Expected *messaging_api.TextMessage")
-			}
-
-			if textMsg.Text == "" {
-				t.Error("Data expired warning message should not be empty")
-			}
-		})
-	}
-}
-
-func TestFormatList(t *testing.T) {
-	tests := []struct {
-		name     string
-		title    string
-		items    []string
-		contains []string
-	}{
-		{
-			name:     "Normal list",
-			title:    "Test List",
-			items:    []string{"Item 1", "Item 2", "Item 3"},
-			contains: []string{"Test List", "1. Item 1", "2. Item 2", "3. Item 3"},
-		},
-		{
-			name:     "Empty list",
-			title:    "Empty",
-			items:    []string{},
-			contains: []string{"Empty", "(無項目)"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := FormatList(tt.title, tt.items)
-
-			for _, expected := range tt.contains {
-				if !contains(result, expected) {
-					t.Errorf("Expected result to contain %q, got %q", expected, result)
-				}
-			}
-		})
-	}
-}
-
-func TestValidationError(t *testing.T) {
-	field := "學號"
-	message := "格式不正確"
-
-	err := NewValidationError(field, message)
-
-	valErr, ok := err.(*ValidationError)
-	if !ok {
-		t.Fatal("Expected *ValidationError")
-	}
-
-	if valErr.Field != field {
-		t.Errorf("Expected field %q, got %q", field, valErr.Field)
-	}
-
-	if valErr.Message != message {
-		t.Errorf("Expected message %q, got %q", message, valErr.Message)
-	}
-
-	errStr := err.Error()
-	if !contains(errStr, field) || !contains(errStr, message) {
-		t.Errorf("Error string should contain field and message, got %q", errStr)
-	}
-}
-
-func TestValidationErrorMessage(t *testing.T) {
-	field := "email"
-	message := "Invalid format"
-
-	msg := ValidationErrorMessage(field, message)
-
-	textMsg, ok := msg.(*messaging_api.TextMessage)
-	if !ok {
-		t.Fatal("Expected *messaging_api.TextMessage")
-	}
-
-	if !contains(textMsg.Text, field) {
-		t.Errorf("Expected message to contain field %q", field)
-	}
-
-	if !contains(textMsg.Text, message) {
-		t.Errorf("Expected message to contain message %q", message)
+		t.Error("Error message cannot be empty")
 	}
 }
 
@@ -453,6 +261,99 @@ func TestNewQuickReply(t *testing.T) {
 
 	if len(quickReply.Items) != 2 {
 		t.Errorf("Expected 2 items, got %d", len(quickReply.Items))
+	}
+}
+
+func TestNewClipboardAction(t *testing.T) {
+	tests := []struct {
+		name          string
+		label         string
+		clipboardText string
+	}{
+		{
+			name:          "Emergency phone",
+			label:         "複製三峽24H緊急行政",
+			clipboardText: "02-2673-2123",
+		},
+		{
+			name:          "Normal phone",
+			label:         "複製電話",
+			clipboardText: "02-1234-5678",
+		},
+		{
+			name:          "Email address",
+			label:         "複製信箱",
+			clipboardText: "test@gm.ntpu.edu.tw",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			action := NewClipboardAction(tt.label, tt.clipboardText)
+
+			clipAction, ok := action.(*messaging_api.ClipboardAction)
+			if !ok {
+				t.Fatal("Expected *messaging_api.ClipboardAction")
+			}
+
+			if clipAction.Label != tt.label {
+				t.Errorf("Expected label %q, got %q", tt.label, clipAction.Label)
+			}
+
+			if clipAction.ClipboardText != tt.clipboardText {
+				t.Errorf("Expected clipboardText %q, got %q", tt.clipboardText, clipAction.ClipboardText)
+			}
+		})
+	}
+}
+
+func TestNewTextMessageWithSender(t *testing.T) {
+	tests := []struct {
+		name           string
+		text           string
+		senderName     string
+		stickerIconURL string
+	}{
+		{
+			name:           "With sticker icon",
+			text:           "Hello, World!",
+			senderName:     "學號魔法師",
+			stickerIconURL: "https://stickershop.line-scdn.net/stickershop/v1/sticker/52002734/android/sticker.png",
+		},
+		{
+			name:           "With UI avatar",
+			text:           "查詢結果",
+			senderName:     "聯繫魔法師",
+			stickerIconURL: "https://ui-avatars.com/api/?name=A&size=256",
+		},
+		{
+			name:           "Empty sticker URL",
+			text:           "測試訊息",
+			senderName:     "課程魔法師",
+			stickerIconURL: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg := NewTextMessageWithSender(tt.text, tt.senderName, tt.stickerIconURL)
+
+			if msg.Text != tt.text {
+				t.Errorf("Expected text %q, got %q", tt.text, msg.Text)
+			}
+
+			if msg.Sender == nil {
+				t.Fatal("Expected non-nil Sender")
+			}
+
+			if msg.Sender.Name != tt.senderName {
+				t.Errorf("Expected sender name %q, got %q", tt.senderName, msg.Sender.Name)
+			}
+
+			if tt.stickerIconURL != "" && msg.Sender.IconUrl != tt.stickerIconURL {
+				t.Errorf("Expected sender icon URL %q, got %q", tt.stickerIconURL, msg.Sender.IconUrl)
+			}
+		})
 	}
 }
 

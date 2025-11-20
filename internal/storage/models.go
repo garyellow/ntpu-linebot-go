@@ -26,6 +26,7 @@ type Contact struct {
 }
 
 // Course represents a course record
+// Matches Python version with all fields from Course class
 type Course struct {
 	UID       string   `json:"uid"`
 	Year      int      `json:"year"`
@@ -38,4 +39,15 @@ type Course struct {
 	DetailURL string   `json:"detail_url,omitempty"`
 	Note      string   `json:"note,omitempty"`
 	CachedAt  int64    `json:"cached_at"`
+	// Note: TeacherURLs not stored in DB to keep schema simple
+	// Can be reconstructed from base URL + teachers if needed
+}
+
+// Sticker represents a sticker URL record
+type Sticker struct {
+	URL          string `json:"url"`
+	Source       string `json:"source"` // "spy_family", "ichigo", or "fallback"
+	CachedAt     int64  `json:"cached_at"`
+	SuccessCount int    `json:"success_count"`
+	FailureCount int    `json:"failure_count"`
 }
