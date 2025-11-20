@@ -1,0 +1,32 @@
+# This Action requires setting the following secrets:
+#
+# - DOCKERHUB_TOKEN (create from https://hub.docker.com/settings/security)
+
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Dockerfile'
+      - '.github/workflows/*.yml'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    name: Release Image
+    uses: ./.github/workflows/_docker-build.yml
+    with:
+      tags: ${{ github.ref_type == 'tag' && format('{0}:{1}\nghcr.io/{0}:{1}', github.repository, github.ref_name) || format('{0}:latest\nghcr.io/{0}:latest', github.repository) }}
+      push-to-dockerhub: true
+    secrets:
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}

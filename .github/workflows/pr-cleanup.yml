@@ -1,0 +1,25 @@
+name: PR Cleanup
+
+on:
+  pull_request:
+    types: [closed]
+
+concurrency:
+  group: pr-cleanup-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  cleanup:
+    name: Cleanup PR Image
+    runs-on: ubuntu-latest
+
+    permissions:
+      packages: write
+
+    steps:
+      - name: Delete PR Image
+        uses: vlaurin/action-ghcr-prune@v0.6.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          container: ${{ github.event.repository.name }}
+          prune-tags-regexes: ^pr-${{ github.event.pull_request.number }}$
