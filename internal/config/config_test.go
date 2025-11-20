@@ -8,10 +8,10 @@ import (
 
 func TestLoad(t *testing.T) {
 	// Set required environment variables
-	os.Setenv("LINE_CHANNEL_ACCESS_TOKEN", "test_token")
-	os.Setenv("LINE_CHANNEL_SECRET", "test_secret")
-	defer os.Unsetenv("LINE_CHANNEL_ACCESS_TOKEN")
-	defer os.Unsetenv("LINE_CHANNEL_SECRET")
+	_ = os.Setenv("LINE_CHANNEL_ACCESS_TOKEN", "test_token")
+	_ = os.Setenv("LINE_CHANNEL_SECRET", "test_secret")
+	defer func() { _ = os.Unsetenv("LINE_CHANNEL_ACCESS_TOKEN") }()
+	defer func() { _ = os.Unsetenv("LINE_CHANNEL_SECRET") }()
 
 	cfg, err := Load()
 	if err != nil {
@@ -122,8 +122,8 @@ func TestGetDurationEnv(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.value != "" {
-				os.Setenv(tt.key, tt.value)
-				defer os.Unsetenv(tt.key)
+				_ = os.Setenv(tt.key, tt.value)
+				defer func() { _ = os.Unsetenv(tt.key) }()
 			}
 
 			got := getDurationEnv(tt.key, tt.defaultValue)

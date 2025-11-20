@@ -70,7 +70,7 @@ func (db *DB) SearchStudentsByName(name string) ([]Student, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to search students by name: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var students []Student
 	for rows.Next() {
@@ -92,7 +92,7 @@ func (db *DB) GetStudentsByYearDept(year int, dept string) ([]Student, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get students by year and department: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var students []Student
 	for rows.Next() {
@@ -233,7 +233,7 @@ func (db *DB) SearchContactsByName(name string) ([]Contact, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to search contacts by name: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var contacts []Contact
 	for rows.Next() {
@@ -263,7 +263,7 @@ func (db *DB) GetContactsByOrganization(org string) ([]Contact, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get contacts by organization: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var contacts []Contact
 	for rows.Next() {
@@ -417,7 +417,7 @@ func (db *DB) SearchCoursesByTitle(title string) ([]Course, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to search courses by title: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	return scanCourses(rows)
 }
@@ -438,7 +438,7 @@ func (db *DB) SearchCoursesByTeacher(teacher string) ([]Course, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to search courses by teacher: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	return scanCourses(rows)
 }
@@ -451,7 +451,7 @@ func (db *DB) GetCoursesByYearTerm(year, term int) ([]Course, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get courses by year and term: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	return scanCourses(rows)
 }
@@ -562,7 +562,7 @@ func (db *DB) GetAllStickers() ([]Sticker, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get all stickers: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var stickers []Sticker
 	ttl := int64(168 * 60 * 60) // 7 days in seconds
@@ -590,7 +590,7 @@ func (db *DB) GetStickersBySource(source string) ([]Sticker, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get stickers by source: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var stickers []Sticker
 	ttl := int64(168 * 60 * 60) // 7 days in seconds
@@ -671,7 +671,7 @@ func (db *DB) GetStickerStats() (map[string]int, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sticker stats: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	stats := make(map[string]int)
 	for rows.Next() {

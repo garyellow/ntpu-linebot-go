@@ -14,9 +14,9 @@ func setupTestDB(t *testing.T) *DB {
 	return db
 }
 
-func TestSaveAndGetStudent(t *testing.T) {
+func TestSaveAndGetCourses(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	student := &Student{
 		ID:         "41247001",
@@ -57,7 +57,7 @@ func TestSaveAndGetStudent(t *testing.T) {
 // TestSearchStudentsByName tests core search logic (critical user feature)
 func TestSearchStudentsByName(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	students := []*Student{
 		{ID: "41247001", Name: "王小明", Department: "資工系", Year: 112},
@@ -84,7 +84,7 @@ func TestSearchStudentsByName(t *testing.T) {
 // TestSearchContactsByName tests core contact search (critical for directory lookup)
 func TestSearchContactsByName(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	contacts := []*Contact{
 		{UID: "c1", Type: "individual", Name: "陳大華", Organization: "資工系"},
@@ -111,7 +111,7 @@ func TestSearchContactsByName(t *testing.T) {
 // TestCourseArrayHandling tests JSON array serialization (critical for course data)
 func TestCourseArrayHandling(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	course := &Course{
 		UID:       "3141U0001",
@@ -147,7 +147,7 @@ func TestCourseArrayHandling(t *testing.T) {
 
 func TestDeleteExpiredStudents(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Insert fresh student
 	fresh := &Student{

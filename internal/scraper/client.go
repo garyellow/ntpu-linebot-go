@@ -88,7 +88,7 @@ func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
 		// Check status code
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			// Close body for non-success responses since we won't return it
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			lastErr = fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 			return lastErr
 		}
@@ -110,7 +110,7 @@ func (c *Client) GetDocument(ctx context.Context, url string) (*goquery.Document
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Parse HTML directly from response body
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
@@ -154,7 +154,7 @@ func (c *Client) TryFailoverURLs(ctx context.Context, domain string) (string, er
 		if err != nil {
 			continue
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		if resp.StatusCode < 500 {
 			// URL is accessible
