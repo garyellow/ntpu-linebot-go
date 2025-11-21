@@ -45,7 +45,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ inputs.push-to-dockerhub && format('ghcr.io/{0}\n{0}', github.repository) || format('ghcr.io/{0}', github.repository) }}
+          images: |
+            ghcr.io/${{ github.repository }}
+            ${{ inputs.push-to-dockerhub && github.repository || '' }}
           tags: ${{ inputs.tags }}
           labels: |
             org.opencontainers.image.title=NTPU LINE Bot
