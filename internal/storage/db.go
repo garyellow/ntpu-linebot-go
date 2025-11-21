@@ -75,7 +75,7 @@ func New(dbPath string) (*DB, error) {
 
 	// Initialize schema
 	if err := InitSchema(conn); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("failed to initialize schema: %w", err)
 	}
 

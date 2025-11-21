@@ -28,7 +28,7 @@ func main() {
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -41,7 +41,7 @@ func main() {
 	if err != nil {
 		log.WithError(err).Fatal("Failed to connect to database")
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	log.WithField("path", cfg.SQLitePath).Info("Database connected")
 
 	// Create Prometheus registry
