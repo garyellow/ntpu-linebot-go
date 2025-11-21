@@ -3,6 +3,7 @@ package course
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
@@ -14,7 +15,7 @@ import (
 
 func setupTestHandler(t *testing.T) *Handler {
 	// Create test database
-	db, err := storage.New(":memory:")
+	db, err := storage.New(":memory:", 168*time.Hour) // 7 days for tests
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}

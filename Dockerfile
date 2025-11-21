@@ -1,59 +1,50 @@
-# Build stage
-# Note: Using modernc.org/sqlite (pure Go) instead of mattn/go-sqlite3 (CGO)
-# This allows CGO_ENABLED=0 for truly static binaries and cross-compilation
-# Trade-off: Slightly lower performance but better portability
 FROM golang:1.25-alpine AS builder
 
-# Install build dependencies
-RUN apk add --no-cache git
+RUN apk add --no-cache git ca-certificates tzdata
 
-# Set working directory
 WORKDIR /app
 
-# Copy go mod files
 COPY go.mod go.sum ./
 
-# Download dependencies
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download && go mod verify
 
-# Copy source code
 COPY . .
 
-# Build binaries (CGo-free for static linking)
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/ntpu-linebot ./cmd/server
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/ntpu-linebot-warmup ./cmd/warmup
+ARG VERSION=dev
+ARG BUILD_DATE
+ARG VCS_REF
 
-# Runtime stage
-FROM alpine:latest
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -trimpath \
+    -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildDate=${BUILD_DATE} -X main.GitCommit=${VCS_REF}" \
+    -o /bin/ntpu-linebot ./cmd/server && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -trimpath \
+    -ldflags="-s -w" \
+    -o /bin/ntpu-linebot-warmup ./cmd/warmup && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -trimpath \
+    -ldflags="-s -w" \
+    -o /bin/healthcheck ./cmd/healthcheck
 
-# Install ca-certificates for HTTPS requests
-RUN apk --no-cache add ca-certificates
+FROM gcr.io/distroless/static-debian12:nonroot
 
-# Create non-root user
-RUN addgroup -g 1000 appuser && adduser -D -u 1000 -G appuser appuser
+WORKDIR /app
 
-# Create data directory
-RUN mkdir -p /data && chown appuser:appuser /data
+COPY --from=builder --chown=65532:65532 /bin/ntpu-linebot /app/ntpu-linebot
+COPY --from=builder --chown=65532:65532 /bin/ntpu-linebot-warmup /app/ntpu-linebot-warmup
+COPY --from=builder --chown=65532:65532 /bin/healthcheck /app/healthcheck
 
-WORKDIR /home/appuser
-
-# Copy binaries from builder
-COPY --from=builder /bin/ntpu-linebot /usr/local/bin/ntpu-linebot
-COPY --from=builder /bin/ntpu-linebot-warmup /usr/local/bin/ntpu-linebot-warmup
-
-# Copy static assets
-COPY --chown=appuser:appuser assets ./assets
-COPY --chown=appuser:appuser add_friend ./add_friend
-
-# Switch to non-root user
-USER appuser
-
-# Expose port
 EXPOSE 10000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:10000/healthz || exit 1
+ENV PORT=10000
 
-# Default command (run server)
-ENTRYPOINT ["/usr/local/bin/ntpu-linebot"]
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD ["/app/healthcheck"]
+
+ENTRYPOINT ["/app/ntpu-linebot"]
+
+USER 65532:65532

@@ -70,10 +70,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: '1.25'
 
@@ -116,7 +116,6 @@ task ci
 
 | Secret 名稱 | 說明 | 必要性 |
 |------------|------|--------|
-| `CODECOV_TOKEN` | Codecov 上傳 token | 可選 |
 | `DOCKER_USERNAME` | Docker Hub 帳號 | 部署用 |
 | `DOCKER_PASSWORD` | Docker Hub 密碼 | 部署用 |
 

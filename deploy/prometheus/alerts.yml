@@ -6,7 +6,7 @@ groups:
       - alert: ScraperHighFailureRate
         expr: |
           (
-            sum(rate(ntpu_scraper_errors_total[5m])) by (module)
+            sum(rate(ntpu_scraper_requests_total{status="error"}[5m])) by (module)
             /
             sum(rate(ntpu_scraper_requests_total[5m])) by (module)
           ) > 0.3
@@ -43,32 +43,27 @@ groups:
           summary: "NTPU LINE bot service is down"
           description: "The NTPU LINE bot service has been unreachable for more than 2 minutes"
 
-      # High memory usage (80% of available memory)
+      # High memory usage (80% of container limit 512MB = 410MB)
       - alert: HighMemoryUsage
-        expr: |
-          (
-            go_memstats_alloc_bytes{job="ntpu-linebot"}
-            /
-            go_memstats_sys_bytes{job="ntpu-linebot"}
-          ) > 0.8
+        expr: go_memstats_alloc_bytes{job="ntpu-linebot"} > 410 * 1024 * 1024
         for: 5m
         labels:
           severity: warning
           component: system
         annotations:
           summary: "High memory usage detected"
-          description: "Memory usage is {{ $value | humanizePercentage }} of system memory (threshold: 80%)"
+          description: "Memory usage is {{ $value | humanize1024 }}B (threshold: 410MB)"
 
-      # Critical memory usage
+      # Critical memory usage (90% of container limit 512MB = 460MB)
       - alert: CriticalMemoryUsage
-        expr: go_memstats_alloc_bytes{job="ntpu-linebot"} > 1024 * 1024 * 1024
+        expr: go_memstats_alloc_bytes{job="ntpu-linebot"} > 460 * 1024 * 1024
         for: 3m
         labels:
           severity: critical
           component: system
         annotations:
           summary: "Critical memory usage detected"
-          description: "Memory usage is {{ $value | humanize1024 }}B (threshold: 1GB)"
+          description: "Memory usage is {{ $value | humanize1024 }}B (threshold: 460MB)"
 
       # Scraper high latency
       - alert: ScraperHighLatency
@@ -114,17 +109,6 @@ groups:
         annotations:
           summary: "High number of goroutines"
           description: "Goroutine count is {{ $value }} (threshold: 1000), possible goroutine leak"
-
-      # Database connection issues
-      - alert: DatabaseConnectionError
-        expr: increase(ntpu_cache_errors_total{error_type="database"}[5m]) > 10
-        for: 3m
-        labels:
-          severity: critical
-          component: database
-        annotations:
-          summary: "Database connection errors detected"
-          description: "Database errors increased by {{ $value }} in last 5 minutes"
 
       # Sticker loading failures
       - alert: StickerLoadingFailure

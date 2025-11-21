@@ -132,7 +132,7 @@ sqlite3 data/cache.db "SELECT COUNT(*) FROM students WHERE cached_at + 604800 > 
 
 ### Scenario 1: Initial Deployment
 ```bash
-# First-time setup
+# First-time setup (no LINE credentials needed)
 go run ./cmd/warmup -reset -modules=id,contact,course -workers=10
 ```
 
@@ -170,8 +170,9 @@ go run ./cmd/warmup -modules=contact
 
 **Solutions:**
 1. Increase workers: `-workers=15`
-2. Run during off-peak hours
-3. Check internet speed
+2. Increase timeout: `WARMUP_TIMEOUT=30m` (default is 20m)
+3. Run during off-peak hours
+4. Check internet speed
 
 ### Problem: Database locked
 **Cause**: Another process (server) is using the database
@@ -249,6 +250,8 @@ wait
 **With -workers=20:**
 - Total time reduced to ~8 minutes
 - Risk of rate limiting increases
+
+**Note:** Default `WARMUP_TIMEOUT` is set to 20 minutes to accommodate varying network conditions and NTPU website load.
 
 ## Best Practices
 

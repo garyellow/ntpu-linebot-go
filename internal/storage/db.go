@@ -5,18 +5,21 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
 
 // DB wraps the SQLite database connection
 type DB struct {
-	conn *sql.DB
-	path string
+	conn     *sql.DB
+	path     string
+	cacheTTL time.Duration // Cache time-to-live for all data
 }
 
 // New creates a new database connection and initializes the schema
-func New(dbPath string) (*DB, error) {
+// cacheTTL specifies how long cached data remains valid before expiring
+func New(dbPath string, cacheTTL time.Duration) (*DB, error) {
 	// Ensure directory exists (skip for in-memory database)
 	if dbPath != ":memory:" {
 		dir := filepath.Dir(dbPath)
@@ -69,8 +72,9 @@ func New(dbPath string) (*DB, error) {
 	}
 
 	db := &DB{
-		conn: conn,
-		path: dbPath,
+		conn:     conn,
+		path:     dbPath,
+		cacheTTL: cacheTTL,
 	}
 
 	// Initialize schema
@@ -123,6 +127,7 @@ func (db *DB) QueryRow(query string, args ...interface{}) *sql.Row {
 // NewTestDB creates an in-memory database for testing.
 // This ensures consistent test data isolation across all test files.
 // The database is automatically cleaned up when closed.
+// Uses default 7-day TTL for tests.
 func NewTestDB() (*DB, error) {
-	return New(":memory:")
+	return New(":memory:", 168*time.Hour) // 7 days
 }

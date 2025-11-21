@@ -36,7 +36,7 @@
 ## 📋 前置需求
 
 - **Go 1.25+**: 用於本機開發
-- **Docker & Docker Compose**: 用於容器化部署
+- **Docker & docker compose CLI**: 用於容器化部署
 - **LINE Bot Credentials**: 需要 Channel Access Token 與 Channel Secret
 
 ### 取得 LINE Bot Credentials
@@ -48,7 +48,7 @@
 
 ## 🚀 快速開始
 
-### 使用 Docker Compose (推薦)
+### 使用 docker compose (推薦)
 
 ```bash
 # 1. Clone 專案
@@ -60,10 +60,10 @@ cp .env.example .env
 # 編輯 .env 填入 LINE_CHANNEL_ACCESS_TOKEN 和 LINE_CHANNEL_SECRET
 
 # 3. 啟動所有服務
-docker-compose -f docker/docker-compose.yml up -d
+docker compose -f docker/docker-compose.yml up -d
 
 # 4. 查看日誌
-docker-compose -f docker/docker-compose.yml logs -f ntpu-linebot
+docker compose -f docker/docker-compose.yml logs -f ntpu-linebot
 ```
 
 服務啟動後:
@@ -306,7 +306,7 @@ Bot: 找到 5 門課程：
 | `SCRAPER_TIMEOUT` | HTTP 請求超時時間 | `15s` | ❌ |
 | `SCRAPER_MAX_RETRIES` | 最大重試次數 | `3` | ❌ |
 | `SHUTDOWN_TIMEOUT` | 優雅關機超時時間 | `30s` | ❌ |
-| `WARMUP_TIMEOUT` | 資料預熱超時時間 | `5m` | ❌ |
+| `WARMUP_TIMEOUT` | 資料預熱超時時間 | `20m` | ❌ |
 
 ## 📊 監控與可觀測性
 
@@ -352,7 +352,7 @@ sum(rate(ntpu_webhook_requests_total[1m]))
 
 1. 開啟 `http://localhost:3000`
 2. 使用帳號 `admin` / 密碼 `admin123` 登入
-3. 預設 Dashboard 已自動匯入：`deploy/grafana/dashboard.json`
+3. 預設 Dashboard 已自動匯入：`deploy/grafana/dashboards/ntpu-linebot.json`
 
 **Dashboard 面板**:
 - 📊 **Overview**: QPS、成功率、平均延遲
@@ -459,9 +459,11 @@ task clean          # 清除建置產物
 
 # Docker 相關
 task docker:build   # 建置 Docker image
-task compose:up     # 啟動 docker-compose
+task compose:up     # 啟動 docker compose
 task compose:down   # 停止服務
 task compose:logs   # 查看日誌
+task compose:ps     # 查看服務狀態
+task compose:restart -- ntpu-linebot  # 重啟指定服務（以 ntpu-linebot 為例）
 ```
 
 ### 新增 Bot 模組
@@ -529,23 +531,23 @@ docker run -d \
   ntpu-linebot:latest
 ```
 
-### Docker Compose (完整監控)
+### docker compose (完整監控)
 
 ```bash
 # 啟動所有服務 (包含 Prometheus + Grafana)
-docker-compose -f docker/docker-compose.yml up -d
+docker compose -f docker/docker-compose.yml up -d
 
 # 查看服務狀態
-docker-compose -f docker/docker-compose.yml ps
+docker compose -f docker/docker-compose.yml ps
 
 # 查看特定服務日誌
-docker-compose -f docker/docker-compose.yml logs -f ntpu-linebot
+docker compose -f docker/docker-compose.yml logs -f ntpu-linebot
 
 # 停止所有服務
-docker-compose -f docker/docker-compose.yml down
+docker compose -f docker/docker-compose.yml down
 
 # 停止並刪除資料卷
-docker-compose -f docker/docker-compose.yml down -v
+docker compose -f docker/docker-compose.yml down -v
 ```
 
 ### 資料預熱 (Warmup)
@@ -558,15 +560,15 @@ docker-compose -f docker/docker-compose.yml down -v
 **執行方式**:
 
 ```bash
-# Docker Compose 方式 (推薦)
-docker-compose -f docker/docker-compose.yml run --rm warmup
+# docker compose 方式 (推薦)
+docker compose -f docker/docker-compose.yml run --rm warmup
 
 # 完整重新抓取 (清除舊資料)
-docker-compose -f docker/docker-compose.yml run --rm warmup --reset
+docker compose -f docker/docker-compose.yml run --rm warmup --reset
 
 # 僅抓取特定模組
-docker-compose -f docker/docker-compose.yml run --rm warmup --modules=id
-docker-compose -f docker/docker-compose.yml run --rm warmup --modules=contact,course
+docker compose -f docker/docker-compose.yml run --rm warmup --modules=id
+docker compose -f docker/docker-compose.yml run --rm warmup --modules=contact,course
 
 # 本機執行
 go run ./cmd/warmup
@@ -600,8 +602,8 @@ SCRAPER_WORKERS=8 go run ./cmd/warmup
 
 **啟動 Prometheus**:
 ```bash
-# Docker Compose 已包含
-docker-compose -f docker/docker-compose.yml up -d prometheus
+# docker compose 已包含
+docker compose -f docker/docker-compose.yml up -d prometheus
 
 # 存取: http://localhost:9090
 ```
@@ -629,7 +631,7 @@ sum(rate(ntpu_cache_hits_total[5m])) by (module)
 1. 開啟 Grafana: `http://localhost:3000`
 2. 登入 (admin / admin123)
 3. 左側選單 → Dashboards → Import
-4. 選擇 `deploy/grafana/dashboard.json`
+4. 選擇 `deploy/grafana/dashboards/ntpu-linebot.json`
 5. 選擇 Prometheus 資料源
 
 **Dashboard 包含**:
@@ -675,7 +677,7 @@ receivers:
 **使用 Loki + Promtail**:
 ```bash
 # 新增至 docker-compose.yml
-docker-compose -f docker/docker-compose-full.yml up -d
+docker compose -f docker/docker-compose-full.yml up -d
 ```
 
 **在 Grafana 中查詢日誌**:
@@ -695,7 +697,7 @@ docker-compose -f docker/docker-compose-full.yml up -d
 | 🚫 Webhook 驗證失敗 | Channel Secret 錯誤 | 檢查 `LINE_CHANNEL_SECRET` 是否正確 |
 | 💾 資料庫鎖定 | 多實例寫入 | 確認只有一個服務實例運行 |
 | 🕷️ 爬蟲失敗率高 | NTPU 網站異常 | 檢查 Prometheus metrics 確認失敗模組 |
-| 📊 Grafana 無資料 | Prometheus 未連線 | 確認 `docker-compose` 服務都正常運行 |
+| 📊 Grafana 無資料 | Prometheus 未連線 | 確認 `docker compose` 服務都正常運行 |
 
 ### 詳細問題解決
 
@@ -749,12 +751,12 @@ sqlite3 data/cache.db "PRAGMA journal_mode;"
 - 確認使用 HTTPS (LINE 要求)
 - 查看 LINE Developers Console 的錯誤日誌
 
-### 問題: Docker Compose 啟動失敗
+### 問題: docker compose 啟動失敗
 
 **錯誤訊息**: `warmup service exited with code 1`
 
 **解決方法**:
-- 查看 warmup 容器日誌: `docker-compose logs warmup`
+- 查看 warmup 容器日誌: `docker compose logs warmup`
 - 檢查網路連線是否正常
 - 確認 NTPU 網站可存取
 - 增加 `WARMUP_TIMEOUT` (預設 5 分鐘)
@@ -883,7 +885,7 @@ Closes #123
 # 部署前執行 warmup 建立快取
 task warmup
 
-# 或使用 Docker Compose（自動執行 warmup）
+# 或使用 docker compose（自動執行 warmup）
 task compose:up
 ```
 

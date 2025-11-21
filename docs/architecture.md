@@ -465,7 +465,7 @@ ntpu_memory_bytes
 
 ## 部署架構
 
-### Docker Compose（推薦）
+### docker compose（推薦）
 
 ```yaml
 services:

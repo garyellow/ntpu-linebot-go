@@ -4,6 +4,9 @@ on:
   pull_request:
     types: [closed]
 
+permissions:
+  packages: write
+
 concurrency:
   group: pr-cleanup-${{ github.event.pull_request.number }}
   cancel-in-progress: true
@@ -12,9 +15,6 @@ jobs:
   cleanup:
     name: Cleanup PR Image
     runs-on: ubuntu-latest
-
-    permissions:
-      packages: write
 
     steps:
       - name: Delete PR Image

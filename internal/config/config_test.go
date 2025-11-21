@@ -88,6 +88,100 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+func TestValidateForMode(t *testing.T) {
+	tests := []struct {
+		name        string
+		cfg         *Config
+		requireLINE bool
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "server mode - valid config",
+			cfg: &Config{
+				LineChannelToken:  "token",
+				LineChannelSecret: "secret",
+				Port:              "10000",
+				SQLitePath:        "/data/cache.db",
+				ScraperWorkers:    5,
+				ScraperMaxRetries: 3,
+			},
+			requireLINE: true,
+			wantErr:     false,
+		},
+		{
+			name: "server mode - missing token",
+			cfg: &Config{
+				LineChannelSecret: "secret",
+				Port:              "10000",
+				SQLitePath:        "/data/cache.db",
+				ScraperWorkers:    5,
+			},
+			requireLINE: true,
+			wantErr:     true,
+			errContains: "LINE_CHANNEL_ACCESS_TOKEN",
+		},
+		{
+			name: "warmup mode - missing LINE credentials OK",
+			cfg: &Config{
+				SQLitePath:        "/data/cache.db",
+				ScraperWorkers:    5,
+				ScraperMaxRetries: 3,
+			},
+			requireLINE: false,
+			wantErr:     false,
+		},
+		{
+			name: "warmup mode - missing SQLite path",
+			cfg: &Config{
+				ScraperWorkers:    5,
+				ScraperMaxRetries: 3,
+			},
+			requireLINE: false,
+			wantErr:     true,
+			errContains: "SQLITE_PATH",
+		},
+		{
+			name: "warmup mode - invalid workers",
+			cfg: &Config{
+				SQLitePath:        "/data/cache.db",
+				ScraperWorkers:    0,
+				ScraperMaxRetries: 3,
+			},
+			requireLINE: false,
+			wantErr:     true,
+			errContains: "SCRAPER_WORKERS",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.cfg.ValidateForMode(tt.requireLINE)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateForMode(%v) error = %v, wantErr %v", tt.requireLINE, err, tt.wantErr)
+			}
+			if tt.wantErr && tt.errContains != "" && err != nil {
+				if !contains(err.Error(), tt.errContains) {
+					t.Errorf("ValidateForMode() error = %v, want error containing %q", err, tt.errContains)
+				}
+			}
+		})
+	}
+}
+
+// Helper function to check if string contains substring
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
+		(len(s) > 0 && len(substr) > 0 && func() bool {
+			for i := 0; i <= len(s)-len(substr); i++ {
+				if s[i:i+len(substr)] == substr {
+					return true
+				}
+			}
+			return false
+		}()))
+}
+
 func TestGetDurationEnv(t *testing.T) {
 	tests := []struct {
 		name         string

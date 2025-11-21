@@ -208,8 +208,8 @@ func (db *DB) GetContactByUID(uid string) (*Contact, error) {
 	contact.Location = location.String
 	contact.Superior = superior.String
 
-	// Check TTL (7 days = 168 hours = 604800 seconds)
-	ttl := int64(168 * 60 * 60)
+	// Check TTL using configured cache duration
+	ttl := int64(db.cacheTTL.Seconds())
 	if contact.CachedAt+ttl <= time.Now().Unix() {
 		return nil, nil // Cache expired
 	}
@@ -392,8 +392,8 @@ func (db *DB) GetCourseByUID(uid string) (*Course, error) {
 		return nil, fmt.Errorf("failed to unmarshal locations: %w", err)
 	}
 
-	// Check TTL (7 days = 168 hours = 604800 seconds)
-	ttl := int64(168 * 60 * 60)
+	// Check TTL using configured cache duration
+	ttl := int64(db.cacheTTL.Seconds())
 	if course.CachedAt+ttl <= time.Now().Unix() {
 		return nil, nil // Cache expired
 	}
@@ -554,7 +554,7 @@ func (db *DB) SaveSticker(sticker *Sticker) error {
 	return nil
 }
 
-// GetAllStickers retrieves all stickers from database and validates cache freshness (7 days TTL)
+// GetAllStickers retrieves all stickers from database and validates cache freshness
 func (db *DB) GetAllStickers() ([]Sticker, error) {
 	query := `SELECT url, source, cached_at, success_count, failure_count FROM stickers`
 
@@ -565,7 +565,8 @@ func (db *DB) GetAllStickers() ([]Sticker, error) {
 	defer func() { _ = rows.Close() }()
 
 	var stickers []Sticker
-	ttl := int64(168 * 60 * 60) // 7 days in seconds
+	// Use configured cache duration
+	ttl := int64(db.cacheTTL.Seconds())
 	currentTime := time.Now().Unix()
 
 	for rows.Next() {
@@ -593,7 +594,8 @@ func (db *DB) GetStickersBySource(source string) ([]Sticker, error) {
 	defer func() { _ = rows.Close() }()
 
 	var stickers []Sticker
-	ttl := int64(168 * 60 * 60) // 7 days in seconds
+	// Use configured cache duration
+	ttl := int64(db.cacheTTL.Seconds())
 	currentTime := time.Now().Unix()
 
 	for rows.Next() {

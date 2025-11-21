@@ -14,7 +14,7 @@ import (
 
 func setupTestDB(t *testing.T) (*storage.DB, func()) {
 	// Use in-memory SQLite database for testing (consistent with other tests)
-	db, err := storage.New(":memory:")
+	db, err := storage.New(":memory:", 168*time.Hour) // 7 days for tests
 	require.NoError(t, err)
 
 	cleanup := func() {

@@ -289,12 +289,12 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(ntpu_scraper_requests_total[5m])) by (module) - sum(rate(ntpu_scraper_errors_total[5m])) by (module)",
+          "expr": "sum(rate(ntpu_scraper_requests_total{status=\"success\"}[5m])) by (module)",
           "legendFormat": "Success - {{module}}",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(ntpu_scraper_errors_total[5m])) by (module)",
+          "expr": "sum(rate(ntpu_scraper_requests_total{status=\"error\"}[5m])) by (module)",
           "legendFormat": "Error - {{module}}",
           "refId": "B"
         }
@@ -679,12 +679,12 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(ntpu_webhook_errors_total[1m])) by (event_type)",
+          "expr": "sum(rate(ntpu_webhook_requests_total{status=\"error\"}[1m])) by (event_type)",
           "legendFormat": "Webhook - {{event_type}}",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(ntpu_scraper_errors_total[1m])) by (module)",
+          "expr": "sum(rate(ntpu_scraper_requests_total{status=\"error\"}[1m])) by (module)",
           "legendFormat": "Scraper - {{module}}",
           "refId": "B"
         }

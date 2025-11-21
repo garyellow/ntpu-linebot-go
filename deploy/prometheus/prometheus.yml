@@ -5,6 +5,14 @@ global:
     cluster: 'ntpu-linebot'
     env: 'production'
 
+# AlertManager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - 'alertmanager:9093'
+      timeout: 10s
+
 # Load alert rules
 rule_files:
   - 'alerts.yml'
@@ -20,3 +28,11 @@ scrape_configs:
           - 'ntpu-linebot:10000'
         labels:
           service: 'ntpu-linebot'
+
+  - job_name: 'prometheus'
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+          - 'localhost:9090'
+        labels:
+          service: 'prometheus'

@@ -71,4 +71,4 @@ sum(rate(ntpu_scraper_requests_total{status="error"}[5m])) /
 
 - [Prometheus Configuration](../../deploy/prometheus/prometheus.yml)
 - [Alert Rules](../../deploy/prometheus/alerts.yml)
-- [Grafana Dashboard](../../deploy/grafana/dashboard.json)
+- [Grafana Dashboard](../../deploy/grafana/dashboards/ntpu-linebot.json)

@@ -1,11 +1,11 @@
 # Reusable workflow for Docker build and push
-name: Docker Build (Reusable)
+name: Docker Build
 
 on:
   workflow_call:
     inputs:
       tags:
-        description: 'Docker image tags (one per line)'
+        description: 'Docker metadata tag definitions (one per line)'
         required: true
         type: string
       platforms:
@@ -23,11 +23,13 @@ on:
         description: 'Docker Hub token (required if push-to-dockerhub is true)'
         required: false
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      packages: write
 
     steps:
       - name: Checkout code
@@ -38,6 +40,16 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ inputs.push-to-dockerhub && format('ghcr.io/{0}\n{0}', github.repository) || format('ghcr.io/{0}', github.repository) }}
+          tags: ${{ inputs.tags }}
+          labels: |
+            org.opencontainers.image.title=NTPU LINE Bot
+            org.opencontainers.image.description=LINE chatbot for NTPU student services
 
       - name: Log in to Docker Hub
         if: inputs.push-to-dockerhub
@@ -58,7 +70,14 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ inputs.tags }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           platforms: ${{ inputs.platforms }}
-          cache-from: type=gha,scope=docker-build
-          cache-to: type=gha,mode=max,scope=docker-build
+          cache-from: type=gha,scope=release
+          cache-to: type=gha,mode=max,scope=release
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+            VCS_REF=${{ github.sha }}
+          provenance: mode=max
+          sbom: true

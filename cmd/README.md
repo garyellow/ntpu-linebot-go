@@ -4,7 +4,6 @@
 
 - **server/** - 主服務（LINE Bot）
 - **warmup/** - 資料預熱工具（詳見 [warmup/README.md](warmup/README.md)）
-- **verify/** - 環境驗證工具
 
 ## 快速啟動
 

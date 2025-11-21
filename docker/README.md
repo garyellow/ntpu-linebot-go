@@ -1,62 +1,55 @@
 # docker/
 
-Docker 部署設定。
-
-## docker-compose.yml
-
-完整的服務堆疊，包含：
-- **warmup** - 資料預熱容器（啟動時執行一次）
-- **ntpu-linebot** - 主服務
-- **prometheus** - 監控指標收集
-- **grafana** - 視覺化儀表板
-
 ## 快速啟動
 
 ```bash
-# 進入 docker 目錄
 cd docker
-
-# 建立 .env 檔案（或複製 .env.example）
 echo "LINE_CHANNEL_ACCESS_TOKEN=your_token" > .env
 echo "LINE_CHANNEL_SECRET=your_secret" >> .env
-
-# 啟動所有服務
-docker-compose up -d
-
-# 查看日誌
-docker-compose logs -f ntpu-linebot
-
-# 停止服務
-docker-compose down
+docker compose up -d
 ```
 
-## 使用 Task 指令（推薦）
+## 服務
+
+- **init-data** - 初始化資料目錄權限
+- **warmup** - 預熱快取（執行一次）
+- **ntpu-linebot** - 主服務
+- **prometheus** - 監控 (http://localhost:9090)
+- **alertmanager** - 告警 (http://localhost:9093)
+- **grafana** - 儀表板 (http://localhost:3000, admin/admin123)
+
+## 環境變數
+
+必填：
+- `LINE_CHANNEL_ACCESS_TOKEN`
+- `LINE_CHANNEL_SECRET`
+
+可選：
+- `IMAGE_TAG` - 映像版本（預設：latest）
+- `WARMUP_MODULES` - 預熱模組（預設：id,contact,course，空字串跳過）
+- `LOG_LEVEL` - 日誌層級（預設：info）
+- `GRAFANA_PASSWORD` - Grafana 密碼（預設：admin123）
+
+## 常用指令
 
 ```bash
-# 在專案根目錄執行
-task compose:up     # 啟動
-task compose:logs   # 查看日誌
-task compose:down   # 停止
-task compose:ps     # 查看狀態
+task compose:up                      # 啟動
+task compose:down                    # 停止
+task compose:logs                    # 查看所有日誌
+task compose:logs -- ntpu-linebot    # 查看特定服務日誌
+task compose:restart -- ntpu-linebot # 重啟服務
 ```
 
-## 資料持久化
+## 疑難排解
 
-- SQLite 資料庫: `./data/cache.db`
-- Prometheus 資料: Docker volume `prometheus-data`
-- Grafana 資料: Docker volume `grafana-data`
-
-## 更新映像檔
-
+權限錯誤：
 ```bash
-# 拉取最新映像檔
-docker-compose pull
-
-# 重啟服務
-docker-compose up -d
+docker compose down
+rm -rf ./data
+docker compose up -d
 ```
 
-或使用提供的腳本：
+更新映像：
 ```bash
-./update.sh
+docker compose pull && docker compose up -d
 ```

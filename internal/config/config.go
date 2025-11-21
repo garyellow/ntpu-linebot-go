@@ -23,7 +23,7 @@ type Config struct {
 
 	// SQLite Configuration
 	SQLitePath string
-	CacheTTL   time.Duration
+	CacheTTL   time.Duration // Cache TTL for all operations (queries and cleanup)
 
 	// Scraper Configuration
 	ScraperWorkers    int
@@ -64,7 +64,7 @@ func Load() (*Config, error) {
 		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 3),
 
 		// Warmup Configuration
-		WarmupTimeout: getDurationEnv("WARMUP_TIMEOUT", 5*time.Minute),
+		WarmupTimeout: getDurationEnv("WARMUP_TIMEOUT", 20*time.Minute),
 	}
 
 	// Validate required fields
@@ -76,15 +76,24 @@ func Load() (*Config, error) {
 }
 
 // Validate checks if required configuration values are set
+// For server mode, all fields are required. For warmup mode, LINE credentials are optional.
 func (c *Config) Validate() error {
-	if c.LineChannelToken == "" {
-		return fmt.Errorf("LINE_CHANNEL_ACCESS_TOKEN is required")
-	}
-	if c.LineChannelSecret == "" {
-		return fmt.Errorf("LINE_CHANNEL_SECRET is required")
-	}
-	if c.Port == "" {
-		return fmt.Errorf("PORT is required")
+	return c.ValidateForMode(true)
+}
+
+// ValidateForMode validates config based on whether LINE credentials are required
+// requireLINE should be false for warmup tool, true for server
+func (c *Config) ValidateForMode(requireLINE bool) error {
+	if requireLINE {
+		if c.LineChannelToken == "" {
+			return fmt.Errorf("LINE_CHANNEL_ACCESS_TOKEN is required")
+		}
+		if c.LineChannelSecret == "" {
+			return fmt.Errorf("LINE_CHANNEL_SECRET is required")
+		}
+		if c.Port == "" {
+			return fmt.Errorf("PORT is required")
+		}
 	}
 	if c.SQLitePath == "" {
 		return fmt.Errorf("SQLITE_PATH is required")

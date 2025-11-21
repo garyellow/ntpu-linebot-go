@@ -36,13 +36,15 @@ func main() {
 	log := logger.New(cfg.LogLevel)
 	log.Info("Starting NTPU LineBot Server")
 
-	// Connect to database
-	db, err := storage.New(cfg.SQLitePath)
+	// Connect to database with configured TTL
+	db, err := storage.New(cfg.SQLitePath, cfg.CacheTTL)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to connect to database")
 	}
 	defer func() { _ = db.Close() }()
-	log.WithField("path", cfg.SQLitePath).Info("Database connected")
+	log.WithField("path", cfg.SQLitePath).
+		WithField("cache_ttl", cfg.CacheTTL).
+		Info("Database connected")
 
 	// Create Prometheus registry
 	registry := prometheus.NewRegistry()
@@ -223,18 +225,34 @@ func setupRoutes(router *gin.Engine, webhookHandler *webhook.Handler, db *storag
 			return
 		}
 
-		// Check scraper URLs availability
-		checkCtx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+		// Check scraper URLs availability (quick check, just try first URL)
+		checkCtx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
 		defer cancel()
 
 		seaAvailable := false
 		lmsAvailable := false
 
-		if _, err := scraperClient.TryFailoverURLs(checkCtx, "sea"); err == nil {
-			seaAvailable = true
+		// Only check first URL in failover list (for speed)
+		seaURLs := scraperClient.GetBaseURLs("sea")
+		if len(seaURLs) > 0 {
+			req, _ := http.NewRequestWithContext(checkCtx, "HEAD", seaURLs[0], nil)
+			if resp, err := http.DefaultClient.Do(req); err == nil {
+				_ = resp.Body.Close()
+				if resp.StatusCode < 500 {
+					seaAvailable = true
+				}
+			}
 		}
-		if _, err := scraperClient.TryFailoverURLs(checkCtx, "lms"); err == nil {
-			lmsAvailable = true
+
+		lmsURLs := scraperClient.GetBaseURLs("lms")
+		if len(lmsURLs) > 0 {
+			req, _ := http.NewRequestWithContext(checkCtx, "HEAD", lmsURLs[0], nil)
+			if resp, err := http.DefaultClient.Do(req); err == nil {
+				_ = resp.Body.Close()
+				if resp.StatusCode < 500 {
+					lmsAvailable = true
+				}
+			}
 		}
 
 		// Check cache data availability

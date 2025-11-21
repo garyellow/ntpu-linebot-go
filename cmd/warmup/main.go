@@ -43,17 +43,25 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Validate config (warmup mode - LINE credentials not required)
+	if err := cfg.ValidateForMode(false); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Config validation failed: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Initialize logger
 	log := logger.New(cfg.LogLevel)
 	log.Info("Starting warmup tool")
 
-	// Connect to database
-	db, err := storage.New(cfg.SQLitePath)
+	// Connect to database with configured TTL
+	db, err := storage.New(cfg.SQLitePath, cfg.CacheTTL)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to connect to database")
 	}
 	defer func() { _ = db.Close() }()
-	log.WithField("path", cfg.SQLitePath).Info("Database connected")
+	log.WithField("path", cfg.SQLitePath).
+		WithField("cache_ttl", cfg.CacheTTL).
+		Info("Database connected")
 
 	// Handle reset flag
 	if *resetFlag {
@@ -67,7 +75,9 @@ func main() {
 	// Parse modules
 	moduleList := parseModules(*modulesFlag)
 	if len(moduleList) == 0 {
-		log.Fatal("No valid modules specified")
+		log.Info("No modules specified, exiting")
+		fmt.Println("⏭️  No modules to warmup, skipping")
+		return
 	}
 	log.WithField("modules", moduleList).Info("Modules to warmup")
 
@@ -102,22 +112,23 @@ func main() {
 
 	// Execute warmup for each module
 	startTime := time.Now()
+	var hasError bool
 	for _, module := range moduleList {
 		switch module {
 		case "id":
 			if err := warmupIDModule(ctx, db, scraperClient, log, stats, workers); err != nil {
 				log.WithError(err).Error("ID module warmup failed")
-				// Continue with other modules
+				hasError = true
 			}
 		case "contact":
 			if err := warmupContactModule(ctx, db, scraperClient, log, stats); err != nil {
 				log.WithError(err).Error("Contact module warmup failed")
-				// Continue with other modules
+				hasError = true
 			}
 		case "course":
 			if err := warmupCourseModule(ctx, db, scraperClient, log, stats); err != nil {
 				log.WithError(err).Error("Course module warmup failed")
-				// Continue with other modules
+				hasError = true
 			}
 		default:
 			log.WithField("module", module).Warn("Unknown module, skipping")
@@ -126,12 +137,22 @@ func main() {
 	duration := time.Since(startTime)
 
 	// Print final summary
-	log.WithField("duration", duration).Info("Warmup complete")
-	fmt.Printf("\n✅ Warmup complete: %d students, %d contacts, %d courses cached\n",
-		atomic.LoadInt64(&stats.students),
-		atomic.LoadInt64(&stats.contacts),
-		atomic.LoadInt64(&stats.courses))
-	fmt.Printf("Total time: %v\n", duration.Round(time.Second))
+	if hasError {
+		log.WithField("duration", duration).Error("Warmup completed with errors")
+		fmt.Fprintf(os.Stderr, "\n❌ Warmup completed with errors: %d students, %d contacts, %d courses cached\n",
+			atomic.LoadInt64(&stats.students),
+			atomic.LoadInt64(&stats.contacts),
+			atomic.LoadInt64(&stats.courses))
+		fmt.Fprintf(os.Stderr, "Total time: %v\n", duration.Round(time.Second))
+		os.Exit(1)
+	} else {
+		log.WithField("duration", duration).Info("Warmup complete")
+		fmt.Printf("\n✅ Warmup complete: %d students, %d contacts, %d courses cached\n",
+			atomic.LoadInt64(&stats.students),
+			atomic.LoadInt64(&stats.contacts),
+			atomic.LoadInt64(&stats.courses))
+		fmt.Printf("Total time: %v\n", duration.Round(time.Second))
+	}
 }
 
 // parseModules parses comma-separated module list
@@ -220,16 +241,18 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 						WithField("dept", t.deptCode).
 						Error("Failed to scrape students")
 					atomic.AddInt64(&errors, 1)
-				} else {
-					// Save to database
-					for _, student := range students {
-						if err := db.SaveStudent(student); err != nil {
-							log.WithError(err).
-								WithField("student_id", student.ID).
-								Warn("Failed to save student")
-						} else {
-							atomic.AddInt64(&stats.students, 1)
-						}
+					continue
+				}
+
+				// Save to database
+				for _, student := range students {
+					if err := db.SaveStudent(student); err != nil {
+						log.WithError(err).
+							WithField("student_id", student.ID).
+							Warn("Failed to save student")
+						atomic.AddInt64(&errors, 1)
+					} else {
+						atomic.AddInt64(&stats.students, 1)
 					}
 				}
 
@@ -270,22 +293,33 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 
 	var contactCount int64
 
+	// Check context
+	if ctx.Err() != nil {
+		return fmt.Errorf("context cancelled: %w", ctx.Err())
+	}
+
 	// Scrape administrative contacts
 	log.Info("Scraping administrative contacts...")
 	adminContacts, err := ntpu.ScrapeAdministrativeContacts(ctx, client)
 	if err != nil {
 		log.WithError(err).Error("Failed to scrape administrative contacts")
-	} else {
-		for _, contact := range adminContacts {
-			if err := db.SaveContact(contact); err != nil {
-				log.WithError(err).
-					WithField("contact", contact.Name).
-					Warn("Failed to save contact")
-			} else {
-				contactCount++
-			}
+		return fmt.Errorf("failed to scrape administrative contacts: %w", err)
+	}
+
+	for _, contact := range adminContacts {
+		if err := db.SaveContact(contact); err != nil {
+			log.WithError(err).
+				WithField("contact", contact.Name).
+				Warn("Failed to save contact")
+		} else {
+			contactCount++
 		}
-		log.WithField("count", len(adminContacts)).Info("Administrative contacts scraped")
+	}
+	log.WithField("count", len(adminContacts)).Info("Administrative contacts scraped")
+
+	// Check context again
+	if ctx.Err() != nil {
+		return fmt.Errorf("context cancelled: %w", ctx.Err())
 	}
 
 	// Scrape academic contacts
@@ -293,18 +327,19 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 	academicContacts, err := ntpu.ScrapeAcademicContacts(ctx, client)
 	if err != nil {
 		log.WithError(err).Error("Failed to scrape academic contacts")
-	} else {
-		for _, contact := range academicContacts {
-			if err := db.SaveContact(contact); err != nil {
-				log.WithError(err).
-					WithField("contact", contact.Name).
-					Warn("Failed to save contact")
-			} else {
-				contactCount++
-			}
-		}
-		log.WithField("count", len(academicContacts)).Info("Academic contacts scraped")
+		return fmt.Errorf("failed to scrape academic contacts: %w", err)
 	}
+
+	for _, contact := range academicContacts {
+		if err := db.SaveContact(contact); err != nil {
+			log.WithError(err).
+				WithField("contact", contact.Name).
+				Warn("Failed to save contact")
+		} else {
+			contactCount++
+		}
+	}
+	log.WithField("count", len(academicContacts)).Info("Academic contacts scraped")
 
 	atomic.AddInt64(&stats.contacts, contactCount)
 	log.Info("Contact module complete")
@@ -356,6 +391,11 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 	totalCourses := int64(0)
 
 	for _, t := range terms {
+		// Check context before each term
+		if ctx.Err() != nil {
+			return fmt.Errorf("context cancelled: %w", ctx.Err())
+		}
+
 		log.WithField("year", t.year).
 			WithField("term", t.term).
 			Info("Scraping ALL courses for term (this may take a while)...")
@@ -371,11 +411,13 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 		}
 
 		// Save courses
+		var saveErrors int
 		for _, course := range courses {
 			if err := db.SaveCourse(course); err != nil {
 				log.WithError(err).
 					WithField("course_uid", course.UID).
 					Warn("Failed to save course")
+				saveErrors++
 			} else {
 				totalCourses++
 			}
@@ -383,7 +425,9 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 
 		log.WithField("year", t.year).
 			WithField("term", t.term).
-			WithField("count", len(courses)).
+			WithField("scraped", len(courses)).
+			WithField("saved", len(courses)-saveErrors).
+			WithField("errors", saveErrors).
 			Info("Courses scraped for term")
 	}
 

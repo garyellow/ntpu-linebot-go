@@ -14,6 +14,7 @@
 - ✅ golangci-lint 代碼檢查
 - ✅ govulncheck 漏洞掃描
 - ✅ Docker 構建 + Trivy 安全掃描（僅 PR）
+- ✅ Trivy 掃描直接使用 metadata 產出的 `pr-{number}` 標籤，避免標籤與映像不同步
 - ✅ 使用 PR 編號標籤 (`pr-123`)，避免分支名稱特殊字符問題
 
 **Cache 策略**:
@@ -33,6 +34,7 @@
 - ✅ 同時推送到 Docker Hub 和 GHCR
 - ✅ 自動標籤：main → `latest`，tag → 版本號（如 `v1.2.3`）
 - ✅ Tag push 忽略 paths 過濾（總是構建）
+- ✅ Tag 規則以 metadata 的 `type=raw` 定義，一次生成兩個 registry 需用的所有標籤
 
 ---
 
@@ -59,13 +61,16 @@
 
 ### ✅ Go 項目
 - 使用 `go-version-file` 而非硬編碼版本
-- `setup-go` 的 `cache: true` 自動處理依賴和構建緩存
-- 覆蓋率不上傳到第三方（符合隱私要求）
+- `setup-go@v6` 的 `cache: true` 自動處理依賴和構建緩存
+- `go mod verify` 驗證依賴完整性（防止供應鏈攻擊）
+- 覆蓋率支援本地顯示（不上傳第三方）
 
 ### ✅ Docker 構建
 - 使用 `cache-from/cache-to` 加速構建（40-60% 時間節省）
-- 限定 cache scope 避免分支互相干擾
+- Branch-specific cache scope（`ci-pr` / `release`）避免衝突
+- Docker metadata action 自動產生語義化標籤
 - 單平台構建在 CI（快速），多平台在 release（完整）
+- 使用最新的 actions：checkout@v5, setup-go@v6
 
 ### ✅ Workflow 設計
 - 使用 `concurrency` 避免重複執行浪費資源
@@ -76,6 +81,7 @@
 - 最小權限原則（`packages: write` 僅在需要時）
 - Trivy 掃描 + CodeQL SARIF 上傳
 - govulncheck 檢查 Go 依賴漏洞
+- **新增**: 依賴驗證防止篡改
 
 ---
 
@@ -83,10 +89,10 @@
 
 | Workflow | 觸發 | 執行內容 | 產物 | Cache Scope |
 |---------|------|---------|------|-------------|
-| **CI** | Push 非 main<br>PR 到 main<br>手動觸發 | 測試<br>Lint<br>漏洞掃描<br>Docker (僅 PR)<br>Trivy 掃描 | `pr-{number}` image<br>SARIF 報告 | `build-${{ github.ref }}` |
+| **CI** | Push 非 main<br>PR 到 main<br>手動觸發 | 測試<br>Lint<br>漏洞掃描<br>Docker (僅 PR)<br>Trivy 掃描 | `pr-{number}` image<br>SARIF 報告 | `ci-pr` |
 | **PR Cleanup** | PR 關閉 | 刪除 GHCR image | - | - |
-| **Release** | Push main (代碼變更)<br>Push tag `v*.*.*` | 雙平台 Docker 構建 | `latest` 或 `v1.2.3`<br>推送到 Hub+GHCR | `docker-build` |
-| **Docker Build** | 被調用 | 可重用構建邏輯 | 參數化 images | `docker-build` |
+| **Release** | Push main (代碼變更)<br>Push tag `v*.*.*` | 雙平台 Docker 構建 | `latest` 或 `v1.2.3`<br>推送到 Hub+GHCR | `release` |
+| **Docker Build** | 被調用 | 可重用構建邏輯 | 參數化 images | `release` |
 
 ## 完整性檢查清單
 
