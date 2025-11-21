@@ -1,0 +1,77 @@
+# AlertManager configuration for NTPU LINE Bot
+# Route alerts to appropriate channels based on severity
+
+global:
+  resolve_timeout: 5m
+
+# Default receiver (can be overridden per route)
+route:
+  receiver: 'default'
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+
+  # Child routes for different severity levels
+  routes:
+    # Critical alerts - immediate notification
+    - receiver: 'critical'
+      match:
+        severity: critical
+      continue: false
+
+    # Warning alerts - standard notification
+    - receiver: 'warning'
+      match:
+        severity: warning
+      continue: false
+
+    # Info alerts - low priority
+    - receiver: 'info'
+      match:
+        severity: info
+      continue: false
+
+# Receivers define where alerts are sent
+# Configure these based on your notification channels
+receivers:
+  # Default receiver - logs only (no external notification)
+  - name: 'default'
+    # Add webhook_configs, email_configs, or other configs as needed
+
+  # Critical alerts receiver
+  - name: 'critical'
+    # Example: Webhook to notification service
+    # webhook_configs:
+    #   - url: 'http://your-webhook-endpoint/critical'
+    #     send_resolved: true
+
+  # Warning alerts receiver
+  - name: 'warning'
+    # Example: Email notification
+    # email_configs:
+    #   - to: 'team@example.com'
+    #     from: 'alertmanager@ntpu-linebot.local'
+    #     smarthost: 'smtp.example.com:587'
+    #     auth_username: 'alertmanager'
+    #     auth_password: 'password'
+    #     send_resolved: true
+
+  # Info alerts receiver
+  - name: 'info'
+    # Example: Slack webhook
+    # slack_configs:
+    #   - api_url: 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL'
+    #     channel: '#monitoring'
+    #     title: 'NTPU LineBot Alert'
+    #     text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+    #     send_resolved: true
+
+# Inhibition rules - suppress certain alerts when others are firing
+inhibit_rules:
+  # Suppress warning if critical alert is firing for the same service
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'service']

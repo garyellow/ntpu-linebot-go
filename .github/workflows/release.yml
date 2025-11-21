@@ -1,0 +1,38 @@
+# This Action requires setting the following secrets:
+#
+# - DOCKERHUB_TOKEN (create from https://hub.docker.com/settings/security)
+
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Dockerfile'
+      - '.github/workflows/*.yml'
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    name: Release Image
+    uses: ./.github/workflows/_docker-build.yml
+    with:
+      # For tags: push version tag + latest
+      # For main branch: push latest only
+      tags: ${{ github.ref_type == 'tag' && format('type=raw,value={0}\ntype=raw,value=latest', github.ref_name) || 'type=raw,value=latest' }}
+      push-to-dockerhub: true
+    secrets:
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}

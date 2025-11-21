@@ -1,0 +1,83 @@
+# Reusable workflow for Docker build and push
+name: Docker Build
+
+on:
+  workflow_call:
+    inputs:
+      tags:
+        description: 'Docker metadata tag definitions (one per line)'
+        required: true
+        type: string
+      platforms:
+        description: 'Target platforms'
+        required: false
+        type: string
+        default: 'linux/amd64,linux/arm64'
+      push-to-dockerhub:
+        description: 'Whether to push to Docker Hub'
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      DOCKERHUB_TOKEN:
+        description: 'Docker Hub token (required if push-to-dockerhub is true)'
+        required: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ inputs.push-to-dockerhub && format('ghcr.io/{0}\n{0}', github.repository) || format('ghcr.io/{0}', github.repository) }}
+          tags: ${{ inputs.tags }}
+          labels: |
+            org.opencontainers.image.title=NTPU LINE Bot
+            org.opencontainers.image.description=LINE chatbot for NTPU student services
+
+      - name: Log in to Docker Hub
+        if: inputs.push-to-dockerhub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: ${{ inputs.platforms }}
+          cache-from: type=gha,scope=release
+          cache-to: type=gha,mode=max,scope=release
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+            VCS_REF=${{ github.sha }}
+          provenance: mode=max
+          sbom: true

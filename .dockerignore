@@ -1,0 +1,75 @@
+# Git
+.git
+.gitignore
+.gitattributes
+.github
+
+# Documentation
+*.md
+!go.mod
+LICENSE
+docs/
+
+# Development
+.env
+.env.*
+!.env.example
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Build artifacts
+bin/
+dist/
+build/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Testing
+*_test.go
+coverage
+coverage.out
+*.test
+*.prof
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Docker (not needed in container)
+docker/
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Deployment configs
+deploy/
+
+# Task runner
+Taskfile.yml
+
+# Data and logs
+data/
+*.db
+*.log
+
+# Temporary
+tmp/
+temp/
+*.tmp
+*.bak
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Rich menu (not needed at runtime)
+rich_menu/
+
+# Upgrade docs
+UPGRADE_2025.md
