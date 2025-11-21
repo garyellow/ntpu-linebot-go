@@ -5,7 +5,21 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go 1.25+](https://img.shields.io/badge/go-1.25+-blue.svg)](https://go.dev/dl/)
 
-國立臺北大學 LINE 聊天機器人，提供學號查詢、通訊錄查詢、課程查詢等功能。使用 Go 重寫，強調高效能、可維護性與完整監控。
+國立臺北大學 LINE 聊天機器人，提供學號查詢、通訊錄查詢、課程查詢等功能。
+
+> **從 Python 遷移**: 本專案從 [ntpu-linebot-python](https://github.com/garyellow/ntpu-linebot-python) 重寫而來，選擇 Go 以獲得更好的並發處理、更低的資源消耗與完整的類型安全。詳見 [遷移說明](docs/migration.md)。
+
+## 📋 目錄
+
+- [功能特色](#-功能特色)
+- [加入好友](#-加入好友)
+- [快速開始](#-快速開始)
+- [架構設計](#-架構設計)
+- [環境變數](#-環境變數)
+- [開發指南](#-開發指南)
+- [Docker 部署](#-docker-部署)
+- [疑難排解](#-疑難排解)
+- [貢獻指南](#-貢獻指南)
 
 ## ✨ 功能特色
 
@@ -66,70 +80,28 @@ docker compose logs -f ntpu-linebot
 - AlertManager: `http://localhost:9093`
 - Grafana: `http://localhost:3000` (admin/admin123)
 
-### 本機開發
-
-```bash
-# 安裝 Task runner
-go install github.com/go-task/task/v3/cmd/task@latest
-
-# 安裝依賴
-go mod download
-
-# 設定環境變數
-cp .env.example .env
-# 編輯 .env
-
-# 預熱快取（首次執行）
-task warmup
-
-# 啟動開發服務
-task dev
-```
-
 ## 🏗️ 架構設計
 
 ```
-LINE Webhook → Gin Handler (25s timeout)
-                 ↓ (簽章驗證、限流)
-           Bot Handlers (id/contact/course)
-                 ↓ (關鍵字匹配)
-          Storage Repository (cache-first)
-                 ↓ (7天 TTL 檢查)
-       Scraper Client (限流、singleflight)
-                 ↓ (指數退避、failover URLs)
-            NTPU Websites (lms/sea)
+LINE Webhook → Gin Handler → Bot Handlers → Storage Repository → Scraper → NTPU Websites
 ```
 
-### 關鍵設計
+### 關鍵特性
 
-- **Cache-First**: 優先查詢快取，Miss 時觸發爬蟲
-- **Singleflight**: 10 個並發查詢 → 1 次爬蟲執行
-- **Rate Limiting**: 全域 5 req/s + 每用戶 10 req/s
-- **Worker Pool**: 限制並發數避免資源耗盡
+- **Cache-First**: 優先查詢快取,避免重複爬取
+- **Singleflight**: 重複查詢自動合併,減輕目標網站負擔
+- **Rate Limiting**: 全域與每用戶限流,防止濫用
+- **Context Timeout**: 25 秒超時控制,避免請求堆積
 
-詳細架構說明請見 [docs/architecture.md](docs/architecture.md)
+📖 **完整架構文件**: [docs/architecture.md](docs/architecture.md)
 
-## 📖 使用範例
+## 💬 使用範例
 
-### 學號查詢
-```
-學號 412345678          # 依學號查詢
-學生 王小明             # 依姓名查詢
-系代碼 85               # 查詢系所名稱
-```
-
-### 課程查詢
-```
-課程 資料結構           # 依課程名稱搜尋
-教師 王教授             # 依教師姓名搜尋
-課號 3141U0001          # 依課號查詢
-```
-
-### 聯絡資訊
-```
-聯絡 資工系             # 查詢系所聯絡方式
-緊急電話                # 顯示緊急聯絡電話
-```
+| 功能 | 指令範例 |
+|------|---------|
+| **學號查詢** | `學號 412345678` / `學生 王小明` / `系代碼 85` |
+| **課程查詢** | `課程 資料結構` / `教師 王教授` / `課號 3141U0001` |
+| **聯絡資訊** | `聯絡 資工系` / `緊急電話` |
 
 ## ⚙️ 環境變數
 
@@ -138,79 +110,52 @@ LINE Webhook → Gin Handler (25s timeout)
 | `LINE_CHANNEL_ACCESS_TOKEN` | LINE Bot Access Token | - | ✅ |
 | `LINE_CHANNEL_SECRET` | LINE Channel Secret | - | ✅ |
 | `PORT` | HTTP 服務埠號 | `10000` | ❌ |
-| `LOG_LEVEL` | 日誌等級 (debug/info/warn/error) | `info` | ❌ |
+| `LOG_LEVEL` | 日誌等級 | `info` | ❌ |
 | `SQLITE_PATH` | SQLite 資料庫路徑 | `/data/cache.db` | ❌ |
-| `CACHE_TTL` | 快取有效期限 | `168h` | ❌ |
-| `SCRAPER_WORKERS` | 爬蟲並發數 | `5` | ❌ |
-| `SCRAPER_TIMEOUT` | 爬蟲請求超時 | `15s` | ❌ |
-| `WARMUP_TIMEOUT` | 預熱超時時間 | `20m` | ❌ |
 
-完整設定請見 [internal/config/README.md](internal/config/README.md)
+📖 **完整設定清單**: [internal/config/README.md](internal/config/README.md)
 
-## 📊 監控與可觀測性
+## 📊 監控
 
-### Prometheus 指標
-
-| 類別 | 指標 | 說明 |
-|------|------|------|
-| **請求** | `ntpu_webhook_requests_total` | Webhook 請求總數 |
-| **延遲** | `ntpu_webhook_duration_seconds` | Webhook 處理耗時 (Histogram) |
-| **快取** | `ntpu_cache_hits_total` | 快取命中次數 |
-| | `ntpu_cache_misses_total` | 快取未命中次數 |
-| **系統** | `ntpu_memory_bytes` | 記憶體使用量 |
-| | `ntpu_active_goroutines` | 活躍 Goroutine 數 |
-
-### 存取監控服務
+提供 Prometheus + Grafana + AlertManager 完整監控堆疊:
 
 ```bash
-# 啟動完整監控堆疊
-task compose:up
-
-# 存取服務
-open http://localhost:9090  # Prometheus
-open http://localhost:9093  # AlertManager
-open http://localhost:3000  # Grafana (admin/admin123)
+task compose:up  # 啟動監控服務
 ```
 
-### Grafana Dashboard
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3000 (admin/admin123)
+- AlertManager: http://localhost:9093
 
-預設 Dashboard 包含：
-- 📊 QPS、成功率、平均延遲
-- ⏱️ P50/P95/P99 延遲分佈
-- 💾 快取命中率
-- 🔧 系統資源使用
-
-詳細監控設定請見 [deploy/README.md](deploy/README.md)
+📖 **監控指標與告警設定**: [deploy/README.md](deploy/README.md)
 
 ## 🛠️ 開發指南
 
-### 專案結構
+### 本機開發
 
-```
-.
-├── cmd/                    # 應用程式入口
-│   ├── server/            # 主服務
-│   ├── warmup/            # 預熱工具
-│   └── healthcheck/       # 健康檢查
-├── internal/              # 內部套件
-│   ├── bot/               # Bot 模組 (id/contact/course)
-│   ├── config/            # 設定管理
-│   ├── logger/            # 結構化日誌
-│   ├── metrics/           # Prometheus 指標
-│   ├── scraper/           # 爬蟲系統
-│   ├── storage/           # SQLite 資料層
-│   ├── sticker/           # 貼圖管理
-│   ├── webhook/           # LINE Webhook 處理
-│   └── lineutil/          # LINE 訊息工具
-├── deploy/                # 監控設定
-│   ├── prometheus/
-│   ├── alertmanager/
-│   └── grafana/
-├── docker/                # Docker 部署
-└── docs/                  # 文件
+```bash
+# 1. Clone 專案
+git clone https://github.com/garyellow/ntpu-linebot-go.git
+cd ntpu-linebot-go
+
+# 2. 安裝 Task runner
+go install github.com/go-task/task/v3/cmd/task@latest
+
+# 3. 安裝依賴
+go mod download
+
+# 4. 設定環境變數
+cp .env.example .env
+# 編輯 .env 填入 LINE 憑證
+
+# 5. 預熱快取（首次執行）
+task warmup
+
+# 6. 啟動開發服務
+task dev
 ```
 
-### Task 指令
+### 常用指令
 
 ```bash
 task dev              # 開發模式執行
@@ -218,9 +163,6 @@ task build            # 編譯二進位
 task test             # 執行測試
 task lint             # 執行 linter
 task ci               # 完整 CI (fmt + lint + test + build)
-task warmup           # 預熱快取
-task compose:up       # 啟動 docker compose
-task compose:logs     # 查看日誌
 ```
 
 ### 執行測試
@@ -229,7 +171,7 @@ task compose:logs     # 查看日誌
 # 執行所有測試
 go test ./...
 
-# 帶 coverage
+# 帶覆蓋率
 go test -coverprofile=coverage.out ./...
 go tool cover -html=coverage.out
 
@@ -237,15 +179,22 @@ go tool cover -html=coverage.out
 go test -race ./...
 ```
 
+### 新增 Bot 模組
+
+1. 在 `internal/bot/` 建立新模組目錄
+2. 實作 `Handler` 介面 (`CanHandle`, `HandleMessage`, `HandlePostback`)
+3. 在 `internal/webhook/handler.go` 註冊模組
+4. 撰寫單元測試
+
+詳細架構說明請見 [docs/architecture.md](docs/architecture.md)
+
 ## 🐳 Docker 部署
 
 ### 建置與執行
 
 ```bash
-# 建置 image
 docker build -t ntpu-linebot:latest .
 
-# 執行容器
 docker run -d \
   --name ntpu-linebot \
   -p 10000:10000 \
@@ -255,133 +204,57 @@ docker run -d \
   ntpu-linebot:latest
 ```
 
-### Docker Compose
-
-```bash
-cd docker
-
-# 啟動所有服務
-docker compose up -d
-
-# 查看狀態
-docker compose ps
-
-# 查看日誌
-docker compose logs -f ntpu-linebot
-
-# 停止服務
-docker compose down
-```
-
 ### 資料預熱
 
-為避免首次查詢緩慢（10-30秒），建議啟動前預熱快取：
+首次啟動建議預熱快取:
 
 ```bash
-# 使用 docker compose
-docker compose run --rm warmup
-
-# 完整重新抓取
-docker compose run --rm warmup -reset
-
-# 本機執行
-go run ./cmd/warmup -modules=id,contact,course
+docker compose run --rm warmup  # 約 3-5 分鐘
 ```
 
-預熱涵蓋：
-- **ID 模組**: 110-113 學年度 × 所有系所
-- **Contact 模組**: 行政 + 學術單位聯絡人
-- **Course 模組**: 最近 3 學期課程
-
-執行時間：約 3-5 分鐘
-
-詳細說明請見 [cmd/warmup/README.md](cmd/warmup/README.md)
+詳見 [cmd/warmup/README.md](cmd/warmup/README.md)
 
 ## 🔧 疑難排解
 
-### 常見問題
-
-| 問題 | 原因 | 解決方法 |
-|------|------|----------|
-| 服務無法啟動 | 環境變數未設定 | 檢查 `.env` 檔案 |
-| 回應緩慢 | Cache 未預熱 | 執行 `task warmup` |
-| Webhook 驗證失敗 | Channel Secret 錯誤 | 檢查 `LINE_CHANNEL_SECRET` |
-| 資料庫鎖定 | 多實例寫入 | 確認只有一個服務實例 |
-
-### 除錯提示
+| 問題 | 解決方法 |
+|------|----------|
+| 服務無法啟動 | 檢查 `.env` 檔案是否正確設定 |
+| 回應緩慢 | 執行 `task warmup` 預熱快取 |
+| Webhook 驗證失敗 | 確認 `LINE_CHANNEL_SECRET` 正確 |
 
 ```bash
-# 啟用 debug 日誌
+# 啟用詳細日誌
 LOG_LEVEL=debug task dev
 
-# 檢查快取狀態
-sqlite3 data/cache.db "SELECT COUNT(*) FROM students;"
-
-# 查看 metrics
+# 查看監控指標
 curl http://localhost:10000/metrics
-
-# 驗證 docker compose 設定
-cd docker && docker compose config
 ```
 
-## 📚 專案文件
+## 📚 文件
 
-- **[架構設計](docs/architecture.md)** - 系統架構、設計模式
-- **[API 文件](docs/API.md)** - HTTP 端點、Prometheus 指標
-- **[部署指南](deploy/README.md)** - Prometheus/Grafana 設定
-- **[Docker Compose](docker/README.md)** - 容器化部署
+### 進階主題
+
+- 📐 **[架構設計](docs/architecture.md)** - 系統架構與設計模式
+- 🔄 **[Python 遷移說明](docs/migration.md)** - 為何選擇 Go
 
 ### 模組文件
 
-- [Bot Modules](internal/bot/README.md) - Bot 模組開發
-- [Scraper System](internal/scraper/README.md) - 爬蟲系統
-- [Storage Layer](internal/storage/README.md) - 資料庫與快取
-- [Webhook Handler](internal/webhook/README.md) - Webhook 處理
-- [Config](internal/config/README.md) - 設定管理
+各模組的詳細說明請見對應目錄:
+- [Bot 模組](internal/bot/README.md) - 訊息處理與模組註冊
+- [爬蟲系統](internal/scraper/README.md) - 限流、重試、Singleflight
+- [資料層](internal/storage/README.md) - SQLite、Cache-First 策略
+- [Webhook](internal/webhook/README.md) - LINE 事件處理
+- [設定管理](internal/config/README.md) - 環境變數載入
 
 ## 🤝 貢獻指南
 
 歡迎提交 Issue 和 Pull Request！
-
-### 開發流程
 
 1. Fork 專案並建立功能分支
 2. 開發與測試 (`task dev` / `task test`)
 3. 執行完整 CI (`task ci`)
 4. 遵循 [Conventional Commits](https://www.conventionalcommits.org/) 規範
 5. 提交 Pull Request
-
-### Commit 規範
-
-```
-feat(bot): add course search by teacher
-fix(scraper): handle timeout correctly
-docs: update README
-refactor(storage): simplify cache logic
-test: add missing unit tests
-```
-
-## ⚡ 效能優化
-
-### 快取策略
-
-```bash
-# 學期中（資料穩定）
-CACHE_TTL=336h  # 14 天
-
-# 學期初/末（資料變動頻繁）
-CACHE_TTL=72h   # 3 天
-```
-
-### 爬蟲並發
-
-```bash
-# 低流量（< 100 users）
-SCRAPER_WORKERS=3
-
-# 高流量（> 1000 users）
-SCRAPER_WORKERS=10
-```
 
 ## 📄 授權條款
 
