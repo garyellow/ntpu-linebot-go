@@ -66,11 +66,11 @@ task compose:restart -- ntpu-linebot # 重啟服務
 
 ## 告警規則
 
-- **ScraperHighFailureRate** - 爬蟲失敗率 >50% 持續 5 分鐘
-- **WebhookHighLatency** - Webhook P95 延遲 >5s 持續 5 分鐘
+- **ScraperHighFailureRate** - 爬蟲失敗率 >30% 持續 3 分鐘
+- **WebhookHighLatency** - Webhook P95 延遲 >3s 持續 5 分鐘
 - **ServiceDown** - 服務停止回應持續 2 分鐘
-- **HighMemoryUsage** - 記憶體使用 >500MB 持續 10 分鐘
-- **CacheLowHitRate** - 快取命中率 <50% 持續 15 分鐘
+- **HighMemoryUsage** - 記憶體使用 >410MB 持續 5 分鐘
+- **CacheLowHitRate** - 快取命中率 <70% 持續 10 分鐘
 
 ## 配置告警通知
 
