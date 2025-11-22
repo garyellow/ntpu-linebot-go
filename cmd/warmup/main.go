@@ -36,16 +36,10 @@ func main() {
 	// Parse command-line flags
 	flag.Parse()
 
-	// Load configuration
-	cfg, err := config.Load()
+	// Load configuration for warmup mode (LINE credentials not required)
+	cfg, err := config.LoadForMode(config.WarmupMode)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Validate config (warmup mode - LINE credentials not required)
-	if err := cfg.ValidateForMode(false); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Config validation failed: %v\n", err)
 		os.Exit(1)
 	}
 

@@ -36,9 +36,26 @@ type Config struct {
 	WarmupTimeout time.Duration
 }
 
-// Load reads configuration from environment variables
+// ValidationMode determines which fields are required during validation
+type ValidationMode int
+
+const (
+	// ServerMode requires all fields including LINE credentials
+	ServerMode ValidationMode = iota
+	// WarmupMode only requires scraper and database fields
+	WarmupMode
+)
+
+// Load reads configuration from environment variables with server mode validation
 // It attempts to load .env file first, then reads from env vars
 func Load() (*Config, error) {
+	return LoadForMode(ServerMode)
+}
+
+// LoadForMode loads configuration for a specific execution mode
+// ServerMode: Validates LINE credentials (for webhook server)
+// WarmupMode: Skips LINE credentials validation (for cache warmup)
+func LoadForMode(mode ValidationMode) (*Config, error) {
 	// Try to load .env file (ignore error if file doesn't exist)
 	_ = godotenv.Load()
 
@@ -67,8 +84,9 @@ func Load() (*Config, error) {
 		WarmupTimeout: getDurationEnv("WARMUP_TIMEOUT", 20*time.Minute),
 	}
 
-	// Validate required fields
-	if err := cfg.Validate(); err != nil {
+	// Validate based on mode
+	requireLINE := mode == ServerMode
+	if err := cfg.ValidateForMode(requireLINE); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
 

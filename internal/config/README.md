@@ -4,7 +4,7 @@
 
 ## 環境變數
 
-### 必填
+### 必填（Server Mode）
 - `LINE_CHANNEL_ACCESS_TOKEN` - LINE Messaging API Token
 - `LINE_CHANNEL_SECRET` - LINE Channel Secret
 
@@ -25,11 +25,36 @@
 
 ## 使用方式
 
+### Server Mode（需要 LINE 憑證）
+
 ```go
+// 載入並驗證所有必填欄位（包含 LINE 憑證）
 cfg, err := config.Load()
 if err != nil {
     log.Fatal(err)
 }
 ```
+
+### Warmup Mode（不需要 LINE 憑證）
+
+```go
+// 載入設定但跳過 LINE 憑證驗證（用於快取預熱工具）
+cfg, err := config.LoadForMode(config.WarmupMode)
+if err != nil {
+    log.Fatal(err)
+}
+```
+
+## 驗證模式
+
+專案使用 `ValidationMode` 來支援不同執行環境：
+
+- **ServerMode**: Webhook 伺服器，需要完整的 LINE 憑證
+- **WarmupMode**: 快取預熱工具，只需要爬蟲和資料庫設定
+
+這種模式化的設計遵循 Go 的最佳實踐：
+- 單一載入邏輯，避免程式碼重複
+- 明確的驗證需求，透過類型安全的 enum 控制
+- Fail-fast 原則，在啟動時就發現設定錯誤
 
 完整環境變數列表請參考專案根目錄的 `.env.example`。
