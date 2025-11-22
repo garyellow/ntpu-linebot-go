@@ -192,11 +192,11 @@ go run ./cmd/warmup -modules=id,contact,course -workers=10
 - `-modules`: Comma-separated list or empty string to skip
 - `-workers`: Parallel scraper count (default: 5)
 
-**Warmup strategy** (with 5 workers default, 100-500ms delays):
-- ID module: 4 years × 22 depts = 88 tasks (~2-5 min)
-- Contact module: Admin + academic (sequential, ~1-2 min)
-- Course module: 3 recent terms × all education codes (sequential, ~3-5 min)
-- Total estimated time: 6-12 min depending on network conditions
+**Warmup strategy** (with 3 workers default, 2-5s delays):
+- ID module: 4 years × 22 depts = 88 tasks (~15-35 min)
+- Contact module: Admin + academic (sequential, ~3-6 min)
+- Course module: 3 recent terms × all education codes (sequential, ~8-15 min)
+- Total estimated time: 25-55 min depending on network conditions
 
 ## Error Handling: Context + Wrapping
 
