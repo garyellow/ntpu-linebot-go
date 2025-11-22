@@ -25,7 +25,7 @@ go run ./cmd/warmup -workers=10
 
 ### `-modules` (預設: "id,contact,course")
 指定要預熱的模組（逗號分隔）：
-- `id` - 學號資料（系所代碼、近 5 年學生）
+- `id` - 學號資料（系所代碼、近 4 年學生）
 - `contact` - 通訊錄（行政與學術單位聯絡資訊）
 - `course` - 課程資料（近 3 年課程）
 
