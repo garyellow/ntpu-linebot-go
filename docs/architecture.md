@@ -217,6 +217,27 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 }
 ```
 
+## 設定管理
+
+### ValidationMode Pattern
+
+**問題**: warmup 工具不需要 LINE 憑證，但使用相同的設定載入邏輯
+
+**解決方案**: 使用模式化驗證而非 boolean 參數
+```go
+// ✅ Good: 清晰的模式化 API
+cfg, err := config.LoadForMode(config.WarmupMode)
+
+// ❌ Bad: 布林參數不清晰
+cfg, err := config.Load(false) // false 代表什麼？
+```
+
+**優勢**:
+- 類型安全（使用 enum 而非 boolean）
+- API 清晰（`WarmupMode` vs `true/false`）
+- 易於擴展（未來可新增 `TestMode`）
+- 單一載入邏輯（DRY 原則）
+
 ## 關鍵技術決策
 
 ### 1. 為什麼使用 SQLite 而非 Redis/PostgreSQL？

@@ -157,14 +157,24 @@ defer db.Close()
 
 **All config loaded once** at startup (`internal/config/config.go`):
 ```go
-cfg, err := config.Load()  // Reads env vars, applies defaults
-if err := cfg.Validate(); err != nil {
+// Server mode (requires LINE credentials)
+cfg, err := config.Load()
+if err != nil {
     log.Fatal(err)  // Fail fast if required vars missing
+}
+
+// Warmup mode (skips LINE credentials validation)
+cfg, err := config.LoadForMode(config.WarmupMode)
+if err != nil {
+    log.Fatal(err)
 }
 ```
 
-**Required vars**: `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`
-**Platform detection**: `runtime.GOOS` for paths (`config.go:28-32`)
+**Validation modes** (`config.ValidationMode`):
+- `ServerMode`: Requires LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET
+- `WarmupMode`: Only requires scraper and database fields
+
+**Platform detection**: `runtime.GOOS` for paths (`config.go`)
 ```go
 if runtime.GOOS == "windows" {
     defaultPath = "./data/cache.db"

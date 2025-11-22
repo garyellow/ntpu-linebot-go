@@ -37,6 +37,91 @@ func TestLoad(t *testing.T) {
 	}
 }
 
+func TestLoadForMode(t *testing.T) {
+	tests := []struct {
+		name        string
+		mode        ValidationMode
+		setupEnv    func()
+		cleanupEnv  func()
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "server mode - valid config",
+			mode: ServerMode,
+			setupEnv: func() {
+				_ = os.Setenv("LINE_CHANNEL_ACCESS_TOKEN", "test_token")
+				_ = os.Setenv("LINE_CHANNEL_SECRET", "test_secret")
+			},
+			cleanupEnv: func() {
+				_ = os.Unsetenv("LINE_CHANNEL_ACCESS_TOKEN")
+				_ = os.Unsetenv("LINE_CHANNEL_SECRET")
+			},
+			wantErr: false,
+		},
+		{
+			name: "server mode - missing credentials",
+			mode: ServerMode,
+			setupEnv: func() {
+				// No LINE credentials set
+			},
+			cleanupEnv:  func() {},
+			wantErr:     true,
+			errContains: "LINE_CHANNEL_ACCESS_TOKEN",
+		},
+		{
+			name: "warmup mode - no credentials required",
+			mode: WarmupMode,
+			setupEnv: func() {
+				// No LINE credentials needed
+			},
+			cleanupEnv: func() {},
+			wantErr:    false,
+		},
+		{
+			name: "warmup mode - custom workers",
+			mode: WarmupMode,
+			setupEnv: func() {
+				_ = os.Setenv("SCRAPER_WORKERS", "5")
+			},
+			cleanupEnv: func() {
+				_ = os.Unsetenv("SCRAPER_WORKERS")
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setupEnv()
+			defer tt.cleanupEnv()
+
+			cfg, err := LoadForMode(tt.mode)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("LoadForMode(%v) error = %v, wantErr %v", tt.mode, err, tt.wantErr)
+				return
+			}
+
+			if tt.wantErr && tt.errContains != "" && err != nil {
+				if !contains(err.Error(), tt.errContains) {
+					t.Errorf("LoadForMode() error = %v, want error containing %q", err, tt.errContains)
+				}
+			}
+
+			if !tt.wantErr && cfg == nil {
+				t.Error("LoadForMode() returned nil config without error")
+			}
+
+			// Validate custom settings when applicable
+			if !tt.wantErr && tt.name == "warmup mode - custom workers" {
+				if cfg.ScraperWorkers != 5 {
+					t.Errorf("Expected workers 5, got %d", cfg.ScraperWorkers)
+				}
+			}
+		})
+	}
+}
+
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		name    string
