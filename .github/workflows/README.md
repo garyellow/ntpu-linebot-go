@@ -66,7 +66,7 @@
 - 覆蓋率支援本地顯示（不上傳第三方）
 
 ### ✅ Docker 構建
-- 使用 `cache-from/cache-to` 加速構建（40-60% 時間節省）
+- 使用 `cache-from/cache-to` 加速構建
 - Branch-specific cache scope（`ci-pr` / `release`）避免衝突
 - Docker metadata action 自動產生語義化標籤
 - 單平台構建在 CI（快速），多平台在 release（完整）

@@ -177,7 +177,7 @@ if runtime.GOOS == "windows" {
 
 ```powershell
 task dev                    # Run server (hot reload)
-task warmup                 # Pre-populate cache (3-5 min)
+task warmup                 # Pre-populate cache
 task ci                     # Full CI: fmt + lint + test + build
 task test:coverage          # Generate coverage.html
 task compose:up             # Start with Prometheus + Grafana
@@ -193,10 +193,9 @@ go run ./cmd/warmup -modules=id,contact,course -workers=10
 - `-workers`: Parallel scraper count (default: 3)
 
 **Warmup strategy** (with 3 workers default, 2-5s delays):
-- ID module: 4 years × 22 depts = 88 tasks (~15-35 min)
-- Contact module: Admin + academic (sequential, ~3-6 min)
-- Course module: 3 recent terms × all education codes (sequential, ~8-15 min)
-- Total estimated time: 25-55 min depending on network conditions
+- ID module: 4 years × 22 depts = 88 tasks
+- Contact module: Admin + academic (sequential)
+- Course module: 3 recent terms × all education codes (sequential)
 
 ## Error Handling: Context + Wrapping
 

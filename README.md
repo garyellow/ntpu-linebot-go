@@ -79,7 +79,7 @@ cp .env.example .env
 # Windows: SQLITE_PATH=./data/cache.db
 # Linux/Mac: SQLITE_PATH=/data/cache.db
 
-# 4. 預熱快取（首次執行推薦，約 20-30 分鐘）
+# 4. 預熱快取（首次執行推薦）
 go run ./cmd/warmup
 
 # 5. 啟動服務
