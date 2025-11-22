@@ -85,11 +85,11 @@ result, err := wrapper.DoScrape(ctx, "key", func() (interface{}, error) {
 ## Rate Limiting: Two-Tier System
 
 **Global scraper rate limit** (`internal/scraper/ratelimiter.go`):
-- Token bucket: 5 tokens, refill 1 per second
+- Token bucket: `workers` tokens (default: 5), refills based on delay intervals
 - Enforced in `RateLimiter.Wait(ctx)` - blocks until token available
-- Random delays: 100-500ms between requests (`client.go:minDelay/maxDelay`)
+- Random delays: 100-500ms between requests (configurable via `SCRAPER_MIN_DELAY`/`SCRAPER_MAX_DELAY`)
 
-**Per-user webhook limit** (`internal/webhook/ratelimiter.go:71`):
+**Per-user webhook limit** (`internal/webhook/ratelimiter.go`):
 ```go
 userLimiter := NewUserRateLimiter(5 * time.Minute) // Cleanup interval
 if !h.userLimiter.Allow(chatID, 10.0, 2.0) {       // 10 req/s, burst 2
@@ -97,8 +97,11 @@ if !h.userLimiter.Allow(chatID, 10.0, 2.0) {       // 10 req/s, burst 2
 }
 ```
 
+**Global webhook rate limit**: 80 rps (LINE API supports 100 rps, using 80 for safety margin)
+
 **Exponential backoff** (`scraper/backoff.go`):
-- Max 3 retries with 1s, 2s, 4s delays (`client.go:71`)
+- Max 3 retries (configurable via `SCRAPER_MAX_RETRIES`)
+- Backoff: 1s → 2s → 4s (base 1s, max 10s)
 - Applies to HTTP errors + context cancellation
 
 ## LINE SDK Conventions
@@ -189,10 +192,11 @@ go run ./cmd/warmup -modules=id,contact,course -workers=10
 - `-modules`: Comma-separated list or empty string to skip
 - `-workers`: Parallel scraper count (default: 5)
 
-**Warmup strategy**:
-- ID module: 4 years × 22 depts = 88 parallel tasks
-- Contact module: Admin + academic (sequential)
-- Course module: 3 recent terms × all education codes (sequential)
+**Warmup strategy** (with 5 workers default, 100-500ms delays):
+- ID module: 4 years × 22 depts = 88 tasks (~2-5 min)
+- Contact module: Admin + academic (sequential, ~1-2 min)
+- Course module: 3 recent terms × all education codes (sequential, ~3-5 min)
+- Total estimated time: 6-12 min depending on network conditions
 
 ## Error Handling: Context + Wrapping
 

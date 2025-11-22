@@ -28,7 +28,7 @@
 
 ### 技術特色
 - 💾 **智慧快取**: SQLite WAL 模式、7 天 TTL、Cache-First 策略
-- 🛡️ **防爬蟲機制**: Singleflight 去重、Token Bucket 限流（5 req/s）、指數退避重試
+- 🛡️ **防爬蟲機制**: Singleflight 去重、Token Bucket 限流（3 workers）、隨機延遲 2-5 秒、指數退避重試
 - 📊 **完整監控**: Prometheus + Grafana + AlertManager
 - 🚀 **高效能**: Go 並發、Worker Pool、Context 超時控制（25s）
 
