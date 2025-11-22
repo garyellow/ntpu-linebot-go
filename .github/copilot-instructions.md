@@ -190,7 +190,7 @@ go run ./cmd/warmup -modules=id,contact,course -workers=10
 ```
 - `-reset`: Deletes all cached data
 - `-modules`: Comma-separated list or empty string to skip
-- `-workers`: Parallel scraper count (default: 5)
+- `-workers`: Parallel scraper count (default: 3)
 
 **Warmup strategy** (with 3 workers default, 2-5s delays):
 - ID module: 4 years × 22 depts = 88 tasks (~15-35 min)
