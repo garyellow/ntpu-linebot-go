@@ -68,7 +68,7 @@ task compose:update
 
 ### 2. 監控儀表板存取
 
-為了不佔用本地 Port，監控服務預設不對外開放。使用以下方式開啟/關閉：
+監控服務預設不對外開放，需透過 access gateway 存取。啟用後會佔用本地 Port (3000, 9090, 9093)。使用以下方式開啟/關閉：
 
 ```bash
 # 開啟監控儀表板 (Grafana:3000, Prometheus:9090, AlertManager:9093)

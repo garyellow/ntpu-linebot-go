@@ -85,7 +85,7 @@ result, err := wrapper.DoScrape(ctx, "key", func() (interface{}, error) {
 ## Rate Limiting: Two-Tier System
 
 **Global scraper rate limit** (`internal/scraper/ratelimiter.go`):
-- Token bucket: `workers` tokens (default: 3), refills based on delay intervals
+- Token bucket: `workers` tokens (default: 3), refills at rate of workers/15.0 tokens/sec (~15s for full refill)
 - Enforced in `RateLimiter.Wait(ctx)` - blocks until token available
 - Random delays: 2s-5s (2000-5000ms) between requests by default (configurable via `SCRAPER_MIN_DELAY`/`SCRAPER_MAX_DELAY`)
 
