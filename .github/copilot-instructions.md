@@ -87,7 +87,7 @@ result, err := wrapper.DoScrape(ctx, "key", func() (interface{}, error) {
 **Global scraper rate limit** (`internal/scraper/ratelimiter.go`):
 - Token bucket: `workers` tokens (default: 3), refills based on delay intervals
 - Enforced in `RateLimiter.Wait(ctx)` - blocks until token available
-- Random delays: 100-500ms between requests (configurable via `SCRAPER_MIN_DELAY`/`SCRAPER_MAX_DELAY`)
+- Random delays: 2s-5s (2000-5000ms) between requests by default (configurable via `SCRAPER_MIN_DELAY`/`SCRAPER_MAX_DELAY`)
 
 **Per-user webhook limit** (`internal/webhook/ratelimiter.go`):
 ```go
