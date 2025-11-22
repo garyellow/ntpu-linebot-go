@@ -470,7 +470,7 @@ ntpu_memory_bytes
 ```yaml
 services:
   ntpu-linebot:
-    image: ntpu-linebot:latest
+    image: garyellow/ntpu-linebot-go:latest
     ports:
       - "10000:10000"
     volumes:
@@ -486,7 +486,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./deploy/prometheus:/etc/prometheus
+      - ./prometheus:/etc/prometheus
 
   grafana:
     image: grafana/grafana:latest

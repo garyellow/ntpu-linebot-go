@@ -10,10 +10,7 @@ services:
       - ntpu-network
 
   warmup:
-    build:
-      context: ..
-      dockerfile: Dockerfile
-    image: garyellow/ntpu-linebot:${IMAGE_TAG:-latest}
+    image: garyellow/ntpu-linebot-go:${IMAGE_TAG:-latest}
     container_name: ntpu-linebot-warmup
     restart: "on-failure:3"
     command: ["/app/ntpu-linebot-warmup", "-modules=${WARMUP_MODULES:-id,contact,course}"]
@@ -39,10 +36,7 @@ services:
       - ntpu-network
 
   ntpu-linebot:
-    build:
-      context: ..
-      dockerfile: Dockerfile
-    image: garyellow/ntpu-linebot:${IMAGE_TAG:-latest}
+    image: garyellow/ntpu-linebot-go:${IMAGE_TAG:-latest}
     container_name: ntpu-linebot
     restart: unless-stopped
     ports:
@@ -91,8 +85,8 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ../deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ../deploy/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -132,7 +126,7 @@ services:
     ports:
       - "9093:9093"
     volumes:
-      - ../deploy/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager-data:/alertmanager
     command:
       - '--config.file=/etc/alertmanager/alertmanager.yml'
@@ -153,6 +147,9 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
+    depends_on:
+      ntpu-linebot:
+        condition: service_healthy
     networks:
       - ntpu-network
 
@@ -163,7 +160,7 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ../deploy/grafana:/etc/grafana/provisioning:ro
+      - ./grafana:/etc/grafana/provisioning:ro
       - grafana-data:/var/lib/grafana
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
