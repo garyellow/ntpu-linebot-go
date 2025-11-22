@@ -32,8 +32,8 @@ func TestLoad(t *testing.T) {
 		t.Errorf("Expected default port '10000', got '%s'", cfg.Port)
 	}
 
-	if cfg.ScraperWorkers != 5 {
-		t.Errorf("Expected default workers 5, got %d", cfg.ScraperWorkers)
+	if cfg.ScraperWorkers != 3 {
+		t.Errorf("Expected default workers 3, got %d", cfg.ScraperWorkers)
 	}
 }
 
@@ -50,7 +50,7 @@ func TestValidate(t *testing.T) {
 				LineChannelSecret: "secret",
 				Port:              "10000",
 				SQLitePath:        "/data/cache.db",
-				ScraperWorkers:    5,
+				ScraperWorkers:    3,
 				ScraperMaxRetries: 3,
 			},
 			wantErr: false,
@@ -61,7 +61,7 @@ func TestValidate(t *testing.T) {
 				LineChannelSecret: "secret",
 				Port:              "10000",
 				SQLitePath:        "/data/cache.db",
-				ScraperWorkers:    5,
+				ScraperWorkers:    3,
 			},
 			wantErr: true,
 		},
@@ -103,7 +103,7 @@ func TestValidateForMode(t *testing.T) {
 				LineChannelSecret: "secret",
 				Port:              "10000",
 				SQLitePath:        "/data/cache.db",
-				ScraperWorkers:    5,
+				ScraperWorkers:    3,
 				ScraperMaxRetries: 3,
 			},
 			requireLINE: true,
@@ -115,7 +115,7 @@ func TestValidateForMode(t *testing.T) {
 				LineChannelSecret: "secret",
 				Port:              "10000",
 				SQLitePath:        "/data/cache.db",
-				ScraperWorkers:    5,
+				ScraperWorkers:    3,
 			},
 			requireLINE: true,
 			wantErr:     true,
@@ -125,7 +125,7 @@ func TestValidateForMode(t *testing.T) {
 			name: "warmup mode - missing LINE credentials OK",
 			cfg: &Config{
 				SQLitePath:        "/data/cache.db",
-				ScraperWorkers:    5,
+				ScraperWorkers:    3,
 				ScraperMaxRetries: 3,
 			},
 			requireLINE: false,
@@ -134,7 +134,7 @@ func TestValidateForMode(t *testing.T) {
 		{
 			name: "warmup mode - missing SQLite path",
 			cfg: &Config{
-				ScraperWorkers:    5,
+				ScraperWorkers:    3,
 				ScraperMaxRetries: 3,
 			},
 			requireLINE: false,

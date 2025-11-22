@@ -57,10 +57,10 @@ func Load() (*Config, error) {
 		CacheTTL:   getDurationEnv("CACHE_TTL", 168*time.Hour), // 7 days
 
 		// Scraper Configuration
-		ScraperWorkers:    getIntEnv("SCRAPER_WORKERS", 5),
-		ScraperMinDelay:   getDurationEnv("SCRAPER_MIN_DELAY", 100*time.Millisecond),
-		ScraperMaxDelay:   getDurationEnv("SCRAPER_MAX_DELAY", 500*time.Millisecond),
-		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", 15*time.Second),
+		ScraperWorkers:    getIntEnv("SCRAPER_WORKERS", 3),
+		ScraperMinDelay:   getDurationEnv("SCRAPER_MIN_DELAY", 2*time.Second),
+		ScraperMaxDelay:   getDurationEnv("SCRAPER_MAX_DELAY", 5*time.Second),
+		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", 30*time.Second),
 		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 3),
 
 		// Warmup Configuration

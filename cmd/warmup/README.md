@@ -1,269 +1,157 @@
-# Warmup Tool
+# Warmup Tool - 快取預熱工具
 
-## Overview
-The warmup tool pre-populates the SQLite cache with data from NTPU websites, improving initial response times and reducing load on upstream services.
+預先從 NTPU 網站抓取資料並存入 SQLite 快取，提升首次回應速度，減少對上游網站的負擔。
 
-## Quick Start
+## 快速使用
 
 ```bash
-# Basic usage - warmup all modules
-go run ./cmd/warmup
-
-# Or using Task runner
+# 使用 Task (推薦)
 task warmup
 
-# Warmup specific modules only
-go run ./cmd/warmup -modules=id,course
+# 或直接執行
+go run ./cmd/warmup
 
-# Reset cache and warmup
+# 只預熱特定模組
+go run ./cmd/warmup -modules=id,contact
+
+# 重置快取後預熱
 go run ./cmd/warmup -reset
 
-# Custom worker pool size
+# 自訂 Worker 數量
 go run ./cmd/warmup -workers=10
 ```
 
-## Command-Line Options
+## 參數說明
 
-### `-modules` (default: "id,contact,course")
-Comma-separated list of modules to warmup:
-- `id` - Student ID data (department mappings, recent year students)
-- `contact` - Contact directory (administrative and academic units)
-- `course` - Course information (recent year courses)
+### `-modules` (預設: "id,contact,course")
+指定要預熱的模組（逗號分隔）：
+- `id` - 學號資料（系所代碼、近 4 年學生）
+- `contact` - 通訊錄（行政與學術單位聯絡資訊）
+- `course` - 課程資料（近 3 年課程）
 
-**Example:**
+範例：
 ```bash
-# Only warmup student data
-go run ./cmd/warmup -modules=id
-
-# Warmup contact and course data
-go run ./cmd/warmup -modules=contact,course
+go run ./cmd/warmup -modules=id              # 只預熱學號
+go run ./cmd/warmup -modules=contact,course  # 預熱聯絡與課程
 ```
 
-### `-reset` (default: false)
-Delete all existing cache data before warmup. Use this to refresh stale data or fix corrupted cache.
+### `-reset` (預設: false)
+預熱前刪除所有快取。用於更新過期資料或修復損壞的快取。
 
-**Example:**
+範例：
 ```bash
-# Fresh start with empty cache
 go run ./cmd/warmup -reset
 ```
 
-### `-workers` (default: 0 = use config)
-Number of concurrent workers for scraping. Higher values = faster warmup but more load on NTPU servers.
+### `-workers` (預設: 0 = 使用設定檔)
+並發爬蟲數量。數值越高速度越快，但對 NTPU 伺服器負擔越大。
 
-**Recommended values:**
-- `5-10` - Conservative, respects rate limits
-- `15-20` - Aggressive, use during off-peak hours only
-- `0` - Use default from config (recommended)
+建議值：
+- `3-5` - 保守，尊重限流（推薦）
+- `8-10` - 平衡，適合離峰時段
+- `0` - 使用設定檔預設值（3 workers）
 
-**Example:**
+範例：
 ```bash
-# Use 8 workers for faster warmup
 go run ./cmd/warmup -workers=8
 ```
 
-## What Gets Cached?
+## 快取內容
 
-### ID Module (~3-5 minutes)
-- Department code mappings (all departments)
-- Student data for recent 5 years (year 108-112)
-- ~10,000-20,000 student records
+| 模組 | 資料量 | 說明 |
+|------|--------|------|
+| **ID** | 1-2 萬筆 | 系所代碼、近 4 年學生（110-113 學年） |
+| **Contact** | 500-1000 筆 | 行政與學術單位聯絡資訊 |
+| **Course** | 5000-1 萬筆 | 近 3 年課程（U/M/N/P 學制） |
+| **總計** | **~2.4 萬筆** | |
 
-**Data sources:**
-- Department page: `https://lms.ntpu.edu.tw/portfolio/search.php`
-- Student search by year/dept
+## 使用建議
 
-### Contact Module (~2-3 minutes)
-- Administrative units (行政單位)
-- Academic units (學術單位)
-- Individual contacts with emails/phones
-- ~500-1000 contact records
+### 執行時機
+- ✅ **推薦**: 夜間 2-6 點或週末
+- ⚠️ **避免**: 平日上班時間（9-17 點）
 
-**Data sources:**
-- Directory: `https://sea.cc.ntpu.edu.tw/pls/ld/CAMPUS_DIR_M.p1`
+### 中斷處理
+若預熱中斷（Ctrl+C）：
+- 已儲存的資料會保留
+- 可直接重新執行，不需 `-reset`
+- 已快取資料不會重複爬取（TTL 7 天）
 
-### Course Module (~5-10 minutes)
-- Course data for recent 3 years
-- All education codes (U/M/N/P types)
-- Teacher assignments
-- ~5,000-10,000 course records
-
-**Data sources:**
-- Course query: `https://sea.cc.ntpu.edu.tw/pls/dev_stud/course_query_all.queryByKeyword`
-
-## Performance Tips
-
-### 1. Run During Low-Traffic Hours
-Best time to run warmup:
-- **Recommended**: 2 AM - 6 AM Taiwan time (夜間 2-6 點)
-- **Acceptable**: Weekends, holidays
-- **Avoid**: Weekday 9 AM - 5 PM (peak hours)
-
-### 2. Monitor Progress
-The tool shows real-time progress:
-```
-[ID] Warmup starting...
-[ID] Year 112: Processing department 85 (資工系)...
-[ID] Year 112: Saved 150 students
-[ID] Year 111: Processing department 87 (電機系)...
-...
-[ID] Warmup completed: 12,543 students cached
-```
-
-### 3. Handle Interruptions
-If warmup is interrupted (Ctrl+C):
-- Partial data is already saved to database
-- Safe to restart without `-reset`
-- Already cached data won't be re-scraped (7-day TTL)
-
-### 4. Verify Cache
-After warmup, check cache statistics:
+### 驗證快取
 ```bash
-# Count cached records
+# Windows (需安裝 sqlite3)
+sqlite3 .\data\cache.db "SELECT COUNT(*) FROM students;"
+
+# Linux / Mac
 sqlite3 data/cache.db "SELECT COUNT(*) FROM students;"
 sqlite3 data/cache.db "SELECT COUNT(*) FROM contacts;"
 sqlite3 data/cache.db "SELECT COUNT(*) FROM courses;"
-
-# Check TTL expiration
-sqlite3 data/cache.db "SELECT COUNT(*) FROM students WHERE cached_at + 604800 > strftime('%s', 'now');"
 ```
 
-## Common Scenarios
+## 常見情境
 
-### Scenario 1: Initial Deployment
 ```bash
-# First-time setup (no LINE credentials needed)
-go run ./cmd/warmup -reset -modules=id,contact,course -workers=10
-```
-
-### Scenario 2: Weekly Refresh
-```bash
-# Refresh all data (TTL = 7 days)
+# 首次部署
 go run ./cmd/warmup -reset
-```
 
-### Scenario 3: Fix Corrupt Data
-```bash
-# Reset and re-warmup
+# 每週更新（TTL 7 天）
+go run ./cmd/warmup -reset
+
+# 修復損壞資料
 go run ./cmd/warmup -reset -modules=id
-```
 
-### Scenario 4: Update Contact Info Only
-```bash
-# Quick contact update
+# 僅更新聯絡資訊
 go run ./cmd/warmup -modules=contact
 ```
 
-## Troubleshooting
+## 疑難排解
 
-### Problem: "Failed to scrape" errors
-**Cause**: NTPU website unavailable or rate limit hit
+| 問題 | 原因 | 解決方法 |
+|------|------|----------|
+| 爬蟲失敗 | NTPU 網站無法連線或限流 | 降低 workers (`-workers=1`)、稍後重試 |
+| 預熱過慢 | Worker 太少或網路延遲 | 增加 workers (`-workers=8`)、離峰執行 |
+| Database locked | 服務正在使用資料庫 | 停止服務後再執行 warmup |
+| 記憶體不足 | 並發數過高 | 降低 workers (`-workers=3`) |
 
-**Solutions:**
-1. Reduce workers: `-workers=3`
-2. Try alternative time
-3. Check network connectivity
-4. Verify NTPU website is accessible
+## 部署整合
 
-### Problem: Warmup too slow
-**Cause**: Too few workers or network latency
-
-**Solutions:**
-1. Increase workers: `-workers=15`
-2. Increase timeout: `WARMUP_TIMEOUT=30m` (default is 20m)
-3. Run during off-peak hours
-4. Check internet speed
-
-### Problem: Database locked
-**Cause**: Another process (server) is using the database
-
-**Solutions:**
-1. Stop server first: `pkill -f ntpu-linebot`
-2. Or use separate database: `-sqlite-path=/tmp/warmup.db`
-
-### Problem: Out of memory
-**Cause**: Too many concurrent operations
-
-**Solutions:**
-1. Reduce workers: `-workers=5`
-2. Warmup one module at a time: `-modules=id`
-
-## Integration with Server
-
-### Auto-warmup on startup
-The server does NOT auto-warmup on startup (by design). This prevents slow startup times.
-
-**Recommended deployment flow:**
+### 推薦部署流程
 ```bash
-# 1. Run warmup before deployment
-go run ./cmd/warmup -reset
+# 1. 預熱快取
+task warmup
+# 或 go run ./cmd/warmup -reset
 
-# 2. Start server with pre-warmed cache
-go run ./cmd/server
+# 2. 啟動服務
+task dev
+# 或 go run ./cmd/server
 ```
 
-### Cron job for periodic refresh
-Set up weekly cache refresh:
+### 定期更新 (Cron)
 ```cron
-# Every Monday at 3 AM, refresh cache
+# 每週一凌晨 3 點更新快取
 0 3 * * 1 cd /path/to/ntpu-linebot-go && go run ./cmd/warmup -reset
 ```
 
-## Advanced Usage
+### Docker Compose
+Docker Compose 部署會自動執行 warmup（見 `deployments/docker-compose.yml`）。
 
-### Custom SQLite Path
+## 進階用法
+
+### 自訂資料庫路徑
 ```bash
-# Use non-default database location
 go run ./cmd/warmup -sqlite-path=/custom/path/cache.db
 ```
 
-### Environment Variables
-The warmup tool respects these environment variables:
+### 環境變數
 ```bash
-export LOG_LEVEL=debug        # Enable verbose logging
+export LOG_LEVEL=debug           # 詳細日誌
 export SQLITE_PATH=/tmp/cache.db
 export SCRAPER_WORKERS=10
 
 go run ./cmd/warmup
 ```
 
-### Parallel Multi-Module Warmup
-```bash
-# Run multiple warmups in parallel (use with caution!)
-go run ./cmd/warmup -modules=id & \
-go run ./cmd/warmup -modules=contact & \
-go run ./cmd/warmup -modules=course & \
-wait
-```
-
-## Performance Benchmarks
-
-**Test environment:** Intel i7, 50 Mbps connection, -workers=10
-
-| Module | Records | Time | Rate |
-|--------|---------|------|------|
-| ID | 15,000 students | 4m 30s | 55/sec |
-| Contact | 800 contacts | 2m 15s | 6/sec |
-| Course | 8,000 courses | 8m 00s | 17/sec |
-| **Total** | **23,800** | **~15 min** | **26/sec** |
-
-**With -workers=20:**
-- Total time reduced to ~8 minutes
-- Risk of rate limiting increases
-
-**Note:** Default `WARMUP_TIMEOUT` is set to 20 minutes to accommodate varying network conditions and NTPU website load.
-
-## Best Practices
-
-1. **Always test in staging first** before production warmup
-2. **Monitor NTPU website load** - be a good citizen
-3. **Schedule regular refreshes** - weekly or bi-weekly
-4. **Keep warmup logs** for debugging
-5. **Verify data integrity** after warmup
-6. **Use -reset sparingly** - only when data is corrupt
-7. **Start with low workers** then increase if needed
-
-## Related Documentation
-- [Scraper Rate Limiting](../../internal/scraper/README.md)
-- [Database Schema](../../internal/storage/README.md)
-- [Configuration Guide](../../internal/config/README.md)
+## 相關文件
+- [爬蟲系統](../../internal/scraper/README.md)
+- [資料庫結構](../../internal/storage/README.md)
+- [設定說明](../../internal/config/README.md)

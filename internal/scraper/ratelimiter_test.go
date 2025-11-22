@@ -42,7 +42,7 @@ func TestRateLimiter_Wait(t *testing.T) {
 	}
 
 	// Third should wait for token refill
-	// refillRate = 2/10 = 0.2 tokens/sec, so need ~5 seconds for 1 token
+	// refillRate = 2/15 = 0.133 tokens/sec, so need ~7.5 seconds for 1 token
 	start := time.Now()
 	if err := rl.Wait(ctx); err != nil {
 		t.Fatalf("Wait failed: %v", err)
@@ -91,7 +91,7 @@ func TestRateLimiter_TokenRefill(t *testing.T) {
 		}
 	}
 
-	// Wait for refill (refillRate = 5/10 = 0.5 tokens/sec, so need ~2 sec for 1 token)
+	// Wait for refill (refillRate = 5/15 = 0.333 tokens/sec, so need ~3 sec for 1 token)
 	time.Sleep(3 * time.Second)
 
 	// Should be able to get a token now

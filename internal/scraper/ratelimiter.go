@@ -26,7 +26,7 @@ type RateLimiter struct {
 // maxDelay: maximum random delay between requests
 func NewRateLimiter(workers int, minDelay, maxDelay time.Duration) *RateLimiter {
 	maxTokens := float64(workers)
-	refillRate := maxTokens / 10.0 // Refill all tokens in ~10 seconds
+	refillRate := maxTokens / 15.0 // Refill all tokens in ~15 seconds
 
 	return &RateLimiter{
 		tokens:         maxTokens,

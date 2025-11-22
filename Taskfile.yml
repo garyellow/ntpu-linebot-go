@@ -9,12 +9,6 @@ env:
   CGO_ENABLED: 0
 
 tasks:
-  default:
-    desc: Show available tasks
-    cmds:
-      - task --list-all
-    silent: true
-
   # Development
   dev:
     desc: Run server in development mode
@@ -22,20 +16,20 @@ tasks:
       - go run ./cmd/server
 
   warmup:
-    desc: Run data warmup tool
+    desc: Pre-populate cache (recommended before first run)
     cmds:
       - go run ./cmd/warmup -modules=id,contact,course
 
   # Testing
   test:
-    desc: Run all tests with coverage
+    desc: Run all tests
     cmds:
-      - go test -v -race -coverprofile={{.COVERAGE_FILE}} -covermode=atomic ./...
+      - go test -v -race ./...
 
   test:coverage:
     desc: Generate HTML coverage report
-    deps: [test]
     cmds:
+      - go test -v -race -coverprofile={{.COVERAGE_FILE}} -covermode=atomic ./...
       - go tool cover -html={{.COVERAGE_FILE}} -o coverage.html
       - cmd: Write-Host "Coverage report -> coverage.html"
         platforms: [windows]
@@ -54,14 +48,8 @@ tasks:
       - gofmt -w .
 
   # Docker Compose
-  compose:pull:
-    desc: Pull latest images from Docker Hub
-    dir: deployments
-    cmds:
-      - docker compose pull
-
   compose:up:
-    desc: Start all services
+    desc: Start all services (background)
     dir: deployments
     cmds:
       - docker compose up -d
@@ -73,26 +61,38 @@ tasks:
       - docker compose down
 
   compose:logs:
-    desc: Show logs
+    desc: "View service logs (usage: task compose:logs -- SERVICE_NAME)"
     dir: deployments
     cmds:
       - docker compose logs -f {{.CLI_ARGS}}
 
-  compose:restart:
-    desc: Restart service
+  compose:update:
+    desc: Update and restart all services with latest images
     dir: deployments
     cmds:
-      - docker compose restart {{.CLI_ARGS}}
-
-  # Utilities
-  clean:
-    desc: Remove build artifacts and cache
-    cmds:
-      - cmd: Remove-Item -Recurse -Force bin, {{.COVERAGE_FILE}}, *.db -ErrorAction SilentlyContinue
+      - cmd: .\update.cmd
         platforms: [windows]
-      - cmd: rm -rf bin {{.COVERAGE_FILE}} *.db
+      - cmd: ./update.sh
         platforms: [linux, darwin]
-      - go clean -cache -testcache
+
+  # Monitoring Access
+  access:up:
+    desc: Open monitoring dashboard access (Grafana:3000, Prometheus:9090, Alertmanager:9093)
+    dir: deployments
+    cmds:
+      - cmd: .\access.cmd up
+        platforms: [windows]
+      - cmd: ./access.sh up
+        platforms: [linux, darwin]
+
+  access:down:
+    desc: Close monitoring dashboard access
+    dir: deployments
+    cmds:
+      - cmd: .\access.cmd down
+        platforms: [windows]
+      - cmd: ./access.sh down
+        platforms: [linux, darwin]
 
   # CI Pipeline
   ci:
