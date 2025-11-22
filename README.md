@@ -133,7 +133,7 @@ task access:up
 ```bash
 task access:down
 # 或 Windows: .\deployments\access.cmd down
-# 或 Linux/Mac: ./deployments/access.sh down
+# 或 Linux/Mac: ./access.sh down
 ```
 
 ## 🛠️ 開發指南
