@@ -1,0 +1,18 @@
+services:
+  gateway:
+    image: nginx:alpine
+    container_name: ntpu-access-gateway
+    restart: "no"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "3000:3000"
+      - "9090:9090"
+      - "9093:9093"
+    networks:
+      - ntpu-network
+
+networks:
+  ntpu-network:
+    external: true
+    name: ntpu-linebot-network

@@ -14,12 +14,10 @@
 - [功能特色](#-功能特色)
 - [加入好友](#-加入好友)
 - [快速開始](#-快速開始)
-- [架構設計](#-架構設計)
-- [環境變數](#-環境變數)
+- [使用範例](#-使用範例)
 - [開發指南](#-開發指南)
-- [Docker 部署](#-docker-部署)
+- [監控](#-監控)
 - [疑難排解](#-疑難排解)
-- [貢獻指南](#-貢獻指南)
 
 ## ✨ 功能特色
 
@@ -42,63 +40,58 @@
 
 ![QR Code](add_friend/S_gainfriends_qr.png)
 
-## 📋 前置需求
+## 🚀 快速開始
 
-- **Go 1.25+** (本機開發)
-- **Docker & Docker Compose** (容器部署)
-- **LINE Bot 憑證**: Channel Access Token 與 Channel Secret
+### 方案 A: Docker Compose (推薦)
+
+```bash
+# 1. Clone 專案
+git clone https://github.com/garyellow/ntpu-linebot-go.git
+cd ntpu-linebot-go/deployments
+
+# 2. 設定環境變數
+cp .env.example .env
+# 編輯 .env 填入你的 LINE_CHANNEL_ACCESS_TOKEN 和 LINE_CHANNEL_SECRET
+
+# 3. 啟動服務（自動拉取最新鏡像並預熱快取）
+docker compose up -d
+```
+
+服務網址：http://localhost:10000/callback（設定為 LINE Webhook URL）
+
+**注意**：若本機測試，需使用 ngrok 或 localtunnel 等工具將 localhost 轉發至公網 IP。
+
+### 方案 B: 本機開發
+
+**前置需求**: Go 1.25+
+
+```bash
+# 1. Clone 專案
+git clone https://github.com/garyellow/ntpu-linebot-go.git
+cd ntpu-linebot-go
+
+# 2. 安裝依賴
+go mod download
+
+# 3. 設定環境變數
+cp .env.example .env
+# 編輯 .env 填入你的 LINE 憑證
+# Windows: SQLITE_PATH=./data/cache.db
+# Linux/Mac: SQLITE_PATH=/data/cache.db
+
+# 4. 預熱快取（首次執行推薦，約 3-5 分鐘）
+go run ./cmd/warmup
+
+# 5. 啟動服務
+go run ./cmd/server
+```
 
 ### 取得 LINE Bot 憑證
 
 1. 前往 [LINE Developers Console](https://developers.line.biz/console/)
 2. 建立 Messaging API Channel
-3. 取得 **Channel Secret** (Basic settings)
-4. 發行 **Channel Access Token** (Messaging API settings)
-
-## 🚀 快速開始
-
-### Docker Compose (推薦)
-
-使用預建映像從 Docker Hub 部署:
-
-```bash
-git clone https://github.com/garyellow/ntpu-linebot-go.git
-cd ntpu-linebot-go/deployments
-
-# 設定環境變數
-cp .env.example .env
-# 編輯 .env 填入 LINE_CHANNEL_ACCESS_TOKEN 和 LINE_CHANNEL_SECRET
-
-# 拉取並啟動服務
-docker compose pull
-docker compose up -d
-
-# 查看日誌
-docker compose logs -f ntpu-linebot
-```
-
-服務啟動後：
-- LINE Bot Webhook: `http://localhost:10000/callback`
-- Prometheus: `http://localhost:9090`
-- AlertManager: `http://localhost:9093`
-- Grafana: `http://localhost:3000` (admin/admin123)
-
-**指定版本**: 在 `.env` 設定 `IMAGE_TAG=v1.2.3`
-
-## 🏗️ 架構設計
-
-```
-LINE Webhook → Gin Handler → Bot Handlers → Storage Repository → Scraper → NTPU Websites
-```
-
-### 關鍵特性
-
-- **Cache-First**: 優先查詢快取,避免重複爬取
-- **Singleflight**: 重複查詢自動合併,減輕目標網站負擔
-- **Rate Limiting**: 全域與每用戶限流,防止濫用
-- **Context Timeout**: 25 秒超時控制,避免請求堆積
-
-📖 **完整架構文件**: [docs/architecture.md](docs/architecture.md)
+3. 取得 **Channel Secret** (Basic settings 頁面)
+4. 發行 **Channel Access Token** (Messaging API 頁面)
 
 ## 💬 使用範例
 
@@ -108,175 +101,113 @@ LINE Webhook → Gin Handler → Bot Handlers → Storage Repository → Scraper
 | **課程查詢** | `課程 資料結構` / `教師 王教授` / `課號 3141U0001` |
 | **聯絡資訊** | `聯絡 資工系` / `緊急電話` |
 
-## ⚙️ 環境變數
-
-| 變數 | 說明 | 預設值 | 必填 |
-|------|------|--------|------|
-| `LINE_CHANNEL_ACCESS_TOKEN` | LINE Bot Access Token | - | ✅ |
-| `LINE_CHANNEL_SECRET` | LINE Channel Secret | - | ✅ |
-| `PORT` | HTTP 服務埠號 | `10000` | ❌ |
-| `LOG_LEVEL` | 日誌等級 | `info` | ❌ |
-| `SQLITE_PATH` | SQLite 資料庫路徑 | `/data/cache.db` | ❌ |
-
-📖 **完整設定清單**: [internal/config/README.md](internal/config/README.md)
-
 ## 📊 監控
 
-提供 Prometheus + Grafana + AlertManager 完整監控堆疊:
+Docker Compose 部署自動包含 Prometheus + Grafana + AlertManager 監控堆疊。
 
-```bash
-task compose:up  # 啟動監控服務
+### 開啟監控儀表板
+
+**Windows**:
+```powershell
+cd deployments
+.\access.cmd up
 ```
 
-- Prometheus: http://localhost:9090
-- Grafana: http://localhost:3000 (admin/admin123)
-- AlertManager: http://localhost:9093
+**Linux / Mac**:
+```bash
+cd deployments
+./access.sh up
+```
 
-📖 **監控指標與告警設定**: [deployments/README.md](deployments/README.md)
+**使用 Task (通用)**:
+```bash
+task access:up
+```
+
+### 存取網址
+- **Grafana**: http://localhost:3000 (帳號: admin / 密碼: admin123)
+- **Prometheus**: http://localhost:9090
+- **AlertManager**: http://localhost:9093
+
+### 關閉監控儀表板
+```bash
+task access:down
+# 或 Windows: .\deployments\access.cmd down
+# 或 Linux/Mac: ./deployments/access.sh down
+```
 
 ## 🛠️ 開發指南
 
-### 本機開發
+### 使用 Task Runner（推薦）
 
+安裝 Task：
 ```bash
-# 1. Clone 專案
-git clone https://github.com/garyellow/ntpu-linebot-go.git
-cd ntpu-linebot-go
-
-# 2. 安裝 Task runner
 go install github.com/go-task/task/v3/cmd/task@latest
-
-# 3. 安裝依賴
-go mod download
-
-# 4. 設定環境變數
-cp .env.example .env
-# 編輯 .env 填入 LINE 憑證
-
-# 5. 預熱快取（首次執行）
-task warmup
-
-# 6. 啟動開發服務
-task dev
 ```
 
-### 常用指令
-
+常用指令：
 ```bash
-task dev              # 開發模式執行
-task build            # 編譯二進位
+task dev              # 啟動開發服務
+task warmup           # 預熱快取
 task test             # 執行測試
-task lint             # 執行 linter
-task ci               # 完整 CI (fmt + lint + test + build)
+task test:coverage    # 測試覆蓋率報告
+task lint             # 程式碼檢查
+task fmt              # 格式化程式碼
+task ci               # 完整 CI (fmt + lint + test)
 ```
 
-### 執行測試
+### 使用原生 Go 指令
 
 ```bash
-# 執行所有測試
-go test ./...
-
-# 帶覆蓋率
-go test -coverprofile=coverage.out ./...
-go tool cover -html=coverage.out
-
-# Race detector
-go test -race ./...
+go run ./cmd/server                # 啟動服務
+go run ./cmd/warmup                # 預熱快取
+go test ./...                      # 執行測試
+go test -race -coverprofile=coverage.out ./...  # 測試 + 覆蓋率
 ```
 
-### 新增 Bot 模組
-
-1. 在 `internal/bot/` 建立新模組目錄
-2. 實作 `Handler` 介面 (`CanHandle`, `HandleMessage`, `HandlePostback`)
-3. 在 `internal/webhook/handler.go` 註冊模組
-4. 撰寫單元測試
-
-詳細架構說明請見 [docs/architecture.md](docs/architecture.md)
-
-## 🐳 Docker 部署
-
-### 使用預建映像 (推薦)
+### Docker 操作
 
 ```bash
-# 從 Docker Hub 拉取
+# Docker Compose
+cd deployments
+docker compose up -d                     # 啟動所有服務
+docker compose logs -f ntpu-linebot      # 查看日誌
+docker compose down                      # 停止服務
+
+# 更新至最新版本
+task compose:update                      # 使用 Task
+# 或 Windows: .\update.cmd
+# 或 Linux/Mac: ./update.sh
+
+# 單一容器
 docker pull garyellow/ntpu-linebot-go:latest
-
-docker run -d \
-  --name ntpu-linebot \
-  -p 10000:10000 \
-  -v ./data:/data \
+docker run -d --name ntpu-linebot \
+  -p 10000:10000 -v ./data:/data \
   -e LINE_CHANNEL_ACCESS_TOKEN=your_token \
   -e LINE_CHANNEL_SECRET=your_secret \
   garyellow/ntpu-linebot-go:latest
 ```
 
-### 本地建置
-
-開發或客製化用途:
-
-```bash
-docker build -t garyellow/ntpu-linebot-go:local .
-
-docker run -d \
-  --name ntpu-linebot \
-  -p 10000:10000 \
-  -v ./data:/data \
-  -e LINE_CHANNEL_ACCESS_TOKEN=your_token \
-  -e LINE_CHANNEL_SECRET=your_secret \
-  garyellow/ntpu-linebot-go:local
-```
-
-### 資料預熱
-
-首次啟動建議預熱快取 (約 3-5 分鐘):
-
-```bash
-docker compose run --rm warmup
-```
-
-詳見 [cmd/warmup/README.md](cmd/warmup/README.md) 和 [deployments/README.md](deployments/README.md)
-
 ## 🔧 疑難排解
 
 | 問題 | 解決方法 |
 |------|----------|
-| 服務無法啟動 | 檢查 `.env` 檔案是否正確設定 |
-| 回應緩慢 | 執行 `task warmup` 預熱快取 |
+| 服務無法啟動 | 檢查 `.env` 檔案是否正確設定 LINE 憑證 |
+| 回應緩慢 | 執行 `go run ./cmd/warmup` 預熱快取 |
 | Webhook 驗證失敗 | 確認 `LINE_CHANNEL_SECRET` 正確 |
+| Docker 權限錯誤 | `docker compose down && rm -rf ./data && docker compose up -d` |
 
+**啟用詳細日誌**：
 ```bash
-# 啟用詳細日誌
-LOG_LEVEL=debug task dev
-
-# 查看監控指標
-curl http://localhost:10000/metrics
+LOG_LEVEL=debug go run ./cmd/server
 ```
 
 ## 📚 文件
 
-### 進階主題
-
-- 📐 **[架構設計](docs/architecture.md)** - 系統架構與設計模式
-- 🔄 **[Python 遷移說明](docs/migration.md)** - 為何選擇 Go
-
-### 模組文件
-
-各模組的詳細說明請見對應目錄:
-- [Bot 模組](internal/bot/README.md) - 訊息處理與模組註冊
-- [爬蟲系統](internal/scraper/README.md) - 限流、重試、Singleflight
-- [資料層](internal/storage/README.md) - SQLite、Cache-First 策略
-- [Webhook](internal/webhook/README.md) - LINE 事件處理
-- [設定管理](internal/config/README.md) - 環境變數載入
-
-## 🤝 貢獻指南
-
-歡迎提交 Issue 和 Pull Request！
-
-1. Fork 專案並建立功能分支
-2. 開發與測試 (`task dev` / `task test`)
-3. 執行完整 CI (`task ci`)
-4. 遵循 [Conventional Commits](https://www.conventionalcommits.org/) 規範
-5. 提交 Pull Request
+- 📐 [架構設計](docs/architecture.md) - 系統設計與實作細節
+- 🔄 [Python 遷移說明](docs/migration.md) - 為何從 Python 遷移到 Go
+- 📊 [監控設定](deployments/README.md) - Prometheus/Grafana 配置
+- 🔧 [配置說明](internal/config/README.md) - 環境變數完整清單
 
 ## 📄 授權條款
 

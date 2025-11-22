@@ -45,13 +45,41 @@ IMAGE_TAG=v1.2.3 docker compose up -d
 
 ## 常用指令
 
+### 1. 服務管理
+
 ```bash
-task compose:up                      # 啟動
-task compose:down                    # 停止
-task compose:pull                    # 更新映像
-task compose:logs                    # 查看所有日誌
-task compose:logs -- ntpu-linebot    # 查看特定服務日誌
-task compose:restart -- ntpu-linebot # 重啟服務
+# 啟動所有服務
+task compose:up
+# 或 cd deployments && docker compose up -d
+
+# 查看日誌
+task compose:logs -- ntpu-linebot
+# 或 cd deployments && docker compose logs -f ntpu-linebot
+
+# 停止所有服務
+task compose:down
+# 或 cd deployments && docker compose down
+
+# 更新至最新版本
+task compose:update
+# 或 Windows: cd deployments && .\update.cmd
+# 或 Linux/Mac: cd deployments && ./update.sh
+```
+
+### 2. 監控儀表板存取
+
+為了不佔用本地 Port，監控服務預設不對外開放。使用以下方式開啟/關閉：
+
+```bash
+# 開啟監控儀表板 (Grafana:3000, Prometheus:9090, AlertManager:9093)
+task access:up
+# 或 Windows: cd deployments && .\access.cmd up
+# 或 Linux/Mac: cd deployments && ./access.sh up
+
+# 關閉監控儀表板
+task access:down
+# 或 Windows: cd deployments && .\access.cmd down
+# 或 Linux/Mac: cd deployments && ./access.sh down
 ```
 
 ## 目錄結構
@@ -97,9 +125,17 @@ rm -rf ./data
 docker compose up -d
 ```
 
-**更新映像**：
+**更新至最新版本**：
 ```bash
-docker compose pull && docker compose up -d --force-recreate
+# 使用 Task
+task compose:update
+
+# 或直接執行腳本
+# Windows: .\update.cmd
+# Linux/Mac: ./update.sh
+
+# 或手動執行
+docker compose up -d --pull always
 ```
 
 **本地建置** (開發用途):

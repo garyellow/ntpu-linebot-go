@@ -28,14 +28,4 @@ m.RecordCacheMiss("contact")
 m.RecordScraperRequest("course", "success", 1.234)
 ```
 
-## Prometheus 查詢
-
-```promql
-# 快取命中率
-sum(rate(ntpu_cache_hits_total[5m])) /
-  (sum(rate(ntpu_cache_hits_total[5m])) + sum(rate(ntpu_cache_misses_total[5m])))
-
-# 錯誤率
-sum(rate(ntpu_scraper_requests_total{status="error"}[5m])) /
-  sum(rate(ntpu_scraper_requests_total[5m]))
-```
+查看 Grafana 儀表板 (http://localhost:3000) 以視覺化這些指標。
