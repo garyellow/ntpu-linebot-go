@@ -59,15 +59,18 @@
 
 ### Docker Compose (推薦)
 
+使用預建映像從 Docker Hub 部署:
+
 ```bash
 git clone https://github.com/garyellow/ntpu-linebot-go.git
-cd ntpu-linebot-go/docker
+cd ntpu-linebot-go/deployments
 
 # 設定環境變數
 cp .env.example .env
 # 編輯 .env 填入 LINE_CHANNEL_ACCESS_TOKEN 和 LINE_CHANNEL_SECRET
 
-# 啟動服務
+# 拉取並啟動服務
+docker compose pull
 docker compose up -d
 
 # 查看日誌
@@ -79,6 +82,8 @@ docker compose logs -f ntpu-linebot
 - Prometheus: `http://localhost:9090`
 - AlertManager: `http://localhost:9093`
 - Grafana: `http://localhost:3000` (admin/admin123)
+
+**指定版本**: 在 `.env` 設定 `IMAGE_TAG=v1.2.3`
 
 ## 🏗️ 架構設計
 
@@ -127,7 +132,7 @@ task compose:up  # 啟動監控服務
 - Grafana: http://localhost:3000 (admin/admin123)
 - AlertManager: http://localhost:9093
 
-📖 **監控指標與告警設定**: [deploy/README.md](deploy/README.md)
+📖 **監控指標與告警設定**: [deployments/README.md](deployments/README.md)
 
 ## 🛠️ 開發指南
 
@@ -190,10 +195,11 @@ go test -race ./...
 
 ## 🐳 Docker 部署
 
-### 建置與執行
+### 使用預建映像 (推薦)
 
 ```bash
-docker build -t ntpu-linebot:latest .
+# 從 Docker Hub 拉取
+docker pull garyellow/ntpu-linebot-go:latest
 
 docker run -d \
   --name ntpu-linebot \
@@ -201,18 +207,34 @@ docker run -d \
   -v ./data:/data \
   -e LINE_CHANNEL_ACCESS_TOKEN=your_token \
   -e LINE_CHANNEL_SECRET=your_secret \
-  ntpu-linebot:latest
+  garyellow/ntpu-linebot-go:latest
+```
+
+### 本地建置
+
+開發或客製化用途:
+
+```bash
+docker build -t garyellow/ntpu-linebot-go:local .
+
+docker run -d \
+  --name ntpu-linebot \
+  -p 10000:10000 \
+  -v ./data:/data \
+  -e LINE_CHANNEL_ACCESS_TOKEN=your_token \
+  -e LINE_CHANNEL_SECRET=your_secret \
+  garyellow/ntpu-linebot-go:local
 ```
 
 ### 資料預熱
 
-首次啟動建議預熱快取:
+首次啟動建議預熱快取 (約 3-5 分鐘):
 
 ```bash
-docker compose run --rm warmup  # 約 3-5 分鐘
+docker compose run --rm warmup
 ```
 
-詳見 [cmd/warmup/README.md](cmd/warmup/README.md)
+詳見 [cmd/warmup/README.md](cmd/warmup/README.md) 和 [deployments/README.md](deployments/README.md)
 
 ## 🔧 疑難排解
 

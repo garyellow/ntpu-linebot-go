@@ -42,13 +42,12 @@ coverage.out
 .travis.yml
 
 # Docker (not needed in container)
-docker/
 Dockerfile*
-docker-compose*.yml
 .dockerignore
 
 # Deployment configs
-deploy/
+deployments/
+docker-compose*.yml
 
 # Task runner
 Taskfile.yml

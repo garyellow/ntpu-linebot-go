@@ -54,27 +54,33 @@ tasks:
       - gofmt -w .
 
   # Docker Compose
+  compose:pull:
+    desc: Pull latest images from Docker Hub
+    dir: deployments
+    cmds:
+      - docker compose pull
+
   compose:up:
     desc: Start all services
-    dir: docker
+    dir: deployments
     cmds:
       - docker compose up -d
 
   compose:down:
     desc: Stop all services
-    dir: docker
+    dir: deployments
     cmds:
       - docker compose down
 
   compose:logs:
     desc: Show logs
-    dir: docker
+    dir: deployments
     cmds:
       - docker compose logs -f {{.CLI_ARGS}}
 
   compose:restart:
     desc: Restart service
-    dir: docker
+    dir: deployments
     cmds:
       - docker compose restart {{.CLI_ARGS}}
 
