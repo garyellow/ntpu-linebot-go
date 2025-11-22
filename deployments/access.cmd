@@ -19,6 +19,6 @@ if "%1"=="down" (
     goto :eof
 )
 
-echo Usage: access.bat [up^|down]
+echo Usage: access.cmd [up^|down]
 popd
 exit /b 1
