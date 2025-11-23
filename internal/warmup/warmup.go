@@ -340,44 +340,40 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 			term int
 		}{year, 2}) // Second semester
 	}
-	// Education level codes: U=大學部, M=碩士班, N=碩士在職專班, P=博士班
-	// Must match Python's ALL_EDU_CODE = ["U", "M", "N", "P"]
-	educationCodes := []string{"U", "M", "N", "P"}
 
+	// Scrape all courses for each term (ScrapeCourses with empty title will fetch all education codes)
 	for _, t := range terms {
-		for _, code := range educationCodes {
-			select {
-			case <-ctx.Done():
-				return fmt.Errorf("course module cancelled: %w", ctx.Err())
-			default:
-			}
-
-			courses, err := ntpu.ScrapeCourses(ctx, client, t.year, t.term, code)
-			if err != nil {
-				log.WithError(err).
-					WithField("year", t.year).
-					WithField("term", t.term).
-					WithField("education_code", code).
-					Warn("Failed to scrape courses")
-				continue
-			}
-
-			savedCount := 0
-			for _, c := range courses {
-				if err := db.SaveCourse(c); err != nil {
-					log.WithError(err).WithField("uid", c.UID).Warn("Failed to save course")
-				} else {
-					savedCount++
-				}
-			}
-
-			stats.Courses.Add(int64(savedCount))
-			log.WithField("year", t.year).
-				WithField("term", t.term).
-				WithField("education_code", code).
-				WithField("count", savedCount).
-				Info("Courses cached")
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("course module cancelled: %w", ctx.Err())
+		default:
 		}
+
+		// Pass empty string as title to fetch ALL courses (all education codes: U, M, N, P)
+		// This matches Python's get_simple_courses_by_year which iterates ALL_EDU_CODE
+		courses, err := ntpu.ScrapeCourses(ctx, client, t.year, t.term, "")
+		if err != nil {
+			log.WithError(err).
+				WithField("year", t.year).
+				WithField("term", t.term).
+				Warn("Failed to scrape courses")
+			continue
+		}
+
+		savedCount := 0
+		for _, c := range courses {
+			if err := db.SaveCourse(c); err != nil {
+				log.WithError(err).WithField("uid", c.UID).Warn("Failed to save course")
+			} else {
+				savedCount++
+			}
+		}
+
+		stats.Courses.Add(int64(savedCount))
+		log.WithField("year", t.year).
+			WithField("term", t.term).
+			WithField("count", savedCount).
+			Info("Courses cached")
 	}
 
 	return nil

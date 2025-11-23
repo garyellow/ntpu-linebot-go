@@ -33,10 +33,11 @@ type Handler struct {
 	rateLimiter    *RateLimiter     // Global rate limiter for API calls
 	userLimiter    *UserRateLimiter // Per-user rate limiter
 	stickerManager *sticker.Manager // Sticker manager for avatar URLs
+	webhookTimeout time.Duration    // Timeout for bot processing
 }
 
 // NewHandler creates a new webhook handler
-func NewHandler(channelSecret, channelToken string, db *storage.DB, scraperClient *scraper.Client, m *metrics.Metrics, log *logger.Logger, stickerManager *sticker.Manager) (*Handler, error) {
+func NewHandler(channelSecret, channelToken string, db *storage.DB, scraperClient *scraper.Client, m *metrics.Metrics, log *logger.Logger, stickerManager *sticker.Manager, webhookTimeout time.Duration) (*Handler, error) {
 	// Create messaging API client
 	client, err := messaging_api.NewMessagingApiAPI(channelToken)
 	if err != nil {
@@ -67,6 +68,7 @@ func NewHandler(channelSecret, channelToken string, db *storage.DB, scraperClien
 		rateLimiter:    globalRateLimiter,
 		userLimiter:    userRateLimiter,
 		stickerManager: stickerManager,
+		webhookTimeout: webhookTimeout,
 	}, nil
 }
 
@@ -263,7 +265,7 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 	}
 
 	// Create context with timeout for bot processing (derived from request context)
-	processCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
+	processCtx, cancel := context.WithTimeout(ctx, h.webhookTimeout)
 	defer cancel()
 
 	// Dispatch to appropriate bot module based on CanHandle
@@ -316,7 +318,7 @@ func (h *Handler) handlePostbackEvent(ctx context.Context, event webhook.Postbac
 	}
 
 	// Create context with timeout (derived from request context)
-	processCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
+	processCtx, cancel := context.WithTimeout(ctx, h.webhookTimeout)
 	defer cancel()
 
 	// Check module prefix or dispatch to all handlers

@@ -33,6 +33,9 @@ type Metrics struct {
 	StickerManagerStickersCount *prometheus.GaugeVec
 	StickerLoadErrors           prometheus.Counter
 	StickerRefreshTotal         *prometheus.CounterVec
+
+	// Data integrity metrics
+	CourseDataIntegrity *prometheus.CounterVec
 }
 
 // New creates a new Metrics instance with all metrics registered
@@ -164,6 +167,15 @@ func New(registry *prometheus.Registry) *Metrics {
 			},
 			[]string{"status"}, // status: success, error
 		),
+
+		// Data integrity metrics
+		CourseDataIntegrity: promauto.With(registry).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "ntpu_course_data_integrity_issues_total",
+				Help: "Total number of course data integrity issues detected",
+			},
+			[]string{"issue_type"}, // issue_type: missing_no, empty_title, etc.
+		),
 	}
 
 	return m
@@ -230,4 +242,9 @@ func (m *Metrics) RecordStickerLoadError() {
 // RecordStickerRefresh records a sticker refresh operation
 func (m *Metrics) RecordStickerRefresh(status string) {
 	m.StickerRefreshTotal.WithLabelValues(status).Inc()
+}
+
+// RecordCourseIntegrityIssue records a course data integrity issue
+func (m *Metrics) RecordCourseIntegrityIssue(issueType string) {
+	m.CourseDataIntegrity.WithLabelValues(issueType).Inc()
 }

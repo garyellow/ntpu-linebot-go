@@ -47,6 +47,7 @@ func setupTestHandler(t *testing.T) *Handler {
 		m,
 		log,
 		stickerManager,
+		30*time.Second, // Default webhook timeout for tests
 	)
 	if err != nil {
 		t.Fatalf("Failed to create handler: %v", err)

@@ -323,7 +323,7 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 	}
 
 	var messages []messaging_api.MessageInterface
-	chunkSize := 10 // LINE Carousel max limit
+	chunkSize := 10 // LINE API limit: max 10 bubbles per Flex Carousel
 
 	for i := 0; i < len(contacts); i += chunkSize {
 		// Limit to 5 messages (LINE reply limit)

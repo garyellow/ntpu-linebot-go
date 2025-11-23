@@ -58,6 +58,9 @@ func main() {
 	m := metrics.New(registry)
 	log.Info("Metrics initialized")
 
+	// Set metrics recorder for database integrity checks
+	db.SetMetrics(m)
+
 	// Create scraper client
 	scraperClient := scraper.NewClient(
 		cfg.ScraperTimeout,
@@ -94,6 +97,7 @@ func main() {
 		m,
 		log,
 		stickerManager,
+		cfg.WebhookTimeout,
 	)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to create webhook handler")

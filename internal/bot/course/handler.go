@@ -436,7 +436,7 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 
 	var messages []messaging_api.MessageInterface
 
-	// Create bubbles for carousel (max 12 per carousel)
+	// Create bubbles for carousel (LINE API limit: max 10 bubbles per Flex Carousel)
 	var bubbles []messaging_api.FlexBubble
 	for _, course := range courses {
 		// Hero: Course title with color background
@@ -492,7 +492,7 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 		bubbles = append(bubbles, *bubble.FlexBubble)
 	}
 
-	// Split bubbles into carousels (max 10 bubbles per carousel)
+	// Split bubbles into carousels (LINE API limit: max 10 bubbles per Flex Carousel)
 	for i := 0; i < len(bubbles); i += 10 {
 		end := i + 10
 		if end > len(bubbles) {

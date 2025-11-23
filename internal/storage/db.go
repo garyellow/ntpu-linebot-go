@@ -14,7 +14,13 @@ import (
 type DB struct {
 	conn     *sql.DB
 	path     string
-	cacheTTL time.Duration // Cache time-to-live for all data
+	cacheTTL time.Duration   // Cache time-to-live for all data
+	metrics  MetricsRecorder // Optional metrics recorder for data integrity checks
+}
+
+// MetricsRecorder defines the interface for recording data integrity metrics
+type MetricsRecorder interface {
+	RecordCourseIntegrityIssue(issueType string)
 }
 
 // New creates a new database connection and initializes the schema
@@ -122,6 +128,11 @@ func (db *DB) Query(query string, args ...interface{}) (*sql.Rows, error) {
 // QueryRow executes a query that returns at most one row
 func (db *DB) QueryRow(query string, args ...interface{}) *sql.Row {
 	return db.conn.QueryRow(query, args...)
+}
+
+// SetMetrics sets the metrics recorder for data integrity monitoring
+func (db *DB) SetMetrics(recorder MetricsRecorder) {
+	db.metrics = recorder
 }
 
 // NewTestDB creates an in-memory database for testing.

@@ -424,14 +424,19 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	}
 
 	// Sort by student ID (newest first)
-	// Take only last 500 students
+	// Take only first 500 students (since query is ordered by year DESC, id DESC)
 	if len(students) > 500 {
-		students = students[len(students)-500:]
+		students = students[:500]
 	}
 
 	// Format results - split into multiple messages if needed (100 students per message)
 	messages := make([]messaging_api.MessageInterface, 0)
 	for i := 0; i < len(students); i += 100 {
+		// Respect LINE reply limit (max 5 messages)
+		if len(messages) >= 5 {
+			break
+		}
+
 		end := i + 100
 		if end > len(students) {
 			end = len(students)
@@ -685,6 +690,7 @@ func (h *Handler) buildDepartmentSelectionTemplate(year, imageURL string, depart
 	}
 
 	// If actions <= 4, use ButtonsTemplate; otherwise use CarouselTemplate
+	// LINE API limits: ButtonsTemplate max 4 actions, CarouselTemplate max 10 columns
 	if len(actions) <= 4 {
 		return []messaging_api.MessageInterface{
 			lineutil.NewButtonsTemplateWithImage(
