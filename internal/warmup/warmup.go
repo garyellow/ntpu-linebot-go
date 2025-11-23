@@ -32,6 +32,14 @@ type Options struct {
 	Reset   bool          // Whether to reset cache before warming
 }
 
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // Run executes cache warming with the given options
 func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, opts Options) (*Stats, error) {
 	stats := &Stats{}
@@ -127,13 +135,20 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 
 // RunInBackground executes cache warming asynchronously
 // Returns immediately without blocking. Logs progress to the provided logger.
+// Creates an independent context with timeout to prevent goroutine leaks on server shutdown.
 func RunInBackground(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, opts Options) {
+	// Create independent context with timeout for warmup
+	// This prevents the goroutine from leaking if server context is cancelled
+	warmupCtx, cancel := context.WithTimeout(context.Background(), opts.Timeout)
+
 	go func() {
+		defer cancel() // Ensure cleanup
+
 		log.WithField("modules", opts.Modules).
 			WithField("workers", opts.Workers).
 			Info("Starting background cache warming")
 
-		stats, err := Run(ctx, db, client, stickerMgr, log, opts)
+		stats, err := Run(warmupCtx, db, client, stickerMgr, log, opts)
 		if err != nil {
 			log.WithError(err).Warn("Background cache warming finished with errors")
 		} else {
@@ -281,39 +296,48 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats) error {
 	log.Info("Starting contact module warmup")
 
+	var errs []error
+
 	// Scrape administrative contacts
 	adminContacts, err := ntpu.ScrapeAdministrativeContacts(ctx, client)
 	if err != nil {
-		return fmt.Errorf("failed to scrape administrative contacts: %w", err)
-	}
-
-	adminSavedCount := 0
-	for _, c := range adminContacts {
-		if err := db.SaveContact(c); err != nil {
-			log.WithError(err).WithField("uid", c.UID).Warn("Failed to save administrative contact")
-		} else {
-			adminSavedCount++
+		log.WithError(err).Warn("Failed to scrape administrative contacts, continuing anyway")
+		errs = append(errs, fmt.Errorf("administrative contacts: %w", err))
+	} else {
+		adminSavedCount := 0
+		for _, c := range adminContacts {
+			if err := db.SaveContact(c); err != nil {
+				log.WithError(err).WithField("uid", c.UID).Warn("Failed to save administrative contact")
+			} else {
+				adminSavedCount++
+			}
 		}
+		stats.Contacts.Add(int64(adminSavedCount))
+		log.WithField("count", adminSavedCount).Info("Administrative contacts cached")
 	}
-	stats.Contacts.Add(int64(adminSavedCount))
-	log.WithField("count", adminSavedCount).Info("Administrative contacts cached")
 
 	// Scrape academic contacts
 	academicContacts, err := ntpu.ScrapeAcademicContacts(ctx, client)
 	if err != nil {
-		return fmt.Errorf("failed to scrape academic contacts: %w", err)
+		log.WithError(err).Warn("Failed to scrape academic contacts, continuing anyway")
+		errs = append(errs, fmt.Errorf("academic contacts: %w", err))
+	} else {
+		academicSavedCount := 0
+		for _, c := range academicContacts {
+			if err := db.SaveContact(c); err != nil {
+				log.WithError(err).WithField("uid", c.UID).Warn("Failed to save academic contact")
+			} else {
+				academicSavedCount++
+			}
+		}
+		stats.Contacts.Add(int64(academicSavedCount))
+		log.WithField("count", academicSavedCount).Info("Academic contacts cached")
 	}
 
-	academicSavedCount := 0
-	for _, c := range academicContacts {
-		if err := db.SaveContact(c); err != nil {
-			log.WithError(err).WithField("uid", c.UID).Warn("Failed to save academic contact")
-		} else {
-			academicSavedCount++
-		}
+	// Return error only if both failed
+	if len(errs) == 2 {
+		return fmt.Errorf("failed to scrape contacts: %v", errs)
 	}
-	stats.Contacts.Add(int64(academicSavedCount))
-	log.WithField("count", academicSavedCount).Info("Academic contacts cached")
 
 	return nil
 }

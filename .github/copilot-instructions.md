@@ -56,21 +56,50 @@ LINE Webhook → Gin Handler (25s timeout) → Bot Module Dispatcher
 
 5. **Warmup module** (`internal/warmup/warmup.go`) handles background cache population automatically on server startup
 
+**Module-specific logic**:
+
+**ID Module** (`internal/bot/id/handler.go`):
+- Year validation: Range-checked (89-130), converts AD years to ROC, handles >= 113 data cutoff with RIP image
+- Department code validation: Must be 1-3 digits and contain only numeric characters before lookup
+- Department selection: Uses college group → college → department flow with image templates
+- Direct student ID input: 8-9 digit numeric strings trigger immediate lookup
+- Student name search: Limited to `MaxStudentsPerSearch` (500) results with warning if limit reached
+
+**Course Module** (`internal/bot/course/handler.go`):
+- Smart semester detection: Based on current month determines which year/term to search:
+  - Feb-Jun (2-6月): Current year both terms (term 2 then term 1) - 下學期進行中
+  - Jul-Aug (7-8月): Current year both terms (term 2 then term 1) - 暑假期間
+  - Sep-Dec & Jan (9-12月 + 1月): Academic year term 1 + previous year term 2 - 上學期進行中或寒假
+    - Academic year starts in September (e.g., 2024/9 → 114學年度)
+    - Example: 2025/11 → Search 114-1 (current) + 113-2 (previous)
+    - Example: 2025/01 → Search 113-1 (just ended) + 112-2 (previous)
+    - Uses consolidated logic with `academicYear` calculation for cleaner code
+- Keyword matching: Supports both "keyword term" and "term keyword" patterns
+- UID format: `{year}{term}{course_no}` (e.g., `11312U0001` = year 113, term 2, course U0001)
+- Nil safety: Checks course pointer after scraping with early return to prevent nil dereference panics
+- UTF-8 safe truncation: Uses rune slicing for proper multi-byte character handling in titles (max `MaxTitleDisplayChars`)
+
+**Contact Module** (`internal/bot/contact/handler.go`):
+- Emergency phones: Hardcoded constants for Sanxia/Taipei campus, police, fire dept
+- Keyword flexibility: Supports traditional/simplified Chinese variants (聯繫/連繫/聯絡/連絡)
+- Contact type detection: Distinguishes between organization and individual contacts
+
 ## Data Layer: Cache-First Strategy
 
 **SQLite as primary cache** (not ephemeral like Redis):
 - **WAL mode** (`internal/storage/db.go:39`) - allows concurrent reads during writes
-- **7-day TTL**: Configurable via CACHE_TTL env (default: 168h), checked in all repository methods
+- **7-day TTL**: Configurable via CACHE_TTL env (default: 168h), enforced at SQL query level with `WHERE cached_at > ?` filters
 - **Busy timeout**: 5000ms (`db.go:44`) - waits for lock instead of failing
+- **Pure Go implementation**: Uses `modernc.org/sqlite` (no CGO required) for cross-platform compatibility
+- **Automatic schema migration**: Tables created on first run with proper indexes for optimal performance
 
-**Repository pattern** (`internal/storage/repository.go`):
+**Repository pattern with TTL validation** (`internal/storage/repository.go`):
 ```go
-// Always check cache first
-students := db.GetStudentsByName(name)
-if len(students) > 0 && !expired(students[0].CachedAt) {
-    return students // Cache hit
-}
-// Cache miss → trigger scraper
+// TTL filtering at SQL level (prevents returning stale data)
+ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
+query := `SELECT ... FROM students WHERE name LIKE ? AND cached_at > ? LIMIT 500`
+rows, err := db.conn.Query(query, "%"+sanitized+"%", ttlTimestamp)
+// All search queries enforce TTL to prevent stale cache hits
 ```
 
 **Avoiding cache stampede** - use singleflight wrapper:
@@ -81,6 +110,11 @@ result, err := wrapper.DoScrape(ctx, "key", func() (interface{}, error) {
 })
 // Concurrent calls to same key wait for single execution
 ```
+
+**Data availability notice**:
+- Student ID data: 101-112 學年度 (year >= 113 shows RIP image + warning)
+- Course data: Automatically queries current and previous semester based on month
+- Contact data: Real-time scraping from NTPU contact directory
 
 ## Rate Limiting: Two-Tier System
 
@@ -109,12 +143,14 @@ if !h.userLimiter.Allow(chatID, 10.0, 2.0) {       // 10 req/s, burst 2
 
 **Message builders** (`internal/lineutil/builder.go`) - always use these:
 ```go
-lineutil.NewTextMessage(text)                              // Auto-truncates at 5000 chars
-lineutil.NewTextMessageWithSender(text, name, iconURL)     // With avatar
+lineutil.NewTextMessage(text)                              // Simple text (auto-truncates at 5000 chars)
+lineutil.NewTextMessageWithSender(text, name, iconURL)     // Text with avatar (recommended for bot modules)
 lineutil.NewFlexMessage(altText, contents)                 // Flex Message for rich UI
 lineutil.NewCarouselTemplate(altText, columns)             // Max 10 columns
 lineutil.NewButtonsTemplate(altText, title, text, actions) // Max 4 actions
 lineutil.NewQuickReply(items)                              // Max 13 items
+lineutil.ErrorMessage(err, sender, iconURL)                // Generic error message
+lineutil.ErrorMessageWithDetail(msg, sender, iconURL)      // Error with user-friendly details
 ```
 
 **UX Best Practices**:
@@ -209,12 +245,14 @@ go run ./cmd/warmup -modules=id,contact,course -workers=10 -reset
 ```
 
 **Production warmup** (automatic):
-- Server runs `warmup.RunInBackground()` on startup
+- Server runs `warmup.RunInBackground()` on startup with independent context
 - Non-blocking: webhook accepts requests immediately
 - Cache misses trigger on-demand scraping
 - Modules: ID (264 tasks for years 101-112), Contact (admin + academic), Course (10 terms = 5 years), Sticker (avatars)
 - Default: "id,contact,course,sticker"
 - Same scraper settings as regular requests (5-10s delay, 60s timeout)
+- **Execution order**: All modules run in parallel (no order dependency)
+- **Context isolation**: Uses independent timeout context to prevent goroutine leaks on server shutdown
 
 ## Error Handling: Context + Wrapping
 

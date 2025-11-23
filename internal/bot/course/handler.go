@@ -27,9 +27,11 @@ type Handler struct {
 }
 
 const (
-	moduleName = "course"
-	splitChar  = "$"
-	senderName = "課程魔法師"
+	moduleName           = "course"
+	splitChar            = "$"
+	senderName           = "課程魔法師"
+	MaxCoursesPerSearch  = 50 // Maximum courses to return in search results
+	MaxTitleDisplayChars = 60 // Maximum characters for course title display before truncation
 )
 
 // Valid keywords for course queries
@@ -111,27 +113,51 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	}
 
 	// Check for course title search - extract term after keyword
-	if match := courseRegex.FindString(text); match != "" {
-		// Extract what comes after the keyword
+	// Support both "keyword term" and "term keyword" patterns
+	if courseRegex.MatchString(text) {
+		match := courseRegex.FindString(text)
+		// Try extracting term after keyword first
 		searchTerm := strings.TrimSpace(strings.Replace(text, match, "", 1))
+
+		// If keyword is at the end or no search term, extract from beginning
+		if searchTerm == "" || strings.HasSuffix(text, match) {
+			// Extract what comes before the keyword
+			searchTerm = strings.TrimSpace(strings.TrimSuffix(text, match))
+		}
+
 		if searchTerm == "" {
 			// If no search term provided, give helpful message
-			return []messaging_api.MessageInterface{
-				lineutil.NewTextMessageWithSender("請在關鍵字後輸入課程名稱\n\n例如：課 程式設計、課程 微積分", senderName, h.stickerManager.GetRandomSticker()),
-			}
+			msg := lineutil.NewTextMessageWithSender("📚 請輸入課程名稱\n\n例如：\n• 課 程式設計\n• 課程 微積分\n• 微積分課\n\n💡 也可直接輸入課程編號（如：3141U0001）", senderName, h.stickerManager.GetRandomSticker())
+			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+				{Action: lineutil.NewMessageAction("👨‍🏫 按教師查詢", "老師")},
+				{Action: lineutil.NewMessageAction("📌 使用說明", "使用說明")},
+			})
+			return []messaging_api.MessageInterface{msg}
 		}
 		return h.handleCourseTitleSearch(ctx, searchTerm)
 	}
 
 	// Check for teacher search - extract term after keyword
-	if match := teacherRegex.FindString(text); match != "" {
-		// Extract what comes after the keyword
+	// Support both "keyword term" and "term keyword" patterns
+	if teacherRegex.MatchString(text) {
+		match := teacherRegex.FindString(text)
+		// Try extracting term after keyword first
 		searchTerm := strings.TrimSpace(strings.Replace(text, match, "", 1))
+
+		// If keyword is at the end or no search term, extract from beginning
+		if searchTerm == "" || strings.HasSuffix(text, match) {
+			// Extract what comes before the keyword
+			searchTerm = strings.TrimSpace(strings.TrimSuffix(text, match))
+		}
+
 		if searchTerm == "" {
 			// If no search term provided, give helpful message
-			return []messaging_api.MessageInterface{
-				lineutil.NewTextMessageWithSender("請在關鍵字後輸入教師姓名\n\n例如：老師 王小明、教師 李大華", senderName, h.stickerManager.GetRandomSticker()),
-			}
+			msg := lineutil.NewTextMessageWithSender("👨‍🏫 請輸入教師姓名\n\n例如：\n• 老師 王小明\n• 教師 李大華\n• 王小明老師\n\n💡 只輸入姓氏也可以（如：老師 王）", senderName, h.stickerManager.GetRandomSticker())
+			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+				{Action: lineutil.NewMessageAction("📚 按課程查詢", "課程")},
+				{Action: lineutil.NewMessageAction("📌 使用說明", "使用說明")},
+			})
+			return []messaging_api.MessageInterface{msg}
 		}
 		return h.handleTeacherSearch(ctx, searchTerm)
 	}
@@ -207,6 +233,21 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 		return []messaging_api.MessageInterface{msg}
 	}
 
+	// Check if course was found (prevent nil pointer dereference)
+	if course == nil {
+		log.Warnf("Course UID %s not found after scraping", uid)
+		h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
+		msg := lineutil.NewTextMessageWithSender(
+			fmt.Sprintf("❌ 查無課程編號 %s\n\n請確認課程編號是否正確", uid),
+			senderName, h.stickerManager.GetRandomSticker(),
+		)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			{Action: lineutil.NewMessageAction("按課名查詢", "課程")},
+			{Action: lineutil.NewMessageAction("按教師查詢", "老師")},
+		})
+		return []messaging_api.MessageInterface{msg}
+	}
+
 	// Save to cache
 	if err := h.db.SaveCourse(course); err != nil {
 		log.WithError(err).Warn("Failed to save course to cache")
@@ -238,19 +279,94 @@ func (h *Handler) handleCourseTitleSearch(ctx context.Context, title string) []m
 
 	if len(courses) > 0 {
 		h.metrics.RecordCacheHit(moduleName)
-		log.Infof("Found %d courses for title: %s", len(courses), title)
+		log.Infof("Found %d courses in cache for title: %s", len(courses), title)
 		return h.formatCourseListResponse(courses)
 	}
 
-	// No results found
+	// Cache miss - Try scraping from current and previous semester
+	log.Infof("Cache miss for course title: %s, scraping from recent semesters...", title)
 	h.metrics.RecordCacheMiss(moduleName)
-	log.Infof("No courses found for title: %s", title)
-	return []messaging_api.MessageInterface{
-		lineutil.NewTextMessageWithSender(fmt.Sprintf(
-			"🔍 查無包含「%s」的課程\n\n請確認課程名稱是否正確，或使用課程編號查詢。",
-			title,
-		), senderName, h.stickerManager.GetRandomSticker()),
+	log.Infof("Cache miss for course title: %s, trying to scrape...", title)
+
+	// Get current year and determine search semesters
+	now := time.Now()
+	currentYear := now.Year() - 1911
+	currentMonth := int(now.Month())
+
+	// Determine search years and terms based on current month
+	// 臺灣學期制度：
+	// - 第1學期（上學期）：9月~1月
+	// - 第2學期（下學期）：2月~6月
+	// - 暑假：7月~8月
+	var searchYears, searchTerms []int
+	if currentMonth >= 2 && currentMonth <= 6 {
+		// 2-6月：下學期進行中，應查詢「當年度第2學期」及「當年度第1學期」
+		searchYears = []int{currentYear, currentYear}
+		searchTerms = []int{2, 1}
+	} else if currentMonth >= 7 && currentMonth <= 8 {
+		// 7-8月：暑假期間，應查詢「當年度第2學期」及「當年度第1學期」（已結束學期）
+		searchYears = []int{currentYear, currentYear}
+		searchTerms = []int{2, 1}
+	} else {
+		// 9-12月 + 1月: 上學期進行中或寒假
+		// 學年度計算：9月開始新學年度
+		// 例如：2025年9月 → 114學年度第1學期（2024/9~2025/1）
+		//      2025年11月 → 查詢 114-1（當前）+ 113-2（前一學期）
+		//      2025年1月 → 查詢 113-1（剛結束）+ 112-2（前一學期）
+		var academicYear int
+		if currentMonth >= 9 {
+			academicYear = currentYear
+		} else {
+			academicYear = currentYear - 1
+		}
+		searchYears = []int{academicYear, academicYear - 1}
+		searchTerms = []int{1, 2}
 	}
+
+	// Search courses from multiple semesters
+	foundCourses := make([]*storage.Course, 0)
+	for i := range searchYears {
+		year := searchYears[i]
+		term := searchTerms[i]
+
+		scrapedCourses, err := ntpu.ScrapeCourses(ctx, h.scraper, year, term, title)
+		if err != nil {
+			log.WithError(err).WithField("year", year).WithField("term", term).
+				Debug("Failed to scrape courses for year/term")
+			continue
+		}
+
+		// Save courses to cache
+		for _, course := range scrapedCourses {
+			if err := h.db.SaveCourse(course); err != nil {
+				log.WithError(err).Warn("Failed to save course to cache")
+			}
+		}
+
+		foundCourses = append(foundCourses, scrapedCourses...)
+	}
+
+	if len(foundCourses) > 0 {
+		h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
+		// Convert []*storage.Course to []storage.Course
+		courses := make([]storage.Course, len(foundCourses))
+		for i, c := range foundCourses {
+			courses[i] = *c
+		}
+		return h.formatCourseListResponse(courses)
+	}
+
+	// No results found even after scraping
+	h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
+	msg := lineutil.NewTextMessageWithSender(fmt.Sprintf(
+		"🔍 查無包含「%s」的課程\n\n請確認：\n• 課程名稱是否正確\n• 該課程是否在本學期或上學期開設\n• 或使用課程編號直接查詢（如：3141U0001）",
+		title,
+	), senderName, h.stickerManager.GetRandomSticker())
+	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+		{Action: lineutil.NewMessageAction("重新查詢", "課程")},
+		{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+	})
+	return []messaging_api.MessageInterface{msg}
 }
 
 // handleTeacherSearch handles teacher search queries
@@ -273,20 +389,92 @@ func (h *Handler) handleTeacherSearch(ctx context.Context, teacherName string) [
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	if len(courses) == 0 {
-		h.metrics.RecordCacheMiss(moduleName)
-		log.Infof("No courses found for teacher: %s", teacherName)
-		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithSender(fmt.Sprintf(
-				"🔍 查無教師「%s」的授課課程\n\n請確認教師姓名是否正確，或使用課程編號查詢。",
-				teacherName,
-			), senderName, h.stickerManager.GetRandomSticker()),
+	if len(courses) > 0 {
+		h.metrics.RecordCacheHit(moduleName)
+		log.Infof("Found %d courses for teacher: %s", len(courses), teacherName)
+		return h.formatCourseListResponse(courses)
+	}
+
+	// Cache miss - Try scraping recent semesters
+	h.metrics.RecordCacheMiss(moduleName)
+	log.Infof("Cache miss for teacher: %s, trying to scrape...", teacherName)
+
+	// Get current year and determine search semesters (same logic as title search)
+	now := time.Now()
+	currentYear := now.Year() - 1911
+	currentMonth := int(now.Month())
+
+	var searchYears, searchTerms []int
+	if currentMonth >= 2 && currentMonth <= 6 {
+		searchYears = []int{currentYear, currentYear}
+		searchTerms = []int{2, 1}
+	} else if currentMonth >= 7 && currentMonth <= 8 {
+		searchYears = []int{currentYear, currentYear}
+		searchTerms = []int{2, 1}
+	} else {
+		// 9-12月 + 1月: 上學期進行中或寒假
+		var academicYear int
+		if currentMonth >= 9 {
+			academicYear = currentYear
+		} else {
+			academicYear = currentYear - 1
+		}
+		searchYears = []int{academicYear, academicYear - 1}
+		searchTerms = []int{1, 2}
+	}
+
+	// Search and save courses
+	foundCourses := make([]*storage.Course, 0)
+	for i := range searchYears {
+		year := searchYears[i]
+		term := searchTerms[i]
+
+		// Scrape all courses for this semester
+		scrapedCourses, err := ntpu.ScrapeCourses(ctx, h.scraper, year, term, "")
+		if err != nil {
+			log.WithError(err).WithField("year", year).WithField("term", term).
+				Debug("Failed to scrape courses for year/term")
+			continue
+		}
+
+		// Filter by teacher and save to cache
+		for _, course := range scrapedCourses {
+			// Save all courses for future queries
+			if err := h.db.SaveCourse(course); err != nil {
+				log.WithError(err).Warn("Failed to save course to cache")
+			}
+
+			// Check if teacher matches
+			for _, teacher := range course.Teachers {
+				if strings.Contains(teacher, teacherName) {
+					foundCourses = append(foundCourses, course)
+					break
+				}
+			}
 		}
 	}
 
-	h.metrics.RecordCacheHit(moduleName)
-	log.Infof("Found %d courses for teacher: %s", len(courses), teacherName)
-	return h.formatCourseListResponse(courses)
+	if len(foundCourses) > 0 {
+		h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
+		// Convert []*storage.Course to []storage.Course
+		courses := make([]storage.Course, len(foundCourses))
+		for i, c := range foundCourses {
+			courses[i] = *c
+		}
+		return h.formatCourseListResponse(courses)
+	}
+
+	// No results found
+	h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
+	msg := lineutil.NewTextMessageWithSender(fmt.Sprintf(
+		"🔍 查無教師「%s」的授課課程\n\n請確認：\n• 教師姓名是否正確（可嘗試只輸入姓氏）\n• 該教師本學期或上學期是否有開課\n• 若為兼任或新進教師，資料可能尚未更新",
+		teacherName,
+	), senderName, h.stickerManager.GetRandomSticker())
+	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+		{Action: lineutil.NewMessageAction("重試", "老師 "+teacherName)},
+		{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+	})
+	return []messaging_api.MessageInterface{msg}
 }
 
 // formatCourseResponse formats a single course as a LINE message
@@ -301,9 +489,11 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 
 	// Hero: Course title and code
 	// Truncate title if too long (max ~60 chars for better display)
+	// Use rune slicing for proper UTF-8 multi-byte character handling
 	displayTitle := course.Title
-	if len(displayTitle) > 60 {
-		displayTitle = displayTitle[:57] + "..."
+	runes := []rune(displayTitle)
+	if len(runes) > MaxTitleDisplayChars {
+		displayTitle = string(runes[:57]) + "..."
 	}
 	hero := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexText(displayTitle).WithWeight("bold").WithSize("xl").WithColor("#ffffff").WithWrap(true).FlexText,

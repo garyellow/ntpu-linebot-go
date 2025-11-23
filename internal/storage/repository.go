@@ -54,7 +54,8 @@ func (db *DB) GetStudentByID(id string) (*Student, error) {
 	return &student, nil
 }
 
-// SearchStudentsByName searches students by partial name match (max 1000 results)
+// SearchStudentsByName searches students by partial name match (max 500 results)
+// Only returns non-expired cache entries based on configured TTL
 func (db *DB) SearchStudentsByName(name string) ([]Student, error) {
 	// Validate input to prevent SQL injection (even though we use prepared statements)
 	if len(name) > 100 {
@@ -64,9 +65,13 @@ func (db *DB) SearchStudentsByName(name string) ([]Student, error) {
 	// Sanitize search term to prevent SQL LIKE special character issues
 	sanitized := sanitizeSearchTerm(name)
 
-	query := `SELECT id, name, department, year, cached_at FROM students WHERE name LIKE ? ESCAPE '\' ORDER BY year DESC, id DESC LIMIT 1000`
+	// Calculate TTL cutoff timestamp
+	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
 
-	rows, err := db.conn.Query(query, "%"+sanitized+"%")
+	// Add TTL filter to prevent returning stale data
+	query := `SELECT id, name, department, year, cached_at FROM students WHERE name LIKE ? ESCAPE '\' AND cached_at > ? ORDER BY year DESC, id DESC LIMIT 500`
+
+	rows, err := db.conn.Query(query, "%"+sanitized+"%", ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search students by name: %w", err)
 	}
@@ -85,10 +90,15 @@ func (db *DB) SearchStudentsByName(name string) ([]Student, error) {
 }
 
 // GetStudentsByYearDept retrieves students by year and department
+// Only returns non-expired cache entries based on configured TTL
 func (db *DB) GetStudentsByYearDept(year int, dept string) ([]Student, error) {
-	query := `SELECT id, name, department, year, cached_at FROM students WHERE year = ? AND department = ?`
+	// Calculate TTL cutoff timestamp
+	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
 
-	rows, err := db.conn.Query(query, year, dept)
+	// Add TTL filter to prevent returning stale data
+	query := `SELECT id, name, department, year, cached_at FROM students WHERE year = ? AND department = ? AND cached_at > ?`
+
+	rows, err := db.conn.Query(query, year, dept, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get students by year and department: %w", err)
 	}
@@ -218,6 +228,7 @@ func (db *DB) GetContactByUID(uid string) (*Contact, error) {
 }
 
 // SearchContactsByName searches contacts by partial name match (max 500 results)
+// Only returns non-expired cache entries based on configured TTL
 func (db *DB) SearchContactsByName(name string) ([]Contact, error) {
 	// Validate input
 	if len(name) > 100 {
@@ -227,9 +238,13 @@ func (db *DB) SearchContactsByName(name string) ([]Contact, error) {
 	// Sanitize search term to prevent SQL LIKE special character issues
 	sanitized := sanitizeSearchTerm(name)
 
-	query := `SELECT uid, name, title, organization, phone, email, cached_at FROM contacts WHERE name LIKE ? ESCAPE '\' ORDER BY type, name LIMIT 500`
+	// Calculate TTL cutoff timestamp
+	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
 
-	rows, err := db.conn.Query(query, "%"+sanitized+"%")
+	// Add TTL filter to prevent returning stale data
+	query := `SELECT uid, name, title, organization, phone, email, cached_at FROM contacts WHERE name LIKE ? ESCAPE '\' AND cached_at > ? ORDER BY type, name LIMIT 500`
+
+	rows, err := db.conn.Query(query, "%"+sanitized+"%", ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search contacts by name: %w", err)
 	}
@@ -256,10 +271,15 @@ func (db *DB) SearchContactsByName(name string) ([]Contact, error) {
 }
 
 // GetContactsByOrganization retrieves contacts by organization
+// Only returns non-expired cache entries based on configured TTL
 func (db *DB) GetContactsByOrganization(org string) ([]Contact, error) {
-	query := `SELECT uid, name, title, organization, phone, email, cached_at FROM contacts WHERE organization = ?`
+	// Calculate TTL cutoff timestamp
+	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
 
-	rows, err := db.conn.Query(query, org)
+	// Add TTL filter to prevent returning stale data
+	query := `SELECT uid, name, title, organization, phone, email, cached_at FROM contacts WHERE organization = ? AND cached_at > ?`
+
+	rows, err := db.conn.Query(query, org, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get contacts by organization: %w", err)
 	}

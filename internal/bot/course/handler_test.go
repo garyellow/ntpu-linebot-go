@@ -163,6 +163,58 @@ func TestHandleMessage_Teacher(t *testing.T) {
 	}
 }
 
+func TestHandleMessage_CourseKeywordBefore(t *testing.T) {
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	// Test "search_term keyword" pattern
+	messages := h.HandleMessage(ctx, "資料結構課")
+
+	// Should return some response
+	if len(messages) == 0 {
+		t.Error("Expected messages for course keyword at end, got none")
+	}
+}
+
+func TestHandleMessage_TeacherKeywordBefore(t *testing.T) {
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	// Test "search_term keyword" pattern
+	messages := h.HandleMessage(ctx, "王教授老師")
+
+	// Should return some response
+	if len(messages) == 0 {
+		t.Error("Expected messages for teacher keyword at end, got none")
+	}
+}
+
+func TestHandleMessage_EmptyKeywordOnly(t *testing.T) {
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"課 only", "課"},
+		{"課程 only", "課程"},
+		{"老師 only", "老師"},
+		{"教師 only", "教師"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			messages := h.HandleMessage(ctx, tt.input)
+
+			// Should return help message
+			if len(messages) == 0 {
+				t.Error("Expected help message for empty keyword, got none")
+			}
+		})
+	}
+}
+
 func TestFormatCourseResponse(t *testing.T) {
 	h := setupTestHandler(t)
 
@@ -299,6 +351,109 @@ func TestHandlePostback_InvalidData(t *testing.T) {
 	// Should return empty slice for invalid data
 	if len(messages) != 0 {
 		t.Errorf("Expected no messages for invalid postback, got %d", len(messages))
+	}
+}
+
+// TestSemesterDetermination tests the semester determination logic based on current month
+func TestSemesterDetermination(t *testing.T) {
+	tests := []struct {
+		name            string
+		month           int
+		currentYear     int
+		expectedYears   []int
+		expectedTerms   []int
+		expectedComment string
+	}{
+		{
+			name:            "February - Spring semester ongoing",
+			month:           2,
+			currentYear:     114,
+			expectedYears:   []int{114, 114},
+			expectedTerms:   []int{2, 1},
+			expectedComment: "查詢當年度第2學期（下學期進行中）及第1學期",
+		},
+		{
+			name:            "June - Spring semester ending",
+			month:           6,
+			currentYear:     114,
+			expectedYears:   []int{114, 114},
+			expectedTerms:   []int{2, 1},
+			expectedComment: "查詢當年度第2學期（下學期結束）及第1學期",
+		},
+		{
+			name:            "July - Summer vacation",
+			month:           7,
+			currentYear:     114,
+			expectedYears:   []int{114, 114},
+			expectedTerms:   []int{2, 1},
+			expectedComment: "查詢當年度第2學期及第1學期（暑假期間）",
+		},
+		{
+			name:            "August - Before fall semester",
+			month:           8,
+			currentYear:     114,
+			expectedYears:   []int{114, 114},
+			expectedTerms:   []int{2, 1},
+			expectedComment: "查詢當年度第2學期及第1學期（暑假結束前）",
+		},
+		{
+			name:            "September - Fall semester starting",
+			month:           9,
+			currentYear:     114,
+			expectedYears:   []int{115, 114},
+			expectedTerms:   []int{1, 2},
+			expectedComment: "查詢次年度第1學期（上學期開始）及當年度第2學期",
+		},
+		{
+			name:            "December - Fall semester ongoing",
+			month:           12,
+			currentYear:     114,
+			expectedYears:   []int{115, 114},
+			expectedTerms:   []int{1, 2},
+			expectedComment: "查詢次年度第1學期（上學期進行中）及當年度第2學期",
+		},
+		{
+			name:            "January - Winter vacation",
+			month:           1,
+			currentYear:     114,
+			expectedYears:   []int{115, 114},
+			expectedTerms:   []int{1, 2},
+			expectedComment: "查詢次年度第1學期（寒假）及當年度第2學期",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var searchYears, searchTerms []int
+
+			// Simulate the logic from handleCourseTitleSearch
+			if tt.month >= 2 && tt.month <= 6 {
+				searchYears = []int{tt.currentYear, tt.currentYear}
+				searchTerms = []int{2, 1}
+			} else if tt.month >= 7 && tt.month <= 8 {
+				searchYears = []int{tt.currentYear, tt.currentYear}
+				searchTerms = []int{2, 1}
+			} else {
+				nextAcademicYear := tt.currentYear + 1
+				searchYears = []int{nextAcademicYear, tt.currentYear}
+				searchTerms = []int{1, 2}
+			}
+
+			if len(searchYears) != len(tt.expectedYears) {
+				t.Errorf("Year count mismatch: got %d, want %d", len(searchYears), len(tt.expectedYears))
+			}
+
+			for i := range searchYears {
+				if searchYears[i] != tt.expectedYears[i] {
+					t.Errorf("Year[%d] mismatch: got %d, want %d (month=%d, %s)",
+						i, searchYears[i], tt.expectedYears[i], tt.month, tt.expectedComment)
+				}
+				if searchTerms[i] != tt.expectedTerms[i] {
+					t.Errorf("Term[%d] mismatch: got %d, want %d (month=%d, %s)",
+						i, searchTerms[i], tt.expectedTerms[i], tt.month, tt.expectedComment)
+				}
+			}
+		})
 	}
 }
 

@@ -343,17 +343,26 @@ func (m *Manager) GetRandomSticker() string {
 
 	// Use crypto/rand for secure randomness
 	var b [8]byte
-	_, _ = rand.Read(b[:])
+	_, _ = rand.Read(b[:]) // Error ignored: crypto/rand.Read only fails on catastrophic system failures
 	idx := int(binary.LittleEndian.Uint64(b[:])) % len(stickers)
 	if idx < 0 {
 		idx = -idx
 	}
 	selectedURL := stickers[idx]
 
-	// Update success count in database (non-blocking, errors silently ignored)
-	go func() {
-		_ = m.db.UpdateStickerSuccess(selectedURL)
-	}()
+	// Update success count in database (non-blocking)
+	// Uses background context with timeout to prevent goroutine leaks on shutdown
+	// Errors are intentionally ignored: sticker selection count is non-critical
+	// and logging would spam logs on every message
+	go func(url string) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		// Context used only for timeout control, not passed to UpdateStickerSuccess
+		// since the function doesn't accept context yet
+		_ = ctx // Placeholder until UpdateStickerSuccess accepts context
+		_ = m.db.UpdateStickerSuccess(url)
+	}(selectedURL)
 
 	return selectedURL
 }

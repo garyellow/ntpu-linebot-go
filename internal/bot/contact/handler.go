@@ -118,9 +118,12 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		searchTerm := strings.TrimSpace(strings.Replace(text, match, "", 1))
 		if searchTerm == "" {
 			// If no search term provided, give helpful message
-			return []messaging_api.MessageInterface{
-				lineutil.NewTextMessageWithSender("請在關鍵字後輸入查詢內容\n\n例如：聯絡 資工系、電話 圖書館", senderName, h.stickerManager.GetRandomSticker()),
-			}
+			msg := lineutil.NewTextMessageWithSender("📞 請輸入查詢內容\n\n例如：\n• 聯絡 資工系\n• 電話 圖書館\n• 分機 學務處\n\n💡 也可直接輸入「緊急」查看緊急聯絡電話", senderName, h.stickerManager.GetRandomSticker())
+			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+				{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
+				{Action: lineutil.NewMessageAction("📌 使用說明", "使用說明")},
+			})
+			return []messaging_api.MessageInterface{msg}
 		}
 		return h.handleContactSearch(ctx, searchTerm)
 	}
@@ -135,6 +138,14 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 
 		if searchTerm != "" {
 			return h.handleContactSearch(ctx, searchTerm)
+		} else {
+			// No search term - provide guidance
+			msg := lineutil.NewTextMessageWithSender("📞 請輸入要查詢的單位或人員\n\n例如：\n• 電話 資工系\n• 分機 圖書館", senderName, h.stickerManager.GetRandomSticker())
+			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+				{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
+				{Action: lineutil.NewMessageAction("📌 使用說明", "使用說明")},
+			})
+			return []messaging_api.MessageInterface{msg}
 		}
 	}
 
@@ -294,8 +305,11 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	}
 
 	if len(contacts) == 0 {
-		h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
-		msg := lineutil.NewTextMessageWithSender(fmt.Sprintf("🔍 查無包含「%s」的聯絡資料\n\n請確認關鍵字是否正確", searchTerm), senderName, h.stickerManager.GetRandomSticker())
+		h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
+		msg := lineutil.NewTextMessageWithSender(fmt.Sprintf(
+			"🔍 查無包含「%s」的聯絡資料\n\n建議：\n• 確認關鍵字拼寫是否正確\n• 嘗試使用單位全名或簡稱\n• 若查詢人名，可嘗試只輸入姓氏",
+			searchTerm,
+		), senderName, h.stickerManager.GetRandomSticker())
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			{Action: lineutil.NewMessageAction("重新搜尋", "聯絡")},
 			{Action: lineutil.NewMessageAction("緊急電話", "緊急")},

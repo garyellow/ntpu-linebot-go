@@ -94,13 +94,13 @@ func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
 
 			switch resp.StatusCode {
 			case 429: // Rate limited - retry with backoff
-				lastErr = fmt.Errorf("rate limited (429)")
+				lastErr = fmt.Errorf("rate limited for %s: status %d", url, resp.StatusCode)
 			case 503, 502, 504: // Server errors - retry
-				lastErr = fmt.Errorf("server error (%d)", resp.StatusCode)
+				lastErr = fmt.Errorf("server error for %s: status %d", url, resp.StatusCode)
 			case 404, 403, 401: // Client errors - don't retry
-				return fmt.Errorf("client error: %d", resp.StatusCode)
+				return fmt.Errorf("client error for %s: status %d (not retrying)", url, resp.StatusCode)
 			default:
-				lastErr = fmt.Errorf("status code: %d", resp.StatusCode)
+				lastErr = fmt.Errorf("unexpected status for %s: %d", url, resp.StatusCode)
 			}
 			return lastErr
 		}

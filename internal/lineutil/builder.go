@@ -36,6 +36,20 @@ func NewImageMessage(originalContentURL, previewImageURL string) messaging_api.M
 	}
 }
 
+// NewTextMessage creates a simple text message without sender information.
+// The text parameter is the message content.
+// LINE API limits: max 5000 characters per text message
+func NewTextMessage(text string) *messaging_api.TextMessage {
+	// Validate and truncate if necessary
+	if len(text) > 5000 {
+		text = TruncateText(text, 4997) + "..."
+	}
+
+	return &messaging_api.TextMessage{
+		Text: text,
+	}
+}
+
 // NewTextMessageWithSender creates a text message with sender information (name and icon).
 // The text parameter is the message content, senderName is the displayed name,
 // and stickerIconURL is the icon image URL (e.g., random sticker).

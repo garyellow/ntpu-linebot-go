@@ -28,9 +28,10 @@ type Handler struct {
 }
 
 const (
-	moduleName = "id"
-	splitChar  = "$"
-	senderName = "學號魔法師"
+	moduleName           = "id"
+	splitChar            = "$"
+	senderName           = "學號魔法師"
+	MaxStudentsPerSearch = 500 // Maximum students to return in name search results
 )
 
 // Valid keywords for student ID queries
@@ -159,9 +160,12 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		searchTerm := strings.TrimSpace(text[loc[1]:])
 		if searchTerm == "" {
 			// If no search term provided, give helpful message
-			return []messaging_api.MessageInterface{
-				lineutil.NewTextMessageWithSender("請在關鍵字後輸入查詢內容\n\n例如：學號 小明、學號 412345678\n或直接輸入 8-9 位學號（如：412345678）", senderName, h.stickerManager.GetRandomSticker()),
-			}
+			msg := lineutil.NewTextMessageWithSender("請在關鍵字後輸入查詢內容\n\n例如：學號 小明、學號 412345678\n或直接輸入 8-9 位學號（如：412345678）", senderName, h.stickerManager.GetRandomSticker())
+			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+				{Action: lineutil.NewMessageAction("按學年查詢", "學年")},
+				{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+			})
+			return []messaging_api.MessageInterface{msg}
 		}
 
 		// Check if it's a student ID (8-9 digits)
@@ -205,6 +209,26 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 		case "人文學院", "法律學院", "商學院", "公共事務學院", "社會科學學院", "電機資訊學院":
 			return h.handleCollegeSelection(action, year)
 		default:
+			// Validate department code format (1-3 digits) before lookup
+			if len(action) > 3 || len(action) == 0 {
+				return []messaging_api.MessageInterface{
+					lineutil.NewTextMessageWithSender(
+						"❌ 無效的系代碼格式\n\n系代碼應為 1-3 位數字",
+						senderName, h.stickerManager.GetRandomSticker(),
+					),
+				}
+			}
+
+			// Verify department code contains only digits
+			if _, err := strconv.Atoi(action); err != nil {
+				return []messaging_api.MessageInterface{
+					lineutil.NewTextMessageWithSender(
+						"❌ 無效的系代碼格式\n\n系代碼應為 1-3 位數字",
+						senderName, h.stickerManager.GetRandomSticker(),
+					),
+				}
+			}
+
 			// Check if it's a department code
 			if _, ok := ntpu.DepartmentNames[action]; ok {
 				return h.handleDepartmentSelection(ctx, action, year)
@@ -256,9 +280,12 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	return []messaging_api.MessageInterface{
-		lineutil.NewTextMessageWithSender("❌ 找不到該系所\n\n請輸入正確的系名，例如：資工、法律、企管", senderName, h.stickerManager.GetRandomSticker()),
-	}
+	msg := lineutil.NewTextMessageWithSender("❌ 找不到該系所\n\n請輸入正確的系名，例如：資工、法律、企管", senderName, h.stickerManager.GetRandomSticker())
+	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+		{Action: lineutil.NewMessageAction(allDeptCodeText, allDeptCodeText)},
+		{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+	})
+	return []messaging_api.MessageInterface{msg}
 }
 
 // handleDepartmentCodeQuery handles department code to name queries
@@ -272,9 +299,12 @@ func (h *Handler) handleDepartmentCodeQuery(code string) []messaging_api.Message
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	return []messaging_api.MessageInterface{
-		lineutil.NewTextMessageWithSender("❌ 找不到該系代碼\n\n請輸入正確的系代碼，例如：85（資工系）", senderName, h.stickerManager.GetRandomSticker()),
-	}
+	msg := lineutil.NewTextMessageWithSender("❌ 找不到該系代碼\n\n請輸入正確的系代碼，例如：85（資工系）", senderName, h.stickerManager.GetRandomSticker())
+	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+		{Action: lineutil.NewMessageAction(allDeptCodeText, allDeptCodeText)},
+		{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+	})
+	return []messaging_api.MessageInterface{msg}
 }
 
 // handleYearQuery handles year-based search queries
@@ -282,18 +312,24 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 	// Parse year
 	year, err := parseYear(yearStr)
 	if err != nil {
-		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithSender("❌ 無效的年份格式\n\n請輸入 2-4 位數字，例如：112 或 2023", senderName, h.stickerManager.GetRandomSticker()),
-		}
+		msg := lineutil.NewTextMessageWithSender("❌ 無效的年份格式\n\n請輸入 2-4 位數字，例如：112 或 2023", senderName, h.stickerManager.GetRandomSticker())
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			{Action: lineutil.NewMessageAction("查詢 112 學年度", "學年 112")},
+			{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+		})
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	currentYear := time.Now().Year() - 1911
 
 	// Validate year
 	if year > currentYear {
-		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithSender("你未來人？(⊙ˍ⊙)", senderName, h.stickerManager.GetRandomSticker()),
-		}
+		msg := lineutil.NewTextMessageWithSender("你未來人？(⊙ˍ⊙)", senderName, h.stickerManager.GetRandomSticker())
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			{Action: lineutil.NewMessageAction(fmt.Sprintf("查詢 %d 學年度", currentYear), fmt.Sprintf("學年 %d", currentYear))},
+			{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+		})
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	// Check for 2024+ data warning (year >= 113)
@@ -307,15 +343,21 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 	}
 
 	if year < 90 {
-		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithSender("學校都還沒蓋好(￣▽￣)", senderName, h.stickerManager.GetRandomSticker()),
-		}
+		msg := lineutil.NewTextMessageWithSender("💡 學年度過早\n\n臺北大學於民國 89 年成立\n請輸入 90 學年度以後的年份", senderName, h.stickerManager.GetRandomSticker())
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			{Action: lineutil.NewMessageAction("查詢 95 學年度", "學年 95")},
+			{Action: lineutil.NewMessageAction("查詢學號", "學號")},
+		})
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	if year >= 90 && year < 95 {
-		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithSender("數位學苑還沒出生喔~~", senderName, h.stickerManager.GetRandomSticker()),
-		}
+		msg := lineutil.NewTextMessageWithSender("💡 此學年度資料不可用\n\n數位學苑系統於 95 學年度啟用\n目前僅提供 95-112 學年度資料", senderName, h.stickerManager.GetRandomSticker())
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			{Action: lineutil.NewMessageAction("查詢 95 學年度", "學年 95")},
+			{Action: lineutil.NewMessageAction("查詢學號", "學號")},
+		})
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	// Create confirmation message
@@ -409,13 +451,21 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	students, err := h.db.SearchStudentsByName(name)
 	if err != nil {
 		log.WithError(err).Error("Failed to search students by name")
-		return []messaging_api.MessageInterface{
-			lineutil.ErrorMessageWithDetail("搜尋姓名時發生問題", senderName, h.stickerManager.GetRandomSticker()),
+		msg := lineutil.ErrorMessageWithDetail("搜尋姓名時發生問題", senderName, h.stickerManager.GetRandomSticker())
+		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+				{Action: lineutil.NewMessageAction("重新搜尋", "學號")},
+				{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+			})
 		}
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	if len(students) == 0 {
-		msg := lineutil.NewTextMessageWithSender(fmt.Sprintf("🔍 查無姓名包含「%s」的學生\n\n請確認姓名是否正確，或嘗試其他關鍵字", name), senderName, h.stickerManager.GetRandomSticker())
+		msg := lineutil.NewTextMessageWithSender(fmt.Sprintf(
+			"🔍 查無姓名包含「%s」的學生\n\n請注意：\n• 僅提供 101-112 學年度資料\n• 請確認姓名拼寫是否正確\n• 可嘗試輸入完整姓名或部分姓名",
+			name,
+		), senderName, h.stickerManager.GetRandomSticker())
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			{Action: lineutil.NewMessageAction("重新搜尋", "學號")},
 			{Action: lineutil.NewMessageAction("按學年查詢", "學年")},
@@ -424,9 +474,15 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	}
 
 	// Sort by student ID (newest first)
-	// Take only first 500 students (since query is ordered by year DESC, id DESC)
-	if len(students) > 500 {
-		students = students[:500]
+	// Database query already limits to 500 students
+	// Add warning if we hit the limit (likely more results available)
+	if len(students) >= 500 {
+		warningMsg := lineutil.NewTextMessageWithSender(
+			"⚠️ 搜尋結果超過 500 筆，僅顯示前 500 筆。\n請使用更完整的姓名縮小範圍。",
+			senderName, h.stickerManager.GetRandomSticker(),
+		)
+		messages := []messaging_api.MessageInterface{warningMsg}
+		return messages
 	}
 
 	// Format results - split into multiple messages if needed (100 students per message)
@@ -555,6 +611,8 @@ func isNumeric(s string) bool {
 }
 
 // parseYear parses a year string (2-4 digits) to ROC year
+// Validates year is within reasonable range (89-130)
+// NTPU founded in ROC 89 (2000), upper bound allows future planning
 func parseYear(yearStr string) (int, error) {
 	if len(yearStr) < 2 || len(yearStr) > 4 {
 		return 0, fmt.Errorf("invalid year length")
@@ -568,6 +626,11 @@ func parseYear(yearStr string) (int, error) {
 	// Convert to ROC year if AD year
 	if year >= 1911 {
 		year = year - 1911
+	}
+
+	// Validate reasonable range (NTPU founded in ROC 89 = 2000)
+	if year < 89 || year > 130 {
+		return 0, fmt.Errorf("year %d out of reasonable range (89-130)", year)
 	}
 
 	return year, nil

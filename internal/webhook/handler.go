@@ -21,6 +21,16 @@ import (
 	"github.com/line/line-bot-sdk-go/v8/linebot/webhook"
 )
 
+// LINE API limits and constraints
+const (
+	MaxMessagesPerReply = 5
+	MaxEventsPerWebhook = 100
+	MinReplyTokenLength = 10
+	MaxMessageLength    = 20000
+	MaxPostbackDataSize = 300
+	WebhookTimeout      = 25 * time.Second
+)
+
 // Handler handles LINE webhook events
 type Handler struct {
 	channelSecret  string
@@ -105,10 +115,10 @@ func (h *Handler) Handle(c *gin.Context) {
 		return
 	}
 
-	// Process each event (max 100 events per webhook)
-	if len(cb.Events) > 100 {
+	// Process each event (max events per webhook per LINE API spec)
+	if len(cb.Events) > MaxEventsPerWebhook {
 		h.logger.Warnf("Too many events in single webhook: %d", len(cb.Events))
-		cb.Events = cb.Events[:100] // Limit to prevent DoS
+		cb.Events = cb.Events[:MaxEventsPerWebhook] // Limit to prevent DoS
 	}
 
 	for _, event := range cb.Events {
@@ -149,11 +159,11 @@ func (h *Handler) Handle(c *gin.Context) {
 				h.logger.WithError(err).Debug("Failed to show loading animation")
 			}
 
-			// LINE API restriction: max 5 messages per reply
-			if len(messages) > 5 {
-				h.logger.Warnf("Message count %d exceeds limit, truncating to 5", len(messages))
-				// Add a warning message at the end
-				messages = messages[:4]
+			// LINE API restriction: max messages per reply
+			if len(messages) > MaxMessagesPerReply {
+				h.logger.Warnf("Message count %d exceeds limit, truncating to %d", len(messages), MaxMessagesPerReply)
+				// Add a warning message at the end (keep room for warning)
+				messages = messages[:MaxMessagesPerReply-1]
 				messages = append(messages, lineutil.NewTextMessageWithSender(
 					"ℹ️ 由於訊息數量限制，部分內容未完全顯示。\n請使用更具體的關鍵字縮小搜尋範圍。",
 					"系統魔法師",
@@ -169,7 +179,7 @@ func (h *Handler) Handle(c *gin.Context) {
 			}
 
 			// Validate reply token format (should not be empty or too short)
-			if len(replyToken) < 10 {
+			if len(replyToken) < MinReplyTokenLength {
 				h.logger.WithField("token_length", len(replyToken)).Warn("Invalid reply token format")
 				continue
 			}
@@ -236,21 +246,28 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 
 	text := textMsg.Text
 
-	// Validate text length (LINE allows up to 20,000 characters)
+	// Validate text length (LINE API allows up to MaxMessageLength characters)
 	if len(text) == 0 {
 		return nil, nil // Empty message, ignore
 	}
-	if len(text) > 20000 {
+	if len(text) > MaxMessageLength {
 		h.logger.Warnf("Text message too long: %d characters", len(text))
 		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithSender("❌ 訊息內容過長\n\n訊息長度超過 20,000 字元，請縮短後重試。", "系統魔法師", h.stickerManager.GetRandomSticker()),
+			lineutil.NewTextMessageWithSender(
+				fmt.Sprintf("❌ 訊息內容過長\n\n訊息長度超過 %d 字元，請縮短後重試。", MaxMessageLength),
+				"系統魔法師",
+				h.stickerManager.GetRandomSticker(),
+			),
 		}, nil
 	}
 
-	// Sanitize input: trim whitespace and remove control characters
+	// Sanitize input: normalize whitespace, remove punctuation (matching Python version)
 	text = strings.TrimSpace(text)
+	text = normalizeWhitespace(text)
+	text = removePunctuation(text)
+	text = normalizeWhitespace(text) // Final normalization after punctuation removal
 	if len(text) == 0 {
-		return nil, nil // Empty after trimming
+		return nil, nil // Empty after sanitization
 	}
 
 	h.logger.WithField("text", text).Debug("Received text message")
@@ -419,6 +436,39 @@ func (h *Handler) getReplyToken(event webhook.EventInterface) string {
 	}
 }
 
+// normalizeWhitespace replaces all whitespace characters with single space
+func normalizeWhitespace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
+// removePunctuation removes punctuation characters (matching Python regex pattern)
+// Pattern: [][!\"#$%&'()*+,./:;<=>?@\\\\^_`{|}~-] + CJK punctuation
+func removePunctuation(s string) string {
+	var result strings.Builder
+	for _, r := range s {
+		// Keep alphanumeric, CJK characters, and spaces
+		// Remove: ASCII punctuation, CJK punctuation (full-width)
+		switch {
+		case r >= 'a' && r <= 'z',
+			r >= 'A' && r <= 'Z',
+			r >= '0' && r <= '9',
+			r == ' ',
+			r >= 0x4E00 && r <= 0x9FFF, // CJK Unified Ideographs
+			r >= 0x3400 && r <= 0x4DBF: // CJK Extension A
+			result.WriteRune(r)
+		// Explicitly exclude common CJK punctuation (full-width)
+		case r >= 0x3000 && r <= 0x303F: // CJK Symbols and Punctuation
+			if r == 0x3000 { // Ideographic space (keep as regular space)
+				result.WriteRune(' ')
+			}
+			// Skip: 、。，！？「」『』【】（）：；
+		default:
+			// Skip all other punctuation and special characters
+		}
+	}
+	return result.String()
+}
+
 // getChatID extracts chat ID from event
 func (h *Handler) getChatID(event webhook.EventInterface) string {
 	switch e := event.(type) {
@@ -441,18 +491,26 @@ func (h *Handler) getChatID(event webhook.EventInterface) string {
 // getHelpMessage returns a simplified help message (fallback when no handler matches)
 func (h *Handler) getHelpMessage() []messaging_api.MessageInterface {
 	helpText := "🔍 NTPU 查詢小工具\n\n" +
-		"📚 課程查詢：輸入課程編號、課程名稱或教師姓名\n" +
-		"📞 聯絡資訊：輸入單位或人名關鍵字\n" +
-		"🎓 學號查詢：輸入學號、姓名或學年度\n" +
-		"🚨 緊急電話：輸入 '緊急' 查看緊急聯絡電話\n\n" +
-		"💡 輸入「使用說明」查看詳細說明和範例"
+		"📚 課程查詢\n" +
+		"   • 課程名稱：「課程 微積分」\n" +
+		"   • 教師姓名：「老師 王小明」\n" +
+		"   • 課程編號：「3141U0001」\n\n" +
+		"🎓 學號查詢\n" +
+		"   • 直接輸入：「412345678」\n" +
+		"   • 姓名查詢：「學生 王小明」\n" +
+		"   • 按學年查：「學年 112」\n\n" +
+		"📞 聯絡資訊\n" +
+		"   • 單位查詢：「聯絡 資工系」\n" +
+		"   • 緊急電話：「緊急」\n\n" +
+		"💡 輸入「使用說明」查看完整說明"
 
 	msg := lineutil.NewTextMessageWithSender(helpText, "幫助魔法師", h.stickerManager.GetRandomSticker())
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 		{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
-		{Action: lineutil.NewMessageAction("📚 查詢課程", "課程")},
-		{Action: lineutil.NewMessageAction("📞 查詢聯絡", "聯絡")},
-		{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
+		{Action: lineutil.NewMessageAction("📚 課程", "課程")},
+		{Action: lineutil.NewMessageAction("🎓 學號", "學號")},
+		{Action: lineutil.NewMessageAction("📞 聯絡", "聯絡")},
+		{Action: lineutil.NewMessageAction("🚨 緊急", "緊急")},
 	})
 	return []messaging_api.MessageInterface{msg}
 }
