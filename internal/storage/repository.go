@@ -45,8 +45,8 @@ func (db *DB) GetStudentByID(id string) (*Student, error) {
 		return nil, fmt.Errorf("failed to get student by ID: %w", err)
 	}
 
-	// Check TTL (7 days = 168 hours = 604800 seconds)
-	ttl := int64(168 * 60 * 60)
+	// Check TTL using configured cache duration
+	ttl := int64(db.cacheTTL.Seconds())
 	if student.CachedAt+ttl <= time.Now().Unix() {
 		return nil, nil // Cache expired
 	}
@@ -318,6 +318,11 @@ func (db *DB) SaveCourse(course *Course) error {
 		return fmt.Errorf("failed to marshal teachers: %w", err)
 	}
 
+	teacherURLsJSON, err := json.Marshal(course.TeacherURLs)
+	if err != nil {
+		return fmt.Errorf("failed to marshal teacher URLs: %w", err)
+	}
+
 	timesJSON, err := json.Marshal(course.Times)
 	if err != nil {
 		return fmt.Errorf("failed to marshal times: %w", err)
@@ -329,13 +334,16 @@ func (db *DB) SaveCourse(course *Course) error {
 	}
 
 	query := `
-		INSERT INTO courses (uid, title, teachers, times, locations, year, term, cached_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO courses (uid, title, teachers, teacher_urls, times, locations, detail_url, note, year, term, cached_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(uid) DO UPDATE SET
 			title = excluded.title,
 			teachers = excluded.teachers,
+			teacher_urls = excluded.teacher_urls,
 			times = excluded.times,
 			locations = excluded.locations,
+			detail_url = excluded.detail_url,
+			note = excluded.note,
 			year = excluded.year,
 			term = excluded.term,
 			cached_at = excluded.cached_at
@@ -344,8 +352,11 @@ func (db *DB) SaveCourse(course *Course) error {
 		course.UID,
 		course.Title,
 		string(teachersJSON),
+		string(teacherURLsJSON),
 		string(timesJSON),
 		string(locationsJSON),
+		nullString(course.DetailURL),
+		nullString(course.Note),
 		course.Year,
 		course.Term,
 		time.Now().Unix(),
@@ -358,17 +369,21 @@ func (db *DB) SaveCourse(course *Course) error {
 
 // GetCourseByUID retrieves a course by UID and validates cache freshness
 func (db *DB) GetCourseByUID(uid string) (*Course, error) {
-	query := `SELECT uid, title, teachers, times, locations, year, term, cached_at FROM courses WHERE uid = ?`
+	query := `SELECT uid, title, teachers, teacher_urls, times, locations, detail_url, note, year, term, cached_at FROM courses WHERE uid = ?`
 
 	var course Course
-	var teachersJSON, timesJSON, locationsJSON string
+	var teachersJSON, teacherURLsJSON, timesJSON, locationsJSON string
+	var detailURL, note sql.NullString
 
 	err := db.conn.QueryRow(query, uid).Scan(
 		&course.UID,
 		&course.Title,
 		&teachersJSON,
+		&teacherURLsJSON,
 		&timesJSON,
 		&locationsJSON,
+		&detailURL,
+		&note,
 		&course.Year,
 		&course.Term,
 		&course.CachedAt,
@@ -381,9 +396,15 @@ func (db *DB) GetCourseByUID(uid string) (*Course, error) {
 		return nil, fmt.Errorf("failed to get course by UID: %w", err)
 	}
 
+	course.DetailURL = detailURL.String
+	course.Note = note.String
+
 	// Deserialize JSON arrays
 	if err := json.Unmarshal([]byte(teachersJSON), &course.Teachers); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal teachers: %w", err)
+	}
+	if err := json.Unmarshal([]byte(teacherURLsJSON), &course.TeacherURLs); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal teacher URLs: %w", err)
 	}
 	if err := json.Unmarshal([]byte(timesJSON), &course.Times); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal times: %w", err)
@@ -411,7 +432,7 @@ func (db *DB) SearchCoursesByTitle(title string) ([]Course, error) {
 	// Sanitize search term to prevent SQL LIKE special character issues
 	sanitized := sanitizeSearchTerm(title)
 
-	query := `SELECT uid, title, teachers, times, locations, year, term, cached_at FROM courses WHERE title LIKE ? ESCAPE '\' ORDER BY year DESC, term DESC LIMIT 500`
+	query := `SELECT uid, title, teachers, teacher_urls, times, locations, detail_url, note, year, term, cached_at FROM courses WHERE title LIKE ? ESCAPE '\' ORDER BY year DESC, term DESC LIMIT 500`
 
 	rows, err := db.conn.Query(query, "%"+sanitized+"%")
 	if err != nil {
@@ -432,7 +453,7 @@ func (db *DB) SearchCoursesByTeacher(teacher string) ([]Course, error) {
 	// Sanitize search term to prevent SQL LIKE special character issues
 	sanitized := sanitizeSearchTerm(teacher)
 
-	query := `SELECT uid, title, teachers, times, locations, year, term, cached_at FROM courses WHERE teachers LIKE ? ESCAPE '\' ORDER BY year DESC, term DESC LIMIT 500`
+	query := `SELECT uid, title, teachers, teacher_urls, times, locations, detail_url, note, year, term, cached_at FROM courses WHERE teachers LIKE ? ESCAPE '\' ORDER BY year DESC, term DESC LIMIT 500`
 
 	rows, err := db.conn.Query(query, "%"+sanitized+"%")
 	if err != nil {
@@ -445,7 +466,7 @@ func (db *DB) SearchCoursesByTeacher(teacher string) ([]Course, error) {
 
 // GetCoursesByYearTerm retrieves courses by year and term
 func (db *DB) GetCoursesByYearTerm(year, term int) ([]Course, error) {
-	query := `SELECT uid, title, teachers, times, locations, year, term, cached_at FROM courses WHERE year = ? AND term = ?`
+	query := `SELECT uid, title, teachers, teacher_urls, times, locations, detail_url, note, year, term, cached_at FROM courses WHERE year = ? AND term = ?`
 
 	rows, err := db.conn.Query(query, year, term)
 	if err != nil {
@@ -496,14 +517,18 @@ func scanCourses(rows *sql.Rows) ([]Course, error) {
 
 	for rows.Next() {
 		var course Course
-		var teachersJSON, timesJSON, locationsJSON string
+		var teachersJSON, teacherURLsJSON, timesJSON, locationsJSON string
+		var detailURL, note sql.NullString
 
 		if err := rows.Scan(
 			&course.UID,
 			&course.Title,
 			&teachersJSON,
+			&teacherURLsJSON,
 			&timesJSON,
 			&locationsJSON,
+			&detailURL,
+			&note,
 			&course.Year,
 			&course.Term,
 			&course.CachedAt,
@@ -511,9 +536,15 @@ func scanCourses(rows *sql.Rows) ([]Course, error) {
 			return nil, fmt.Errorf("failed to scan course row: %w", err)
 		}
 
+		course.DetailURL = detailURL.String
+		course.Note = note.String
+
 		// Deserialize JSON arrays
 		if err := json.Unmarshal([]byte(teachersJSON), &course.Teachers); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal teachers: %w", err)
+		}
+		if err := json.Unmarshal([]byte(teacherURLsJSON), &course.TeacherURLs); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal teacher URLs: %w", err)
 		}
 		if err := json.Unmarshal([]byte(timesJSON), &course.Times); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal times: %w", err)

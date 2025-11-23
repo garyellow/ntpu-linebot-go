@@ -34,7 +34,7 @@ type Config struct {
 
 	// Warmup Configuration
 	WarmupTimeout time.Duration
-	WarmupModules string // Comma-separated list of modules to warmup (default: "id,contact,course")
+	WarmupModules string // Comma-separated list of modules to warmup (default: "id,contact,course,sticker")
 }
 
 // ValidationMode determines which fields are required during validation
@@ -76,14 +76,14 @@ func LoadForMode(mode ValidationMode) (*Config, error) {
 
 		// Scraper Configuration
 		ScraperWorkers:    getIntEnv("SCRAPER_WORKERS", 3),
-		ScraperMinDelay:   getDurationEnv("SCRAPER_MIN_DELAY", 2*time.Second),
-		ScraperMaxDelay:   getDurationEnv("SCRAPER_MAX_DELAY", 5*time.Second),
-		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", 30*time.Second),
-		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 3),
+		ScraperMinDelay:   getDurationEnv("SCRAPER_MIN_DELAY", 5*time.Second),
+		ScraperMaxDelay:   getDurationEnv("SCRAPER_MAX_DELAY", 10*time.Second),
+		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", 60*time.Second),
+		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 5),
 
 		// Warmup Configuration
 		WarmupTimeout: getDurationEnv("WARMUP_TIMEOUT", 20*time.Minute),
-		WarmupModules: getEnv("WARMUP_MODULES", "id,contact,course"),
+		WarmupModules: getEnv("WARMUP_MODULES", "id,contact,course,sticker"),
 	}
 
 	// Validate based on mode

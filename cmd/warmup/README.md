@@ -1,38 +1,42 @@
-# Warmup Tool - 快取預熱工具
+# Warmup Tool - 手動快取預熱工具
 
-預先從 NTPU 網站抓取資料並存入 SQLite 快取，提升首次回應速度，減少對上游網站的負擔。
+> **生產環境不需要此工具** - Server 啟動時會自動在背景執行 warmup。
+
+此工具主要用於：
+- 🔧 開發/除錯：驗證爬蟲功能
+- 🔄 手動維護：重置特定模組快取
+- ⏰ 定期更新：Cron job 定期更新快取
+- 🧪 測試環境：獨立測試 warmup 邏輯
 
 ## 快速使用
 
 ```bash
-# 使用 Task (推薦)
-task warmup
-
-# 或直接執行
+# 基本用法
 go run ./cmd/warmup
 
-# 只預熱特定模組
-go run ./cmd/warmup -modules=id,contact
-
-# 重置快取後預熱
+# 重置所有快取
 go run ./cmd/warmup -reset
 
-# 自訂 Worker 數量
+# 只更新特定模組
+go run ./cmd/warmup -modules=contact,course
+
+# 使用更多 workers 加速
 go run ./cmd/warmup -workers=10
 ```
 
 ## 參數說明
 
-### `-modules` (預設: 使用環境變數 WARMUP_MODULES，未設定則為 "id,contact,course")
-指定要預熱的模組（逗號分隔）：
-- `id` - 學號資料（系所代碼、近 4 年學生）
-- `contact` - 通訊錄（行政與學術單位聯絡資訊）
-- `course` - 課程資料（近 3 年課程）
+### `-modules` (預設: WARMUP_MODULES 環境變數，預設 "id,contact,course,sticker")
 
-範例：
+支援的模組：
+- `id` - 101-112 學年 × 22 系所 = 264 任務
+- `contact` - 行政 + 學術單位
+- `course` - 3 學期課程（113-1, 113-2, 112-2）
+- `sticker` - 頭像貼圖（Spy Family + Ichigo Production）
+
 ```bash
-go run ./cmd/warmup -modules=id              # 只預熱學號
-go run ./cmd/warmup -modules=contact,course  # 預熱聯絡與課程
+go run ./cmd/warmup -modules=id
+go run ./cmd/warmup -modules=contact,course
 ```
 
 ### `-reset` (預設: false)
@@ -60,7 +64,7 @@ go run ./cmd/warmup -workers=8
 
 | 模組 | 資料量 | 說明 |
 |------|--------|------|
-| **ID** | 1-2 萬筆 | 系所代碼、近 4 年學生（110-113 學年） |
+| **ID** | 1-2 萬筆 | 系所代碼、101-112 學年學生 |
 | **Contact** | 500-1000 筆 | 行政與學術單位聯絡資訊 |
 | **Course** | 5000-1 萬筆 | 近 3 年課程（U/M/N/P 學制） |
 | **總計** | **~2.4 萬筆** | |
@@ -68,14 +72,8 @@ go run ./cmd/warmup -workers=8
 ## 使用建議
 
 ### 執行時機
-- ✅ **推薦**: 夜間 2-6 點或週末
-- ⚠️ **避免**: 平日上班時間（9-17 點）
-
-### 中斷處理
-若預熱中斷（Ctrl+C）：
-- 已儲存的資料會保留
-- 可直接重新執行，不需 `-reset`
-- 已快取資料不會重複爬取（TTL 7 天）
+- 推薦: 夜間或週末
+- 中斷後可繼續，已快取資料不重複 (TTL 7 天)
 
 ### 驗證快取
 ```bash
@@ -115,15 +113,14 @@ go run ./cmd/warmup -modules=contact
 
 ## 部署整合
 
-### 推薦部署流程
+### 部署流程
 ```bash
-# 1. 預熱快取
-task warmup
-# 或 go run ./cmd/warmup -reset
-
-# 2. 啟動服務
+# 直接啟動服務（會自動在背景執行 warmup）
 task dev
 # 或 go run ./cmd/server
+
+# 若需手動預熱（測試/除錯用）
+go run ./cmd/warmup -reset
 ```
 
 ### 定期更新 (Cron)
@@ -133,27 +130,14 @@ task dev
 ```
 
 ### Docker Compose
-Docker Compose 部署會自動執行 warmup（見 `deployments/docker-compose.yml`）。
+Server 啟動時會自動在背景執行 warmup，不需手動執行此工具。
 
-## 進階用法
+## 環境變數
 
-### 自訂資料庫路徑
 ```bash
-go run ./cmd/warmup -sqlite-path=/custom/path/cache.db
+LOG_LEVEL=debug                       # 詳細日誌
+SQLITE_PATH=/tmp/cache.db             # 資料庫路徑
+SCRAPER_WORKERS=10                    # Worker 數
+WARMUP_MODULES=id,contact,course,sticker  # 預設模組
+WARMUP_TIMEOUT=30m                    # 超時時間
 ```
-
-### 環境變數
-```bash
-export LOG_LEVEL=debug                    # 詳細日誌
-export SQLITE_PATH=/tmp/cache.db          # 自訂資料庫路徑
-export SCRAPER_WORKERS=10                 # 爬蟲並發數
-export WARMUP_MODULES=id,contact          # 預設預熱模組
-export WARMUP_TIMEOUT=30m                 # 預熱超時時間
-
-go run ./cmd/warmup
-```
-
-## 相關文件
-- [爬蟲系統](../../internal/scraper/README.md)
-- [資料庫結構](../../internal/storage/README.md)
-- [設定說明](../../internal/config/README.md)

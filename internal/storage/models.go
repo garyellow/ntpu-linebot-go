@@ -28,19 +28,18 @@ type Contact struct {
 // Course represents a course record
 // Matches Python version with all fields from Course class
 type Course struct {
-	UID       string   `json:"uid"`
-	Year      int      `json:"year"`
-	Term      int      `json:"term"`
-	No        string   `json:"no"`
-	Title     string   `json:"title"`
-	Teachers  []string `json:"teachers"`
-	Times     []string `json:"times"`
-	Locations []string `json:"locations"`
-	DetailURL string   `json:"detail_url,omitempty"`
-	Note      string   `json:"note,omitempty"`
-	CachedAt  int64    `json:"cached_at"`
-	// Note: TeacherURLs not stored in DB to keep schema simple
-	// Can be reconstructed from base URL + teachers if needed
+	UID         string   `json:"uid"`
+	Year        int      `json:"year"`
+	Term        int      `json:"term"`
+	No          string   `json:"no"`
+	Title       string   `json:"title"`
+	Teachers    []string `json:"teachers"`
+	TeacherURLs []string `json:"teacher_urls,omitempty"` // Teacher course table URLs
+	Times       []string `json:"times"`
+	Locations   []string `json:"locations"`
+	DetailURL   string   `json:"detail_url,omitempty"`
+	Note        string   `json:"note,omitempty"`
+	CachedAt    int64    `json:"cached_at"`
 }
 
 // Sticker represents a sticker URL record

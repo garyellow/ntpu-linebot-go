@@ -27,10 +27,10 @@
 - 📚 **課程查詢**: 課程資訊（課號、教師、時間、地點、大綱連結）
 
 ### 技術特色
-- 💾 **智慧快取**: SQLite WAL 模式、7 天 TTL、Cache-First 策略
-- 🛡️ **防爬蟲機制**: Singleflight 去重、Token Bucket 限流（3 workers）、隨機延遲 2-5 秒、指數退避重試
+- 💾 **智慧快取**: SQLite WAL 模式、7 天 TTL（可配置）、Cache-First 策略
+- 🛡️ **防爬蟲機制**: Singleflight 去重、Token Bucket 限流（3 workers）、隨機延遲 5-10 秒、指數退避重試（最多 5 次）、60 秒 Timeout
 - 📊 **完整監控**: Prometheus + Grafana + AlertManager
-- 🚀 **高效能**: Go 並發、Worker Pool、Context 超時控制（25s）
+- 🚀 **高效能**: Go 並發、Worker Pool、Context 超時控制（25s webhook + 60s scraper）
 - 📱 **現代化 UI**: 全面採用 LINE Flex Message，提供卡片式互動介面與 Quick Reply 快捷操作
 
 ## 📞 加入好友
@@ -54,7 +54,7 @@ cd ntpu-linebot-go/deployments
 cp .env.example .env
 # 編輯 .env 填入你的 LINE_CHANNEL_ACCESS_TOKEN 和 LINE_CHANNEL_SECRET
 
-# 3. 啟動服務（自動拉取最新鏡像並預熱快取）
+# 3. 啟動服務（server 會自動在背景預熱快取）
 docker compose up -d
 ```
 
@@ -80,10 +80,7 @@ cp .env.example .env
 # Windows: SQLITE_PATH=./data/cache.db
 # Linux/Mac: SQLITE_PATH=/data/cache.db
 
-# 4. 預熱快取（首次執行推薦）
-go run ./cmd/warmup
-
-# 5. 啟動服務
+# 4. 啟動服務（會自動在背景預熱快取）
 go run ./cmd/server
 ```
 
@@ -181,10 +178,10 @@ task ci               # 完整 CI (fmt + lint + test)
 ### 使用原生 Go 指令
 
 ```bash
-go run ./cmd/server                # 啟動服務
-go run ./cmd/warmup                # 預熱快取
-go test ./...                      # 執行測試
-go test -race -coverprofile=coverage.out ./...  # 測試 + 覆蓋率
+go run ./cmd/server                                     # 啟動服務
+go test ./...                                           # 執行測試
+go test -race -coverprofile=coverage.out ./...          # 測試 + 覆蓋率
+go run ./cmd/warmup -reset                              # 手動預熱（選用）
 ```
 
 ### Docker 操作
@@ -215,7 +212,7 @@ docker run -d --name ntpu-linebot \
 | 問題 | 解決方法 |
 |------|----------|
 | 服務無法啟動 | 檢查 `.env` 檔案是否正確設定 LINE 憑證 |
-| 回應緩慢 | 執行 `go run ./cmd/warmup` 預熱快取 |
+| 首次啟動回應緩慢 | 服務啟動後會在背景預熱快取（約 5-10 分鐘），期間首次查詢可能較慢 |
 | Webhook 驗證失敗 | 確認 `LINE_CHANNEL_SECRET` 正確 |
 | Docker 權限錯誤 | `docker compose down && rm -rf ./data && docker compose up -d` |
 

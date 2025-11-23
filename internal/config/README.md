@@ -16,12 +16,12 @@
   - Linux/Mac: `/data/cache.db`（預設）
 - `CACHE_TTL=168h` - 快取有效期（7 天）
 - `SCRAPER_WORKERS=3` - 爬蟲並發數
-- `SCRAPER_MIN_DELAY=2s` - 爬蟲最小延遲
-- `SCRAPER_MAX_DELAY=5s` - 爬蟲最大延遲
-- `SCRAPER_TIMEOUT=30s` - 爬蟲請求超時
-- `SCRAPER_MAX_RETRIES=3` - 最大重試次數
+- `SCRAPER_MIN_DELAY=5s` - 爬蟲最小延遲
+- `SCRAPER_MAX_DELAY=10s` - 爬蟲最大延遲
+- `SCRAPER_TIMEOUT=60s` - 爬蟲請求超時
+- `SCRAPER_MAX_RETRIES=5` - 最大重試次數
 - `WARMUP_TIMEOUT=20m` - 預熱超時
-- `WARMUP_MODULES=id,contact,course` - 預熱模組列表（逗號分隔，空字串跳過）
+- `WARMUP_MODULES=id,contact,course,sticker` - 預熱模組列表（逗號分隔，空字串跳過）
 - `SHUTDOWN_TIMEOUT=30s` - 優雅關閉超時
 
 ## 使用方式
