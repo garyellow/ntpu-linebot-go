@@ -225,9 +225,12 @@ func (h *Handler) handleAllDepartmentCodes() []messaging_api.MessageInterface {
 		builder.WriteString(fmt.Sprintf("%s系 → %s\n", name, code))
 	}
 
-	return []messaging_api.MessageInterface{
-		lineutil.NewTextMessageWithSender(builder.String(), senderName, h.stickerManager.GetRandomSticker()),
-	}
+	msg := lineutil.NewTextMessageWithSender(builder.String(), senderName, h.stickerManager.GetRandomSticker())
+	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+		{Action: lineutil.NewMessageAction("查詢學號", "學號")},
+		{Action: lineutil.NewMessageAction("按學年查詢", "學年")},
+	})
+	return []messaging_api.MessageInterface{msg}
 }
 
 // handleDepartmentNameQuery handles department name to code queries
@@ -356,9 +359,14 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	if err != nil {
 		log.WithError(err).Error("Failed to query cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		return []messaging_api.MessageInterface{
-			lineutil.ErrorMessageWithDetail("查詢學號時發生問題"),
+		msg := lineutil.ErrorMessageWithDetail("查詢學號時發生問題")
+		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+				{Action: lineutil.NewMessageAction("重試", "學號 "+studentID)},
+				{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+			})
 		}
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	if student != nil {
@@ -376,9 +384,12 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	if err != nil {
 		log.WithError(err).Errorf("Failed to scrape student ID: %s", studentID)
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithSender(fmt.Sprintf("❌ 學號 %s 不存在OAO\n\n請確認學號是否正確", studentID), senderName, h.stickerManager.GetRandomSticker()),
-		}
+		msg := lineutil.NewTextMessageWithSender(fmt.Sprintf("❌ 學號 %s 不存在OAO\n\n請確認學號是否正確", studentID), senderName, h.stickerManager.GetRandomSticker())
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			{Action: lineutil.NewMessageAction("查詢其他學號", "學號")},
+			{Action: lineutil.NewMessageAction("查詢系所代碼", allDeptCodeText)},
+		})
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	// Save to cache
@@ -404,9 +415,12 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	}
 
 	if len(students) == 0 {
-		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithSender(fmt.Sprintf("🔍 查無姓名包含「%s」的學生\n\n請確認姓名是否正確，或嘗試其他關鍵字", name), senderName, h.stickerManager.GetRandomSticker()),
-		}
+		msg := lineutil.NewTextMessageWithSender(fmt.Sprintf("🔍 查無姓名包含「%s」的學生\n\n請確認姓名是否正確，或嘗試其他關鍵字", name), senderName, h.stickerManager.GetRandomSticker())
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			{Action: lineutil.NewMessageAction("重新搜尋", "學號")},
+			{Action: lineutil.NewMessageAction("按學年查詢", "學年")},
+		})
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	// Sort by student ID (newest first)
@@ -435,10 +449,18 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 		messages = append(messages, lineutil.NewTextMessageWithSender(builder.String(), senderName, h.stickerManager.GetRandomSticker()))
 	}
 
-	return messages
-}
+	// Add Quick Reply to the last message
+	if len(messages) > 0 {
+		if lastMsg, ok := messages[len(messages)-1].(*messaging_api.TextMessage); ok {
+			lastMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+				{Action: lineutil.NewMessageAction("重新搜尋", "學號")},
+				{Action: lineutil.NewMessageAction("查詢系所代碼", allDeptCodeText)},
+			})
+		}
+	}
 
-// formatStudentResponse formats a student record as a LINE message
+	return messages
+} // formatStudentResponse formats a student record as a LINE message
 func (h *Handler) formatStudentResponse(student *storage.Student, fromCache bool) []messaging_api.MessageInterface {
 	// Header: School Name
 	header := lineutil.NewFlexBox("vertical",
@@ -710,9 +732,12 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 			// For law departments, show the specific division name
 			displayName = deptName
 		}
-		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithSender(fmt.Sprintf("%d學年度%s%s好像沒有人耶OAO", year, displayName, departmentType), senderName, h.stickerManager.GetRandomSticker()),
-		}
+		msg := lineutil.NewTextMessageWithSender(fmt.Sprintf("%d學年度%s%s好像沒有人耶OAO", year, displayName, departmentType), senderName, h.stickerManager.GetRandomSticker())
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			{Action: lineutil.NewMessageAction("重新選擇", fmt.Sprintf("學年 %d", year))},
+			{Action: lineutil.NewMessageAction("查詢學號", "學號")},
+		})
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	// Format student list
@@ -733,7 +758,10 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 
 	builder.WriteString(fmt.Sprintf("\n%d學年度%s%s共有%d位學生", year, displayName, departmentType, len(students)))
 
-	return []messaging_api.MessageInterface{
-		lineutil.NewTextMessageWithSender(builder.String(), senderName, h.stickerManager.GetRandomSticker()),
-	}
+	msg := lineutil.NewTextMessageWithSender(builder.String(), senderName, h.stickerManager.GetRandomSticker())
+	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+		{Action: lineutil.NewMessageAction("查詢其他學年", "學年")},
+		{Action: lineutil.NewMessageAction("查詢系所代碼", allDeptCodeText)},
+	})
+	return []messaging_api.MessageInterface{msg}
 }

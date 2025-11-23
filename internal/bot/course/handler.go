@@ -174,9 +174,14 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 	if err != nil {
 		log.WithError(err).Error("Failed to query cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		return []messaging_api.MessageInterface{
-			lineutil.ErrorMessageWithDetail("查詢課程時發生問題"),
+		msg := lineutil.ErrorMessageWithDetail("查詢課程時發生問題")
+		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+				{Action: lineutil.NewMessageAction("重試", uid)},
+				{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+			})
 		}
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	if course != nil {
@@ -194,9 +199,12 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 	if err != nil {
 		log.WithError(err).Errorf("Failed to scrape course UID: %s", uid)
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithSender(fmt.Sprintf("❌ 查無課程編號 %s\n\n請確認課程編號是否正確", uid), senderName, h.stickerManager.GetRandomSticker()),
-		}
+		msg := lineutil.NewTextMessageWithSender(fmt.Sprintf("❌ 查無課程編號 %s\n\n請確認課程編號是否正確", uid), senderName, h.stickerManager.GetRandomSticker())
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			{Action: lineutil.NewMessageAction("按課名查詢", "課程")},
+			{Action: lineutil.NewMessageAction("按教師查詢", "老師")},
+		})
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	// Save to cache
@@ -218,9 +226,14 @@ func (h *Handler) handleCourseTitleSearch(ctx context.Context, title string) []m
 	if err != nil {
 		log.WithError(err).Error("Failed to search courses in cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		return []messaging_api.MessageInterface{
-			lineutil.ErrorMessageWithDetail("搜尋課程時發生問題"),
+		msg := lineutil.ErrorMessageWithDetail("搜尋課程時發生問題")
+		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+				{Action: lineutil.NewMessageAction("重試", "課程 "+title)},
+				{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+			})
 		}
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	if len(courses) > 0 {
@@ -250,9 +263,14 @@ func (h *Handler) handleTeacherSearch(ctx context.Context, teacherName string) [
 	if err != nil {
 		log.WithError(err).Error("Failed to search courses by teacher")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		return []messaging_api.MessageInterface{
-			lineutil.ErrorMessageWithDetail("搜尋教師課程時發生問題"),
+		msg := lineutil.ErrorMessageWithDetail("搜尋教師課程時發生問題")
+		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+				{Action: lineutil.NewMessageAction("重試", "老師 "+teacherName)},
+				{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+			})
 		}
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	if len(courses) == 0 {

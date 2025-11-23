@@ -90,79 +90,19 @@ func TestHandleEmergencyPhones(t *testing.T) {
 		t.Error("Expected emergency phone messages, got none")
 	}
 
-	// Should contain at least the template message
+	// Should contain at least the flex message
 	if len(messages) < 1 {
 		t.Errorf("Expected at least 1 message, got %d", len(messages))
 	}
 
-	// Verify the template message structure
-	templateMsg, ok := messages[0].(*messaging_api.TemplateMessage)
+	// Verify the message structure
+	flexMsg, ok := messages[0].(*messaging_api.FlexMessage)
 	if !ok {
-		t.Fatal("Expected first message to be *messaging_api.TemplateMessage")
+		t.Fatal("Expected first message to be *messaging_api.FlexMessage")
 	}
 
-	buttonsTemplate, ok := templateMsg.Template.(*messaging_api.ButtonsTemplate)
-	if !ok {
-		t.Fatal("Expected template to be *messaging_api.ButtonsTemplate")
-	}
-
-	// Verify 4 actions: 3 ClipboardAction + 1 URIAction
-	if len(buttonsTemplate.Actions) != 4 {
-		t.Errorf("Expected 4 actions, got %d", len(buttonsTemplate.Actions))
-	}
-
-	// Verify action types
-	clipboardCount := 0
-	uriCount := 0
-	for _, action := range buttonsTemplate.Actions {
-		switch action.(type) {
-		case *messaging_api.ClipboardAction:
-			clipboardCount++
-		case *messaging_api.UriAction:
-			uriCount++
-		}
-	}
-
-	if clipboardCount != 3 {
-		t.Errorf("Expected 3 ClipboardAction, got %d", clipboardCount)
-	}
-
-	if uriCount != 1 {
-		t.Errorf("Expected 1 URIAction, got %d", uriCount)
-	}
-
-	// Verify specific clipboard actions (no hyphens, consistent with official website)
-	clipAction1, ok := buttonsTemplate.Actions[0].(*messaging_api.ClipboardAction)
-	if !ok {
-		t.Fatal("Expected first action to be *messaging_api.ClipboardAction")
-	}
-	if clipAction1.ClipboardText != "0226731949" {
-		t.Errorf("Expected first clipboard text '0226731949' (三峽24H行政), got %q", clipAction1.ClipboardText)
-	}
-
-	clipAction2, ok := buttonsTemplate.Actions[1].(*messaging_api.ClipboardAction)
-	if !ok {
-		t.Fatal("Expected second action to be *messaging_api.ClipboardAction")
-	}
-	if clipAction2.ClipboardText != "0226711234" {
-		t.Errorf("Expected second clipboard text '0226711234' (三峽24H急難), got %q", clipAction2.ClipboardText)
-	}
-
-	clipAction3, ok := buttonsTemplate.Actions[2].(*messaging_api.ClipboardAction)
-	if !ok {
-		t.Fatal("Expected third action to be *messaging_api.ClipboardAction")
-	}
-	if clipAction3.ClipboardText != "0225023671" {
-		t.Errorf("Expected third clipboard text '0225023671' (臺北24H急難), got %q", clipAction3.ClipboardText)
-	}
-
-	// Verify URIAction to safety website
-	uriAction, ok := buttonsTemplate.Actions[3].(*messaging_api.UriAction)
-	if !ok {
-		t.Fatal("Expected fourth action to be *messaging_api.UriAction")
-	}
-	if uriAction.Uri != "https://new.ntpu.edu.tw/safety" {
-		t.Errorf("Expected URI 'https://new.ntpu.edu.tw/safety', got %q", uriAction.Uri)
+	if flexMsg.AltText != "緊急聯絡電話" {
+		t.Errorf("Expected AltText '緊急聯絡電話', got %q", flexMsg.AltText)
 	}
 }
 

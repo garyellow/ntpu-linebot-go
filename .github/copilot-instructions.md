@@ -110,9 +110,17 @@ if !h.userLimiter.Allow(chatID, 10.0, 2.0) {       // 10 req/s, burst 2
 ```go
 lineutil.NewTextMessage(text)                              // Auto-truncates at 5000 chars
 lineutil.NewTextMessageWithSender(text, name, iconURL)     // With avatar
+lineutil.NewFlexMessage(altText, contents)                 // Flex Message for rich UI
 lineutil.NewCarouselTemplate(altText, columns)             // Max 10 columns
 lineutil.NewButtonsTemplate(altText, title, text, actions) // Max 4 actions
+lineutil.NewQuickReply(items)                              // Max 13 items
 ```
+
+**UX Best Practices**:
+- Add **Quick Reply** to all messages for next-step guidance
+- Show **Loading Animation** before long-running queries (webhook handles this)
+- Use **Flex Messages** for rich card-based interfaces
+- Provide **actionable options** in error messages
 
 **Postback data format** (300 byte limit):
 - Use module prefix: `"course:3141U0001"`, `"id:select_year_112"`
