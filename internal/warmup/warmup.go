@@ -36,11 +36,13 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 	stats := &Stats{}
 	startTime := time.Now()
 
-	// Create context with timeout
+	// Create context with timeout only if parent context has no deadline
 	if opts.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
-		defer cancel()
+		if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
+			defer cancel()
+		}
 	}
 
 	// Reset cache if requested
@@ -132,8 +134,18 @@ func ParseModules(modules string) []string {
 
 // resetCache deletes all cached data
 func resetCache(db *storage.DB) error {
+	validTables := map[string]bool{
+		"students": true,
+		"contacts": true,
+		"courses":  true,
+		"stickers": true,
+	}
+
 	tables := []string{"students", "contacts", "courses", "stickers"}
 	for _, table := range tables {
+		if !validTables[table] {
+			return fmt.Errorf("invalid table name: %s", table)
+		}
 		query := fmt.Sprintf("DELETE FROM %s", table)
 		if _, err := db.Exec(query); err != nil {
 			return fmt.Errorf("failed to delete from %s: %w", table, err)
@@ -148,7 +160,8 @@ func resetCache(db *storage.DB) error {
 
 // warmupIDModule warms student ID cache
 func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, workers int) error {
-	years := []int{112, 113, 114, 115}
+	// Match Python version: from min(112, current_year) down to 101
+	years := []int{112, 111, 110, 109, 108, 107, 106, 105, 104, 103, 102, 101}
 	departments := []string{
 		"A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "B1",
 		"B2", "B3", "B4", "B5", "B6", "C1", "C2", "C3", "C4", "C5", "C6", "C7",
@@ -175,8 +188,7 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 	// Worker pool
 	var wg sync.WaitGroup
 	var completed atomic.Int64
-	errorCount := 0
-	var mu sync.Mutex
+	var errorCount atomic.Int64
 
 	for i := 0; i < workers; i++ {
 		wg.Add(1)
@@ -192,27 +204,27 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 
 				students, err := ntpu.ScrapeStudentsByYear(ctx, client, t.year, t.dept)
 				if err != nil {
-					mu.Lock()
-					errorCount++
-					mu.Unlock()
 					log.WithError(err).
 						WithField("year", t.year).
 						WithField("dept", t.dept).
-						WithField("worker", workerID).
 						Warn("Failed to scrape students")
+					errorCount.Add(1)
 					continue
 				}
 
 				// Save to database
+				savedCount := 0
 				for _, s := range students {
 					if err := db.SaveStudent(s); err != nil {
 						log.WithError(err).
 							WithField("id", s.ID).
 							Warn("Failed to save student")
+					} else {
+						savedCount++
 					}
 				}
 
-				atomic.AddInt64(&stats.Students, int64(len(students)))
+				atomic.AddInt64(&stats.Students, int64(savedCount))
 				count := completed.Add(1)
 
 				if count%10 == 0 || count == int64(totalTasks) {
@@ -226,8 +238,8 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 
 	wg.Wait()
 
-	if errorCount > 0 {
-		return fmt.Errorf("completed with %d errors", errorCount)
+	if errorCount.Load() > 0 {
+		return fmt.Errorf("completed with %d errors", errorCount.Load())
 	}
 	return nil
 }
@@ -242,13 +254,16 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 		return fmt.Errorf("failed to scrape administrative contacts: %w", err)
 	}
 
+	adminSavedCount := 0
 	for _, c := range adminContacts {
 		if err := db.SaveContact(c); err != nil {
-			log.WithError(err).WithField("uid", c.UID).Warn("Failed to save admin contact")
+			log.WithError(err).WithField("uid", c.UID).Warn("Failed to save administrative contact")
+		} else {
+			adminSavedCount++
 		}
 	}
-	atomic.AddInt64(&stats.Contacts, int64(len(adminContacts)))
-	log.WithField("count", len(adminContacts)).Info("Administrative contacts cached")
+	atomic.AddInt64(&stats.Contacts, int64(adminSavedCount))
+	log.WithField("count", adminSavedCount).Info("Administrative contacts cached")
 
 	// Scrape academic contacts
 	academicContacts, err := ntpu.ScrapeAcademicContacts(ctx, client)
@@ -256,13 +271,16 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 		return fmt.Errorf("failed to scrape academic contacts: %w", err)
 	}
 
+	academicSavedCount := 0
 	for _, c := range academicContacts {
 		if err := db.SaveContact(c); err != nil {
 			log.WithError(err).WithField("uid", c.UID).Warn("Failed to save academic contact")
+		} else {
+			academicSavedCount++
 		}
 	}
-	atomic.AddInt64(&stats.Contacts, int64(len(academicContacts)))
-	log.WithField("count", len(academicContacts)).Info("Academic contacts cached")
+	atomic.AddInt64(&stats.Contacts, int64(academicSavedCount))
+	log.WithField("count", academicSavedCount).Info("Academic contacts cached")
 
 	return nil
 }
@@ -284,7 +302,7 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 		for _, code := range educationCodes {
 			select {
 			case <-ctx.Done():
-				return ctx.Err()
+				return fmt.Errorf("course module cancelled: %w", ctx.Err())
 			default:
 			}
 
@@ -298,17 +316,20 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 				continue
 			}
 
+			savedCount := 0
 			for _, c := range courses {
 				if err := db.SaveCourse(c); err != nil {
 					log.WithError(err).WithField("uid", c.UID).Warn("Failed to save course")
+				} else {
+					savedCount++
 				}
 			}
 
-			atomic.AddInt64(&stats.Courses, int64(len(courses)))
+			atomic.AddInt64(&stats.Courses, int64(savedCount))
 			log.WithField("year", t.year).
 				WithField("term", t.term).
 				WithField("education_code", code).
-				WithField("count", len(courses)).
+				WithField("count", savedCount).
 				Info("Courses cached")
 		}
 	}

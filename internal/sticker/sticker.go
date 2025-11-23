@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"strings"
 	"sync"
 	"time"
 
@@ -270,15 +271,14 @@ func (m *Manager) fetchIchigoStickers(ctx context.Context, client *scraper.Clien
 		if !exists {
 			return
 		}
-
 		// Skip non-sticker images (logo, icons, etc.)
 		// Stickers are in core_sys/images/contents/ directory
-		if !contains(src, "core_sys/images/contents/") {
+		if !strings.Contains(src, "core_sys/images/contents/") {
 			return
 		}
 
 		// Must contain .jpg (with or without query string)
-		if !contains(src, ".jpg") {
+		if !strings.Contains(src, ".jpg") {
 			return
 		}
 
@@ -302,20 +302,6 @@ func (m *Manager) fetchIchigoStickers(ctx context.Context, client *scraper.Clien
 	}
 
 	return stickers, nil
-}
-
-// contains checks if a string contains a substring
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && findSubstring(s, substr)
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
 
 // RefreshStickers refreshes stickers from web sources (should be called periodically)

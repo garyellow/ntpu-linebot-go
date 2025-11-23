@@ -26,11 +26,13 @@ go run ./cmd/warmup -workers=10
 
 ## 參數說明
 
-### `-modules` (預設: WARMUP_MODULES 環境變數，預設 "id,contact,course")
+### `-modules` (預設: WARMUP_MODULES 環境變數，預設 "id,contact,course,sticker")
 
-- `id` - 110-113 學年 × 22 系所 = 88 任務
+支援的模組：
+- `id` - 101-112 學年 × 22 系所 = 264 任務
 - `contact` - 行政 + 學術單位
 - `course` - 3 學期課程（113-1, 113-2, 112-2）
+- `sticker` - 頭像貼圖（Spy Family + Ichigo Production）
 
 ```bash
 go run ./cmd/warmup -modules=id
@@ -62,7 +64,7 @@ go run ./cmd/warmup -workers=8
 
 | 模組 | 資料量 | 說明 |
 |------|--------|------|
-| **ID** | 1-2 萬筆 | 系所代碼、近 4 年學生（110-113 學年） |
+| **ID** | 1-2 萬筆 | 系所代碼、101-112 學年學生 |
 | **Contact** | 500-1000 筆 | 行政與學術單位聯絡資訊 |
 | **Course** | 5000-1 萬筆 | 近 3 年課程（U/M/N/P 學制） |
 | **總計** | **~2.4 萬筆** | |
@@ -133,20 +135,20 @@ Server 啟動時會自動在背景執行 warmup，不需手動執行此工具。
 ## 環境變數
 
 ```bash
-LOG_LEVEL=debug           # 詳細日誌
-SQLITE_PATH=/tmp/cache.db # 資料庫路徑
-SCRAPER_WORKERS=10        # Worker 數
-WARMUP_MODULES=id         # 預設模組
-WARMUP_TIMEOUT=30m        # 超時時間
+LOG_LEVEL=debug                       # 詳細日誌
+SQLITE_PATH=/tmp/cache.db             # 資料庫路徑
+SCRAPER_WORKERS=10                    # Worker 數
+WARMUP_MODULES=id,contact,course,sticker  # 預設模組
+WARMUP_TIMEOUT=30m                    # 超時時間
 ```
 
 ## 速度參考
 
 使用預設設定 (3 workers, 2-5s 延遲):
-- ID 模組: ~8 分鐘 (88 任務)
+- ID 模組: ~25 分鐘 (264 任務)
 - Contact 模組: ~30 秒
 - Course 模組: ~2 分鐘
 - Sticker 模組: ~10 秒
-- 總計: ~11 分鐘
+- 總計: ~28 分鐘
 
 實際時間受網路狀況影響。Server 背景執行時不影響 webhook 回應。

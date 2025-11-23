@@ -13,7 +13,7 @@ services:
     image: garyellow/ntpu-linebot-go:${IMAGE_TAG:-latest}
     container_name: ntpu-linebot-warmup
     restart: "on-failure:3"
-    command: ["/app/ntpu-linebot-warmup", "-modules=${WARMUP_MODULES:-id,contact,course}"]
+    command: ["/app/ntpu-linebot-warmup", "-modules=${WARMUP_MODULES:-id,contact,course,sticker}"]
     volumes:
       - ./data:/data
     deploy:
@@ -37,7 +37,7 @@ services:
       - SCRAPER_TIMEOUT=${SCRAPER_TIMEOUT:-15s}
       - SCRAPER_MAX_RETRIES=${SCRAPER_MAX_RETRIES:-3}
       - WARMUP_TIMEOUT=${WARMUP_TIMEOUT:-20m}
-      - WARMUP_MODULES=${WARMUP_MODULES:-id,contact,course}
+      - WARMUP_MODULES=${WARMUP_MODULES:-id,contact,course,sticker}
     depends_on:
       init-data:
         condition: service_completed_successfully

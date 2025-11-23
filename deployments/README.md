@@ -29,7 +29,7 @@ docker compose up -d
 
 可選：
 - `IMAGE_TAG` - 映像版本（預設：latest）
-- `WARMUP_MODULES` - 預熱模組（預設：id,contact,course，空字串跳過）
+- `WARMUP_MODULES` - 預熱模組（預設：id,contact,course,sticker，空字串跳過）
 - `LOG_LEVEL` - 日誌層級（預設：info）
 - `GRAFANA_PASSWORD` - Grafana 密碼（預設：admin123）
 

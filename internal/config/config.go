@@ -34,7 +34,7 @@ type Config struct {
 
 	// Warmup Configuration
 	WarmupTimeout time.Duration
-	WarmupModules string // Comma-separated list of modules to warmup (default: "id,contact,course")
+	WarmupModules string // Comma-separated list of modules to warmup (default: "id,contact,course,sticker")
 }
 
 // ValidationMode determines which fields are required during validation
@@ -83,7 +83,7 @@ func LoadForMode(mode ValidationMode) (*Config, error) {
 
 		// Warmup Configuration
 		WarmupTimeout: getDurationEnv("WARMUP_TIMEOUT", 20*time.Minute),
-		WarmupModules: getEnv("WARMUP_MODULES", "id,contact,course"),
+		WarmupModules: getEnv("WARMUP_MODULES", "id,contact,course,sticker"),
 	}
 
 	// Validate based on mode

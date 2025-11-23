@@ -211,7 +211,8 @@ go run ./cmd/warmup -modules=id,contact,course -workers=10 -reset
 - Server runs `warmup.RunInBackground()` on startup
 - Non-blocking: webhook accepts requests immediately
 - Cache misses trigger on-demand scraping
-- Modules: ID (88 tasks), Contact (admin + academic), Course (3 terms), Stickers
+- Modules: ID (264 tasks for years 101-112), Contact (admin + academic), Course (3 terms), Sticker (avatars)
+- Default: "id,contact,course,sticker"
 - Same scraper settings as regular requests
 
 ## Error Handling: Context + Wrapping
