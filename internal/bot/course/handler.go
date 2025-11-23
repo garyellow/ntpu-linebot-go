@@ -188,7 +188,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 		// Cache hit
 		h.metrics.RecordCacheHit(moduleName)
 		log.Infof("Cache hit for course UID: %s", uid)
-		return h.formatCourseResponse(course, true)
+		return h.formatCourseResponse(course)
 	}
 
 	// Cache miss - scrape from website
@@ -213,7 +213,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 	}
 
 	h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
-	return h.formatCourseResponse(course, false)
+	return h.formatCourseResponse(course)
 }
 
 // handleCourseTitleSearch handles course title search queries
@@ -290,27 +290,27 @@ func (h *Handler) handleTeacherSearch(ctx context.Context, teacherName string) [
 }
 
 // formatCourseResponse formats a single course as a LINE message
-func (h *Handler) formatCourseResponse(course *storage.Course, fromCache bool) []messaging_api.MessageInterface {
+func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.MessageInterface {
 	// Build body contents
 	contents := []messaging_api.FlexComponentInterface{
-		lineutil.NewFlexText(course.Title).WithWeight("bold").WithSize("xl"),
-		lineutil.NewFlexText(course.UID).WithSize("xs").WithColor("#aaaaaa").WithWrap(true),
-		lineutil.NewFlexSeparator().WithMargin("md"),
+		lineutil.NewFlexText(course.Title).WithWeight("bold").WithSize("xl").FlexText,
+		lineutil.NewFlexText(course.UID).WithSize("xs").WithColor("#aaaaaa").WithWrap(true).FlexText,
+		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
 	}
 
 	// Add details
 	if len(course.Teachers) > 0 {
-		contents = append(contents, lineutil.NewKeyValueRow("教師", strings.Join(course.Teachers, "、")).WithMargin("md"))
+		contents = append(contents, lineutil.NewKeyValueRow("教師", strings.Join(course.Teachers, "、")).WithMargin("md").FlexBox)
 	}
-	contents = append(contents, lineutil.NewKeyValueRow("學期", fmt.Sprintf("%d-%d", course.Year, course.Term)))
+	contents = append(contents, lineutil.NewKeyValueRow("學期", fmt.Sprintf("%d-%d", course.Year, course.Term)).FlexBox)
 	if len(course.Times) > 0 {
-		contents = append(contents, lineutil.NewKeyValueRow("時間", strings.Join(course.Times, "、")))
+		contents = append(contents, lineutil.NewKeyValueRow("時間", strings.Join(course.Times, "、")).FlexBox)
 	}
 	if len(course.Locations) > 0 {
-		contents = append(contents, lineutil.NewKeyValueRow("地點", strings.Join(course.Locations, "、")))
+		contents = append(contents, lineutil.NewKeyValueRow("地點", strings.Join(course.Locations, "、")).FlexBox)
 	}
 	if course.Note != "" {
-		contents = append(contents, lineutil.NewKeyValueRow("備註", course.Note))
+		contents = append(contents, lineutil.NewKeyValueRow("備註", course.Note).FlexBox)
 	}
 
 	// Build footer actions
@@ -320,7 +320,7 @@ func (h *Handler) formatCourseResponse(course *storage.Course, fromCache bool) [
 	if course.DetailURL != "" {
 		footerContents = append(footerContents, lineutil.NewFlexButton(
 			lineutil.NewURIAction("課程大綱", course.DetailURL),
-		).WithStyle("primary").WithColor("#00b900"))
+		).WithStyle("primary").WithColor("#00b900").FlexButton)
 	}
 
 	// Course Query System button
@@ -328,7 +328,7 @@ func (h *Handler) formatCourseResponse(course *storage.Course, fromCache bool) [
 		course.Year, course.Term, course.No)
 	footerContents = append(footerContents, lineutil.NewFlexButton(
 		lineutil.NewURIAction("課程查詢系統", courseQueryURL),
-	).WithStyle("secondary"))
+	).WithStyle("secondary").FlexButton)
 
 	// Teacher schedule button (if teachers exist)
 	if len(course.Teachers) > 0 {
@@ -339,7 +339,7 @@ func (h *Handler) formatCourseResponse(course *storage.Course, fromCache bool) [
 				fmt.Sprintf("搜尋 %s 的授課課程", teacherName),
 				fmt.Sprintf("授課課程%s%s", splitChar, teacherName),
 			),
-		).WithStyle("secondary"))
+		).WithStyle("secondary").FlexButton)
 	}
 
 	bubble := lineutil.NewFlexBubble(
@@ -380,21 +380,22 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 	for _, course := range courses {
 		// Build body contents
 		contents := []messaging_api.FlexComponentInterface{
-			lineutil.NewFlexText(course.Title).WithWeight("bold").WithSize("md").WithWrap(true),
-			lineutil.NewFlexText(course.UID).WithSize("xs").WithColor("#aaaaaa"),
-			lineutil.NewFlexSeparator().WithMargin("md"),
+			lineutil.NewFlexText(course.Title).WithWeight("bold").WithSize("md").WithWrap(true).FlexText,
+			lineutil.NewFlexText(course.UID).WithSize("xs").WithColor("#aaaaaa").FlexText,
+			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
 		}
 
 		if len(course.Teachers) > 0 {
-			contents = append(contents, lineutil.NewKeyValueRow("教師", strings.Join(course.Teachers, "、")).WithMargin("md"))
+			contents = append(contents, lineutil.NewKeyValueRow("教師", strings.Join(course.Teachers, "、")).WithMargin("md").FlexBox)
 		}
-		contents = append(contents, lineutil.NewKeyValueRow("時間", strings.Join(course.Times, "、")))
-
+		if len(course.Times) > 0 {
+			contents = append(contents, lineutil.NewKeyValueRow("時間", strings.Join(course.Times, "、")).FlexBox)
+		}
 		// Footer with "View Detail" button
 		footer := lineutil.NewFlexBox("vertical",
 			lineutil.NewFlexButton(
 				lineutil.NewPostbackActionWithDisplayText("查看詳細", fmt.Sprintf("查詢課程 %s", course.UID), course.UID),
-			).WithStyle("primary").WithHeight("sm"),
+			).WithStyle("primary").WithHeight("sm").FlexButton,
 		)
 
 		bubble := lineutil.NewFlexBubble(
@@ -406,9 +407,9 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 		bubbles = append(bubbles, *bubble.FlexBubble)
 	}
 
-	// Split bubbles into carousels (max 12 bubbles per carousel)
-	for i := 0; i < len(bubbles); i += 12 {
-		end := i + 12
+	// Split bubbles into carousels (max 10 bubbles per carousel)
+	for i := 0; i < len(bubbles); i += 10 {
+		end := i + 10
 		if end > len(bubbles) {
 			end = len(bubbles)
 		}

@@ -176,50 +176,50 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 			valColor = color
 		}
 		return lineutil.NewFlexBox("baseline",
-			lineutil.NewFlexText(label).WithColor("#aaaaaa").WithSize("sm").WithFlex(2),
-			lineutil.NewFlexText(value).WithWrap(true).WithColor(valColor).WithSize("sm").WithFlex(5).WithAlign("end"),
-		)
+			lineutil.NewFlexText(label).WithColor("#aaaaaa").WithSize("sm").WithFlex(2).FlexText,
+			lineutil.NewFlexText(value).WithWrap(true).WithColor(valColor).WithSize("sm").WithFlex(5).WithAlign("end").FlexText,
+		).FlexBox
 	}
 
 	// Sanxia Campus Box
 	sanxiaBox := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexText("三峽校區").WithWeight("bold").WithSize("lg").WithColor("#1DB446"),
-		lineutil.NewFlexSeparator().WithMargin("sm"),
+		lineutil.NewFlexText("三峽校區").WithWeight("bold").WithSize("lg").WithColor("#1DB446").FlexText,
+		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 		createRow("總機", sanxiaNormalPhone, ""),
 		createRow("24H行政", sanxia24HPhone, ""),
 		createRow("24H校安", sanxiaEmergencyPhone, "#ff3333"), // Highlight emergency
 		createRow("大門哨所", sanxiaGatePhone, ""),
 		createRow("宿舍夜間", sanxiaDormPhone, ""),
-	).WithSpacing("sm")
+	).WithSpacing("sm").FlexBox
 
 	// Taipei Campus Box
 	taipeiBox := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexText("台北校區").WithWeight("bold").WithSize("lg").WithColor("#1DB446").WithMargin("xl"),
-		lineutil.NewFlexSeparator().WithMargin("sm"),
+		lineutil.NewFlexText("台北校區").WithWeight("bold").WithSize("lg").WithColor("#1DB446").WithMargin("xl").FlexText,
+		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 		createRow("總機", taipeiNormalPhone, ""),
 		createRow("24H校安", taipeiEmergencyPhone, "#ff3333"),
-	).WithSpacing("sm")
+	).WithSpacing("sm").FlexBox
 
 	// External Emergency Box
 	externalBox := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexText("校外緊急").WithWeight("bold").WithSize("lg").WithColor("#ff3333").WithMargin("xl"),
-		lineutil.NewFlexSeparator().WithMargin("sm"),
+		lineutil.NewFlexText("校外緊急").WithWeight("bold").WithSize("lg").WithColor("#ff3333").WithMargin("xl").FlexText,
+		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 		createRow("警察局", "110", "#ff3333"),
 		createRow("消防/救護", "119", "#ff3333"),
 		createRow("北大派出所", policeStation, ""),
 		createRow("恩主公醫院", homHospital, ""),
-	).WithSpacing("sm")
+	).WithSpacing("sm").FlexBox
 
 	// Buttons
 	buttons := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexButton(lineutil.NewURIAction("撥打三峽校安", "tel:"+sanxiaEmergencyPhone)).WithStyle("primary").WithColor("#ff3333"),
-		lineutil.NewFlexButton(lineutil.NewURIAction("撥打台北校安", "tel:"+taipeiEmergencyPhone)).WithStyle("secondary").WithMargin("sm"),
-		lineutil.NewFlexButton(lineutil.NewURIAction("查看更多資訊", "https://new.ntpu.edu.tw/safety")).WithStyle("link").WithMargin("sm"),
-	).WithMargin("xl")
+		lineutil.NewFlexButton(lineutil.NewURIAction("撥打三峽校安", "tel:"+sanxiaEmergencyPhone)).WithStyle("primary").WithColor("#ff3333").FlexButton,
+		lineutil.NewFlexButton(lineutil.NewURIAction("撥打台北校安", "tel:"+taipeiEmergencyPhone)).WithStyle("secondary").WithMargin("sm").FlexButton,
+		lineutil.NewFlexButton(lineutil.NewURIAction("查看更多資訊", "https://new.ntpu.edu.tw/safety")).WithStyle("link").WithMargin("sm").FlexButton,
+	).WithMargin("xl").FlexBox
 
 	bubble := lineutil.NewFlexBubble(
 		lineutil.NewFlexBox("vertical",
-			lineutil.NewFlexText("緊急聯絡電話").WithWeight("bold").WithSize("xl"),
+			lineutil.NewFlexText("緊急聯絡電話").WithWeight("bold").WithSize("xl").FlexText,
 		),
 		nil,
 		lineutil.NewFlexBox("vertical",
@@ -317,7 +317,7 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 	}
 
 	var messages []messaging_api.MessageInterface
-	chunkSize := 12
+	chunkSize := 10 // LINE Carousel max limit
 
 	for i := 0; i < len(contacts); i += chunkSize {
 		// Limit to 5 messages (LINE reply limit)
@@ -348,20 +348,20 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 
 			// Organization / Superior
 			if c.Type == "organization" && c.Superior != "" {
-				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("上級", c.Superior))
+				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("上級", c.Superior).FlexBox)
 			} else if c.Organization != "" {
-				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("單位", c.Organization))
+				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("單位", c.Organization).FlexBox)
 			}
 
 			// Contact Info
 			if c.Extension != "" {
-				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("分機", c.Extension))
+				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("分機", c.Extension).FlexBox)
 			}
 			if c.Phone != "" {
-				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("專線", c.Phone))
+				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("專線", c.Phone).FlexBox)
 			}
 			if c.Location != "" {
-				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("地點", c.Location))
+				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("地點", c.Location).FlexBox)
 			}
 			if c.Email != "" {
 				// Truncate email if too long to prevent layout break
@@ -369,7 +369,7 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 				if len(email) > 25 {
 					email = email[:22] + "..."
 				}
-				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("Email", email))
+				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("Email", email).FlexBox)
 			}
 
 			// Footer: Actions
@@ -382,34 +382,34 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 				phoneNum = strings.ReplaceAll(phoneNum, " ", "")
 				footerContents = append(footerContents, lineutil.NewFlexButton(
 					lineutil.NewURIAction("撥打專線", "tel:"+phoneNum),
-				).WithStyle("primary").WithHeight("sm"))
+				).WithStyle("primary").WithHeight("sm").FlexButton)
 			} else if c.Extension != "" {
 				// For extension, we can't dial directly, but we can copy
 				footerContents = append(footerContents, lineutil.NewFlexButton(
 					lineutil.NewClipboardAction("複製分機", c.Extension),
-				).WithStyle("secondary").WithHeight("sm"))
+				).WithStyle("secondary").WithHeight("sm").FlexButton)
 			}
 
 			// Email button
 			if c.Email != "" {
 				footerContents = append(footerContents, lineutil.NewFlexButton(
 					lineutil.NewURIAction("寄送郵件", "mailto:"+c.Email),
-				).WithStyle("secondary").WithHeight("sm"))
+				).WithStyle("secondary").WithHeight("sm").FlexButton)
 			}
 
 			// Website button (for organizations)
 			if c.Website != "" {
 				footerContents = append(footerContents, lineutil.NewFlexButton(
 					lineutil.NewURIAction("瀏覽網站", c.Website),
-				).WithStyle("secondary").WithHeight("sm"))
+				).WithStyle("secondary").WithHeight("sm").FlexButton)
 			}
 
 			// Assemble Bubble
 			bubble := lineutil.NewFlexBubble(
 				nil, // Hero
 				lineutil.NewFlexBox("vertical", // Header
-					lineutil.NewFlexText(headerText).WithWeight("bold").WithSize("xl").WithColor("#1DB446"),
-					lineutil.NewFlexText(subText).WithSize("xs").WithColor("#aaaaaa"),
+					lineutil.NewFlexText(headerText).WithWeight("bold").WithSize("xl").WithColor("#1DB446").FlexText,
+					lineutil.NewFlexText(subText).WithSize("xs").WithColor("#aaaaaa").FlexText,
 				).WithPaddingBottom("none"),
 				lineutil.NewFlexBox("vertical", bodyContents...).WithSpacing("sm"), // Body
 				nil, // Footer (handled below)

@@ -154,9 +154,9 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	}
 
 	// Handle student ID or name query
-	if match := studentRegex.FindString(text); match != "" {
+	if loc := studentRegex.FindStringIndex(text); loc != nil {
 		// Extract the search term after the keyword
-		searchTerm := strings.TrimSpace(strings.Replace(text, match, "", 1))
+		searchTerm := strings.TrimSpace(text[loc[1]:])
 		if searchTerm == "" {
 			// If no search term provided, give helpful message
 			return []messaging_api.MessageInterface{
@@ -460,12 +460,14 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	}
 
 	return messages
-} // formatStudentResponse formats a student record as a LINE message
+}
+
+// formatStudentResponse formats a student record as a LINE message
 func (h *Handler) formatStudentResponse(student *storage.Student, fromCache bool) []messaging_api.MessageInterface {
 	// Header: School Name
 	header := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexText("國立臺北大學").WithWeight("bold").WithColor("#1DB446").WithSize("xs"),
-		lineutil.NewFlexText("學生資訊查詢").WithWeight("bold").WithSize("xl"),
+		lineutil.NewFlexText("國立臺北大學").WithWeight("bold").WithColor("#1DB446").WithSize("xs").FlexText,
+		lineutil.NewFlexText("學生資訊查詢").WithWeight("bold").WithSize("xl").FlexText,
 	)
 
 	// Body: Student Info
@@ -473,8 +475,8 @@ func (h *Handler) formatStudentResponse(student *storage.Student, fromCache bool
 		lineutil.NewFlexText(student.Name).WithWeight("bold").WithSize("xxl").WithMargin("md"),
 		lineutil.NewFlexText(student.ID).WithSize("md").WithColor("#aaaaaa"),
 		lineutil.NewFlexSeparator().WithMargin("lg"),
-		lineutil.NewKeyValueRow("系所", student.Department).WithMargin("lg"),
-		lineutil.NewKeyValueRow("入學學年", fmt.Sprintf("%d", student.Year)),
+		lineutil.NewKeyValueRow("系所", student.Department).WithMargin("lg").FlexBox,
+		lineutil.NewKeyValueRow("入學學年", fmt.Sprintf("%d", student.Year)).FlexBox,
 	)
 
 	if fromCache {
@@ -726,13 +728,7 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 		if strings.HasPrefix(deptCode, "71") {
 			departmentType = "組"
 		}
-		// Use actual dept name in error message
-		displayName := deptName
-		if strings.HasPrefix(deptCode, "71") {
-			// For law departments, show the specific division name
-			displayName = deptName
-		}
-		msg := lineutil.NewTextMessageWithSender(fmt.Sprintf("%d學年度%s%s好像沒有人耶OAO", year, displayName, departmentType), senderName, h.stickerManager.GetRandomSticker())
+		msg := lineutil.NewTextMessageWithSender(fmt.Sprintf("%d學年度%s%s好像沒有人耶OAO", year, deptName, departmentType), senderName, h.stickerManager.GetRandomSticker())
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			{Action: lineutil.NewMessageAction("重新選擇", fmt.Sprintf("學年 %d", year))},
 			{Action: lineutil.NewMessageAction("查詢學號", "學號")},

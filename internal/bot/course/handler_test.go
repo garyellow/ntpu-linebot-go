@@ -180,13 +180,13 @@ func TestFormatCourseResponse(t *testing.T) {
 	}
 
 	// Test with cache hit
-	messages := h.formatCourseResponse(course, true)
+	messages := h.formatCourseResponse(course)
 	if len(messages) == 0 {
 		t.Error("Expected messages for course response, got none")
 	}
 
 	// Test with fresh data
-	messages = h.formatCourseResponse(course, false)
+	messages = h.formatCourseResponse(course)
 	if len(messages) == 0 {
 		t.Error("Expected messages for course response, got none")
 	}
@@ -203,7 +203,7 @@ func TestFormatCourseResponse_NoDetailURL(t *testing.T) {
 		Teachers: []string{"王教授"},
 	}
 
-	messages := h.formatCourseResponse(course, false)
+	messages := h.formatCourseResponse(course)
 
 	// Should return at least the text message
 	if len(messages) == 0 {
