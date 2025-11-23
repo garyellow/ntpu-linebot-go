@@ -25,9 +25,15 @@ services:
           cpus: '0.5'
           memory: 256M
     environment:
+      # Warmup mode does not require LINE credentials
       - SQLITE_PATH=/data/cache.db
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      - CACHE_TTL=${CACHE_TTL:-168h}
       - SCRAPER_WORKERS=${SCRAPER_WORKERS:-5}
+      - SCRAPER_MIN_DELAY=${SCRAPER_MIN_DELAY:-100ms}
+      - SCRAPER_MAX_DELAY=${SCRAPER_MAX_DELAY:-500ms}
+      - SCRAPER_TIMEOUT=${SCRAPER_TIMEOUT:-15s}
+      - SCRAPER_MAX_RETRIES=${SCRAPER_MAX_RETRIES:-3}
       - WARMUP_TIMEOUT=${WARMUP_TIMEOUT:-20m}
     depends_on:
       init-data:
