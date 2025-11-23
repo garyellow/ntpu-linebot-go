@@ -174,7 +174,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 	if err != nil {
 		log.WithError(err).Error("Failed to query cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		msg := lineutil.ErrorMessageWithDetail("查詢課程時發生問題")
+		msg := lineutil.ErrorMessageWithDetail("查詢課程時發生問題", senderName, h.stickerManager.GetRandomSticker())
 		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
 			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 				{Action: lineutil.NewMessageAction("重試", uid)},
@@ -226,7 +226,7 @@ func (h *Handler) handleCourseTitleSearch(ctx context.Context, title string) []m
 	if err != nil {
 		log.WithError(err).Error("Failed to search courses in cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		msg := lineutil.ErrorMessageWithDetail("搜尋課程時發生問題")
+		msg := lineutil.ErrorMessageWithDetail("搜尋課程時發生問題", senderName, h.stickerManager.GetRandomSticker())
 		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
 			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 				{Action: lineutil.NewMessageAction("重試", "課程 "+title)},
@@ -263,7 +263,7 @@ func (h *Handler) handleTeacherSearch(ctx context.Context, teacherName string) [
 	if err != nil {
 		log.WithError(err).Error("Failed to search courses by teacher")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		msg := lineutil.ErrorMessageWithDetail("搜尋教師課程時發生問題")
+		msg := lineutil.ErrorMessageWithDetail("搜尋教師課程時發生問題", senderName, h.stickerManager.GetRandomSticker())
 		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
 			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 				{Action: lineutil.NewMessageAction("重試", "老師 "+teacherName)},

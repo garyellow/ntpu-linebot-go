@@ -152,8 +152,10 @@ func (h *Handler) Handle(c *gin.Context) {
 				h.logger.Warnf("Message count %d exceeds limit, truncating to 5", len(messages))
 				// Add a warning message at the end
 				messages = messages[:4]
-				messages = append(messages, lineutil.NewTextMessage(
+				messages = append(messages, lineutil.NewTextMessageWithSender(
 					"ℹ️ 由於訊息數量限制，部分內容未完全顯示。\n請使用更具體的關鍵字縮小搜尋範圍。",
+					"系統魔法師",
+					h.stickerManager.GetRandomSticker(),
 				))
 			}
 
@@ -239,7 +241,7 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 	if len(text) > 20000 {
 		h.logger.Warnf("Text message too long: %d characters", len(text))
 		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessage("❌ 訊息內容過長\n\n訊息長度超過 20,000 字元，請縮短後重試。"),
+			lineutil.NewTextMessageWithSender("❌ 訊息內容過長\n\n訊息長度超過 20,000 字元，請縮短後重試。", "系統魔法師", h.stickerManager.GetRandomSticker()),
 		}, nil
 	}
 
@@ -295,7 +297,7 @@ func (h *Handler) handlePostbackEvent(ctx context.Context, event webhook.Postbac
 	if len(data) > 300 { // LINE postback data limit is 300 bytes
 		h.logger.Warnf("Postback data too long: %d bytes", len(data))
 		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessage("❌ 操作資料異常\n\n請重新使用功能。"),
+			lineutil.NewTextMessageWithSender("❌ 操作資料異常\n\n請重新使用功能。", "系統魔法師", h.stickerManager.GetRandomSticker()),
 		}, nil
 	}
 
@@ -345,7 +347,7 @@ func (h *Handler) handlePostbackEvent(ctx context.Context, event webhook.Postbac
 
 	// No handler matched
 	return []messaging_api.MessageInterface{
-		lineutil.NewTextMessage("操作已過期或無效"),
+		lineutil.NewTextMessageWithSender("操作已過期或無效", "系統魔法師", h.stickerManager.GetRandomSticker()),
 	}, nil
 }
 
@@ -443,15 +445,13 @@ func (h *Handler) getHelpMessage() []messaging_api.MessageInterface {
 		"🚨 緊急電話：輸入 '緊急' 查看緊急聯絡電話\n\n" +
 		"💡 輸入「使用說明」查看詳細說明和範例"
 
-	msg := lineutil.NewTextMessage(helpText)
-	if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
-		textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
-			{Action: lineutil.NewMessageAction("📚 查詢課程", "課程")},
-			{Action: lineutil.NewMessageAction("📞 查詢聯絡", "聯絡")},
-			{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
-		})
-	}
+	msg := lineutil.NewTextMessageWithSender(helpText, "幫助魔法師", h.stickerManager.GetRandomSticker())
+	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+		{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
+		{Action: lineutil.NewMessageAction("📚 查詢課程", "課程")},
+		{Action: lineutil.NewMessageAction("📞 查詢聯絡", "聯絡")},
+		{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
+	})
 	return []messaging_api.MessageInterface{msg}
 }
 

@@ -252,7 +252,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	if err != nil {
 		log.WithError(err).Error("Failed to search contacts in cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		msg := lineutil.ErrorMessageWithDetail("查詢聯絡資訊時發生問題")
+		msg := lineutil.ErrorMessageWithDetail("查詢聯絡資訊時發生問題", senderName, h.stickerManager.GetRandomSticker())
 		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
 			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 				{Action: lineutil.NewMessageAction("重試", "聯絡 "+searchTerm)},
@@ -277,7 +277,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	if err != nil {
 		log.WithError(err).Errorf("Failed to scrape contacts for: %s", searchTerm)
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		msg := lineutil.ErrorMessageWithDetail("無法取得聯絡資料，可能是網路問題或資料來源暫時無法使用")
+		msg := lineutil.ErrorMessageWithDetail("無法取得聯絡資料，可能是網路問題或資料來源暫時無法使用", senderName, h.stickerManager.GetRandomSticker())
 		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
 			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 				{Action: lineutil.NewMessageAction("緊急電話", "緊急")},

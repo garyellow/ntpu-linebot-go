@@ -359,7 +359,7 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	if err != nil {
 		log.WithError(err).Error("Failed to query cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		msg := lineutil.ErrorMessageWithDetail("查詢學號時發生問題")
+		msg := lineutil.ErrorMessageWithDetail("查詢學號時發生問題", senderName, h.stickerManager.GetRandomSticker())
 		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
 			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 				{Action: lineutil.NewMessageAction("重試", "學號 "+studentID)},
@@ -410,7 +410,7 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	if err != nil {
 		log.WithError(err).Error("Failed to search students by name")
 		return []messaging_api.MessageInterface{
-			lineutil.ErrorMessageWithDetail("搜尋姓名時發生問題"),
+			lineutil.ErrorMessageWithDetail("搜尋姓名時發生問題", senderName, h.stickerManager.GetRandomSticker()),
 		}
 	}
 
@@ -758,7 +758,7 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 	if err != nil {
 		log.WithError(err).Error("Failed to search students by year and department")
 		return []messaging_api.MessageInterface{
-			lineutil.ErrorMessageWithDetail("查詢學生名單時發生問題"),
+			lineutil.ErrorMessageWithDetail("查詢學生名單時發生問題", senderName, h.stickerManager.GetRandomSticker()),
 		}
 	}
 
