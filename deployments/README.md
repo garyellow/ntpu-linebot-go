@@ -14,12 +14,13 @@ docker compose up -d
 
 ## 服務
 
-- **init-data** - 初始化資料目錄權限
-- **warmup** - 預熱快取（執行一次）
-- **ntpu-linebot** - 主服務
+- **init-data** - 初始化資料目錄權限（一次性執行）
+- **ntpu-linebot** - 主服務（啟動時會自動在背景預熱快取）
 - **prometheus** - 監控 (http://localhost:9090)
 - **alertmanager** - 告警 (http://localhost:9093)
 - **grafana** - 儀表板 (http://localhost:3000, admin/admin123)
+
+> **快取預熱**：主服務啟動後會自動在背景執行快取預熱（約 5-10 分鐘），不影響 webhook 接收請求。
 
 ## 環境變數
 
@@ -29,7 +30,7 @@ docker compose up -d
 
 可選：
 - `IMAGE_TAG` - 映像版本（預設：latest）
-- `WARMUP_MODULES` - 預熱模組（預設：id,contact,course,sticker，空字串跳過）
+- `WARMUP_MODULES` - 預熱模組（預設：id,contact,course,sticker，空字串跳過預熱）
 - `LOG_LEVEL` - 日誌層級（預設：info）
 - `GRAFANA_PASSWORD` - Grafana 密碼（預設：admin123）
 

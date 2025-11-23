@@ -76,10 +76,10 @@ func LoadForMode(mode ValidationMode) (*Config, error) {
 
 		// Scraper Configuration
 		ScraperWorkers:    getIntEnv("SCRAPER_WORKERS", 3),
-		ScraperMinDelay:   getDurationEnv("SCRAPER_MIN_DELAY", 2*time.Second),
-		ScraperMaxDelay:   getDurationEnv("SCRAPER_MAX_DELAY", 5*time.Second),
-		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", 30*time.Second),
-		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 3),
+		ScraperMinDelay:   getDurationEnv("SCRAPER_MIN_DELAY", 5*time.Second),
+		ScraperMaxDelay:   getDurationEnv("SCRAPER_MAX_DELAY", 10*time.Second),
+		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", 60*time.Second),
+		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 5),
 
 		// Warmup Configuration
 		WarmupTimeout: getDurationEnv("WARMUP_TIMEOUT", 20*time.Minute),

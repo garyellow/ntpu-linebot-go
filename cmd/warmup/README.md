@@ -141,14 +141,3 @@ SCRAPER_WORKERS=10                    # Worker 數
 WARMUP_MODULES=id,contact,course,sticker  # 預設模組
 WARMUP_TIMEOUT=30m                    # 超時時間
 ```
-
-## 速度參考
-
-使用預設設定 (3 workers, 2-5s 延遲):
-- ID 模組: ~25 分鐘 (264 任務)
-- Contact 模組: ~30 秒
-- Course 模組: ~2 分鐘
-- Sticker 模組: ~10 秒
-- 總計: ~28 分鐘
-
-實際時間受網路狀況影響。Server 背景執行時不影響 webhook 回應。

@@ -62,7 +62,7 @@ func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
 	var lastErr error
 
 	// Retry with exponential backoff
-	err := RetryWithBackoff(ctx, c.maxRetries, 1*time.Second, 10*time.Second, func() error {
+	err := RetryWithBackoff(ctx, c.maxRetries, 1*time.Second, 30*time.Second, func() error {
 		// Wait for rate limiter
 		if err := c.rateLimiter.Wait(ctx); err != nil {
 			return err
@@ -127,11 +127,12 @@ func (c *Client) GetDocument(ctx context.Context, url string) (*goquery.Document
 	// Handle gzip encoding
 	var reader io.ReadCloser
 	if resp.Header.Get("Content-Encoding") == "gzip" {
-		reader, err = gzip.NewReader(resp.Body)
+		gzipReader, err := gzip.NewReader(resp.Body)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decompress gzip: %w", err)
 		}
-		defer func() { _ = reader.Close() }()
+		defer func() { _ = gzipReader.Close() }()
+		reader = gzipReader
 	} else {
 		reader = resp.Body
 	}

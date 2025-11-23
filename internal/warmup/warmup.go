@@ -36,13 +36,15 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 	stats := &Stats{}
 	startTime := time.Now()
 
-	// Create context with timeout only if parent context has no deadline
+	// Always create a cancel function for cleanup if timeout is set
 	if opts.Timeout > 0 {
+		var cancel context.CancelFunc
 		if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-			var cancel context.CancelFunc
 			ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
-			defer cancel()
+		} else {
+			ctx, cancel = context.WithCancel(ctx)
 		}
+		defer cancel()
 	}
 
 	// Reset cache if requested
@@ -160,14 +162,17 @@ func resetCache(db *storage.DB) error {
 
 // warmupIDModule warms student ID cache
 func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, workers int) error {
-	// Match Python version: from min(112, current_year) down to 101
-	years := []int{112, 111, 110, 109, 108, 107, 106, 105, 104, 103, 102, 101}
+	// Match Python version: range(min(112, current_year), 100, -1)
+	currentYear := time.Now().Year() - 1911
+	fromYear := min(112, currentYear)
+
+	// Department codes from Python's DEPARTMENT_CODE.values()
 	departments := []string{
-		"A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "B1",
-		"B2", "B3", "B4", "B5", "B6", "C1", "C2", "C3", "C4", "C5", "C6", "C7",
+		"71", "712", "714", "716", "72", "73", "742", "744",
+		"75", "76", "77", "78", "79", "80", "81", "82", "83", "84", "85", "86", "87",
 	}
 
-	totalTasks := len(years) * len(departments)
+	totalTasks := (fromYear - 100) * len(departments)
 	log.WithField("tasks", totalTasks).
 		WithField("workers", workers).
 		Info("Starting ID module warmup")
@@ -178,7 +183,7 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 		dept string
 	}
 	tasks := make(chan task, totalTasks)
-	for _, year := range years {
+	for year := fromYear; year > 100; year-- {
 		for _, dept := range departments {
 			tasks <- task{year, dept}
 		}
@@ -290,13 +295,26 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 	log.Info("Starting course module warmup")
 
 	currentYear := time.Now().Year() - 1911
-	terms := []struct {
+	// Course terms to warm: Load 5 years of course data (matching Python version)
+	// This includes historical course data for queries about past courses
+	var terms []struct {
 		year int
 		term int
-	}{
-		{currentYear, 1}, {currentYear, 2}, {currentYear - 1, 2},
 	}
-	educationCodes := []string{"UG", "PG", "MD", "ON"}
+	// Generate terms for current year and previous 4 years (5 years total)
+	for year := currentYear; year > currentYear-5; year-- {
+		terms = append(terms, struct {
+			year int
+			term int
+		}{year, 1}) // First semester
+		terms = append(terms, struct {
+			year int
+			term int
+		}{year, 2}) // Second semester
+	}
+	// Education level codes: U=大學部, M=碩士班, N=碩士在職專班, P=博士班
+	// Must match Python's ALL_EDU_CODE = ["U", "M", "N", "P"]
+	educationCodes := []string{"U", "M", "N", "P"}
 
 	for _, t := range terms {
 		for _, code := range educationCodes {

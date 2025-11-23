@@ -54,13 +54,13 @@ LINE Webhook → Gin Handler (25s timeout) → Bot Module Dispatcher
    }
    ```
 
-5. **Warmup module** (`internal/warmup/warmup.go`) handles background cache population on server startup
+5. **Warmup module** (`internal/warmup/warmup.go`) handles background cache population automatically on server startup
 
 ## Data Layer: Cache-First Strategy
 
 **SQLite as primary cache** (not ephemeral like Redis):
 - **WAL mode** (`internal/storage/db.go:39`) - allows concurrent reads during writes
-- **7-day TTL**: Hardcoded in queries as `cached_at + 604800 <= now()` (not configurable)
+- **7-day TTL**: Configurable via CACHE_TTL env (default: 168h), checked in all repository methods
 - **Busy timeout**: 5000ms (`db.go:44`) - waits for lock instead of failing
 
 **Repository pattern** (`internal/storage/repository.go`):
@@ -87,7 +87,8 @@ result, err := wrapper.DoScrape(ctx, "key", func() (interface{}, error) {
 **Global scraper rate limit** (`internal/scraper/ratelimiter.go`):
 - Token bucket: `workers` tokens (default: 3), refills at rate of workers/15.0 tokens/sec (~15s for full refill)
 - Enforced in `RateLimiter.Wait(ctx)` - blocks until token available
-- Random delays: 2s-5s (2000-5000ms) between requests by default (configurable via `SCRAPER_MIN_DELAY`/`SCRAPER_MAX_DELAY`)
+- Random delays: 5s-10s (5000-10000ms) between requests by default (configurable via `SCRAPER_MIN_DELAY`/`SCRAPER_MAX_DELAY`)
+- Timeout: 60s for all scraper operations (configurable via `SCRAPER_TIMEOUT`)
 
 **Per-user webhook limit** (`internal/webhook/ratelimiter.go`):
 ```go
@@ -100,8 +101,8 @@ if !h.userLimiter.Allow(chatID, 10.0, 2.0) {       // 10 req/s, burst 2
 **Global webhook rate limit**: 80 rps (LINE API supports 100 rps, using 80 for safety margin)
 
 **Exponential backoff** (`scraper/backoff.go`):
-- Max 3 retries (configurable via `SCRAPER_MAX_RETRIES`)
-- Backoff: 1s → 2s → 4s (base 1s, max 10s)
+- Max 5 retries (configurable via `SCRAPER_MAX_RETRIES`)
+- Backoff: 1s → 2s → 4s → 8s → 16s (base 1s, max 30s)
 - Applies to HTTP errors + context cancellation
 
 ## LINE SDK Conventions
@@ -211,9 +212,9 @@ go run ./cmd/warmup -modules=id,contact,course -workers=10 -reset
 - Server runs `warmup.RunInBackground()` on startup
 - Non-blocking: webhook accepts requests immediately
 - Cache misses trigger on-demand scraping
-- Modules: ID (264 tasks for years 101-112), Contact (admin + academic), Course (3 terms), Sticker (avatars)
+- Modules: ID (264 tasks for years 101-112), Contact (admin + academic), Course (10 terms = 5 years), Sticker (avatars)
 - Default: "id,contact,course,sticker"
-- Same scraper settings as regular requests
+- Same scraper settings as regular requests (5-10s delay, 60s timeout)
 
 ## Error Handling: Context + Wrapping
 
@@ -288,7 +289,7 @@ histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by 
 
 **Container startup flow** (`docker-compose.yml`):
 1. `init-data` - Creates `/data` with uid=65532 ownership (alpine with shell)
-2. `ntpu-linebot` - Main service starts immediately, warmup runs in background
+2. `ntpu-linebot` - Main service starts and runs warmup in background automatically
 3. Monitoring stack (prometheus/alertmanager/grafana)
 
 **Healthcheck**:

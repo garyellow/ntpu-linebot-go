@@ -99,6 +99,7 @@ func createCoursesTable(db *sql.DB) error {
 		no TEXT,
 		title TEXT NOT NULL,
 		teachers TEXT,
+		teacher_urls TEXT,
 		times TEXT,
 		locations TEXT,
 		detail_url TEXT,

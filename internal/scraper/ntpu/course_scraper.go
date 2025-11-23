@@ -157,22 +157,19 @@ func parseCoursesPage(doc *goquery.Document, courseBaseURL string, year, term in
 		}
 
 		course := &storage.Course{
-			UID:       uid,
-			Year:      year,
-			Term:      term,
-			No:        no,
-			Title:     title,
-			Teachers:  teachers,
-			Times:     times,
-			Locations: locations,
-			DetailURL: fullDetailURL,
-			Note:      note,
-			CachedAt:  cachedAt,
+			UID:         uid,
+			Year:        year,
+			Term:        term,
+			No:          no,
+			Title:       title,
+			Teachers:    teachers,
+			TeacherURLs: teacherURLs,
+			Times:       times,
+			Locations:   locations,
+			DetailURL:   fullDetailURL,
+			Note:        note,
+			CachedAt:    cachedAt,
 		}
-
-		// Note: teacherURLs are currently not stored in the database
-		// Could extend storage.Course to include TeacherURLs []string if needed
-		_ = teacherURLs
 
 		courses = append(courses, course)
 	})

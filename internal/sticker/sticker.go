@@ -225,8 +225,7 @@ func (m *Manager) fetchSpyFamilyStickers(ctx context.Context, client *scraper.Cl
 	stickers := make([]string, 0)
 	baseURL := "https://spy-family.net/tvseries/"
 
-	// Find all <a> tags with href attributes containing .png images
-	doc.Find("a[href$='.png']").Each(func(i int, s *goquery.Selection) {
+	doc.Find("ul.icondlLists a[href$='.png']").Each(func(i int, s *goquery.Selection) {
 		href, exists := s.Attr("href")
 		if !exists {
 			return

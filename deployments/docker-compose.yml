@@ -9,41 +9,6 @@ services:
     networks:
       - ntpu-network
 
-  warmup:
-    image: garyellow/ntpu-linebot-go:${IMAGE_TAG:-latest}
-    container_name: ntpu-linebot-warmup
-    restart: "on-failure:3"
-    command: ["/app/ntpu-linebot-warmup", "-modules=${WARMUP_MODULES:-id,contact,course,sticker}"]
-    volumes:
-      - ./data:/data
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 512M
-        reservations:
-          cpus: '0.5'
-          memory: 256M
-    environment:
-      # Warmup mode does not require LINE credentials (set to dummy values)
-      - LINE_CHANNEL_ACCESS_TOKEN=warmup-mode-not-required
-      - LINE_CHANNEL_SECRET=warmup-mode-not-required
-      - SQLITE_PATH=/data/cache.db
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - CACHE_TTL=${CACHE_TTL:-168h}
-      - SCRAPER_WORKERS=${SCRAPER_WORKERS:-5}
-      - SCRAPER_MIN_DELAY=${SCRAPER_MIN_DELAY:-100ms}
-      - SCRAPER_MAX_DELAY=${SCRAPER_MAX_DELAY:-500ms}
-      - SCRAPER_TIMEOUT=${SCRAPER_TIMEOUT:-15s}
-      - SCRAPER_MAX_RETRIES=${SCRAPER_MAX_RETRIES:-3}
-      - WARMUP_TIMEOUT=${WARMUP_TIMEOUT:-20m}
-      - WARMUP_MODULES=${WARMUP_MODULES:-id,contact,course,sticker}
-    depends_on:
-      init-data:
-        condition: service_completed_successfully
-    networks:
-      - ntpu-network
-
   ntpu-linebot:
     image: garyellow/ntpu-linebot-go:${IMAGE_TAG:-latest}
     container_name: ntpu-linebot
@@ -73,6 +38,8 @@ services:
       - SCRAPER_TIMEOUT=${SCRAPER_TIMEOUT:-15s}
       - SCRAPER_MAX_RETRIES=${SCRAPER_MAX_RETRIES:-3}
       - SHUTDOWN_TIMEOUT=${SHUTDOWN_TIMEOUT:-30s}
+      - WARMUP_MODULES=${WARMUP_MODULES:-id,contact,course,sticker}
+      - WARMUP_TIMEOUT=${WARMUP_TIMEOUT:-20m}
     security_opt:
       - no-new-privileges:true
     healthcheck:
@@ -82,7 +49,7 @@ services:
       retries: 3
       start_period: 40s
     depends_on:
-      warmup:
+      init-data:
         condition: service_completed_successfully
     networks:
       - ntpu-network
