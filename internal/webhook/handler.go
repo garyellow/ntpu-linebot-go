@@ -251,6 +251,15 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 
 	h.logger.WithField("text", text).Debug("Received text message")
 
+	// Check for help keywords FIRST (before dispatching to bot modules)
+	helpKeywords := []string{"使用說明", "help", "Help", "HELP"}
+	for _, keyword := range helpKeywords {
+		if strings.EqualFold(text, keyword) {
+			h.logger.Info("User requested help/instruction")
+			return h.getDetailedInstructionMessages(), nil
+		}
+	}
+
 	// Create context with timeout for bot processing (derived from request context)
 	processCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
@@ -294,6 +303,15 @@ func (h *Handler) handlePostbackEvent(ctx context.Context, event webhook.Postbac
 	data = strings.TrimSpace(data)
 
 	h.logger.WithField("data", data).Debug("Received postback")
+
+	// Check for help keywords FIRST (before dispatching to bot modules)
+	helpKeywords := []string{"使用說明", "help", "Help", "HELP"}
+	for _, keyword := range helpKeywords {
+		if strings.EqualFold(data, keyword) {
+			h.logger.Info("User requested help/instruction via postback")
+			return h.getDetailedInstructionMessages(), nil
+		}
+	}
 
 	// Create context with timeout (derived from request context)
 	processCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
@@ -416,34 +434,71 @@ func (h *Handler) getChatID(event webhook.EventInterface) string {
 	return ""
 }
 
-// getHelpMessage returns a help message with available commands
+// getHelpMessage returns a simplified help message (fallback when no handler matches)
 func (h *Handler) getHelpMessage() []messaging_api.MessageInterface {
 	helpText := "🔍 NTPU 查詢小工具\n\n" +
-		"📚 課程查詢：\n" +
-		"  • 輸入課程編號（如：1131U1234）\n" +
-		"  • 輸入課程名稱關鍵字\n" +
-		"  • 輸入教師姓名\n\n" +
-		"📞 聯絡資訊查詢：\n" +
-		"  • 輸入單位或人名關鍵字\n" +
-		"  • 輸入 '緊急' 查看緊急電話\n\n" +
-		"🎓 學號查詢：\n" +
-		"  • 輸入學號（8-9位數字）\n" +
-		"  • 輸入學生姓名\n" +
-		"  • 輸入學年度（如：112）\n" +
-		"  • 輸入 '所有系代碼' 查看系所代碼\n\n" +
-		"💡 使用說明請點選下方選單\n" +
-		"或直接輸入關鍵字開始查詢！\n\n" +
-		"⚠️ 部分內容由相關資料推斷，不一定為正確資訊\n" +
-		"📊 資料來源：國立臺北大學、數位學苑2.0、校園聯絡簿、課程查詢系統"
+		"📚 課程查詢：輸入課程編號、課程名稱或教師姓名\n" +
+		"📞 聯絡資訊：輸入單位或人名關鍵字\n" +
+		"🎓 學號查詢：輸入學號、姓名或學年度\n" +
+		"🚨 緊急電話：輸入 '緊急' 查看緊急聯絡電話\n\n" +
+		"💡 輸入「使用說明」查看詳細說明和範例"
 
 	msg := lineutil.NewTextMessage(helpText)
 	if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
 		textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
 			{Action: lineutil.NewMessageAction("📚 查詢課程", "課程")},
-			{Action: lineutil.NewMessageAction("📞 查詢聯絡資訊", "聯絡")},
-			{Action: lineutil.NewMessageAction("🎓 查詢學號", "學號")},
+			{Action: lineutil.NewMessageAction("📞 查詢聯絡", "聯絡")},
 			{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
 		})
 	}
 	return []messaging_api.MessageInterface{msg}
+}
+
+// getDetailedInstructionMessages returns detailed instruction messages (matches Python version)
+func (h *Handler) getDetailedInstructionMessages() []messaging_api.MessageInterface {
+	senderName := "進階魔法師"
+	stickerURL := h.stickerManager.GetRandomSticker()
+
+	// Message 1: Main instruction text
+	instructionText := "使用說明：\n\n" +
+		"輸入「學生 {學號}」查詢學生\n" +
+		"輸入「學生 {姓名}」查詢學生\n" +
+		"輸入「科系 {系名}」查詢系代碼\n" +
+		"輸入「系代碼 {系代碼}」查詢系名\n" +
+		"輸入「學年 {入學年份}」後選科系查學生名單\n\n" +
+		"輸入「課程 {課程名}」尋找課程\n" +
+		"輸入「教師 {教師名}」尋找教師開的課\n\n" +
+		"輸入「聯繫 {單位/姓名}」尋找聯繫方式\n\n" +
+		"PS 符號{}中的部分要換成實際值\n" +
+		"PPS 學生相關功能已無113學年後的資料"
+
+	// Message 2: Examples
+	currentYear := time.Now().Year()
+	lastYear := currentYear - 1
+	rocYear := lastYear - 1911
+
+	exampleText := "範例：\n\n" +
+		"學號：`學生 412345678`\n" +
+		"姓名：`學生 小明` or `學生 林小明`\n" +
+		"系名：`科系 資工系` or `科系 資訊工程學系`\n" +
+		"系代碼：`系代碼 85`\n" +
+		fmt.Sprintf("入學年：`學年 %d` or `學年 %d`\n\n", rocYear, lastYear) +
+		"課程：`課程 程式設計`\n" +
+		"教師：`教師 李小美`\n\n" +
+		"聯繫：`聯繫 資工系`\n\n" +
+		"PS 符號``中的部分是實際要輸入的"
+
+	// Message 3: Disclaimer
+	disclaimerText := "部分內容是由相關資料推斷\n不一定為正確資訊"
+
+	// Message 4: Data source
+	dataSourceText := "資料來源：國立臺北大學\n數位學苑2.0(已無新資料)\n校園聯絡簿\n課程查詢系統"
+
+	return []messaging_api.MessageInterface{
+		lineutil.NewTextMessageWithSender(instructionText, senderName, stickerURL),
+		lineutil.NewTextMessageWithSender(exampleText, senderName, h.stickerManager.GetRandomSticker()),
+		lineutil.NewTextMessageWithSender(disclaimerText, senderName, h.stickerManager.GetRandomSticker()),
+		lineutil.NewTextMessageWithSender(dataSourceText, senderName, h.stickerManager.GetRandomSticker()),
+	}
 }

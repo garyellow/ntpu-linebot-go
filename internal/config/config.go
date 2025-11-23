@@ -83,7 +83,7 @@ func LoadForMode(mode ValidationMode) (*Config, error) {
 
 		// Warmup Configuration
 		WarmupTimeout: getDurationEnv("WARMUP_TIMEOUT", 20*time.Minute),
-		WarmupModules: getEnv("WARMUP_MODULES", "id,contact,course,sticker"),
+		WarmupModules: getEnv("WARMUP_MODULES", "sticker,id,contact,course"),
 	}
 
 	// Validate based on mode
