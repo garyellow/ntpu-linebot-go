@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -135,13 +134,6 @@ func main() {
 	defer cancel()
 
 	var wg sync.WaitGroup
-
-	// System metrics updater
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		updateSystemMetrics(ctx, m, log)
-	}()
 
 	// Cache cleanup goroutine
 	wg.Add(1)
@@ -317,31 +309,6 @@ func loggingMiddleware(log *logger.Logger) gin.HandlerFunc {
 			entry.Warn("Request completed with client error")
 		} else {
 			entry.Debug("Request completed")
-		}
-	}
-}
-
-// updateSystemMetrics periodically updates system metrics
-func updateSystemMetrics(ctx context.Context, m *metrics.Metrics, log *logger.Logger) {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			var memStats runtime.MemStats
-			runtime.ReadMemStats(&memStats)
-
-			goroutines := runtime.NumGoroutine()
-			memoryBytes := memStats.Alloc
-
-			m.UpdateSystemMetrics(goroutines, memoryBytes)
-
-			log.WithField("goroutines", goroutines).
-				WithField("memory_mb", memoryBytes/1024/1024).
-				Debug("Updated system metrics")
 		}
 	}
 }

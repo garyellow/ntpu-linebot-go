@@ -86,11 +86,6 @@ func NewHandler(channelSecret, channelToken string, db *storage.DB, scraperClien
 func (h *Handler) Handle(c *gin.Context) {
 	start := time.Now()
 
-	// Record request size
-	if c.Request.ContentLength > 0 {
-		h.metrics.RecordHTTPRequest("/callback", c.Request.Method, c.Request.ContentLength)
-	}
-
 	// Validate Content-Length to prevent abuse
 	if c.Request.ContentLength > 1<<20 { // 1MB limit
 		h.logger.Warn("Request body too large")

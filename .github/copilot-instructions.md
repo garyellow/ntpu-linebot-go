@@ -304,18 +304,66 @@ $env:LOG_LEVEL="debug"; task dev
 Shows: SQL queries, scraper timing, cache hit/miss, rate limiter waits
 
 **Prometheus metrics** (`http://localhost:10000/metrics`):
-- `ntpu_cache_hits_total{module="id"}` - Cache hit count by module
-- `ntpu_scraper_duration_seconds` - Histogram of scrape latencies
-- `ntpu_webhook_requests_total{status="success"}` - Total webhook success/error
+- **14 production metrics** (updated 2025-11-24 - optimized based on best practices)
+
+**Webhook Metrics**:
+- `ntpu_webhook_requests_total{event_type, status}` - Webhook request count
+- `ntpu_webhook_duration_seconds{event_type}` - Webhook latency histogram
+
+**Cache Metrics**:
+- `ntpu_cache_hits_total{module}`, `ntpu_cache_misses_total{module}` - Cache performance
+
+**Scraper Metrics**:
+- `ntpu_scraper_requests_total{module, status}` - Scraper request count (status: success, error, timeout, not_found)
+- `ntpu_scraper_duration_seconds{module}` - Scraper latency histogram (buckets: 0.5-60s)
+
+**HTTP Metrics**:
+- `ntpu_http_errors_total{error_type, module}` - HTTP error tracking
+
+**Data Integrity Metrics**:
+- `ntpu_course_data_integrity_issues_total{issue_type}` - Course data quality tracking
+
+**Rate Limiter Metrics**:
+- `ntpu_rate_limiter_wait_duration_seconds{limiter_type}` - Wait time histogram (limiter_type: scraper, user, global)
+- `ntpu_rate_limiter_dropped_total{limiter_type}` - Dropped request count
+
+**Singleflight Metrics**:
+- `ntpu_singleflight_dedup_total{module}` - Deduplicated request count
+
+**Warmup Metrics**:
+- `ntpu_warmup_tasks_total{module, status}` - Warmup task count
+- `ntpu_warmup_duration_seconds` - Total warmup duration histogram
+
+**Go Runtime Metrics** (standard collectors):
+- `go_goroutines`, `go_memstats_alloc_bytes`, `go_gc_duration_seconds`, etc.
+
+**Recently removed** (2025-11-24):
+- ~~`ntpu_http_request_size_bytes`~~ - Low value, only 1 usage location
 
 **Common queries**:
 ```promql
-# Cache hit rate
+# Cache hit rate by module
 sum(rate(ntpu_cache_hits_total[5m])) by (module)
 / (sum(rate(ntpu_cache_hits_total[5m])) + sum(rate(ntpu_cache_misses_total[5m]))) by (module)
 
-# P95 webhook latency
-histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le))
+# P95 webhook latency by event type
+histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le, event_type))
+
+# P99 scraper latency by module
+histogram_quantile(0.99, sum(rate(ntpu_scraper_duration_seconds_bucket[5m])) by (module, le))
+
+# Scraper success rate
+sum(rate(ntpu_scraper_requests_total{status="success"}[5m])) by (module)
+/ sum(rate(ntpu_scraper_requests_total[5m])) by (module)
+
+# Rate limiter wait time P95
+histogram_quantile(0.95, sum(rate(ntpu_rate_limiter_wait_duration_seconds_bucket[5m])) by (le, limiter_type))
+
+# Singleflight deduplication rate
+sum(rate(ntpu_singleflight_dedup_total[5m])) by (module)
+
+# HTTP error rate by type
+sum(rate(ntpu_http_errors_total[5m])) by (error_type, module)
 ```
 
 ## Docker & Image Architecture
