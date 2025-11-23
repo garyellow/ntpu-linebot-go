@@ -35,12 +35,23 @@ const (
 // Valid keywords for course queries
 var (
 	validCourseKeywords = []string{
-		"class", "course", "課", "課程", "科目", "課名", "課程名", "課程名稱", "科目名",
+		// 中文關鍵字
+		"課", "課程", "科目",
+		"課名", "課程名", "課程名稱",
+		"科目名", "科目名稱",
+		// English keywords
+		"class", "course",
 	}
 	validTeacherKeywords = []string{
-		"dr", "prof", "teacher", "professor", "doctor", "師", "老師", "教師", "教授",
-		"老師名", "教師名", "教授名", "老師名稱", "教師名稱", "教授名稱",
+		// 中文關鍵字（基本）
+		"師", "老師", "教師", "教授",
+		// 中文關鍵字（完整）
+		"老師名", "教師名", "教授名",
+		"老師名稱", "教師名稱", "教授名稱",
+		// 中文關鍵字（授課相關）
 		"授課教師", "授課老師", "授課教授",
+		// English keywords
+		"teacher", "professor", "prof", "dr", "doctor",
 	}
 
 	courseRegex  = buildRegex(validCourseKeywords)
@@ -94,19 +105,35 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 
 	log.Infof("Handling course message: %s", text)
 
-	// Check for course UID
+	// Check for course UID first (highest priority)
 	if match := uidRegex.FindString(text); match != "" {
 		return h.handleCourseUIDQuery(ctx, match)
 	}
 
-	// Check for course title search
+	// Check for course title search - extract term after keyword
 	if match := courseRegex.FindString(text); match != "" {
-		return h.handleCourseTitleSearch(ctx, match)
+		// Extract what comes after the keyword
+		searchTerm := strings.TrimSpace(strings.Replace(text, match, "", 1))
+		if searchTerm == "" {
+			// If no search term provided, give helpful message
+			return []messaging_api.MessageInterface{
+				lineutil.NewTextMessageWithSender("請在關鍵字後輸入課程名稱\n\n例如：課 程式設計、課程 微積分", senderName, h.stickerManager.GetRandomSticker()),
+			}
+		}
+		return h.handleCourseTitleSearch(ctx, searchTerm)
 	}
 
-	// Check for teacher search
+	// Check for teacher search - extract term after keyword
 	if match := teacherRegex.FindString(text); match != "" {
-		return h.handleTeacherSearch(ctx, match)
+		// Extract what comes after the keyword
+		searchTerm := strings.TrimSpace(strings.Replace(text, match, "", 1))
+		if searchTerm == "" {
+			// If no search term provided, give helpful message
+			return []messaging_api.MessageInterface{
+				lineutil.NewTextMessageWithSender("請在關鍵字後輸入教師姓名\n\n例如：老師 王小明、教師 李大華", senderName, h.stickerManager.GetRandomSticker()),
+			}
+		}
+		return h.handleTeacherSearch(ctx, searchTerm)
 	}
 
 	return []messaging_api.MessageInterface{}
@@ -246,52 +273,73 @@ func (h *Handler) handleTeacherSearch(ctx context.Context, teacherName string) [
 
 // formatCourseResponse formats a single course as a LINE message
 func (h *Handler) formatCourseResponse(course *storage.Course, fromCache bool) []messaging_api.MessageInterface {
-	// Format course information
-	var builder strings.Builder
-	builder.WriteString("📚 課程資訊\n\n")
-	builder.WriteString(fmt.Sprintf("課程名稱：%s\n", course.Title))
-	builder.WriteString(fmt.Sprintf("課程編號：%s\n", course.UID))
-	builder.WriteString(fmt.Sprintf("學年學期：%d 學年第 %d 學期\n", course.Year, course.Term))
+	// Build body contents
+	contents := []messaging_api.FlexComponentInterface{
+		lineutil.NewFlexText(course.Title).WithWeight("bold").WithSize("xl"),
+		lineutil.NewFlexText(course.UID).WithSize("xs").WithColor("#aaaaaa").WithWrap(true),
+		lineutil.NewFlexSeparator().WithMargin("md"),
+	}
 
+	// Add details
 	if len(course.Teachers) > 0 {
-		builder.WriteString(fmt.Sprintf("授課教師：%s\n", strings.Join(course.Teachers, "、")))
+		contents = append(contents, lineutil.NewKeyValueRow("教師", strings.Join(course.Teachers, "、")).WithMargin("md"))
 	}
-
+	contents = append(contents, lineutil.NewKeyValueRow("學期", fmt.Sprintf("%d-%d", course.Year, course.Term)))
 	if len(course.Times) > 0 {
-		builder.WriteString(fmt.Sprintf("上課時間：%s\n", strings.Join(course.Times, "、")))
+		contents = append(contents, lineutil.NewKeyValueRow("時間", strings.Join(course.Times, "、")))
 	}
-
 	if len(course.Locations) > 0 {
-		builder.WriteString(fmt.Sprintf("上課地點：%s\n", strings.Join(course.Locations, "、")))
+		contents = append(contents, lineutil.NewKeyValueRow("地點", strings.Join(course.Locations, "、")))
 	}
-
 	if course.Note != "" {
-		builder.WriteString(fmt.Sprintf("\n備註：%s\n", course.Note))
+		contents = append(contents, lineutil.NewKeyValueRow("備註", course.Note))
 	}
 
-	if fromCache {
-		builder.WriteString("\n📌 資料來自快取")
-	}
+	// Build footer actions
+	var footerContents []messaging_api.FlexComponentInterface
 
-	messages := []messaging_api.MessageInterface{
-		lineutil.NewTextMessageWithSender(builder.String(), senderName, h.stickerManager.GetRandomSticker()),
-	}
-
-	// Add detail URL button if available
+	// Course Outline button
 	if course.DetailURL != "" {
-		actions := []lineutil.Action{
-			lineutil.NewURIAction("查看課程大綱", course.DetailURL),
-		}
-
-		messages = append(messages, lineutil.NewButtonsTemplate(
-			"課程資訊",
-			"",
-			"點擊查看更多資訊",
-			actions,
-		))
+		footerContents = append(footerContents, lineutil.NewFlexButton(
+			lineutil.NewURIAction("課程大綱", course.DetailURL),
+		).WithStyle("primary").WithColor("#00b900"))
 	}
 
-	return messages
+	// Course Query System button
+	courseQueryURL := fmt.Sprintf("https://sea.cc.ntpu.edu.tw/pls/dev_stud/course_query_all.queryByKeyword?qYear=%d&qTerm=%d&courseno=%s&seq1=A&seq2=M",
+		course.Year, course.Term, course.No)
+	footerContents = append(footerContents, lineutil.NewFlexButton(
+		lineutil.NewURIAction("課程查詢系統", courseQueryURL),
+	).WithStyle("secondary"))
+
+	// Teacher schedule button (if teachers exist)
+	if len(course.Teachers) > 0 {
+		teacherName := course.Teachers[0]
+		footerContents = append(footerContents, lineutil.NewFlexButton(
+			lineutil.NewPostbackActionWithDisplayText(
+				"查看教師資訊",
+				fmt.Sprintf("搜尋 %s 的授課課程", teacherName),
+				fmt.Sprintf("授課課程%s%s", splitChar, teacherName),
+			),
+		).WithStyle("secondary"))
+	}
+
+	bubble := lineutil.NewFlexBubble(
+		nil,
+		nil,
+		lineutil.NewFlexBox("vertical", contents...),
+		lineutil.NewFlexBox("vertical", footerContents...).WithSpacing("sm"),
+	)
+
+	msg := lineutil.NewFlexMessage(fmt.Sprintf("課程：%s", course.Title), bubble.FlexBubble)
+
+	// Add Quick Reply for related actions
+	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+		{Action: lineutil.NewMessageAction("查詢其他課程", "課程")},
+		{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+	})
+
+	return []messaging_api.MessageInterface{msg}
 }
 
 // formatCourseListResponse formats a list of courses as LINE messages
@@ -307,44 +355,62 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 		courses = courses[:50]
 	}
 
-	messages := make([]messaging_api.MessageInterface, 0)
+	var messages []messaging_api.MessageInterface
 
-	// Split into groups of 20 per message
-	for i := 0; i < len(courses); i += 20 {
-		end := i + 20
-		if end > len(courses) {
-			end = len(courses)
+	// Create bubbles for carousel (max 12 per carousel)
+	var bubbles []messaging_api.FlexBubble
+	for _, course := range courses {
+		// Build body contents
+		contents := []messaging_api.FlexComponentInterface{
+			lineutil.NewFlexText(course.Title).WithWeight("bold").WithSize("md").WithWrap(true),
+			lineutil.NewFlexText(course.UID).WithSize("xs").WithColor("#aaaaaa"),
+			lineutil.NewFlexSeparator().WithMargin("md"),
 		}
 
-		var builder strings.Builder
-		builder.WriteString(fmt.Sprintf("📚 課程列表 (第 %d-%d 筆，共 %d 筆)：\n\n", i+1, end, len(courses)))
+		if len(course.Teachers) > 0 {
+			contents = append(contents, lineutil.NewKeyValueRow("教師", strings.Join(course.Teachers, "、")).WithMargin("md"))
+		}
+		contents = append(contents, lineutil.NewKeyValueRow("時間", strings.Join(course.Times, "、")))
 
-		for j := i; j < end; j++ {
-			course := courses[j]
+		// Footer with "View Detail" button
+		footer := lineutil.NewFlexBox("vertical",
+			lineutil.NewFlexButton(
+				lineutil.NewPostbackActionWithDisplayText("查看詳細", fmt.Sprintf("查詢課程 %s", course.UID), course.UID),
+			).WithStyle("primary").WithHeight("sm"),
+		)
 
-			// Format: Title (UID) - Teachers
-			builder.WriteString(fmt.Sprintf("📖 %s\n", course.Title))
-			builder.WriteString(fmt.Sprintf("編號：%s\n", course.UID))
+		bubble := lineutil.NewFlexBubble(
+			nil,
+			nil,
+			lineutil.NewFlexBox("vertical", contents...),
+			footer,
+		)
+		bubbles = append(bubbles, *bubble.FlexBubble)
+	}
 
-			if len(course.Teachers) > 0 {
-				builder.WriteString(fmt.Sprintf("教師：%s\n", strings.Join(course.Teachers, "、")))
-			}
-
-			builder.WriteString(fmt.Sprintf("學期：%d-%d\n", course.Year, course.Term))
-
-			if len(course.Times) > 0 {
-				builder.WriteString(fmt.Sprintf("時間：%s\n", strings.Join(course.Times, "、")))
-			}
-
-			builder.WriteString("\n")
+	// Split bubbles into carousels (max 12 bubbles per carousel)
+	for i := 0; i < len(bubbles); i += 12 {
+		end := i + 12
+		if end > len(bubbles) {
+			end = len(bubbles)
 		}
 
-		// Add helpful text at the end
-		if i == 0 {
-			builder.WriteString("💡 提示：輸入課程編號可查看詳細資訊")
+		carouselBubbles := bubbles[i:end]
+		carousel := &messaging_api.FlexCarousel{
+			Contents: carouselBubbles,
 		}
 
-		messages = append(messages, lineutil.NewTextMessageWithSender(builder.String(), senderName, h.stickerManager.GetRandomSticker()))
+		messages = append(messages, lineutil.NewFlexMessage("課程列表", carousel))
+	}
+
+	// Add Quick Reply to the last message
+	if len(messages) > 0 {
+		if flexMsg, ok := messages[len(messages)-1].(*messaging_api.FlexMessage); ok {
+			flexMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+				{Action: lineutil.NewMessageAction("重新查詢", "課程")},
+				{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+			})
+		}
 	}
 
 	return messages

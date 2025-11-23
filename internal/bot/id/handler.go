@@ -36,18 +36,20 @@ const (
 // Valid keywords for student ID queries
 var (
 	validStudentKeywords = []string{
-		"學號", "student", "name", "學生", "姓名", "學生姓名", "學生編號",
+		"學號", "學生", "姓名", "學生姓名", "學生編號",
+		"student", "id", // English keywords
 	}
 	validDepartmentKeywords = []string{
-		"dep", "department", "系", "所", "系所", "科系", "系名", "系所名", "科系名",
-		"系所名稱", "科系名稱",
+		"系", "所", "系所", "科系", "系名", "系所名", "科系名", "系所名稱", "科系名稱",
+		"dep", "department", // English keywords
 	}
 	validDepartmentCodeKeywords = []string{
-		"depCode", "departmentCode", "系代碼", "系所代碼", "科系代碼",
-		"系編號", "系所編號", "科系編號",
+		"系代碼", "系所代碼", "科系代碼", "系編號", "系所編號", "科系編號",
+		"depCode", "departmentCode", // English keywords
 	}
 	validYearKeywords = []string{
-		"year", "年份", "學年", "年度", "學年度", "入學年", "入學學年", "入學年度",
+		"學年", "年份", "年度", "學年度", "入學年", "入學學年", "入學年度",
+		"year", // English keyword
 	}
 
 	studentRegex    = buildRegex(validStudentKeywords)
@@ -83,14 +85,13 @@ func (h *Handler) CanHandle(text string) bool {
 		return true
 	}
 
-	// Check for student ID (8-9 digits)
-	if match := studentRegex.FindString(text); match != "" {
-		if isNumeric(match) && (len(match) == 8 || len(match) == 9) {
-			return true
-		}
+	// Check for student ID (8-9 digits) at the start of text
+	// This handles direct ID input like "412345678"
+	if len(text) >= 8 && len(text) <= 9 && isNumeric(text) {
+		return true
 	}
 
-	// Check for student name search
+	// Check for student name search with keyword
 	if studentRegex.MatchString(text) {
 		return true
 	}
@@ -120,27 +121,47 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		return h.handleAllDepartmentCodes()
 	}
 
-	// Handle department name query
+	// Check for direct student ID input (8-9 digits without keyword)
+	if len(text) >= 8 && len(text) <= 9 && isNumeric(text) {
+		return h.handleStudentIDQuery(ctx, text)
+	}
+
+	// Handle department name query - extract term after keyword
 	if match := departmentRegex.FindString(text); match != "" {
-		return h.handleDepartmentNameQuery(match)
+		// Extract what comes after the keyword
+		searchTerm := strings.TrimSpace(strings.Replace(text, match, "", 1))
+		if searchTerm != "" {
+			return h.handleDepartmentNameQuery(searchTerm)
+		}
 	}
 
-	// Handle department code query
+	// Handle department code query - extract term after keyword
 	if match := deptCodeRegex.FindString(text); match != "" {
-		return h.handleDepartmentCodeQuery(match)
+		// Extract what comes after the keyword
+		searchTerm := strings.TrimSpace(strings.Replace(text, match, "", 1))
+		if searchTerm != "" {
+			return h.handleDepartmentCodeQuery(searchTerm)
+		}
 	}
 
-	// Handle year query
+	// Handle year query - extract year after keyword
 	if match := yearRegex.FindString(text); match != "" {
-		return h.handleYearQuery(match)
+		// Extract what comes after the keyword
+		searchTerm := strings.TrimSpace(strings.Replace(text, match, "", 1))
+		if searchTerm != "" {
+			return h.handleYearQuery(searchTerm)
+		}
 	}
 
 	// Handle student ID or name query
 	if match := studentRegex.FindString(text); match != "" {
 		// Extract the search term after the keyword
-		searchTerm := strings.TrimSpace(strings.TrimPrefix(text, match))
+		searchTerm := strings.TrimSpace(strings.Replace(text, match, "", 1))
 		if searchTerm == "" {
-			searchTerm = match
+			// If no search term provided, give helpful message
+			return []messaging_api.MessageInterface{
+				lineutil.NewTextMessageWithSender("請在關鍵字後輸入查詢內容\n\n例如：學號 小明、學號 412345678\n或直接輸入 8-9 位學號（如：412345678）", senderName, h.stickerManager.GetRandomSticker()),
+			}
 		}
 
 		// Check if it's a student ID (8-9 digits)
@@ -274,12 +295,11 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 
 	// Check for 2024+ data warning (year >= 113)
 	if year >= 113 {
+		sender := senderName
+		imageURL := "https://raw.githubusercontent.com/garyellow/ntpu-linebot-go/main/assets/rip.png"
 		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithSender("⚠️ 數位學苑 2.0 已停止使用\n\n無法取得 113 學年度（2024年）之後的資料。\n\n舊版系統已不再維護，建議洽詢學校相關單位。", senderName, h.stickerManager.GetRandomSticker()),
-			lineutil.NewImageMessage(
-				"https://raw.githubusercontent.com/garyellow/ntpu-linebot-go/main/assets/rip.png",
-				"https://raw.githubusercontent.com/garyellow/ntpu-linebot-go/main/assets/rip.png",
-			),
+			lineutil.NewTextMessageWithSender("數位學苑 2.0 已停止使用，無法取得資料", sender, h.stickerManager.GetRandomSticker()),
+			lineutil.NewImageMessage(imageURL, imageURL),
 		}
 	}
 
@@ -420,25 +440,38 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 
 // formatStudentResponse formats a student record as a LINE message
 func (h *Handler) formatStudentResponse(student *storage.Student, fromCache bool) []messaging_api.MessageInterface {
-	// Format student information
-	text := fmt.Sprintf("👤 學生資訊\n\n學號：%s\n姓名：%s\n學年：%d\n系所：%s",
-		student.ID, student.Name, student.Year, student.Department)
+	// Header: School Name
+	header := lineutil.NewFlexBox("vertical",
+		lineutil.NewFlexText("國立臺北大學").WithWeight("bold").WithColor("#1DB446").WithSize("xs"),
+		lineutil.NewFlexText("學生資訊查詢").WithWeight("bold").WithSize("xl"),
+	)
+
+	// Body: Student Info
+	body := lineutil.NewFlexBox("vertical",
+		lineutil.NewFlexText(student.Name).WithWeight("bold").WithSize("xxl").WithMargin("md"),
+		lineutil.NewFlexText(student.ID).WithSize("md").WithColor("#aaaaaa"),
+		lineutil.NewFlexSeparator().WithMargin("lg"),
+		lineutil.NewKeyValueRow("系所", student.Department).WithMargin("lg"),
+		lineutil.NewKeyValueRow("入學學年", fmt.Sprintf("%d", student.Year)),
+	)
 
 	if fromCache {
-		text += "\n\n📌 資料來自快取"
+		body.Contents = append(body.Contents,
+			lineutil.NewFlexText("📌 資料來自快取").WithSize("xxs").WithColor("#aaaaaa").WithMargin("md").WithAlign("end"),
+		)
 	}
 
-	// Add 2024+ warning for recent years
-	messages := []messaging_api.MessageInterface{
-		lineutil.NewTextMessageWithSender(text, senderName, h.stickerManager.GetRandomSticker()),
-	}
+	bubble := lineutil.NewFlexBubble(header, nil, body, nil)
 
-	if student.Year >= 113 {
-		messages = append(messages, lineutil.NewTextMessageWithSender(
-			"⚠️ 資料提醒\n\n113 學年度（2024年）後的資料可能不完整或已過期。\n數位學苑 2.0 已停止使用。", senderName, h.stickerManager.GetRandomSticker()))
-	}
+	msg := lineutil.NewFlexMessage(fmt.Sprintf("學生資訊：%s", student.Name), bubble.FlexBubble)
 
-	return messages
+	// Add Quick Reply
+	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+		{Action: lineutil.NewMessageAction("查詢系所代碼", "所有系代碼")},
+		{Action: lineutil.NewMessageAction("查詢其他學號", "學號")},
+	})
+
+	return []messaging_api.MessageInterface{msg}
 }
 
 // Helper functions
@@ -642,16 +675,23 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 	deptName, ok := ntpu.DepartmentNames[deptCode]
 	if !ok {
 		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithSender("❌ 無效的科系代碼", senderName, h.stickerManager.GetRandomSticker()),
+			lineutil.NewTextMessageWithSender("❌ 無效的系代碼", senderName, h.stickerManager.GetRandomSticker()),
 		}
 	}
 
-	// Query students from cache using full department name
-	// The database stores department as "科系名+系" (e.g., "資工系", "社學系", "社工系")
-	// For special cases, determineDepartment already adds "系" suffix
-	fullDeptName := deptName + "系"
-	// Handle special case: 社學 and 社工 are stored as "社學系" and "社工系" directly
-	students, err := h.db.GetStudentsByYearDept(year, fullDeptName)
+	// Query students from cache using department name that matches determineDepartment logic
+	// determineDepartment returns "法律系" for all 71x codes, and "XX系" for others
+	// So we should query using "法律系", "資工系", "社學系", "社工系", etc.
+	var queryDeptName string
+	if strings.HasPrefix(deptCode, "71") {
+		// All law school departments (712/714/716) are stored as "法律系"
+		queryDeptName = "法律系"
+	} else {
+		// For other departments, add "系" suffix
+		queryDeptName = deptName + "系"
+	}
+
+	students, err := h.db.GetStudentsByYearDept(year, queryDeptName)
 	if err != nil {
 		log.WithError(err).Error("Failed to search students by year and department")
 		return []messaging_api.MessageInterface{
@@ -664,24 +704,34 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 		if strings.HasPrefix(deptCode, "71") {
 			departmentType = "組"
 		}
+		// Use actual dept name in error message
+		displayName := deptName
+		if strings.HasPrefix(deptCode, "71") {
+			// For law departments, show the specific division name
+			displayName = deptName
+		}
 		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithSender(fmt.Sprintf("%d學年度%s%s好像沒有人耶 OAO", year, deptName, departmentType), senderName, h.stickerManager.GetRandomSticker()),
+			lineutil.NewTextMessageWithSender(fmt.Sprintf("%d學年度%s%s好像沒有人耶OAO", year, displayName, departmentType), senderName, h.stickerManager.GetRandomSticker()),
 		}
 	}
 
 	// Format student list
 	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("%d學年度%s系學生名單：\n\n", year, deptName))
+	departmentType := "系"
+	displayName := deptName
+	if strings.HasPrefix(deptCode, "71") {
+		departmentType = "組"
+		// For law, use "法律系XX組" format
+		displayName = "法律系" + deptName
+	}
+
+	builder.WriteString(fmt.Sprintf("%d學年度%s%s學生名單：\n\n", year, displayName, departmentType))
 
 	for _, student := range students {
 		builder.WriteString(fmt.Sprintf("%s  %s\n", student.ID, student.Name))
 	}
 
-	departmentType := "系"
-	if strings.HasPrefix(deptCode, "71") {
-		departmentType = "組"
-	}
-	builder.WriteString(fmt.Sprintf("\n%d學年度%s%s共有%d位學生", year, deptName, departmentType, len(students)))
+	builder.WriteString(fmt.Sprintf("\n%d學年度%s%s共有%d位學生", year, displayName, departmentType, len(students)))
 
 	return []messaging_api.MessageInterface{
 		lineutil.NewTextMessageWithSender(builder.String(), senderName, h.stickerManager.GetRandomSticker()),
