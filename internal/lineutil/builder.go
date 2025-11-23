@@ -26,13 +26,6 @@ type QuickReplyItem struct {
 // Action is an alias for the LINE SDK action interface for convenience.
 type Action = messaging_api.ActionInterface
 
-// NewTextMessage creates a simple text message without sender information.
-// The text parameter is the message content to send.
-// LINE API limits: max 5000 characters per text message
-func NewTextMessage(text string) messaging_api.MessageInterface {
-	return NewTextMessageWithSender(text, "", "")
-}
-
 // NewImageMessage creates an image message with the given URLs.
 // The originalContentURL is the full-size image URL, and previewImageURL is the thumbnail.
 // LINE API requires both URLs to be HTTPS.
@@ -40,6 +33,20 @@ func NewImageMessage(originalContentURL, previewImageURL string) messaging_api.M
 	return &messaging_api.ImageMessage{
 		OriginalContentUrl: originalContentURL,
 		PreviewImageUrl:    previewImageURL,
+	}
+}
+
+// NewTextMessage creates a simple text message without sender information.
+// The text parameter is the message content.
+// LINE API limits: max 5000 characters per text message
+func NewTextMessage(text string) *messaging_api.TextMessage {
+	// Validate and truncate if necessary
+	if len(text) > 5000 {
+		text = TruncateText(text, 4997) + "..."
+	}
+
+	return &messaging_api.TextMessage{
+		Text: text,
 	}
 }
 
@@ -259,44 +266,54 @@ func NewClipboardAction(label, clipboardText string) Action {
 	}
 }
 
-// ErrorMessage creates a user-friendly error message.
+// ErrorMessage creates a user-friendly error message with sender information.
 // The err parameter is the internal error (technical details are hidden from users).
+// The senderName is displayed as the message sender.
+// The stickerURL is the avatar icon URL.
 // This provides a consistent error experience without exposing implementation details.
-func ErrorMessage(err error) messaging_api.MessageInterface {
+func ErrorMessage(err error, senderName, stickerURL string) messaging_api.MessageInterface {
 	// Log the actual error internally (caller should log)
 	// But show user-friendly message to end users
-	return NewTextMessage("❌ 系統暫時無法處理您的請求\n\n請稍後再試，或聯絡管理員協助。\n\n如問題持續發生，請提供查詢內容以便我們協助處理。")
+	return NewTextMessageWithSender("❌ 系統暫時無法處理您的請求\n\n請稍後再試，或聯絡管理員協助。\n\n如問題持續發生，請提供查詢內容以便我們協助處理。", senderName, stickerURL)
 }
 
 // ErrorMessageWithDetail creates an error message with additional context for debugging.
 // Use this when you want to show users what went wrong while keeping it user-friendly.
-func ErrorMessageWithDetail(userMessage string) messaging_api.MessageInterface {
-	return NewTextMessage(fmt.Sprintf("❌ %s\n\n請稍後再試，或聯絡管理員協助。", userMessage))
+// The senderName is displayed as the message sender.
+// The stickerURL is the avatar icon URL.
+func ErrorMessageWithDetail(userMessage, senderName, stickerURL string) messaging_api.MessageInterface {
+	return NewTextMessageWithSender(fmt.Sprintf("❌ %s\n\n請稍後再試，或聯絡管理員協助。", userMessage), senderName, stickerURL)
 }
 
 // ServiceUnavailableMessage creates a message indicating the service is unavailable.
-func ServiceUnavailableMessage() messaging_api.MessageInterface {
-	return NewTextMessage("⚠️ 服務暫時無法使用\n\n系統正在維護中，請稍後再試。")
+// The senderName is displayed as the message sender.
+// The stickerURL is the avatar icon URL.
+func ServiceUnavailableMessage(senderName, stickerURL string) messaging_api.MessageInterface {
+	return NewTextMessageWithSender("⚠️ 服務暫時無法使用\n\n系統正在維護中，請稍後再試。", senderName, stickerURL)
 }
 
 // NoResultsMessage creates a message indicating no search results were found.
-func NoResultsMessage() messaging_api.MessageInterface {
-	return NewTextMessage("🔍 查無資料\n\n請檢查輸入的關鍵字是否正確，或嘗試其他搜尋條件。")
+// The senderName is displayed as the message sender.
+// The stickerURL is the avatar icon URL.
+func NoResultsMessage(senderName, stickerURL string) messaging_api.MessageInterface {
+	return NewTextMessageWithSender("🔍 查無資料\n\n請檢查輸入的關鍵字是否正確，或嘗試其他搜尋條件。", senderName, stickerURL)
 }
 
 // DataExpiredWarningMessage creates a warning message for potentially outdated data.
 // The year parameter indicates the data year that may be expired.
-func DataExpiredWarningMessage(year int) messaging_api.MessageInterface {
+// The senderName is displayed as the message sender.
+// The stickerURL is the avatar icon URL.
+func DataExpiredWarningMessage(year int, senderName, stickerURL string) messaging_api.MessageInterface {
 	if year >= 2024 {
-		return NewTextMessage(fmt.Sprintf(
+		return NewTextMessageWithSender(fmt.Sprintf(
 			"⚠️ 資料更新提醒\n\n%d 年度的資料可能尚未更新或已過期。\n如有疑問，請洽詢相關單位確認最新資訊。",
 			year,
-		))
+		), senderName, stickerURL)
 	}
-	return NewTextMessage(fmt.Sprintf(
+	return NewTextMessageWithSender(fmt.Sprintf(
 		"ℹ️ 歷史資料提醒\n\n您查詢的是 %d 年度的資料，此資料可能已過時。\n建議查詢最新學年度的資訊。",
 		year,
-	))
+	), senderName, stickerURL)
 }
 
 // TruncateText truncates text to a maximum length and adds "..." if truncated.
@@ -392,6 +409,8 @@ func NewValidationError(field, message string) error {
 }
 
 // ValidationErrorMessage creates a user-friendly validation error message.
-func ValidationErrorMessage(field, message string) messaging_api.MessageInterface {
-	return NewTextMessage(fmt.Sprintf("❌ 輸入錯誤\n\n欄位：%s\n說明：%s", field, message))
+// The senderName is displayed as the message sender.
+// The stickerURL is the avatar icon URL.
+func ValidationErrorMessage(field, message, senderName, stickerURL string) messaging_api.MessageInterface {
+	return NewTextMessageWithSender(fmt.Sprintf("❌ 輸入錯誤\n\n欄位：%s\n說明：%s", field, message), senderName, stickerURL)
 }

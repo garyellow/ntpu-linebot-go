@@ -35,6 +35,9 @@ type Config struct {
 	// Warmup Configuration
 	WarmupTimeout time.Duration
 	WarmupModules string // Comma-separated list of modules to warmup (default: "id,contact,course,sticker")
+
+	// Webhook Configuration
+	WebhookTimeout time.Duration // Timeout for webhook bot processing (default: 30s)
 }
 
 // ValidationMode determines which fields are required during validation
@@ -83,7 +86,10 @@ func LoadForMode(mode ValidationMode) (*Config, error) {
 
 		// Warmup Configuration
 		WarmupTimeout: getDurationEnv("WARMUP_TIMEOUT", 20*time.Minute),
-		WarmupModules: getEnv("WARMUP_MODULES", "id,contact,course,sticker"),
+		WarmupModules: getEnv("WARMUP_MODULES", "sticker,id,contact,course"),
+
+		// Webhook Configuration
+		WebhookTimeout: getDurationEnv("WEBHOOK_TIMEOUT", 30*time.Second),
 	}
 
 	// Validate based on mode

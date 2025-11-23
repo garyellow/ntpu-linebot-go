@@ -26,16 +26,19 @@ go run ./cmd/warmup -workers=10
 
 ## 參數說明
 
-### `-modules` (預設: WARMUP_MODULES 環境變數，預設 "id,contact,course,sticker")
+### `-modules` (預設: WARMUP_MODULES 環境變數，預設 "sticker,id,contact,course")
 
-支援的模組：
-- `id` - 101-112 學年 × 22 系所 = 264 任務
+支援的模組（**並行執行，無順序限制**）：
+- `sticker` - 頭像貼圖（Spy Family + Ichigo Production）- 最快完成
+- `id` - 101-112 學年 × 22 系所 = 264 任務 - 最耗時
 - `contact` - 行政 + 學術單位
 - `course` - 3 學期課程（113-1, 113-2, 112-2）
-- `sticker` - 頭像貼圖（Spy Family + Ichigo Production）
 
 ```bash
-go run ./cmd/warmup -modules=id
+# 單一模組
+go run ./cmd/warmup -modules=sticker
+
+# 多模組（並行執行）
 go run ./cmd/warmup -modules=contact,course
 ```
 

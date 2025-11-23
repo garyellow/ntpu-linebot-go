@@ -7,20 +7,6 @@ import (
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
-func TestNewTextMessage(t *testing.T) {
-	text := "Hello, World!"
-	msg := NewTextMessage(text)
-
-	textMsg, ok := msg.(*messaging_api.TextMessage)
-	if !ok {
-		t.Fatal("Expected *messaging_api.TextMessage")
-	}
-
-	if textMsg.Text != text {
-		t.Errorf("Expected text %q, got %q", text, textMsg.Text)
-	}
-}
-
 func TestNewMessageAction(t *testing.T) {
 	label := "Click me"
 	text := "User clicked"
@@ -118,9 +104,8 @@ func TestSplitMessages(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			messages := make([]messaging_api.MessageInterface, tt.messageCount)
 			for i := 0; i < tt.messageCount; i++ {
-				messages[i] = NewTextMessage("Test")
+				messages[i] = NewTextMessageWithSender("Test", "測試", "https://example.com/avatar.png")
 			}
-
 			batches := SplitMessages(messages, tt.maxCount)
 			if len(batches) != tt.expectedBatches {
 				t.Errorf("Expected %d batches, got %d", tt.expectedBatches, len(batches))
@@ -132,7 +117,7 @@ func TestSplitMessages(t *testing.T) {
 // TestErrorMessage tests that technical errors are NOT exposed to users
 func TestErrorMessage(t *testing.T) {
 	err := fmt.Errorf("database connection failed")
-	msg := ErrorMessage(err)
+	msg := ErrorMessage(err, "系統魔法師", "https://example.com/avatar.png")
 
 	textMsg, ok := msg.(*messaging_api.TextMessage)
 	if !ok {

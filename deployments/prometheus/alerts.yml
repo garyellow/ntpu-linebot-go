@@ -110,13 +110,40 @@ groups:
           summary: "High number of goroutines"
           description: "Goroutine count is {{ $value }} (threshold: 1000), possible goroutine leak"
 
-      # Sticker loading failures
-      - alert: StickerLoadingFailure
-        expr: ntpu_sticker_manager_stickers_count{job="ntpu-linebot"} == 0
+      # High rate limiter wait time
+      - alert: HighRateLimiterWait
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(ntpu_rate_limiter_wait_duration_seconds_bucket[5m])) by (le, limiter_type)
+          ) > 2
         for: 5m
         labels:
           severity: warning
-          component: sticker
+          component: rate_limiter
         annotations:
-          summary: "No stickers loaded"
-          description: "Sticker manager has 0 stickers loaded, using fallback mode"
+          summary: "High rate limiter wait time for {{ $labels.limiter_type }}"
+          description: "P95 rate limiter wait time for {{ $labels.limiter_type }} is {{ $value }}s (threshold: 2s)"
+
+      # High rate limiter drop rate
+      - alert: HighRateLimiterDropRate
+        expr: |
+          sum(rate(ntpu_rate_limiter_dropped_total[5m])) by (limiter_type) > 5
+        for: 3m
+        labels:
+          severity: warning
+          component: rate_limiter
+        annotations:
+          summary: "High rate limiter drop rate for {{ $labels.limiter_type }}"
+          description: "Rate limiter is dropping {{ $value }} requests/sec for {{ $labels.limiter_type }}"
+
+      # Data integrity issues
+      - alert: CourseDataIntegrityIssues
+        expr: |
+          sum(rate(ntpu_course_data_integrity_issues_total[10m])) by (issue_type) > 1
+        for: 5m
+        labels:
+          severity: info
+          component: data_integrity
+        annotations:
+          summary: "Course data integrity issues detected: {{ $labels.issue_type }}"
+          description: "Detected {{ $value }} {{ $labels.issue_type }} issues per second in course data"

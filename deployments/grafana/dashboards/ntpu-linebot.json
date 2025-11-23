@@ -91,7 +91,7 @@
           "refId": "A"
         }
       ],
-      "title": "Request QPS by Event Type",
+      "title": "Webhook QPS by Event Type",
       "type": "timeseries"
     },
     {
@@ -289,17 +289,17 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(ntpu_scraper_requests_total{status=\"success\"}[5m])) by (module)",
+          "expr": "sum(rate(ntpu_scraper_requests_total{status=\"success\"}[5m])) by (module) / sum(rate(ntpu_scraper_requests_total[5m])) by (module)",
           "legendFormat": "Success - {{module}}",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(ntpu_scraper_requests_total{status=\"error\"}[5m])) by (module)",
+          "expr": "sum(rate(ntpu_scraper_requests_total{status=~\"error|timeout\"}[5m])) by (module) / sum(rate(ntpu_scraper_requests_total[5m])) by (module)",
           "legendFormat": "Error - {{module}}",
           "refId": "B"
         }
       ],
-      "title": "Scraper Success/Error Rate by Module",
+      "title": "Scraper Success Rate by Module",
       "type": "timeseries"
     },
     {
@@ -344,6 +344,14 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 30
               }
             ]
           },
@@ -373,9 +381,14 @@
           "expr": "histogram_quantile(0.95, sum(rate(ntpu_scraper_duration_seconds_bucket[5m])) by (le, module))",
           "legendFormat": "P95 - {{module}}",
           "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(ntpu_scraper_duration_seconds_bucket[5m])) by (le, module))",
+          "legendFormat": "P99 - {{module}}",
+          "refId": "B"
         }
       ],
-      "title": "Scraper Duration P95 by Module",
+      "title": "Scraper Duration (P95/P99) by Module",
       "type": "timeseries"
     },
     {
@@ -383,80 +396,29 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "Rate",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
+            "mode": "thresholds"
           },
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.7
+              },
+              {
+                "color": "green",
+                "value": 0.85
               }
             ]
           },
-          "unit": "ops"
+          "unit": "percentunit"
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Hit"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "green",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Miss"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "orange",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
         "h": 8,
@@ -466,29 +428,24 @@
       },
       "id": 5,
       "options": {
-        "legend": {
-          "calcs": ["mean", "lastNotNull"],
-          "displayMode": "table",
-          "placement": "bottom"
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
         },
-        "tooltip": {
-          "mode": "multi"
-        }
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
       },
       "targets": [
         {
-          "expr": "sum(rate(ntpu_cache_hits_total[1m])) by (module)",
-          "legendFormat": "Hit - {{module}}",
+          "expr": "sum(rate(ntpu_cache_hits_total[5m])) by (module) / (sum(rate(ntpu_cache_hits_total[5m])) + sum(rate(ntpu_cache_misses_total[5m]))) by (module)",
+          "legendFormat": "{{module}}",
           "refId": "A"
-        },
-        {
-          "expr": "sum(rate(ntpu_cache_misses_total[1m])) by (module)",
-          "legendFormat": "Miss - {{module}}",
-          "refId": "B"
         }
       ],
-      "title": "Cache Hit/Miss Rate by Module",
-      "type": "timeseries"
+      "title": "Cache Hit Rate by Module",
+      "type": "gauge"
     },
     {
       "datasource": "Prometheus",
@@ -550,6 +507,13 @@
               {
                 "id": "custom.axisLabel",
                 "value": "Count"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
               }
             ]
           },
@@ -570,6 +534,13 @@
               {
                 "id": "custom.axisPlacement",
                 "value": "right"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "purple"
+                }
               }
             ]
           }
@@ -584,7 +555,7 @@
       "id": 6,
       "options": {
         "legend": {
-          "calcs": ["mean", "max"],
+          "calcs": ["mean", "max", "last"],
           "displayMode": "table",
           "placement": "bottom"
         },
@@ -604,7 +575,252 @@
           "refId": "B"
         }
       ],
-      "title": "Active Goroutines & Memory Usage",
+      "title": "Go Runtime Metrics",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "Wait Time (seconds)",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ntpu_rate_limiter_wait_duration_seconds_bucket[5m])) by (le, limiter_type))",
+          "legendFormat": "P95 - {{limiter_type}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(ntpu_rate_limiter_wait_duration_seconds_bucket[5m])) by (le, limiter_type))",
+          "legendFormat": "P99 - {{limiter_type}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Rate Limiter Wait Time (P95/P99)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "Requests/sec",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max", "sum"],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ntpu_rate_limiter_dropped_total[1m])) by (limiter_type)",
+          "legendFormat": "Dropped - {{limiter_type}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Rate Limiter Dropped Requests",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "Deduplicated Requests/sec",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "sum"],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ntpu_singleflight_dedup_total[1m])) by (module)",
+          "legendFormat": "{{module}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Singleflight Deduplication Rate",
       "type": "timeseries"
     },
     {
@@ -662,11 +878,11 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 24
+        "w": 12,
+        "x": 12,
+        "y": 32
       },
-      "id": 7,
+      "id": 10,
       "options": {
         "legend": {
           "calcs": ["mean", "max", "sum"],
@@ -679,17 +895,96 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(ntpu_webhook_requests_total{status=\"error\"}[1m])) by (event_type)",
-          "legendFormat": "Webhook - {{event_type}}",
+          "expr": "sum(rate(ntpu_http_errors_total[1m])) by (error_type, module)",
+          "legendFormat": "{{error_type}} - {{module}}",
           "refId": "A"
-        },
-        {
-          "expr": "sum(rate(ntpu_scraper_requests_total{status=\"error\"}[1m])) by (module)",
-          "legendFormat": "Scraper - {{module}}",
-          "refId": "B"
         }
       ],
-      "title": "Error Rate Over Time",
+      "title": "HTTP Errors by Type",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "Issues/sec",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.1
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "sum"],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ntpu_course_data_integrity_issues_total[5m])) by (issue_type)",
+          "legendFormat": "{{issue_type}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Data Integrity Issues",
       "type": "timeseries"
     }
   ],

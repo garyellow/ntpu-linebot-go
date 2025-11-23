@@ -7,9 +7,9 @@ import (
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
-// ExampleNewTextMessage demonstrates creating a simple text message.
-func ExampleNewTextMessage() {
-	msg := lineutil.NewTextMessage("Hello, World!")
+// ExampleNewTextMessageWithSender demonstrates creating a text message with sender information.
+func ExampleNewTextMessageWithSender() {
+	msg := lineutil.NewTextMessageWithSender("Hello, World!", "魔法師", "https://example.com/avatar.png")
 	fmt.Printf("%T", msg)
 	// Output: *messaging_api.TextMessage
 }
@@ -102,13 +102,13 @@ func ExampleTruncateText() {
 // ExampleSplitMessages demonstrates splitting messages into batches.
 func ExampleSplitMessages() {
 	messages := []messaging_api.MessageInterface{
-		lineutil.NewTextMessage("Message 1"),
-		lineutil.NewTextMessage("Message 2"),
-		lineutil.NewTextMessage("Message 3"),
-		lineutil.NewTextMessage("Message 4"),
-		lineutil.NewTextMessage("Message 5"),
-		lineutil.NewTextMessage("Message 6"),
-		lineutil.NewTextMessage("Message 7"),
+		lineutil.NewTextMessageWithSender("Message 1", "魔法師", "https://example.com/avatar.png"),
+		lineutil.NewTextMessageWithSender("Message 2", "魔法師", "https://example.com/avatar.png"),
+		lineutil.NewTextMessageWithSender("Message 3", "魔法師", "https://example.com/avatar.png"),
+		lineutil.NewTextMessageWithSender("Message 4", "魔法師", "https://example.com/avatar.png"),
+		lineutil.NewTextMessageWithSender("Message 5", "魔法師", "https://example.com/avatar.png"),
+		lineutil.NewTextMessageWithSender("Message 6", "魔法師", "https://example.com/avatar.png"),
+		lineutil.NewTextMessageWithSender("Message 7", "魔法師", "https://example.com/avatar.png"),
 	}
 
 	batches := lineutil.SplitMessages(messages, 5)
@@ -120,14 +120,14 @@ func ExampleSplitMessages() {
 // ExampleErrorMessage demonstrates creating error messages.
 func ExampleErrorMessage() {
 	err := fmt.Errorf("database connection failed")
-	msg := lineutil.ErrorMessage(err)
+	msg := lineutil.ErrorMessage(err, "系統魔法師", "https://example.com/avatar.png")
 	fmt.Printf("%T", msg)
 	// Output: *messaging_api.TextMessage
 }
 
 // ExampleDataExpiredWarningMessage demonstrates creating data expiration warnings.
 func ExampleDataExpiredWarningMessage() {
-	msg := lineutil.DataExpiredWarningMessage(2024)
+	msg := lineutil.DataExpiredWarningMessage(2024, "魔法師", "https://example.com/avatar.png")
 	fmt.Printf("%T", msg)
 	// Output: *messaging_api.TextMessage
 }
@@ -146,7 +146,7 @@ func ExampleFormatList() {
 
 // ExampleValidationErrorMessage demonstrates creating validation error messages.
 func ExampleValidationErrorMessage() {
-	msg := lineutil.ValidationErrorMessage("學號", "學號格式不正確，請輸入9位數字")
+	msg := lineutil.ValidationErrorMessage("學號", "學號格式不正確，請輸入９位數字", "魔法師", "https://example.com/avatar.png")
 	fmt.Printf("%T", msg)
 	// Output: *messaging_api.TextMessage
 }

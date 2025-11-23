@@ -54,7 +54,8 @@ func (db *DB) GetStudentByID(id string) (*Student, error) {
 	return &student, nil
 }
 
-// SearchStudentsByName searches students by partial name match (max 1000 results)
+// SearchStudentsByName searches students by partial name match (max 500 results)
+// Only returns non-expired cache entries based on configured TTL
 func (db *DB) SearchStudentsByName(name string) ([]Student, error) {
 	// Validate input to prevent SQL injection (even though we use prepared statements)
 	if len(name) > 100 {
@@ -64,9 +65,13 @@ func (db *DB) SearchStudentsByName(name string) ([]Student, error) {
 	// Sanitize search term to prevent SQL LIKE special character issues
 	sanitized := sanitizeSearchTerm(name)
 
-	query := `SELECT id, name, department, year, cached_at FROM students WHERE name LIKE ? ESCAPE '\' ORDER BY year DESC, id DESC LIMIT 1000`
+	// Calculate TTL cutoff timestamp
+	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
 
-	rows, err := db.conn.Query(query, "%"+sanitized+"%")
+	// Add TTL filter to prevent returning stale data
+	query := `SELECT id, name, department, year, cached_at FROM students WHERE name LIKE ? ESCAPE '\' AND cached_at > ? ORDER BY year DESC, id DESC LIMIT 500`
+
+	rows, err := db.conn.Query(query, "%"+sanitized+"%", ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search students by name: %w", err)
 	}
@@ -85,10 +90,15 @@ func (db *DB) SearchStudentsByName(name string) ([]Student, error) {
 }
 
 // GetStudentsByYearDept retrieves students by year and department
+// Only returns non-expired cache entries based on configured TTL
 func (db *DB) GetStudentsByYearDept(year int, dept string) ([]Student, error) {
-	query := `SELECT id, name, department, year, cached_at FROM students WHERE year = ? AND department = ?`
+	// Calculate TTL cutoff timestamp
+	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
 
-	rows, err := db.conn.Query(query, year, dept)
+	// Add TTL filter to prevent returning stale data
+	query := `SELECT id, name, department, year, cached_at FROM students WHERE year = ? AND department = ? AND cached_at > ?`
+
+	rows, err := db.conn.Query(query, year, dept, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get students by year and department: %w", err)
 	}
@@ -218,6 +228,7 @@ func (db *DB) GetContactByUID(uid string) (*Contact, error) {
 }
 
 // SearchContactsByName searches contacts by partial name match (max 500 results)
+// Only returns non-expired cache entries based on configured TTL
 func (db *DB) SearchContactsByName(name string) ([]Contact, error) {
 	// Validate input
 	if len(name) > 100 {
@@ -227,9 +238,13 @@ func (db *DB) SearchContactsByName(name string) ([]Contact, error) {
 	// Sanitize search term to prevent SQL LIKE special character issues
 	sanitized := sanitizeSearchTerm(name)
 
-	query := `SELECT uid, name, title, organization, phone, email, cached_at FROM contacts WHERE name LIKE ? ESCAPE '\' ORDER BY type, name LIMIT 500`
+	// Calculate TTL cutoff timestamp
+	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
 
-	rows, err := db.conn.Query(query, "%"+sanitized+"%")
+	// Add TTL filter to prevent returning stale data
+	query := `SELECT uid, name, title, organization, phone, email, cached_at FROM contacts WHERE name LIKE ? ESCAPE '\' AND cached_at > ? ORDER BY type, name LIMIT 500`
+
+	rows, err := db.conn.Query(query, "%"+sanitized+"%", ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search contacts by name: %w", err)
 	}
@@ -256,10 +271,15 @@ func (db *DB) SearchContactsByName(name string) ([]Contact, error) {
 }
 
 // GetContactsByOrganization retrieves contacts by organization
+// Only returns non-expired cache entries based on configured TTL
 func (db *DB) GetContactsByOrganization(org string) ([]Contact, error) {
-	query := `SELECT uid, name, title, organization, phone, email, cached_at FROM contacts WHERE organization = ?`
+	// Calculate TTL cutoff timestamp
+	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
 
-	rows, err := db.conn.Query(query, org)
+	// Add TTL filter to prevent returning stale data
+	query := `SELECT uid, name, title, organization, phone, email, cached_at FROM contacts WHERE organization = ? AND cached_at > ?`
+
+	rows, err := db.conn.Query(query, org, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get contacts by organization: %w", err)
 	}
@@ -313,6 +333,16 @@ func (db *DB) CountContacts() (int, error) {
 
 // SaveCourse inserts or updates a course record (serializes arrays as JSON)
 func (db *DB) SaveCourse(course *Course) error {
+	// Check data integrity and record metrics if available
+	if db.metrics != nil {
+		if course.No == "" {
+			db.metrics.RecordCourseIntegrityIssue("missing_no")
+		}
+		if course.Title == "" {
+			db.metrics.RecordCourseIntegrityIssue("empty_title")
+		}
+	}
+
 	teachersJSON, err := json.Marshal(course.Teachers)
 	if err != nil {
 		return fmt.Errorf("failed to marshal teachers: %w", err)
@@ -334,9 +364,12 @@ func (db *DB) SaveCourse(course *Course) error {
 	}
 
 	query := `
-		INSERT INTO courses (uid, title, teachers, teacher_urls, times, locations, detail_url, note, year, term, cached_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO courses (uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(uid) DO UPDATE SET
+			year = excluded.year,
+			term = excluded.term,
+			no = excluded.no,
 			title = excluded.title,
 			teachers = excluded.teachers,
 			teacher_urls = excluded.teacher_urls,
@@ -344,12 +377,13 @@ func (db *DB) SaveCourse(course *Course) error {
 			locations = excluded.locations,
 			detail_url = excluded.detail_url,
 			note = excluded.note,
-			year = excluded.year,
-			term = excluded.term,
 			cached_at = excluded.cached_at
 	`
 	_, err = db.conn.Exec(query,
 		course.UID,
+		course.Year,
+		course.Term,
+		course.No,
 		course.Title,
 		string(teachersJSON),
 		string(teacherURLsJSON),
@@ -357,8 +391,6 @@ func (db *DB) SaveCourse(course *Course) error {
 		string(locationsJSON),
 		nullString(course.DetailURL),
 		nullString(course.Note),
-		course.Year,
-		course.Term,
 		time.Now().Unix(),
 	)
 	if err != nil {
@@ -369,7 +401,7 @@ func (db *DB) SaveCourse(course *Course) error {
 
 // GetCourseByUID retrieves a course by UID and validates cache freshness
 func (db *DB) GetCourseByUID(uid string) (*Course, error) {
-	query := `SELECT uid, title, teachers, teacher_urls, times, locations, detail_url, note, year, term, cached_at FROM courses WHERE uid = ?`
+	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at FROM courses WHERE uid = ?`
 
 	var course Course
 	var teachersJSON, teacherURLsJSON, timesJSON, locationsJSON string
@@ -377,6 +409,9 @@ func (db *DB) GetCourseByUID(uid string) (*Course, error) {
 
 	err := db.conn.QueryRow(query, uid).Scan(
 		&course.UID,
+		&course.Year,
+		&course.Term,
+		&course.No,
 		&course.Title,
 		&teachersJSON,
 		&teacherURLsJSON,
@@ -384,8 +419,6 @@ func (db *DB) GetCourseByUID(uid string) (*Course, error) {
 		&locationsJSON,
 		&detailURL,
 		&note,
-		&course.Year,
-		&course.Term,
 		&course.CachedAt,
 	)
 
@@ -432,7 +465,7 @@ func (db *DB) SearchCoursesByTitle(title string) ([]Course, error) {
 	// Sanitize search term to prevent SQL LIKE special character issues
 	sanitized := sanitizeSearchTerm(title)
 
-	query := `SELECT uid, title, teachers, teacher_urls, times, locations, detail_url, note, year, term, cached_at FROM courses WHERE title LIKE ? ESCAPE '\' ORDER BY year DESC, term DESC LIMIT 500`
+	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at FROM courses WHERE title LIKE ? ESCAPE '\' ORDER BY year DESC, term DESC LIMIT 500`
 
 	rows, err := db.conn.Query(query, "%"+sanitized+"%")
 	if err != nil {
@@ -453,7 +486,7 @@ func (db *DB) SearchCoursesByTeacher(teacher string) ([]Course, error) {
 	// Sanitize search term to prevent SQL LIKE special character issues
 	sanitized := sanitizeSearchTerm(teacher)
 
-	query := `SELECT uid, title, teachers, teacher_urls, times, locations, detail_url, note, year, term, cached_at FROM courses WHERE teachers LIKE ? ESCAPE '\' ORDER BY year DESC, term DESC LIMIT 500`
+	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at FROM courses WHERE teachers LIKE ? ESCAPE '\' ORDER BY year DESC, term DESC LIMIT 500`
 
 	rows, err := db.conn.Query(query, "%"+sanitized+"%")
 	if err != nil {
@@ -466,7 +499,7 @@ func (db *DB) SearchCoursesByTeacher(teacher string) ([]Course, error) {
 
 // GetCoursesByYearTerm retrieves courses by year and term
 func (db *DB) GetCoursesByYearTerm(year, term int) ([]Course, error) {
-	query := `SELECT uid, title, teachers, teacher_urls, times, locations, detail_url, note, year, term, cached_at FROM courses WHERE year = ? AND term = ?`
+	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at FROM courses WHERE year = ? AND term = ?`
 
 	rows, err := db.conn.Query(query, year, term)
 	if err != nil {
@@ -522,6 +555,9 @@ func scanCourses(rows *sql.Rows) ([]Course, error) {
 
 		if err := rows.Scan(
 			&course.UID,
+			&course.Year,
+			&course.Term,
+			&course.No,
 			&course.Title,
 			&teachersJSON,
 			&teacherURLsJSON,
@@ -529,8 +565,6 @@ func scanCourses(rows *sql.Rows) ([]Course, error) {
 			&locationsJSON,
 			&detailURL,
 			&note,
-			&course.Year,
-			&course.Term,
 			&course.CachedAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan course row: %w", err)

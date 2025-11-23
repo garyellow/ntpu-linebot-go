@@ -11,6 +11,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
+	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
@@ -34,7 +35,10 @@ func setupTestHandler(t *testing.T) *Handler {
 	// Create test logger
 	log := logger.New("info")
 
-	// Create handler (nil for stickerManager as it's unused in webhook handler)
+	// Create sticker manager
+	stickerManager := sticker.NewManager(db, scraperClient, log)
+
+	// Create handler
 	handler, err := NewHandler(
 		"test_channel_secret",
 		"test_channel_token",
@@ -42,7 +46,8 @@ func setupTestHandler(t *testing.T) *Handler {
 		scraperClient,
 		m,
 		log,
-		nil, // stickerManager (unused)
+		stickerManager,
+		30*time.Second, // Default webhook timeout for tests
 	)
 	if err != nil {
 		t.Fatalf("Failed to create handler: %v", err)

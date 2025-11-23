@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"sync/atomic"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/config"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
@@ -86,11 +85,11 @@ func main() {
 	}
 
 	// Print summary
-	total := atomic.LoadInt64(&stats.Students) + atomic.LoadInt64(&stats.Contacts) + atomic.LoadInt64(&stats.Courses) + atomic.LoadInt64(&stats.Stickers)
+	total := stats.Students.Load() + stats.Contacts.Load() + stats.Courses.Load() + stats.Stickers.Load()
 	fmt.Printf("\n✓ Cached %d records: %d students, %d contacts, %d courses, %d stickers\n",
 		total,
-		atomic.LoadInt64(&stats.Students),
-		atomic.LoadInt64(&stats.Contacts),
-		atomic.LoadInt64(&stats.Courses),
-		atomic.LoadInt64(&stats.Stickers))
+		stats.Students.Load(),
+		stats.Contacts.Load(),
+		stats.Courses.Load(),
+		stats.Stickers.Load())
 }

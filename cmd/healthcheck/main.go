@@ -20,6 +20,8 @@ func main() {
 	if err != nil {
 		os.Exit(1)
 	}
+	// Error ignored: response body close error is non-critical for healthcheck
+	// and process exits immediately anyway
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
