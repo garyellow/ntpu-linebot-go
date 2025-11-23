@@ -436,7 +436,14 @@ func (h *Handler) getHelpMessage() []messaging_api.MessageInterface {
 		"⚠️ 部分內容由相關資料推斷，不一定為正確資訊\n" +
 		"📊 資料來源：國立臺北大學、數位學苑2.0、校園聯絡簿、課程查詢系統"
 
-	return []messaging_api.MessageInterface{
-		lineutil.NewTextMessage(helpText),
+	msg := lineutil.NewTextMessage(helpText)
+	if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+		textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			{Action: lineutil.NewMessageAction("📚 查詢課程", "課程")},
+			{Action: lineutil.NewMessageAction("📞 查詢聯絡資訊", "聯絡")},
+			{Action: lineutil.NewMessageAction("🎓 查詢學號", "學號")},
+			{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
+		})
 	}
+	return []messaging_api.MessageInterface{msg}
 }

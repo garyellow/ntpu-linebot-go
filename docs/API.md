@@ -259,6 +259,7 @@ sequenceDiagram
     LINE->>Bot: POST /callback (webhook)
     Bot->>Bot: 驗證簽章
     Bot->>Bot: 解析事件
+    Bot->>LINE: ShowLoadingAnimation API (...)
     Bot->>Bot: 查詢快取
     alt Cache Miss
         Bot->>NTPU: HTTP GET (爬蟲)
@@ -266,8 +267,8 @@ sequenceDiagram
         Bot->>Bot: 解析 HTML
         Bot->>Bot: 儲存快取
     end
-    Bot->>LINE: ReplyMessage API
-    LINE->>User: 顯示學生資訊
+    Bot->>LINE: ReplyMessage API (with Quick Reply)
+    LINE->>User: 顯示學生資訊 + 快速選項
 ```
 
 ### LINE API 限制
@@ -276,9 +277,35 @@ sequenceDiagram
 |------|------|------|
 | Reply Token | 單次使用 | 一個 replyToken 只能回覆一次 |
 | 訊息數量 | 5 則 | 每次回覆最多 5 則訊息 |
+| Quick Reply | 13 個 | 快速回覆按鈕最多 13 個 |
 | 文字長度 | 5000 字元 | 超過會被截斷 |
 | Postback Data | 300 bytes | 按鈕回傳資料長度 |
+| Carousel Columns | 10 個 | 輪播訊息最多 10 個欄位 |
 | API Rate Limit | 100 rps | 全域限制（我們設定 80 rps） |
+
+### LINE Bot UX 最佳實踐
+
+本專案遵循 LINE Messaging API 最佳實踐：
+
+1. **Loading Animation (載入動畫)**
+   - 在長查詢前顯示「...」動畫
+   - 使用 `ShowLoadingAnimation` API
+   - 最長顯示 60 秒
+
+2. **Quick Reply (快速回覆)**
+   - 在訊息下方提供快速選項
+   - 引導使用者下一步操作
+   - 減少輸入錯誤
+
+3. **Flex Message (彈性訊息)**
+   - 使用卡片式介面呈現資料
+   - 支援按鈕、圖片、多欄位佈局
+   - 提供更好的視覺體驗
+
+4. **錯誤處理**
+   - 隱藏技術細節
+   - 提供可操作的選項
+   - 友善的錯誤訊息
 
 ---
 

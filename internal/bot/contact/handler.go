@@ -53,8 +53,14 @@ const (
 // Valid keywords for contact queries
 var (
 	validContactKeywords = []string{
-		"touch", "contact", "connect", "聯繫", "聯絡", "聯繫方式", "聯絡方式",
-		"連繫", "連絡", "連絡方式", "連絡方式", "電話", "分機", "email", "信箱",
+		// 繁體中文主要關鍵字
+		"聯繫", "聯絡", "聯繫方式", "聯絡方式",
+		// 簡體/異體字變體
+		"連繫", "連絡",
+		// 具體查詢類型
+		"電話", "分機", "email", "信箱",
+		// English keywords
+		"touch", "contact", "connect",
 	}
 
 	contactRegex = buildRegex(validContactKeywords)
@@ -81,12 +87,12 @@ func NewHandler(db *storage.DB, scraper *scraper.Client, metrics *metrics.Metric
 func (h *Handler) CanHandle(text string) bool {
 	text = strings.TrimSpace(text)
 
-	// Check for emergency keyword
+	// Check for emergency keyword (must be at start)
 	if strings.HasPrefix(text, "緊急") {
 		return true
 	}
 
-	// Check for contact keywords
+	// Check for contact keywords (includes 電話, 分機, email, 信箱, etc.)
 	if contactRegex.MatchString(text) {
 		return true
 	}
@@ -106,9 +112,30 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		return h.handleEmergencyPhones()
 	}
 
-	// Handle contact search
+	// Handle contact search - extract search term after keyword
 	if match := contactRegex.FindString(text); match != "" {
-		return h.handleContactSearch(ctx, match)
+		// Extract what comes after the keyword
+		searchTerm := strings.TrimSpace(strings.Replace(text, match, "", 1))
+		if searchTerm == "" {
+			// If no search term provided, give helpful message
+			return []messaging_api.MessageInterface{
+				lineutil.NewTextMessageWithSender("請在關鍵字後輸入查詢內容\n\n例如：聯絡 資工系、電話 圖書館", senderName, h.stickerManager.GetRandomSticker()),
+			}
+		}
+		return h.handleContactSearch(ctx, searchTerm)
+	}
+
+	// Handle phone/extension queries (fallback if not caught by regex)
+	if strings.Contains(text, "電話") || strings.Contains(text, "分機") {
+		// Extract the term (remove common keywords)
+		searchTerm := text
+		searchTerm = strings.ReplaceAll(searchTerm, "電話", "")
+		searchTerm = strings.ReplaceAll(searchTerm, "分機", "")
+		searchTerm = strings.TrimSpace(searchTerm)
+
+		if searchTerm != "" {
+			return h.handleContactSearch(ctx, searchTerm)
+		}
 	}
 
 	return []messaging_api.MessageInterface{}
@@ -142,81 +169,70 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 
 // handleEmergencyPhones returns emergency phone numbers
 func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
-	// Format phone numbers for display (add hyphens)
-	formatPhone := func(phone string) string {
-		if len(phone) == 10 {
-			return phone[:2] + "-" + phone[2:6] + "-" + phone[6:]
-		} else if len(phone) == 3 {
-			return phone // 110, 119
+	// Helper to create a row with optional color
+	createRow := func(label, value, color string) messaging_api.FlexComponentInterface {
+		valColor := "#666666"
+		if color != "" {
+			valColor = color
 		}
-		return phone
+		return lineutil.NewFlexBox("baseline",
+			lineutil.NewFlexText(label).WithColor("#aaaaaa").WithSize("sm").WithFlex(2).FlexText,
+			lineutil.NewFlexText(value).WithWrap(true).WithColor(valColor).WithSize("sm").WithFlex(5).WithAlign("end").FlexText,
+		).FlexBox
 	}
 
-	// Main emergency info message
-	mainText := fmt.Sprintf(`🚨 緊急聯絡電話
+	// Sanxia Campus Box
+	sanxiaBox := lineutil.NewFlexBox("vertical",
+		lineutil.NewFlexText("三峽校區").WithWeight("bold").WithSize("lg").WithColor("#1DB446").FlexText,
+		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
+		createRow("總機", sanxiaNormalPhone, ""),
+		createRow("24H行政", sanxia24HPhone, ""),
+		createRow("24H校安", sanxiaEmergencyPhone, "#ff3333"), // Highlight emergency
+		createRow("大門哨所", sanxiaGatePhone, ""),
+		createRow("宿舍夜間", sanxiaDormPhone, ""),
+	).WithSpacing("sm").FlexBox
 
-【三峽校區】
-總機：%s
-24H 緊急行政：%s
-24H 急難救助：%s
-大門哨所：%s
-宿舍夜間緊急：%s
+	// Taipei Campus Box
+	taipeiBox := lineutil.NewFlexBox("vertical",
+		lineutil.NewFlexText("台北校區").WithWeight("bold").WithSize("lg").WithColor("#1DB446").WithMargin("xl").FlexText,
+		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
+		createRow("總機", taipeiNormalPhone, ""),
+		createRow("24H校安", taipeiEmergencyPhone, "#ff3333"),
+	).WithSpacing("sm").FlexBox
 
-【臺北校區】
-總機：%s
-24H 急難救助：%s`,
-		formatPhone(sanxiaNormalPhone),
-		formatPhone(sanxia24HPhone),
-		formatPhone(sanxiaEmergencyPhone),
-		formatPhone(sanxiaGatePhone),
-		formatPhone(sanxiaDormPhone),
-		formatPhone(taipeiNormalPhone),
-		formatPhone(taipeiEmergencyPhone),
-	)
+	// External Emergency Box
+	externalBox := lineutil.NewFlexBox("vertical",
+		lineutil.NewFlexText("校外緊急").WithWeight("bold").WithSize("lg").WithColor("#ff3333").WithMargin("xl").FlexText,
+		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
+		createRow("警察局", "110", "#ff3333"),
+		createRow("消防/救護", "119", "#ff3333"),
+		createRow("北大派出所", policeStation, ""),
+		createRow("恩主公醫院", homHospital, ""),
+	).WithSpacing("sm").FlexBox
 
-	// Other emergency services
-	otherText := fmt.Sprintf(`🚑 其他緊急服務
+	// Buttons
+	buttons := lineutil.NewFlexBox("vertical",
+		lineutil.NewFlexButton(lineutil.NewURIAction("撥打三峽校安", "tel:"+sanxiaEmergencyPhone)).WithStyle("primary").WithColor("#ff3333").FlexButton,
+		lineutil.NewFlexButton(lineutil.NewURIAction("撥打台北校安", "tel:"+taipeiEmergencyPhone)).WithStyle("secondary").WithMargin("sm").FlexButton,
+		lineutil.NewFlexButton(lineutil.NewURIAction("查看更多資訊", "https://new.ntpu.edu.tw/safety")).WithStyle("link").WithMargin("sm").FlexButton,
+	).WithMargin("xl").FlexBox
 
-警察局：%s
-消防局/救護車：%s
-北大派出所：%s
-恩主公醫院：%s
-
-ℹ️ 行動電話收訊不良時請改撥 112`,
-		formatPhone(policePhone),
-		formatPhone(firePhone),
-		formatPhone(policeStation),
-		formatPhone(homHospital),
+	bubble := lineutil.NewFlexBubble(
+		lineutil.NewFlexBox("vertical",
+			lineutil.NewFlexText("緊急聯絡電話").WithWeight("bold").WithSize("xl").FlexText,
+		),
+		nil,
+		lineutil.NewFlexBox("vertical",
+			sanxiaBox,
+			taipeiBox,
+			externalBox,
+			buttons,
+		),
+		nil,
 	)
 
 	return []messaging_api.MessageInterface{
-		// Main message with quick copy buttons
-		lineutil.NewButtonsTemplate(
-			"🚨 緊急電話",
-			"校園緊急聯絡電話",
-			"快速複製電話號碼",
-			[]lineutil.Action{
-				lineutil.NewClipboardAction("複製三峽24H行政", sanxia24HPhone),
-				lineutil.NewClipboardAction("複製三峽24H急難", sanxiaEmergencyPhone),
-				lineutil.NewClipboardAction("複製臺北24H急難", taipeiEmergencyPhone),
-				lineutil.NewURIAction("查看校園安全網", "https://new.ntpu.edu.tw/safety"),
-			},
-		),
-		// Detailed campus phone numbers
-		lineutil.NewTextMessageWithSender(mainText, senderName, h.stickerManager.GetRandomSticker()),
-		// Other emergency services
-		lineutil.NewButtonsTemplate(
-			"🚑 其他緊急服務",
-			"其他常用緊急電話",
-			"快速複製或撥打",
-			[]lineutil.Action{
-				lineutil.NewURIAction("撥打 110 警察", "tel:"+policePhone),
-				lineutil.NewURIAction("撥打 119 消防/救護", "tel:"+firePhone),
-				lineutil.NewClipboardAction("複製北大派出所", policeStation),
-				lineutil.NewClipboardAction("複製恩主公醫院", homHospital),
-			},
-		),
-		lineutil.NewTextMessageWithSender(otherText, senderName, h.stickerManager.GetRandomSticker()),
+		lineutil.NewFlexMessage("緊急聯絡電話", bubble.FlexBubble),
 	}
 }
 
@@ -230,9 +246,14 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	if err != nil {
 		log.WithError(err).Error("Failed to search contacts in cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		return []messaging_api.MessageInterface{
-			lineutil.ErrorMessageWithDetail("查詢聯絡資訊時發生問題"),
+		msg := lineutil.ErrorMessageWithDetail("查詢聯絡資訊時發生問題")
+		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+				{Action: lineutil.NewMessageAction("重試", "聯絡 "+searchTerm)},
+				{Action: lineutil.NewMessageAction("緊急電話", "緊急")},
+			})
 		}
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	// If found in cache and not expired, return results
@@ -250,9 +271,14 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	if err != nil {
 		log.WithError(err).Errorf("Failed to scrape contacts for: %s", searchTerm)
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		return []messaging_api.MessageInterface{
-			lineutil.ErrorMessageWithDetail("無法取得聯絡資料，可能是網路問題或資料來源暫時無法使用"),
+		msg := lineutil.ErrorMessageWithDetail("無法取得聯絡資料，可能是網路問題或資料來源暫時無法使用")
+		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+				{Action: lineutil.NewMessageAction("緊急電話", "緊急")},
+				{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+			})
 		}
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	// Convert []*storage.Contact to []storage.Contact
@@ -263,9 +289,12 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 
 	if len(contacts) == 0 {
 		h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
-		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithSender(fmt.Sprintf("🔍 查無包含「%s」的聯絡資料\n\n請確認關鍵字是否正確", searchTerm), senderName, h.stickerManager.GetRandomSticker()),
-		}
+		msg := lineutil.NewTextMessageWithSender(fmt.Sprintf("🔍 查無包含「%s」的聯絡資料\n\n請確認關鍵字是否正確", searchTerm), senderName, h.stickerManager.GetRandomSticker())
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			{Action: lineutil.NewMessageAction("重新搜尋", "聯絡")},
+			{Action: lineutil.NewMessageAction("緊急電話", "緊急")},
+		})
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	// Save to cache
@@ -287,88 +316,133 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 		}
 	}
 
-	// Limit to 50 results
-	if len(contacts) > 50 {
-		contacts = contacts[:50]
-	}
+	var messages []messaging_api.MessageInterface
+	chunkSize := 10 // LINE Carousel max limit
 
-	messages := make([]messaging_api.MessageInterface, 0)
-
-	// Group contacts: organizations first, then individuals
-	var orgs []storage.Contact
-	var individuals []storage.Contact
-
-	for _, c := range contacts {
-		if c.Type == "organization" {
-			orgs = append(orgs, c)
-		} else {
-			individuals = append(individuals, c)
-		}
-	}
-
-	// Format organizations
-	if len(orgs) > 0 {
-		var builder strings.Builder
-		builder.WriteString("🏢 單位資訊：\n\n")
-
-		for i, org := range orgs {
-			if i >= 20 {
-				break // Limit to 20 organizations
-			}
-
-			builder.WriteString(fmt.Sprintf("📌 %s\n", org.Name))
-			if org.Superior != "" {
-				builder.WriteString(fmt.Sprintf("上級單位：%s\n", org.Superior))
-			}
-			if org.Location != "" {
-				builder.WriteString(fmt.Sprintf("地點：%s\n", org.Location))
-			}
-			if org.Website != "" {
-				builder.WriteString(fmt.Sprintf("網站：%s\n", org.Website))
-			}
-			builder.WriteString("\n")
+	for i := 0; i < len(contacts); i += chunkSize {
+		// Limit to 5 messages (LINE reply limit)
+		if len(messages) >= 5 {
+			break
 		}
 
-		messages = append(messages, lineutil.NewTextMessageWithSender(builder.String(), senderName, h.stickerManager.GetRandomSticker()))
+		end := i + chunkSize
+		if end > len(contacts) {
+			end = len(contacts)
+		}
+
+		displayContacts := contacts[i:end]
+		var bubbles []messaging_api.FlexBubble
+
+		for _, c := range displayContacts {
+			// Header: Name and Title/Type
+			headerText := c.Name
+			subText := c.Type
+			if c.Type == "organization" {
+				subText = "單位"
+			} else if c.Title != "" {
+				subText = c.Title
+			}
+
+			// Body: Details
+			var bodyContents []messaging_api.FlexComponentInterface
+
+			// Organization / Superior
+			if c.Type == "organization" && c.Superior != "" {
+				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("上級", c.Superior).FlexBox)
+			} else if c.Organization != "" {
+				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("單位", c.Organization).FlexBox)
+			}
+
+			// Contact Info
+			if c.Extension != "" {
+				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("分機", c.Extension).FlexBox)
+			}
+			if c.Phone != "" {
+				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("專線", c.Phone).FlexBox)
+			}
+			if c.Location != "" {
+				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("地點", c.Location).FlexBox)
+			}
+			if c.Email != "" {
+				// Truncate email if too long to prevent layout break
+				email := c.Email
+				if len(email) > 25 {
+					email = email[:22] + "..."
+				}
+				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("Email", email).FlexBox)
+			}
+
+			// Footer: Actions
+			var footerContents []messaging_api.FlexComponentInterface
+
+			// Call button (Extension or Phone)
+			if c.Phone != "" {
+				// Clean phone number for tel link
+				phoneNum := strings.ReplaceAll(c.Phone, "-", "")
+				phoneNum = strings.ReplaceAll(phoneNum, " ", "")
+				footerContents = append(footerContents, lineutil.NewFlexButton(
+					lineutil.NewURIAction("撥打專線", "tel:"+phoneNum),
+				).WithStyle("primary").WithHeight("sm").FlexButton)
+			} else if c.Extension != "" {
+				// For extension, we can't dial directly, but we can copy
+				footerContents = append(footerContents, lineutil.NewFlexButton(
+					lineutil.NewClipboardAction("複製分機", c.Extension),
+				).WithStyle("secondary").WithHeight("sm").FlexButton)
+			}
+
+			// Email button
+			if c.Email != "" {
+				footerContents = append(footerContents, lineutil.NewFlexButton(
+					lineutil.NewURIAction("寄送郵件", "mailto:"+c.Email),
+				).WithStyle("secondary").WithHeight("sm").FlexButton)
+			}
+
+			// Website button (for organizations)
+			if c.Website != "" {
+				footerContents = append(footerContents, lineutil.NewFlexButton(
+					lineutil.NewURIAction("瀏覽網站", c.Website),
+				).WithStyle("secondary").WithHeight("sm").FlexButton)
+			}
+
+			// Assemble Bubble
+			bubble := lineutil.NewFlexBubble(
+				nil, // Hero
+				lineutil.NewFlexBox("vertical", // Header
+					lineutil.NewFlexText(headerText).WithWeight("bold").WithSize("xl").WithColor("#1DB446").FlexText,
+					lineutil.NewFlexText(subText).WithSize("xs").WithColor("#aaaaaa").FlexText,
+				).WithPaddingBottom("none"),
+				lineutil.NewFlexBox("vertical", bodyContents...).WithSpacing("sm"), // Body
+				nil, // Footer (handled below)
+			)
+
+			if len(footerContents) > 0 {
+				bubble.Footer = lineutil.NewFlexBox("vertical", footerContents...).WithSpacing("sm").FlexBox
+			}
+
+			bubbles = append(bubbles, *bubble.FlexBubble)
+		}
+
+		carousel := &messaging_api.FlexCarousel{
+			Contents: bubbles,
+		}
+
+		altText := "聯絡資訊搜尋結果"
+		if i > 0 {
+			altText += fmt.Sprintf(" (%d-%d)", i+1, end)
+		}
+
+		msg := lineutil.NewFlexMessage(altText, carousel)
+		messages = append(messages, msg)
 	}
 
-	// Format individuals
-	if len(individuals) > 0 {
-		// Split into groups of 20 per message
-		for i := 0; i < len(individuals); i += 20 {
-			end := i + 20
-			if end > len(individuals) {
-				end = len(individuals)
-			}
-
-			var builder strings.Builder
-			builder.WriteString(fmt.Sprintf("👤 人員資訊 (第 %d-%d 筆)：\n\n", i+1, end))
-
-			for j := i; j < end; j++ {
-				person := individuals[j]
-				builder.WriteString(fmt.Sprintf("📌 %s", person.Name))
-
-				if person.Title != "" {
-					builder.WriteString(fmt.Sprintf(" - %s", person.Title))
-				}
-				builder.WriteString("\n")
-
-				if person.Organization != "" {
-					builder.WriteString(fmt.Sprintf("單位：%s\n", person.Organization))
-				}
-				if person.Extension != "" {
-					builder.WriteString(fmt.Sprintf("分機：%s\n", person.Extension))
-				}
-				if person.Phone != "" {
-					builder.WriteString(fmt.Sprintf("電話：%s\n", person.Phone))
-				}
-				if person.Email != "" {
-					builder.WriteString(fmt.Sprintf("Email：%s\n", person.Email))
-				}
-				builder.WriteString("\n")
-			}
-
-			messages = append(messages, lineutil.NewTextMessageWithSender(builder.String(), senderName, h.stickerManager.GetRandomSticker()))
+	// Add Quick Reply to the last message
+	if len(messages) > 0 {
+		lastMsg := messages[len(messages)-1]
+		if flexMsg, ok := lastMsg.(*messaging_api.FlexMessage); ok {
+			flexMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+				{Action: lineutil.NewMessageAction("緊急電話", "緊急")},
+				{Action: lineutil.NewMessageAction("查詢其他", "聯絡")},
+			})
 		}
 	}
 

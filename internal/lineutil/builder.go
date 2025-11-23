@@ -365,7 +365,7 @@ func AddQuickReply(message *messaging_api.TextMessage, items []QuickReplyItem) *
 
 // NewFlexMessage creates a flex message with the given alt text and flex container.
 // Flex messages allow for rich, customizable layouts.
-func NewFlexMessage(altText string, contents *messaging_api.FlexContainer) messaging_api.MessageInterface {
+func NewFlexMessage(altText string, contents messaging_api.FlexContainerInterface) *messaging_api.FlexMessage {
 	return &messaging_api.FlexMessage{
 		AltText:  altText,
 		Contents: contents,
