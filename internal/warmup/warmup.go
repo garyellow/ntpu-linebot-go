@@ -16,11 +16,12 @@ import (
 )
 
 // Stats tracks cache warming statistics
+// All fields use atomic operations for concurrent access
 type Stats struct {
-	Students int64
-	Contacts int64
-	Courses  int64
-	Stickers int64
+	Students atomic.Int64
+	Contacts atomic.Int64
+	Courses  atomic.Int64
+	Stickers atomic.Int64
 }
 
 // Options configures cache warming behavior
@@ -56,7 +57,10 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 		log.Info("Cache reset complete")
 	}
 
-	// Warm modules in order
+	// Warm modules concurrently (no dependencies between modules)
+	var wg sync.WaitGroup
+	errChan := make(chan error, len(opts.Modules))
+
 	for _, module := range opts.Modules {
 		select {
 		case <-ctx.Done():
@@ -64,34 +68,58 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 		default:
 		}
 
-		switch module {
-		case "id":
-			if err := warmupIDModule(ctx, db, client, log, stats, opts.Workers); err != nil {
-				log.WithError(err).Error("ID module warmup failed")
+		wg.Add(1)
+		moduleName := module // Capture for goroutine
+		go func() {
+			defer wg.Done()
+
+			switch moduleName {
+			case "id":
+				if err := warmupIDModule(ctx, db, client, log, stats, opts.Workers); err != nil {
+					log.WithError(err).Error("ID module warmup failed")
+					errChan <- fmt.Errorf("id module: %w", err)
+				}
+			case "contact":
+				if err := warmupContactModule(ctx, db, client, log, stats); err != nil {
+					log.WithError(err).Error("Contact module warmup failed")
+					errChan <- fmt.Errorf("contact module: %w", err)
+				}
+			case "course":
+				if err := warmupCourseModule(ctx, db, client, log, stats); err != nil {
+					log.WithError(err).Error("Course module warmup failed")
+					errChan <- fmt.Errorf("course module: %w", err)
+				}
+			case "sticker":
+				if err := warmupStickerModule(ctx, stickerMgr, log, stats); err != nil {
+					log.WithError(err).Error("Sticker module warmup failed")
+					errChan <- fmt.Errorf("sticker module: %w", err)
+				}
+			default:
+				log.WithField("module", moduleName).Warn("Unknown module, skipping")
 			}
-		case "contact":
-			if err := warmupContactModule(ctx, db, client, log, stats); err != nil {
-				log.WithError(err).Error("Contact module warmup failed")
-			}
-		case "course":
-			if err := warmupCourseModule(ctx, db, client, log, stats); err != nil {
-				log.WithError(err).Error("Course module warmup failed")
-			}
-		case "sticker":
-			if err := warmupStickerModule(ctx, stickerMgr, log, stats); err != nil {
-				log.WithError(err).Error("Sticker module warmup failed")
-			}
-		default:
-			log.WithField("module", module).Warn("Unknown module, skipping")
-		}
+		}()
+	}
+
+	// Wait for all modules to complete
+	wg.Wait()
+	close(errChan)
+
+	// Collect errors
+	var errs []error
+	for err := range errChan {
+		errs = append(errs, err)
+	}
+
+	if len(errs) > 0 {
+		log.WithField("error_count", len(errs)).Warn("Some modules failed during warmup")
 	}
 
 	duration := time.Since(startTime)
 	log.WithField("duration", duration).
-		WithField("students", stats.Students).
-		WithField("contacts", stats.Contacts).
-		WithField("courses", stats.Courses).
-		WithField("stickers", stats.Stickers).
+		WithField("students", stats.Students.Load()).
+		WithField("contacts", stats.Contacts.Load()).
+		WithField("courses", stats.Courses.Load()).
+		WithField("stickers", stats.Stickers.Load()).
 		Info("Cache warming complete")
 
 	return stats, nil
@@ -109,10 +137,10 @@ func RunInBackground(ctx context.Context, db *storage.DB, client *scraper.Client
 		if err != nil {
 			log.WithError(err).Warn("Background cache warming finished with errors")
 		} else {
-			log.WithField("students", stats.Students).
-				WithField("contacts", stats.Contacts).
-				WithField("courses", stats.Courses).
-				WithField("stickers", stats.Stickers).
+			log.WithField("students", stats.Students.Load()).
+				WithField("contacts", stats.Contacts.Load()).
+				WithField("courses", stats.Courses.Load()).
+				WithField("stickers", stats.Stickers.Load()).
 				Info("Background cache warming completed successfully")
 		}
 	}()
@@ -229,12 +257,12 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 					}
 				}
 
-				atomic.AddInt64(&stats.Students, int64(savedCount))
+				stats.Students.Add(int64(savedCount))
 				count := completed.Add(1)
 
 				if count%10 == 0 || count == int64(totalTasks) {
 					log.WithField("progress", fmt.Sprintf("%d/%d", count, totalTasks)).
-						WithField("students", atomic.LoadInt64(&stats.Students)).
+						WithField("students", stats.Students.Load()).
 						Info("ID module progress")
 				}
 			}
@@ -267,7 +295,7 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 			adminSavedCount++
 		}
 	}
-	atomic.AddInt64(&stats.Contacts, int64(adminSavedCount))
+	stats.Contacts.Add(int64(adminSavedCount))
 	log.WithField("count", adminSavedCount).Info("Administrative contacts cached")
 
 	// Scrape academic contacts
@@ -284,7 +312,7 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 			academicSavedCount++
 		}
 	}
-	atomic.AddInt64(&stats.Contacts, int64(academicSavedCount))
+	stats.Contacts.Add(int64(academicSavedCount))
 	log.WithField("count", academicSavedCount).Info("Academic contacts cached")
 
 	return nil
@@ -343,7 +371,7 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 				}
 			}
 
-			atomic.AddInt64(&stats.Courses, int64(savedCount))
+			stats.Courses.Add(int64(savedCount))
 			log.WithField("year", t.year).
 				WithField("term", t.term).
 				WithField("education_code", code).
@@ -364,7 +392,7 @@ func warmupStickerModule(ctx context.Context, stickerMgr *sticker.Manager, log *
 	}
 
 	count := stickerMgr.Count()
-	atomic.StoreInt64(&stats.Stickers, int64(count))
+	stats.Stickers.Store(int64(count))
 	log.WithField("count", count).Info("Stickers cached")
 
 	return nil
