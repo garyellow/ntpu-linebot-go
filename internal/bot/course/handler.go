@@ -291,65 +291,126 @@ func (h *Handler) handleTeacherSearch(ctx context.Context, teacherName string) [
 
 // formatCourseResponse formats a single course as a LINE message
 func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.MessageInterface {
-	// Build body contents
-	contents := []messaging_api.FlexComponentInterface{
-		lineutil.NewFlexText(course.Title).WithWeight("bold").WithSize("xl").FlexText,
-		lineutil.NewFlexText(course.UID).WithSize("xs").WithColor("#aaaaaa").WithWrap(true).FlexText,
-		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
+	// Header: Course badge
+	header := lineutil.NewFlexBox("vertical",
+		lineutil.NewFlexBox("baseline",
+			lineutil.NewFlexText("📚").WithSize("lg").FlexText,
+			lineutil.NewFlexText("課程資訊").WithWeight("bold").WithColor("#1DB446").WithSize("sm").WithMargin("sm").FlexText,
+		).FlexBox,
+	)
+
+	// Hero: Course title and code
+	// Truncate title if too long (max ~60 chars for better display)
+	displayTitle := course.Title
+	if len(displayTitle) > 60 {
+		displayTitle = displayTitle[:57] + "..."
 	}
+	hero := lineutil.NewFlexBox("vertical",
+		lineutil.NewFlexText(displayTitle).WithWeight("bold").WithSize("xl").WithColor("#ffffff").WithWrap(true).FlexText,
+		lineutil.NewFlexText(course.UID).WithSize("xs").WithColor("#ffffff").WithMargin("sm").FlexText,
+	).FlexBox
+	hero.BackgroundColor = "#1DB446"
+	hero.PaddingAll = "20px"
+	hero.PaddingTop = "15px"
+	hero.PaddingBottom = "15px"
+
+	// Build body contents
+	contents := []messaging_api.FlexComponentInterface{}
 
 	// Add details
 	if len(course.Teachers) > 0 {
-		contents = append(contents, lineutil.NewKeyValueRow("教師", strings.Join(course.Teachers, "、")).WithMargin("md").FlexBox)
+		// Truncate teacher names if too long (max ~40 chars)
+		teacherNames := strings.Join(course.Teachers, "、")
+		if len(teacherNames) > 40 {
+			teacherNames = teacherNames[:37] + "..."
+		}
+		contents = append(contents, lineutil.NewKeyValueRow("👨‍🏫 教師", teacherNames).WithMargin("lg").FlexBox)
 	}
-	contents = append(contents, lineutil.NewKeyValueRow("學期", fmt.Sprintf("%d-%d", course.Year, course.Term)).FlexBox)
+	contents = append(contents,
+		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
+		lineutil.NewKeyValueRow("📅 學期", fmt.Sprintf("%d-%d", course.Year, course.Term)).WithMargin("md").FlexBox,
+	)
 	if len(course.Times) > 0 {
-		contents = append(contents, lineutil.NewKeyValueRow("時間", strings.Join(course.Times, "、")).FlexBox)
+		// Truncate times if too long (max ~50 chars)
+		timeStr := strings.Join(course.Times, "、")
+		if len(timeStr) > 50 {
+			timeStr = timeStr[:47] + "..."
+		}
+		contents = append(contents,
+			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
+			lineutil.NewKeyValueRow("⏰ 時間", timeStr).WithMargin("md").FlexBox,
+		)
 	}
 	if len(course.Locations) > 0 {
-		contents = append(contents, lineutil.NewKeyValueRow("地點", strings.Join(course.Locations, "、")).FlexBox)
+		// Truncate locations if too long (max ~40 chars)
+		locationStr := strings.Join(course.Locations, "、")
+		if len(locationStr) > 40 {
+			locationStr = locationStr[:37] + "..."
+		}
+		contents = append(contents,
+			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
+			lineutil.NewKeyValueRow("📍 地點", locationStr).WithMargin("md").FlexBox,
+		)
 	}
 	if course.Note != "" {
-		contents = append(contents, lineutil.NewKeyValueRow("備註", course.Note).FlexBox)
+		// Truncate note if too long (max ~80 chars for better readability)
+		noteStr := course.Note
+		if len(noteStr) > 80 {
+			noteStr = noteStr[:77] + "..."
+		}
+		contents = append(contents,
+			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
+			lineutil.NewKeyValueRow("📝 備註", noteStr).WithMargin("md").FlexBox,
+		)
 	}
 
 	// Build footer actions
 	var footerContents []messaging_api.FlexComponentInterface
 
-	// Course Outline button
+	// Course Outline button (label: 6 chars + emoji)
 	if course.DetailURL != "" {
 		footerContents = append(footerContents, lineutil.NewFlexButton(
-			lineutil.NewURIAction("課程大綱", course.DetailURL),
-		).WithStyle("primary").WithColor("#00b900").FlexButton)
+			lineutil.NewURIAction("📄 課程大綱", course.DetailURL),
+		).WithStyle("primary").WithHeight("sm").FlexButton)
 	}
 
-	// Course Query System button
+	// Course Query System button (label: 6 chars + emoji)
 	courseQueryURL := fmt.Sprintf("https://sea.cc.ntpu.edu.tw/pls/dev_stud/course_query_all.queryByKeyword?qYear=%d&qTerm=%d&courseno=%s&seq1=A&seq2=M",
 		course.Year, course.Term, course.No)
 	footerContents = append(footerContents, lineutil.NewFlexButton(
-		lineutil.NewURIAction("課程查詢系統", courseQueryURL),
-	).WithStyle("secondary").FlexButton)
+		lineutil.NewURIAction("🔍 查詢系統", courseQueryURL),
+	).WithStyle("secondary").WithHeight("sm").FlexButton)
 
-	// Teacher schedule button (if teachers exist)
+	// Teacher schedule button (if teachers exist) (label: 6 chars + emoji)
 	if len(course.Teachers) > 0 {
 		teacherName := course.Teachers[0]
+		// Truncate teacher name in display text if too long
+		displayText := fmt.Sprintf("搜尋 %s 的授課課程", teacherName)
+		if len(displayText) > 40 {
+			displayText = displayText[:37] + "..."
+		}
 		footerContents = append(footerContents, lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText(
-				"查看教師資訊",
-				fmt.Sprintf("搜尋 %s 的授課課程", teacherName),
+				"👤 教師課程",
+				displayText,
 				fmt.Sprintf("授課課程%s%s", splitChar, teacherName),
 			),
-		).WithStyle("secondary").FlexButton)
+		).WithStyle("secondary").WithHeight("sm").FlexButton)
 	}
 
 	bubble := lineutil.NewFlexBubble(
-		nil,
-		nil,
+		header,
+		hero,
 		lineutil.NewFlexBox("vertical", contents...),
 		lineutil.NewFlexBox("vertical", footerContents...).WithSpacing("sm"),
 	)
 
-	msg := lineutil.NewFlexMessage(fmt.Sprintf("課程：%s", course.Title), bubble.FlexBubble)
+	// Limit altText to 400 chars (LINE API limit)
+	altText := fmt.Sprintf("課程：%s", course.Title)
+	if len(altText) > 400 {
+		altText = altText[:397] + "..."
+	}
+	msg := lineutil.NewFlexMessage(altText, bubble.FlexBubble)
 
 	// Add Quick Reply for related actions
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -378,29 +439,53 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 	// Create bubbles for carousel (max 12 per carousel)
 	var bubbles []messaging_api.FlexBubble
 	for _, course := range courses {
+		// Hero: Course title with color background
+		// Truncate title for carousel display (max ~50 chars)
+		carouselTitle := course.Title
+		if len(carouselTitle) > 50 {
+			carouselTitle = carouselTitle[:47] + "..."
+		}
+		hero := lineutil.NewFlexBox("vertical",
+			lineutil.NewFlexText(carouselTitle).WithWeight("bold").WithSize("md").WithColor("#ffffff").WithWrap(true).FlexText,
+		).FlexBox
+		hero.BackgroundColor = "#17c950"
+		hero.PaddingAll = "13px"
+
 		// Build body contents
 		contents := []messaging_api.FlexComponentInterface{
-			lineutil.NewFlexText(course.Title).WithWeight("bold").WithSize("md").WithWrap(true).FlexText,
-			lineutil.NewFlexText(course.UID).WithSize("xs").WithColor("#aaaaaa").FlexText,
+			lineutil.NewFlexText(course.UID).WithSize("xs").WithColor("#999999").WithMargin("md").FlexText,
 			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
 		}
 
 		if len(course.Teachers) > 0 {
-			contents = append(contents, lineutil.NewKeyValueRow("教師", strings.Join(course.Teachers, "、")).WithMargin("md").FlexBox)
+			// Truncate teachers for carousel (max ~30 chars)
+			carouselTeachers := strings.Join(course.Teachers, "、")
+			if len(carouselTeachers) > 30 {
+				carouselTeachers = carouselTeachers[:27] + "..."
+			}
+			contents = append(contents, lineutil.NewKeyValueRow("👨‍🏫 教師", carouselTeachers).WithMargin("md").FlexBox)
 		}
 		if len(course.Times) > 0 {
-			contents = append(contents, lineutil.NewKeyValueRow("時間", strings.Join(course.Times, "、")).FlexBox)
+			// Truncate times for carousel (max ~35 chars)
+			carouselTimes := strings.Join(course.Times, "、")
+			if len(carouselTimes) > 35 {
+				carouselTimes = carouselTimes[:32] + "..."
+			}
+			contents = append(contents,
+				lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
+				lineutil.NewKeyValueRow("⏰ 時間", carouselTimes).WithMargin("sm").FlexBox,
+			)
 		}
 		// Footer with "View Detail" button
 		footer := lineutil.NewFlexBox("vertical",
 			lineutil.NewFlexButton(
-				lineutil.NewPostbackActionWithDisplayText("查看詳細", fmt.Sprintf("查詢課程 %s", course.UID), course.UID),
+				lineutil.NewPostbackActionWithDisplayText("📝 查看詳細", fmt.Sprintf("查詢課程 %s", course.UID), course.UID),
 			).WithStyle("primary").WithHeight("sm").FlexButton,
 		)
 
 		bubble := lineutil.NewFlexBubble(
 			nil,
-			nil,
+			hero,
 			lineutil.NewFlexBox("vertical", contents...),
 			footer,
 		)

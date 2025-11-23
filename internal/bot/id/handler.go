@@ -464,30 +464,69 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 
 // formatStudentResponse formats a student record as a LINE message
 func (h *Handler) formatStudentResponse(student *storage.Student, fromCache bool) []messaging_api.MessageInterface {
-	// Header: School Name
+	// Header: School Name with badge style
 	header := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexText("國立臺北大學").WithWeight("bold").WithColor("#1DB446").WithSize("xs").FlexText,
-		lineutil.NewFlexText("學生資訊查詢").WithWeight("bold").WithSize("xl").FlexText,
+		lineutil.NewFlexBox("baseline",
+			lineutil.NewFlexText("🎓").WithSize("lg").FlexText,
+			lineutil.NewFlexText("國立臺北大學").WithWeight("bold").WithColor("#1DB446").WithSize("sm").WithMargin("sm").FlexText,
+		).FlexBox,
+		lineutil.NewFlexText("學生資訊查詢").WithWeight("bold").WithSize("xl").WithMargin("xs").FlexText,
 	)
 
-	// Body: Student Info
+	// Hero: Student ID as prominent display
+	hero := lineutil.NewFlexBox("vertical",
+		lineutil.NewFlexBox("vertical",
+			lineutil.NewFlexText(student.Name).WithWeight("bold").WithSize("xxl").WithColor("#ffffff").WithAlign("center").FlexText,
+			lineutil.NewFlexText(student.ID).WithSize("md").WithColor("#ffffff").WithAlign("center").WithMargin("sm").FlexText,
+		).FlexBox,
+	).FlexBox
+	hero.BackgroundColor = "#1DB446"
+	hero.PaddingAll = "20px"
+	hero.PaddingTop = "15px"
+	hero.PaddingBottom = "15px"
+
+	// Body: Detailed Info
+	// Truncate department name if too long (max ~30 chars)
+	deptName := student.Department
+	if len(deptName) > 30 {
+		deptName = deptName[:27] + "..."
+	}
 	body := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexText(student.Name).WithWeight("bold").WithSize("xxl").WithMargin("md"),
-		lineutil.NewFlexText(student.ID).WithSize("md").WithColor("#aaaaaa"),
-		lineutil.NewFlexSeparator().WithMargin("lg"),
-		lineutil.NewKeyValueRow("系所", student.Department).WithMargin("lg").FlexBox,
-		lineutil.NewKeyValueRow("入學學年", fmt.Sprintf("%d", student.Year)).FlexBox,
+		lineutil.NewKeyValueRow("系所", deptName).WithMargin("lg").FlexBox,
+		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
+		lineutil.NewKeyValueRow("入學學年", fmt.Sprintf("%d 年度", student.Year)).WithMargin("md").FlexBox,
 	)
 
 	if fromCache {
 		body.Contents = append(body.Contents,
-			lineutil.NewFlexText("📌 資料來自快取").WithSize("xxs").WithColor("#aaaaaa").WithMargin("md").WithAlign("end"),
+			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
+			lineutil.NewFlexText("📌 資料來自快取").WithSize("xxs").WithColor("#999999").WithMargin("md").WithAlign("end").FlexText,
 		)
 	}
 
-	bubble := lineutil.NewFlexBubble(header, nil, body, nil)
+	// Footer: Action Buttons
+	footer := lineutil.NewFlexBox("vertical",
+		lineutil.NewFlexButton(
+			lineutil.NewClipboardAction("📋 複製學號", student.ID),
+		).WithStyle("primary").WithHeight("sm").FlexButton,
+		lineutil.NewFlexBox("horizontal",
+			lineutil.NewFlexButton(
+				lineutil.NewMessageAction("查詢其他", "學號"),
+			).WithStyle("secondary").WithHeight("sm").FlexButton,
+			lineutil.NewFlexButton(
+				lineutil.NewMessageAction("系所代碼", "所有系代碼"),
+			).WithStyle("secondary").WithHeight("sm").FlexButton,
+		).WithSpacing("sm").WithMargin("sm").FlexBox,
+	).WithSpacing("sm")
 
-	msg := lineutil.NewFlexMessage(fmt.Sprintf("學生資訊：%s", student.Name), bubble.FlexBubble)
+	bubble := lineutil.NewFlexBubble(header, hero, body, footer)
+
+	// Limit altText to 400 chars (LINE API limit)
+	altText := fmt.Sprintf("學生資訊：%s", student.Name)
+	if len(altText) > 400 {
+		altText = altText[:397] + "..."
+	}
+	msg := lineutil.NewFlexMessage(altText, bubble.FlexBubble)
 
 	// Add Quick Reply
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{

@@ -147,9 +147,10 @@ func (s *FlexSeparator) WithMargin(margin string) *FlexSeparator {
 }
 
 // Helper to create a key-value row for Flex Box
+// Note: value text has wrap enabled to handle long content gracefully
 func NewKeyValueRow(key, value string) *FlexBox {
 	return NewFlexBox("baseline",
-		NewFlexText(key).WithColor("#aaaaaa").WithSize("sm").WithFlex(1),
-		NewFlexText(value).WithWrap(true).WithColor("#666666").WithSize("sm").WithFlex(5),
+		NewFlexText(key).WithColor("#aaaaaa").WithSize("sm").WithFlex(1).FlexText,
+		NewFlexText(value).WithWrap(true).WithColor("#666666").WithSize("sm").WithFlex(5).FlexText,
 	)
 }
