@@ -54,7 +54,7 @@ LINE Webhook → Gin Handler (25s timeout) → Bot Module Dispatcher
    }
    ```
 
-5. **Add warmup logic** (`cmd/warmup/main.go:81-98`) to pre-populate cache
+5. **Warmup module** (`internal/warmup/warmup.go`) handles background cache population on server startup
 
 ## Data Layer: Cache-First Strategy
 
@@ -202,18 +202,17 @@ task compose:up             # Start with Prometheus + Grafana
 task compose:logs -- <svc>  # View specific service logs
 ```
 
-**Warmup usage**:
+**Standalone warmup** (for testing/debugging):
 ```powershell
-go run ./cmd/warmup -modules=id,contact,course -workers=10
+go run ./cmd/warmup -modules=id,contact,course -workers=10 -reset
 ```
-- `-reset`: Deletes all cached data
-- `-modules`: Comma-separated list or empty string to skip
-- `-workers`: Parallel scraper count (default: 3)
 
-**Warmup strategy** (with 3 workers default, 2-5s delays):
-- ID module: 4 years × 22 depts = 88 tasks
-- Contact module: Admin + academic (sequential)
-- Course module: 3 recent terms × all education codes (sequential)
+**Production warmup** (automatic):
+- Server runs `warmup.RunInBackground()` on startup
+- Non-blocking: webhook accepts requests immediately
+- Cache misses trigger on-demand scraping
+- Modules: ID (88 tasks), Contact (admin + academic), Course (3 terms), Stickers
+- Same scraper settings as regular requests
 
 ## Error Handling: Context + Wrapping
 
@@ -288,9 +287,8 @@ histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by 
 
 **Container startup flow** (`docker-compose.yml`):
 1. `init-data` - Creates `/data` with uid=65532 ownership (alpine with shell)
-2. `warmup` - Runs once to pre-populate cache (exits on completion)
-3. `ntpu-linebot` - Main service depends on warmup completion
-4. Monitoring stack (prometheus/alertmanager/grafana)
+2. `ntpu-linebot` - Main service starts immediately, warmup runs in background
+3. Monitoring stack (prometheus/alertmanager/grafana)
 
 **Healthcheck**:
 - Binary: `cmd/healthcheck/main.go` (no wget/curl in distroless)
@@ -305,6 +303,7 @@ histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by 
 ## Key File Locations
 
 - **Entry points**: `cmd/server/main.go`, `cmd/warmup/main.go`, `cmd/healthcheck/main.go`
+- **Warmup module**: `internal/warmup/warmup.go` (background cache warming)
 - **Webhook router**: `internal/webhook/handler.go:handleMessageEvent()`
 - **Bot module interface**: `internal/bot/handler.go`
 - **DB schema**: `internal/storage/schema.go`

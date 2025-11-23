@@ -16,9 +16,9 @@ tasks:
       - go run ./cmd/server
 
   warmup:
-    desc: Pre-populate cache (recommended before first run)
+    desc: Manual cache warmup (optional, server runs this automatically)
     cmds:
-      - go run ./cmd/warmup -modules=id,contact,course
+      - go run ./cmd/warmup
 
   # Testing
   test:

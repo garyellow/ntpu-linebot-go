@@ -17,6 +17,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
+	"github.com/garyellow/ntpu-linebot-go/internal/warmup"
 	"github.com/garyellow/ntpu-linebot-go/internal/webhook"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
@@ -71,18 +72,18 @@ func main() {
 	stickerManager := sticker.NewManager(db, scraperClient, log)
 	log.Info("Sticker manager created")
 
-	// Load stickers in background (non-blocking)
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-		defer cancel()
+	// Start background cache warming (non-blocking)
+	// Warmup runs concurrently with server startup
+	warmupCtx, warmupCancel := context.WithTimeout(context.Background(), cfg.WarmupTimeout)
+	defer warmupCancel()
 
-		log.Info("Loading stickers...")
-		if err := stickerManager.LoadStickers(ctx); err != nil {
-			log.WithError(err).Warn("Failed to load stickers, using fallback avatars")
-		} else {
-			log.WithField("count", stickerManager.Count()).Info("Stickers loaded successfully")
-		}
-	}()
+	warmup.RunInBackground(warmupCtx, db, scraperClient, stickerManager, log, warmup.Options{
+		Modules: warmup.ParseModules(cfg.WarmupModules),
+		Workers: cfg.ScraperWorkers,
+		Timeout: cfg.WarmupTimeout,
+		Reset:   false, // Never reset in production
+	})
+	log.Info("Background cache warming started")
 
 	// Create webhook handler
 	webhookHandler, err := webhook.NewHandler(

@@ -62,7 +62,7 @@ func (m *Manager) LoadStickers(ctx context.Context) error {
 
 // FetchAndSaveStickers fetches stickers from web and saves to database
 func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
-	// Spy Family URLs (7 sources)
+	// Spy Family URLs (8 sources)
 	spyFamilyURLs := []string{
 		"https://spy-family.net/tvseries/special/special1_season1.php",
 		"https://spy-family.net/tvseries/special/special2_season1.php",
@@ -70,11 +70,12 @@ func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
 		"https://spy-family.net/tvseries/special/special13_season1.php",
 		"https://spy-family.net/tvseries/special/special16_season1.php",
 		"https://spy-family.net/tvseries/special/special17_season1.php",
-		"https://spy-family.net/tvseries/special/special3.php",
+		"https://spy-family.net/tvseries/special/special3_season2.php",
+		"https://spy-family.net/tvseries/special/special10.php",
 	}
 
 	// Ichigo Production URL (1 source)
-	ichigoURL := "https://ichigoproduction.com/special/present_icon.html"
+	ichigoURL := "https://ichigoproduction.com/Season1/special/present_icon.html"
 
 	// Create channels for concurrent fetching with retry
 	type result struct {
@@ -221,19 +222,27 @@ func (m *Manager) fetchSpyFamilyStickers(ctx context.Context, client *scraper.Cl
 	}
 
 	stickers := make([]string, 0)
+	baseURL := "https://spy-family.net/tvseries/"
 
-	// Select sticker links: ul.icondlLists > li > a
-	doc.Find("ul.icondlLists > li > a").Each(func(i int, s *goquery.Selection) {
+	// Find all <a> tags with href attributes containing .png images
+	doc.Find("a[href$='.png']").Each(func(i int, s *goquery.Selection) {
 		href, exists := s.Attr("href")
 		if !exists {
 			return
 		}
 
-		// Convert relative URL to absolute
-		// Example: ../../../images/special/special1_01.png -> https://spy-family.net/tvseries/images/special/special1_01.png
+		// Handle relative URLs (e.g., ../assets/img/special/01.png)
 		if len(href) > 3 && href[:3] == "../" {
-			stickerURL := fmt.Sprintf("https://spy-family.net/tvseries/%s", href[3:])
-			stickers = append(stickers, stickerURL)
+			// Remove ../ prefix and construct absolute URL
+			relPath := href[3:] // Remove "../"
+			absURL := baseURL + relPath
+			stickers = append(stickers, absURL)
+		} else if len(href) > 4 && href[:4] == "http" {
+			// Already absolute URL
+			stickers = append(stickers, href)
+		} else if len(href) > 2 && href[:2] == "//" {
+			// Protocol-relative URL
+			stickers = append(stickers, "https:"+href)
 		}
 	})
 
@@ -252,19 +261,39 @@ func (m *Manager) fetchIchigoStickers(ctx context.Context, client *scraper.Clien
 	}
 
 	stickers := make([]string, 0)
+	baseURL := "https://ichigoproduction.com/Season1/"
 
-	// Select sticker links: ul.tp5 > li > div.ph > a
-	doc.Find("ul.tp5 > li > div.ph > a").Each(func(i int, s *goquery.Selection) {
-		href, exists := s.Attr("href")
+	// Find all <img> tags with src attributes containing sticker content
+	// (Ichigo uses img tags with query strings like .jpg?timestamp)
+	doc.Find("img").Each(func(i int, s *goquery.Selection) {
+		src, exists := s.Attr("src")
 		if !exists {
 			return
 		}
 
-		// Convert relative URL to absolute
-		// Example: ../../../img/present_icon/icon01.png -> https://ichigoproduction.com/img/present_icon/icon01.png
-		if len(href) > 3 && href[:3] == "../" {
-			stickerURL := fmt.Sprintf("https://ichigoproduction.com/%s", href[3:])
-			stickers = append(stickers, stickerURL)
+		// Skip non-sticker images (logo, icons, etc.)
+		// Stickers are in core_sys/images/contents/ directory
+		if !contains(src, "core_sys/images/contents/") {
+			return
+		}
+
+		// Must contain .jpg (with or without query string)
+		if !contains(src, ".jpg") {
+			return
+		}
+
+		// Handle relative URLs (e.g., ../core_sys/images/...)
+		if len(src) > 3 && src[:3] == "../" {
+			// Remove ../ prefix and construct absolute URL
+			relPath := src[3:]
+			absURL := baseURL + relPath
+			stickers = append(stickers, absURL)
+		} else if len(src) > 4 && src[:4] == "http" {
+			// Already absolute URL
+			stickers = append(stickers, src)
+		} else if len(src) > 2 && src[:2] == "//" {
+			// Protocol-relative URL
+			stickers = append(stickers, "https:"+src)
 		}
 	})
 
@@ -273,6 +302,20 @@ func (m *Manager) fetchIchigoStickers(ctx context.Context, client *scraper.Clien
 	}
 
 	return stickers, nil
+}
+
+// contains checks if a string contains a substring
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && findSubstring(s, substr)
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }
 
 // RefreshStickers refreshes stickers from web sources (should be called periodically)

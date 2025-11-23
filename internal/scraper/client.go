@@ -1,8 +1,10 @@
 package scraper
 
 import (
+	"compress/gzip"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -23,7 +25,7 @@ type Client struct {
 
 // NewClient creates a new scraper client with URL failover support
 func NewClient(timeout time.Duration, workers int, minDelay, maxDelay time.Duration, maxRetries int) *Client {
-	// Define failover URLs for NTPU services (matching Python version)
+	// Define failover URLs for NTPU services
 	baseURLs := map[string][]string{
 		"lms": {
 			"http://120.126.197.52",
@@ -89,7 +91,17 @@ func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			// Close body for non-success responses since we won't return it
 			_ = resp.Body.Close()
-			lastErr = fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+
+			switch resp.StatusCode {
+			case 429: // Rate limited - retry with backoff
+				lastErr = fmt.Errorf("rate limited (429)")
+			case 503, 502, 504: // Server errors - retry
+				lastErr = fmt.Errorf("server error (%d)", resp.StatusCode)
+			case 404, 403, 401: // Client errors - don't retry
+				return fmt.Errorf("client error: %d", resp.StatusCode)
+			default:
+				lastErr = fmt.Errorf("status code: %d", resp.StatusCode)
+			}
 			return lastErr
 		}
 
@@ -112,8 +124,20 @@ func (c *Client) GetDocument(ctx context.Context, url string) (*goquery.Document
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	// Parse HTML directly from response body
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	// Handle gzip encoding
+	var reader io.ReadCloser
+	if resp.Header.Get("Content-Encoding") == "gzip" {
+		reader, err = gzip.NewReader(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decompress gzip: %w", err)
+		}
+		defer func() { _ = reader.Close() }()
+	} else {
+		reader = resp.Body
+	}
+
+	// Parse HTML from reader
+	doc, err := goquery.NewDocumentFromReader(reader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse HTML: %w", err)
 	}
