@@ -21,6 +21,7 @@
 - `SCRAPER_TIMEOUT=30s` - 爬蟲請求超時
 - `SCRAPER_MAX_RETRIES=3` - 最大重試次數
 - `WARMUP_TIMEOUT=20m` - 預熱超時
+- `WARMUP_MODULES=id,contact,course` - 預熱模組列表（逗號分隔，空字串跳過）
 - `SHUTDOWN_TIMEOUT=30s` - 優雅關閉超時
 
 ## 使用方式

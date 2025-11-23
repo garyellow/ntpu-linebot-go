@@ -34,6 +34,7 @@ type Config struct {
 
 	// Warmup Configuration
 	WarmupTimeout time.Duration
+	WarmupModules string // Comma-separated list of modules to warmup (default: "id,contact,course")
 }
 
 // ValidationMode determines which fields are required during validation
@@ -82,11 +83,11 @@ func LoadForMode(mode ValidationMode) (*Config, error) {
 
 		// Warmup Configuration
 		WarmupTimeout: getDurationEnv("WARMUP_TIMEOUT", 20*time.Minute),
+		WarmupModules: getEnv("WARMUP_MODULES", "id,contact,course"),
 	}
 
 	// Validate based on mode
-	requireLINE := mode == ServerMode
-	if err := cfg.ValidateForMode(requireLINE); err != nil {
+	if err := cfg.ValidateForMode(mode); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
 
@@ -96,13 +97,14 @@ func LoadForMode(mode ValidationMode) (*Config, error) {
 // Validate checks if required configuration values are set
 // For server mode, all fields are required. For warmup mode, LINE credentials are optional.
 func (c *Config) Validate() error {
-	return c.ValidateForMode(true)
+	return c.ValidateForMode(ServerMode)
 }
 
-// ValidateForMode validates config based on whether LINE credentials are required
-// requireLINE should be false for warmup tool, true for server
-func (c *Config) ValidateForMode(requireLINE bool) error {
-	if requireLINE {
+// ValidateForMode validates config based on the execution mode
+// ServerMode requires LINE credentials and server fields
+// WarmupMode only requires scraper and database fields
+func (c *Config) ValidateForMode(mode ValidationMode) error {
+	if mode == ServerMode {
 		if c.LineChannelToken == "" {
 			return fmt.Errorf("LINE_CHANNEL_ACCESS_TOKEN is required")
 		}

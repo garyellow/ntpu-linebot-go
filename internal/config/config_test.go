@@ -177,7 +177,7 @@ func TestValidateForMode(t *testing.T) {
 	tests := []struct {
 		name        string
 		cfg         *Config
-		requireLINE bool
+		mode        ValidationMode
 		wantErr     bool
 		errContains string
 	}{
@@ -191,8 +191,8 @@ func TestValidateForMode(t *testing.T) {
 				ScraperWorkers:    3,
 				ScraperMaxRetries: 3,
 			},
-			requireLINE: true,
-			wantErr:     false,
+			mode:    ServerMode,
+			wantErr: false,
 		},
 		{
 			name: "server mode - missing token",
@@ -202,7 +202,7 @@ func TestValidateForMode(t *testing.T) {
 				SQLitePath:        "/data/cache.db",
 				ScraperWorkers:    3,
 			},
-			requireLINE: true,
+			mode:        ServerMode,
 			wantErr:     true,
 			errContains: "LINE_CHANNEL_ACCESS_TOKEN",
 		},
@@ -213,8 +213,8 @@ func TestValidateForMode(t *testing.T) {
 				ScraperWorkers:    3,
 				ScraperMaxRetries: 3,
 			},
-			requireLINE: false,
-			wantErr:     false,
+			mode:    WarmupMode,
+			wantErr: false,
 		},
 		{
 			name: "warmup mode - missing SQLite path",
@@ -222,7 +222,7 @@ func TestValidateForMode(t *testing.T) {
 				ScraperWorkers:    3,
 				ScraperMaxRetries: 3,
 			},
-			requireLINE: false,
+			mode:        WarmupMode,
 			wantErr:     true,
 			errContains: "SQLITE_PATH",
 		},
@@ -233,7 +233,7 @@ func TestValidateForMode(t *testing.T) {
 				ScraperWorkers:    0,
 				ScraperMaxRetries: 3,
 			},
-			requireLINE: false,
+			mode:        WarmupMode,
 			wantErr:     true,
 			errContains: "SCRAPER_WORKERS",
 		},
@@ -241,9 +241,9 @@ func TestValidateForMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.cfg.ValidateForMode(tt.requireLINE)
+			err := tt.cfg.ValidateForMode(tt.mode)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ValidateForMode(%v) error = %v, wantErr %v", tt.requireLINE, err, tt.wantErr)
+				t.Errorf("ValidateForMode(%v) error = %v, wantErr %v", tt.mode, err, tt.wantErr)
 			}
 			if tt.wantErr && tt.errContains != "" && err != nil {
 				if !contains(err.Error(), tt.errContains) {

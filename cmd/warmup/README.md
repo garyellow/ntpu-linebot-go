@@ -23,7 +23,7 @@ go run ./cmd/warmup -workers=10
 
 ## 參數說明
 
-### `-modules` (預設: "id,contact,course")
+### `-modules` (預設: 使用環境變數 WARMUP_MODULES，未設定則為 "id,contact,course")
 指定要預熱的模組（逗號分隔）：
 - `id` - 學號資料（系所代碼、近 4 年學生）
 - `contact` - 通訊錄（行政與學術單位聯絡資訊）
@@ -144,9 +144,11 @@ go run ./cmd/warmup -sqlite-path=/custom/path/cache.db
 
 ### 環境變數
 ```bash
-export LOG_LEVEL=debug           # 詳細日誌
-export SQLITE_PATH=/tmp/cache.db
-export SCRAPER_WORKERS=10
+export LOG_LEVEL=debug                    # 詳細日誌
+export SQLITE_PATH=/tmp/cache.db          # 自訂資料庫路徑
+export SCRAPER_WORKERS=10                 # 爬蟲並發數
+export WARMUP_MODULES=id,contact          # 預設預熱模組
+export WARMUP_TIMEOUT=30m                 # 預熱超時時間
 
 go run ./cmd/warmup
 ```

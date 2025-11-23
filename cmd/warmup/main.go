@@ -21,7 +21,7 @@ import (
 // CLI flags
 var (
 	resetFlag   = flag.Bool("reset", false, "Delete all cache data before warmup")
-	modulesFlag = flag.String("modules", "id,contact,course", "Comma-separated list of modules to warmup (id,contact,course)")
+	modulesFlag = flag.String("modules", "", "Comma-separated list of modules to warmup (empty = use config default)")
 	workersFlag = flag.Int("workers", 0, "Worker pool size (0 = use config default)")
 )
 
@@ -66,8 +66,12 @@ func main() {
 		log.Info("Cache reset complete")
 	}
 
-	// Parse modules
-	moduleList := parseModules(*modulesFlag)
+	// Parse modules - use config default if flag not provided
+	modulesStr := *modulesFlag
+	if modulesStr == "" {
+		modulesStr = cfg.WarmupModules
+	}
+	moduleList := parseModules(modulesStr)
 	if len(moduleList) == 0 {
 		log.Info("No modules specified, exiting")
 		fmt.Println("⏭️  No modules to warmup, skipping")
