@@ -55,16 +55,16 @@ func TestFlexBubbleComponents(t *testing.T) {
 
 		bubble := NewFlexBubble(header, hero, body, footer)
 
-		if bubble.FlexBubble.Header == nil {
+		if bubble.Header == nil {
 			t.Error("Expected non-nil header")
 		}
-		if bubble.FlexBubble.Hero == nil {
+		if bubble.Hero == nil {
 			t.Error("Expected non-nil hero")
 		}
-		if bubble.FlexBubble.Body == nil {
+		if bubble.Body == nil {
 			t.Error("Expected non-nil body")
 		}
-		if bubble.FlexBubble.Footer == nil {
+		if bubble.Footer == nil {
 			t.Error("Expected non-nil footer")
 		}
 	})
@@ -75,16 +75,16 @@ func TestFlexBubbleComponents(t *testing.T) {
 
 		bubble := NewFlexBubble(nil, hero, body, nil)
 
-		if bubble.FlexBubble.Header != nil {
+		if bubble.Header != nil {
 			t.Error("Expected nil header")
 		}
-		if bubble.FlexBubble.Hero == nil {
+		if bubble.Hero == nil {
 			t.Error("Expected non-nil hero")
 		}
-		if bubble.FlexBubble.Body == nil {
+		if bubble.Body == nil {
 			t.Error("Expected non-nil body")
 		}
-		if bubble.FlexBubble.Footer != nil {
+		if bubble.Footer != nil {
 			t.Error("Expected nil footer")
 		}
 	})
@@ -95,8 +95,8 @@ func TestKeyValueRow(t *testing.T) {
 	t.Run("Standard row", func(t *testing.T) {
 		row := NewKeyValueRow("Key", "Value")
 
-		if len(row.FlexBox.Contents) != 2 {
-			t.Errorf("Expected 2 components, got %d", len(row.FlexBox.Contents))
+		if len(row.Contents) != 2 {
+			t.Errorf("Expected 2 components, got %d", len(row.Contents))
 		}
 	})
 
@@ -104,24 +104,24 @@ func TestKeyValueRow(t *testing.T) {
 		longValue := "This is a very long value that should wrap properly in the Flex Message layout without breaking the UI"
 		longRow := NewKeyValueRow("Label", longValue)
 
-		if len(longRow.FlexBox.Contents) != 2 {
-			t.Errorf("Expected 2 components for long value, got %d", len(longRow.FlexBox.Contents))
+		if len(longRow.Contents) != 2 {
+			t.Errorf("Expected 2 components for long value, got %d", len(longRow.Contents))
 		}
 	})
 
 	t.Run("Chinese characters", func(t *testing.T) {
 		row := NewKeyValueRow("系所", "資訊工程學系資訊科學組")
 
-		if len(row.FlexBox.Contents) != 2 {
-			t.Errorf("Expected 2 components for Chinese text, got %d", len(row.FlexBox.Contents))
+		if len(row.Contents) != 2 {
+			t.Errorf("Expected 2 components for Chinese text, got %d", len(row.Contents))
 		}
 	})
 
 	t.Run("Empty values", func(t *testing.T) {
 		row := NewKeyValueRow("", "")
 
-		if len(row.FlexBox.Contents) != 2 {
-			t.Errorf("Expected 2 components even for empty strings, got %d", len(row.FlexBox.Contents))
+		if len(row.Contents) != 2 {
+			t.Errorf("Expected 2 components even for empty strings, got %d", len(row.Contents))
 		}
 	})
 }
@@ -137,20 +137,20 @@ func TestFlexTextChaining(t *testing.T) {
 		WithAlign("center").
 		WithMargin("md")
 
-	if text.FlexText.Weight != "bold" {
-		t.Errorf("Expected weight 'bold', got %v", text.FlexText.Weight)
+	if text.Weight != "bold" {
+		t.Errorf("Expected weight 'bold', got %v", text.Weight)
 	}
-	if text.FlexText.Size != "xl" {
-		t.Errorf("Expected size 'xl', got %v", text.FlexText.Size)
+	if text.Size != "xl" {
+		t.Errorf("Expected size 'xl', got %v", text.Size)
 	}
-	if text.FlexText.Color != "#1DB446" {
-		t.Errorf("Expected color '#1DB446', got %v", text.FlexText.Color)
+	if text.Color != "#1DB446" {
+		t.Errorf("Expected color '#1DB446', got %v", text.Color)
 	}
-	if !text.FlexText.Wrap {
+	if !text.Wrap {
 		t.Error("Expected wrap to be true")
 	}
-	if text.FlexText.MaxLines != 2 {
-		t.Errorf("Expected maxLines 2, got %v", text.FlexText.MaxLines)
+	if text.MaxLines != 2 {
+		t.Errorf("Expected maxLines 2, got %v", text.MaxLines)
 	}
 }
 
@@ -163,14 +163,14 @@ func TestFlexButtonChaining(t *testing.T) {
 		WithHeight("sm").
 		WithMargin("md")
 
-	if button.FlexButton.Style != "primary" {
-		t.Errorf("Expected style 'primary', got %v", button.FlexButton.Style)
+	if button.Style != "primary" {
+		t.Errorf("Expected style 'primary', got %v", button.Style)
 	}
-	if button.FlexButton.Color != "#1DB446" {
-		t.Errorf("Expected color '#1DB446', got %v", button.FlexButton.Color)
+	if button.Color != "#1DB446" {
+		t.Errorf("Expected color '#1DB446', got %v", button.Color)
 	}
-	if button.FlexButton.Height != "sm" {
-		t.Errorf("Expected height 'sm', got %v", button.FlexButton.Height)
+	if button.Height != "sm" {
+		t.Errorf("Expected height 'sm', got %v", button.Height)
 	}
 }
 
@@ -181,14 +181,14 @@ func TestFlexBoxChaining(t *testing.T) {
 		WithMargin("md").
 		WithPaddingBottom("16px")
 
-	if box.FlexBox.Spacing != "sm" {
-		t.Errorf("Expected spacing 'sm', got %v", box.FlexBox.Spacing)
+	if box.Spacing != "sm" {
+		t.Errorf("Expected spacing 'sm', got %v", box.Spacing)
 	}
-	if box.FlexBox.Margin != "md" {
-		t.Errorf("Expected margin 'md', got %v", box.FlexBox.Margin)
+	if box.Margin != "md" {
+		t.Errorf("Expected margin 'md', got %v", box.Margin)
 	}
-	if box.FlexBox.PaddingBottom != "16px" {
-		t.Errorf("Expected paddingBottom '16px', got %v", box.FlexBox.PaddingBottom)
+	if box.PaddingBottom != "16px" {
+		t.Errorf("Expected paddingBottom '16px', got %v", box.PaddingBottom)
 	}
 }
 
@@ -196,8 +196,8 @@ func TestFlexBoxChaining(t *testing.T) {
 func TestFlexSeparator(t *testing.T) {
 	sep := NewFlexSeparator().WithMargin("md")
 
-	if sep.FlexSeparator.Margin != "md" {
-		t.Errorf("Expected margin 'md', got %v", sep.FlexSeparator.Margin)
+	if sep.Margin != "md" {
+		t.Errorf("Expected margin 'md', got %v", sep.Margin)
 	}
 }
 

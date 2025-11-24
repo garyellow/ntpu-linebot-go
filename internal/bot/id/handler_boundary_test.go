@@ -194,13 +194,3 @@ func TestHandleYearQuery_ADtoROC(t *testing.T) {
 		})
 	}
 }
-
-// Helper function to check if message is an error
-func isErrorMessage(msg messaging_api.MessageInterface) bool {
-	if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
-		text := textMsg.Text
-		// Check for common error indicators (using string contains instead of rune comparison)
-		return len(text) > 0 && (text[0:2] == "❌" || text[0:2] == "⚠️" || text[0:2] == "💡" || text[0:2] == "🔍")
-	}
-	return false
-}
