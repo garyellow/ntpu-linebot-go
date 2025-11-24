@@ -7,9 +7,10 @@ import (
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
-// ExampleNewTextMessageWithSender demonstrates creating a text message with sender information.
-func ExampleNewTextMessageWithSender() {
-	msg := lineutil.NewTextMessageWithSender("Hello, World!", "魔法師", "https://example.com/avatar.png")
+// ExampleNewTextMessageWithConsistentSender demonstrates creating a text message with sender information.
+func ExampleNewTextMessageWithConsistentSender() {
+	sender := &messaging_api.Sender{Name: "魔法師", IconUrl: "https://example.com/avatar.png"}
+	msg := lineutil.NewTextMessageWithConsistentSender("Hello, World!", sender)
 	fmt.Printf("%T", msg)
 	// Output: *messaging_api.TextMessage
 }
@@ -101,14 +102,15 @@ func ExampleTruncateText() {
 
 // ExampleSplitMessages demonstrates splitting messages into batches.
 func ExampleSplitMessages() {
+	sender := &messaging_api.Sender{Name: "魔法師", IconUrl: "https://example.com/avatar.png"}
 	messages := []messaging_api.MessageInterface{
-		lineutil.NewTextMessageWithSender("Message 1", "魔法師", "https://example.com/avatar.png"),
-		lineutil.NewTextMessageWithSender("Message 2", "魔法師", "https://example.com/avatar.png"),
-		lineutil.NewTextMessageWithSender("Message 3", "魔法師", "https://example.com/avatar.png"),
-		lineutil.NewTextMessageWithSender("Message 4", "魔法師", "https://example.com/avatar.png"),
-		lineutil.NewTextMessageWithSender("Message 5", "魔法師", "https://example.com/avatar.png"),
-		lineutil.NewTextMessageWithSender("Message 6", "魔法師", "https://example.com/avatar.png"),
-		lineutil.NewTextMessageWithSender("Message 7", "魔法師", "https://example.com/avatar.png"),
+		lineutil.NewTextMessageWithConsistentSender("Message 1", sender),
+		lineutil.NewTextMessageWithConsistentSender("Message 2", sender),
+		lineutil.NewTextMessageWithConsistentSender("Message 3", sender),
+		lineutil.NewTextMessageWithConsistentSender("Message 4", sender),
+		lineutil.NewTextMessageWithConsistentSender("Message 5", sender),
+		lineutil.NewTextMessageWithConsistentSender("Message 6", sender),
+		lineutil.NewTextMessageWithConsistentSender("Message 7", sender),
 	}
 
 	batches := lineutil.SplitMessages(messages, 5)
@@ -117,17 +119,11 @@ func ExampleSplitMessages() {
 	// Output: Total batches: 2, First batch size: 5, Second batch size: 2
 }
 
-// ExampleErrorMessage demonstrates creating error messages.
-func ExampleErrorMessage() {
+// ExampleErrorMessageWithSender demonstrates creating error messages.
+func ExampleErrorMessageWithSender() {
 	err := fmt.Errorf("database connection failed")
-	msg := lineutil.ErrorMessage(err, "系統魔法師", "https://example.com/avatar.png")
-	fmt.Printf("%T", msg)
-	// Output: *messaging_api.TextMessage
-}
-
-// ExampleDataExpiredWarningMessage demonstrates creating data expiration warnings.
-func ExampleDataExpiredWarningMessage() {
-	msg := lineutil.DataExpiredWarningMessage(2024, "魔法師", "https://example.com/avatar.png")
+	sender := &messaging_api.Sender{Name: "系統魔法師", IconUrl: "https://example.com/avatar.png"}
+	msg := lineutil.ErrorMessageWithSender(err, sender)
 	fmt.Printf("%T", msg)
 	// Output: *messaging_api.TextMessage
 }
@@ -142,11 +138,4 @@ func ExampleFormatList() {
 	// 1. 課程A
 	// 2. 課程B
 	// 3. 課程C
-}
-
-// ExampleValidationErrorMessage demonstrates creating validation error messages.
-func ExampleValidationErrorMessage() {
-	msg := lineutil.ValidationErrorMessage("學號", "學號格式不正確，請輸入９位數字", "魔法師", "https://example.com/avatar.png")
-	fmt.Printf("%T", msg)
-	// Output: *messaging_api.TextMessage
 }

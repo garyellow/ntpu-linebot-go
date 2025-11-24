@@ -118,7 +118,8 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		searchTerm := strings.TrimSpace(strings.Replace(text, match, "", 1))
 		if searchTerm == "" {
 			// If no search term provided, give helpful message
-			msg := lineutil.NewTextMessageWithSender("📞 請輸入查詢內容\n\n例如：\n• 聯絡 資工系\n• 電話 圖書館\n• 分機 學務處\n\n💡 也可直接輸入「緊急」查看緊急聯絡電話", senderName, h.stickerManager.GetRandomSticker())
+			sender := lineutil.GetSender(senderName, h.stickerManager)
+			msg := lineutil.NewTextMessageWithConsistentSender("📞 請輸入查詢內容\n\n例如：\n• 聯絡 資工系\n• 電話 圖書館\n• 分機 學務處\n\n💡 也可直接輸入「緊急」查看緊急聯絡電話", sender)
 			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 				{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
 				{Action: lineutil.NewMessageAction("📌 使用說明", "使用說明")},
@@ -140,7 +141,8 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			return h.handleContactSearch(ctx, searchTerm)
 		} else {
 			// No search term - provide guidance
-			msg := lineutil.NewTextMessageWithSender("📞 請輸入要查詢的單位或人員\n\n例如：\n• 電話 資工系\n• 分機 圖書館", senderName, h.stickerManager.GetRandomSticker())
+			sender := lineutil.GetSender(senderName, h.stickerManager)
+			msg := lineutil.NewTextMessageWithConsistentSender("📞 請輸入要查詢的單位或人員\n\n例如：\n• 電話 資工系\n• 分機 圖書館", sender)
 			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 				{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
 				{Action: lineutil.NewMessageAction("📌 使用說明", "使用說明")},
@@ -157,7 +159,7 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 	log := h.logger.WithModule(moduleName)
 	log.Infof("Handling contact postback: %s", data)
 
-	// Handle "查看更多" postback
+	// Handle "查看更多" postback (with or without prefix)
 	if strings.HasPrefix(data, "查看更多") {
 		parts := strings.Split(data, splitChar)
 		if len(parts) >= 2 {
@@ -166,7 +168,7 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 		}
 	}
 
-	// Handle "查看資訊" postback
+	// Handle "查看資訊" postback (with or without prefix)
 	if strings.HasPrefix(data, "查看資訊") {
 		parts := strings.Split(data, splitChar)
 		if len(parts) >= 2 {
@@ -193,11 +195,11 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 		).FlexBox
 	}
 
-	// Header
+	// Header - 與其他模組保持一致的設計風格
 	header := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexBox("baseline",
-			lineutil.NewFlexText("🚨").WithSize("xl").FlexText,
-			lineutil.NewFlexText("緊急聯絡電話").WithWeight("bold").WithSize("lg").WithColor("#ff3333").WithMargin("sm").FlexText,
+			lineutil.NewFlexText("🚨").WithSize("lg").FlexText,
+			lineutil.NewFlexText("緊急聯絡電話").WithWeight("bold").WithColor("#ff3333").WithSize("sm").WithMargin("sm").FlexText,
 		).FlexBox,
 	)
 
@@ -257,13 +259,14 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(moduleName)
 	startTime := time.Now()
+	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	// Search in cache first
 	contacts, err := h.db.SearchContactsByName(searchTerm)
 	if err != nil {
 		log.WithError(err).Error("Failed to search contacts in cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		msg := lineutil.ErrorMessageWithDetail("查詢聯絡資訊時發生問題", senderName, h.stickerManager.GetRandomSticker())
+		msg := lineutil.ErrorMessageWithDetailAndSender("查詢聯絡資訊時發生問題", sender)
 		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
 			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 				{Action: lineutil.NewMessageAction("重試", "聯絡 "+searchTerm)},
@@ -288,7 +291,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	if err != nil {
 		log.WithError(err).Errorf("Failed to scrape contacts for: %s", searchTerm)
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		msg := lineutil.ErrorMessageWithDetail("無法取得聯絡資料，可能是網路問題或資料來源暫時無法使用", senderName, h.stickerManager.GetRandomSticker())
+		msg := lineutil.ErrorMessageWithDetailAndSender("無法取得聯絡資料，可能是網路問題或資料來源暫時無法使用", sender)
 		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
 			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 				{Action: lineutil.NewMessageAction("緊急電話", "緊急")},
@@ -306,10 +309,10 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 
 	if len(contacts) == 0 {
 		h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
-		msg := lineutil.NewTextMessageWithSender(fmt.Sprintf(
+		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf(
 			"🔍 查無包含「%s」的聯絡資料\n\n建議：\n• 確認關鍵字拼寫是否正確\n• 嘗試使用單位全名或簡稱\n• 若查詢人名，可嘗試只輸入姓氏",
 			searchTerm,
-		), senderName, h.stickerManager.GetRandomSticker())
+		), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			{Action: lineutil.NewMessageAction("重新搜尋", "聯絡")},
 			{Action: lineutil.NewMessageAction("緊急電話", "緊急")},
@@ -331,8 +334,9 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 // formatContactResults formats contact results as LINE messages
 func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_api.MessageInterface {
 	if len(contacts) == 0 {
+		sender := lineutil.GetSender(senderName, h.stickerManager)
 		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithSender("🔍 查無聯絡資料", senderName, h.stickerManager.GetRandomSticker()),
+			lineutil.NewTextMessageWithConsistentSender("🔍 查無聯絡資料", sender),
 		}
 	}
 
@@ -363,31 +367,34 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 				subText = c.Title
 			}
 
+			// Header: Contact badge (consistent with other modules)
+			header := lineutil.NewFlexBox("vertical",
+				lineutil.NewFlexBox("baseline",
+					lineutil.NewFlexText("📞").WithSize("lg").FlexText,
+					lineutil.NewFlexText("聯絡資訊").WithWeight("bold").WithColor("#1DB446").WithSize("sm").WithMargin("sm").FlexText,
+				).FlexBox,
+			)
+
 			// Hero: Name with colored background
 			hero := lineutil.NewFlexBox("vertical",
-				lineutil.NewFlexText(headerText).WithWeight("bold").WithSize("lg").WithColor("#ffffff").WithWrap(true).FlexText,
+				lineutil.NewFlexText(headerText).WithWeight("bold").WithSize("lg").WithColor("#ffffff").WithWrap(true).WithMaxLines(2).FlexText,
 				lineutil.NewFlexText(subText).WithSize("xs").WithColor("#ffffff").WithMargin("xs").FlexText,
 			).FlexBox
 			hero.BackgroundColor = "#1DB446"
 			hero.PaddingAll = "15px"
+			hero.PaddingBottom = "12px"
 
 			// Body: Details
 			var bodyContents []messaging_api.FlexComponentInterface
 
 			// Organization / Superior
 			if c.Type == "organization" && c.Superior != "" {
-				// Truncate superior name if too long (max ~30 chars)
-				superiorName := c.Superior
-				if len(superiorName) > 30 {
-					superiorName = superiorName[:27] + "..."
-				}
+				// Truncate superior name if too long (max ~30 chars, using rune slicing for UTF-8 safety)
+				superiorName := lineutil.TruncateRunes(c.Superior, 30)
 				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("🏢 上級", superiorName).WithMargin("lg").FlexBox)
 			} else if c.Organization != "" {
-				// Truncate organization name if too long (max ~30 chars)
-				orgName := c.Organization
-				if len(orgName) > 30 {
-					orgName = orgName[:27] + "..."
-				}
+				// Truncate organization name if too long (max ~30 chars, using rune slicing for UTF-8 safety)
+				orgName := lineutil.TruncateRunes(c.Organization, 30)
 				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("🏢 單位", orgName).WithMargin("lg").FlexBox)
 			}
 
@@ -405,22 +412,16 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("📞 專線", c.Phone).WithMargin("md").FlexBox)
 			}
 			if c.Location != "" {
-				// Truncate location if too long (max ~35 chars)
-				location := c.Location
-				if len(location) > 35 {
-					location = location[:32] + "..."
-				}
+				// Truncate location if too long (max ~40 chars for better readability, using rune slicing)
+				location := lineutil.TruncateRunes(c.Location, 40)
 				if len(bodyContents) > 0 {
 					bodyContents = append(bodyContents, lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator)
 				}
 				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("📍 地點", location).WithMargin("md").FlexBox)
 			}
 			if c.Email != "" {
-				// Truncate email if too long to prevent layout break
-				email := c.Email
-				if len(email) > 30 {
-					email = email[:27] + "..."
-				}
+				// Truncate email if too long to prevent layout break (max 40 chars, using rune slicing)
+				email := lineutil.TruncateRunes(c.Email, 40)
 				if len(bodyContents) > 0 {
 					bodyContents = append(bodyContents, lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator)
 				}
@@ -461,7 +462,7 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 
 			// Assemble Bubble
 			bubble := lineutil.NewFlexBubble(
-				nil, // Header
+				header,
 				hero,
 				lineutil.NewFlexBox("vertical", bodyContents...).WithSpacing("sm"), // Body
 				nil, // Footer (handled below)

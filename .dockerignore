@@ -69,6 +69,3 @@ Thumbs.db
 
 # Rich menu (not needed at runtime)
 rich_menu/
-
-# Upgrade docs
-UPGRADE_2025.md

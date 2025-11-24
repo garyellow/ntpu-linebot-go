@@ -159,10 +159,10 @@ func (h *Handler) Handle(c *gin.Context) {
 				h.logger.Warnf("Message count %d exceeds limit, truncating to %d", len(messages), MaxMessagesPerReply)
 				// Add a warning message at the end (keep room for warning)
 				messages = messages[:MaxMessagesPerReply-1]
-				messages = append(messages, lineutil.NewTextMessageWithSender(
+				sender := lineutil.GetSender("系統魔法師", h.stickerManager)
+				messages = append(messages, lineutil.NewTextMessageWithConsistentSender(
 					"ℹ️ 由於訊息數量限制，部分內容未完全顯示。\n請使用更具體的關鍵字縮小搜尋範圍。",
-					"系統魔法師",
-					h.stickerManager.GetRandomSticker(),
+					sender,
 				))
 			}
 
@@ -247,11 +247,11 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 	}
 	if len(text) > MaxMessageLength {
 		h.logger.Warnf("Text message too long: %d characters", len(text))
+		sender := lineutil.GetSender("系統魔法師", h.stickerManager)
 		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithSender(
+			lineutil.NewTextMessageWithConsistentSender(
 				fmt.Sprintf("❌ 訊息內容過長\n\n訊息長度超過 %d 字元，請縮短後重試。", MaxMessageLength),
-				"系統魔法師",
-				h.stickerManager.GetRandomSticker(),
+				sender,
 			),
 		}, nil
 	}
@@ -310,8 +310,9 @@ func (h *Handler) handlePostbackEvent(ctx context.Context, event webhook.Postbac
 	}
 	if len(data) > 300 { // LINE postback data limit is 300 bytes
 		h.logger.Warnf("Postback data too long: %d bytes", len(data))
+		sender := lineutil.GetSender("系統魔法師", h.stickerManager)
 		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithSender("❌ 操作資料異常\n\n請重新使用功能。", "系統魔法師", h.stickerManager.GetRandomSticker()),
+			lineutil.NewTextMessageWithConsistentSender("❌ 操作資料異常\n\n請重新使用功能。", sender),
 		}, nil
 	}
 
@@ -360,8 +361,9 @@ func (h *Handler) handlePostbackEvent(ctx context.Context, event webhook.Postbac
 	}
 
 	// No handler matched
+	sender := lineutil.GetSender("系統魔法師", h.stickerManager)
 	return []messaging_api.MessageInterface{
-		lineutil.NewTextMessageWithSender("操作已過期或無效", "系統魔法師", h.stickerManager.GetRandomSticker()),
+		lineutil.NewTextMessageWithConsistentSender("操作已過期或無效", sender),
 	}, nil
 }
 
@@ -386,13 +388,13 @@ func (h *Handler) handleFollowEvent(event webhook.FollowEvent) ([]messaging_api.
 	h.logger.Info("New user followed the bot")
 
 	// Send welcome message (matching Python version style)
-	senderName := "初階魔法師"
+	sender := lineutil.GetSender("初階魔法師", h.stickerManager)
 	messages := []messaging_api.MessageInterface{
-		lineutil.NewTextMessageWithSender("泥好~~我是北大查詢小工具🔍", senderName, h.stickerManager.GetRandomSticker()),
-		lineutil.NewTextMessageWithSender("使用說明請點選下方選單\n或輸入「使用說明」查看", senderName, h.stickerManager.GetRandomSticker()),
-		lineutil.NewTextMessageWithSender("有疑問可以先去看常見問題\n若無法解決或有發現 Bug\n歡迎到 GitHub 提出", senderName, h.stickerManager.GetRandomSticker()),
-		lineutil.NewTextMessageWithSender("部分內容是由相關資料推斷\n不一定為正確資訊", senderName, h.stickerManager.GetRandomSticker()),
-		lineutil.NewTextMessageWithSender("資料來源：國立臺北大學\n數位學苑2.0(已無新資料)\n校園聯絡簿\n課程查詢系統", senderName, h.stickerManager.GetRandomSticker()),
+		lineutil.NewTextMessageWithConsistentSender("泥好~~我是北大查詢小工具🔍", sender),
+		lineutil.NewTextMessageWithConsistentSender("使用說明請點選下方選單\n或輸入「使用說明」查看", sender),
+		lineutil.NewTextMessageWithConsistentSender("有疑問可以先去看常見問題\n若無法解決或有發現 Bug\n歡迎到 GitHub 提出", sender),
+		lineutil.NewTextMessageWithConsistentSender("部分內容是由相關資料推斷\n不一定為正確資訊", sender),
+		lineutil.NewTextMessageWithConsistentSender("資料來源：國立臺北大學\n數位學苑2.0(已無新資料)\n校園聯絡簿\n課程查詢系統", sender),
 	}
 
 	return messages, nil
@@ -499,7 +501,8 @@ func (h *Handler) getHelpMessage() []messaging_api.MessageInterface {
 		"   • 緊急電話：「緊急」\n\n" +
 		"💡 輸入「使用說明」查看完整說明"
 
-	msg := lineutil.NewTextMessageWithSender(helpText, "幫助魔法師", h.stickerManager.GetRandomSticker())
+	sender := lineutil.GetSender("幫助魔法師", h.stickerManager)
+	msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 		{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
 		{Action: lineutil.NewMessageAction("📚 課程", "課程")},
@@ -513,7 +516,6 @@ func (h *Handler) getHelpMessage() []messaging_api.MessageInterface {
 // getDetailedInstructionMessages returns detailed instruction messages (matches Python version)
 func (h *Handler) getDetailedInstructionMessages() []messaging_api.MessageInterface {
 	senderName := "進階魔法師"
-	stickerURL := h.stickerManager.GetRandomSticker()
 
 	// Message 1: Main instruction text
 	instructionText := "使用說明：\n\n" +
@@ -550,10 +552,12 @@ func (h *Handler) getDetailedInstructionMessages() []messaging_api.MessageInterf
 	// Message 4: Data source
 	dataSourceText := "資料來源：國立臺北大學\n數位學苑2.0(已無新資料)\n校園聯絡簿\n課程查詢系統"
 
+	// Use GetSender pattern for consistent avatar across all 4 messages
+	sender := lineutil.GetSender(senderName, h.stickerManager)
 	return []messaging_api.MessageInterface{
-		lineutil.NewTextMessageWithSender(instructionText, senderName, stickerURL),
-		lineutil.NewTextMessageWithSender(exampleText, senderName, h.stickerManager.GetRandomSticker()),
-		lineutil.NewTextMessageWithSender(disclaimerText, senderName, h.stickerManager.GetRandomSticker()),
-		lineutil.NewTextMessageWithSender(dataSourceText, senderName, h.stickerManager.GetRandomSticker()),
+		lineutil.NewTextMessageWithConsistentSender(instructionText, sender),
+		lineutil.NewTextMessageWithConsistentSender(exampleText, sender),
+		lineutil.NewTextMessageWithConsistentSender(disclaimerText, sender),
+		lineutil.NewTextMessageWithConsistentSender(dataSourceText, sender),
 	}
 }

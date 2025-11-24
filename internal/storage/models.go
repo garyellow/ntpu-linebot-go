@@ -1,5 +1,13 @@
 package storage
 
+import "errors"
+
+// Common errors
+var (
+	// ErrNotFound is returned when a resource is not found in the database
+	ErrNotFound = errors.New("resource not found")
+)
+
 // Student represents a student record
 type Student struct {
 	ID         string `json:"id"`

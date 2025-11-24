@@ -50,34 +50,6 @@ func NewTextMessage(text string) *messaging_api.TextMessage {
 	}
 }
 
-// NewTextMessageWithSender creates a text message with sender information (name and icon).
-// The text parameter is the message content, senderName is the displayed name,
-// and stickerIconURL is the icon image URL (e.g., random sticker).
-// LINE API limits: max 5000 characters per text message
-func NewTextMessageWithSender(text, senderName, stickerIconURL string) *messaging_api.TextMessage {
-	// Validate and truncate if necessary
-	if len(text) > 5000 {
-		text = TruncateText(text, 4997) + "..."
-	}
-
-	msg := &messaging_api.TextMessage{
-		Text: text,
-	}
-
-	// Add sender information if provided
-	if senderName != "" || stickerIconURL != "" {
-		msg.Sender = &messaging_api.Sender{}
-		if senderName != "" {
-			msg.Sender.Name = senderName
-		}
-		if stickerIconURL != "" {
-			msg.Sender.IconUrl = stickerIconURL
-		}
-	}
-
-	return msg
-}
-
 // NewCarouselTemplate creates a carousel template message with multiple columns.
 // The altText is displayed in push notifications and chat lists.
 // The columns parameter contains the carousel columns to display.
@@ -266,68 +238,20 @@ func NewClipboardAction(label, clipboardText string) Action {
 	}
 }
 
-// ErrorMessage creates a user-friendly error message with sender information.
-// The err parameter is the internal error (technical details are hidden from users).
-// The senderName is displayed as the message sender.
-// The stickerURL is the avatar icon URL.
-// This provides a consistent error experience without exposing implementation details.
-func ErrorMessage(err error, senderName, stickerURL string) messaging_api.MessageInterface {
-	// Log the actual error internally (caller should log)
-	// But show user-friendly message to end users
-	return NewTextMessageWithSender("❌ 系統暫時無法處理您的請求\n\n請稍後再試，或聯絡管理員協助。\n\n如問題持續發生，請提供查詢內容以便我們協助處理。", senderName, stickerURL)
-}
-
-// ErrorMessageWithDetail creates an error message with additional context for debugging.
-// Use this when you want to show users what went wrong while keeping it user-friendly.
-// The senderName is displayed as the message sender.
-// The stickerURL is the avatar icon URL.
-func ErrorMessageWithDetail(userMessage, senderName, stickerURL string) messaging_api.MessageInterface {
-	return NewTextMessageWithSender(fmt.Sprintf("❌ %s\n\n請稍後再試，或聯絡管理員協助。", userMessage), senderName, stickerURL)
-}
-
-// ServiceUnavailableMessage creates a message indicating the service is unavailable.
-// The senderName is displayed as the message sender.
-// The stickerURL is the avatar icon URL.
-func ServiceUnavailableMessage(senderName, stickerURL string) messaging_api.MessageInterface {
-	return NewTextMessageWithSender("⚠️ 服務暫時無法使用\n\n系統正在維護中，請稍後再試。", senderName, stickerURL)
-}
-
-// NoResultsMessage creates a message indicating no search results were found.
-// The senderName is displayed as the message sender.
-// The stickerURL is the avatar icon URL.
-func NoResultsMessage(senderName, stickerURL string) messaging_api.MessageInterface {
-	return NewTextMessageWithSender("🔍 查無資料\n\n請檢查輸入的關鍵字是否正確，或嘗試其他搜尋條件。", senderName, stickerURL)
-}
-
-// DataExpiredWarningMessage creates a warning message for potentially outdated data.
-// The year parameter indicates the data year that may be expired.
-// The senderName is displayed as the message sender.
-// The stickerURL is the avatar icon URL.
-func DataExpiredWarningMessage(year int, senderName, stickerURL string) messaging_api.MessageInterface {
-	if year >= 2024 {
-		return NewTextMessageWithSender(fmt.Sprintf(
-			"⚠️ 資料更新提醒\n\n%d 年度的資料可能尚未更新或已過期。\n如有疑問，請洽詢相關單位確認最新資訊。",
-			year,
-		), senderName, stickerURL)
-	}
-	return NewTextMessageWithSender(fmt.Sprintf(
-		"ℹ️ 歷史資料提醒\n\n您查詢的是 %d 年度的資料，此資料可能已過時。\n建議查詢最新學年度的資訊。",
-		year,
-	), senderName, stickerURL)
-}
-
 // TruncateText truncates text to a maximum length and adds "..." if truncated.
 // The text parameter is the original text, and maxLen is the maximum allowed length.
+// Uses rune slicing to properly handle multi-byte UTF-8 characters (e.g., Chinese).
 func TruncateText(text string, maxLen int) string {
-	if len(text) <= maxLen {
+	runes := []rune(text)
+	if len(runes) <= maxLen {
 		return text
 	}
 
 	if maxLen <= 3 {
-		return text[:maxLen]
+		return string(runes[:maxLen])
 	}
 
-	return text[:maxLen-3] + "..."
+	return string(runes[:maxLen-3]) + "..."
 }
 
 // SplitMessages splits a slice of messages into batches of a specified size.
@@ -406,11 +330,4 @@ func NewValidationError(field, message string) error {
 		Field:   field,
 		Message: message,
 	}
-}
-
-// ValidationErrorMessage creates a user-friendly validation error message.
-// The senderName is displayed as the message sender.
-// The stickerURL is the avatar icon URL.
-func ValidationErrorMessage(field, message, senderName, stickerURL string) messaging_api.MessageInterface {
-	return NewTextMessageWithSender(fmt.Sprintf("❌ 輸入錯誤\n\n欄位：%s\n說明：%s", field, message), senderName, stickerURL)
 }

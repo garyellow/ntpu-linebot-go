@@ -103,8 +103,9 @@ func TestSplitMessages(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			messages := make([]messaging_api.MessageInterface, tt.messageCount)
+			sender := &messaging_api.Sender{Name: "測試", IconUrl: "https://example.com/avatar.png"}
 			for i := 0; i < tt.messageCount; i++ {
-				messages[i] = NewTextMessageWithSender("Test", "測試", "https://example.com/avatar.png")
+				messages[i] = NewTextMessageWithConsistentSender("Test", sender)
 			}
 			batches := SplitMessages(messages, tt.maxCount)
 			if len(batches) != tt.expectedBatches {
@@ -117,7 +118,8 @@ func TestSplitMessages(t *testing.T) {
 // TestErrorMessage tests that technical errors are NOT exposed to users
 func TestErrorMessage(t *testing.T) {
 	err := fmt.Errorf("database connection failed")
-	msg := ErrorMessage(err, "系統魔法師", "https://example.com/avatar.png")
+	sender := &messaging_api.Sender{Name: "系統魔法師", IconUrl: "https://example.com/avatar.png"}
+	msg := ErrorMessageWithSender(err, sender)
 
 	textMsg, ok := msg.(*messaging_api.TextMessage)
 	if !ok {
@@ -292,7 +294,7 @@ func TestNewClipboardAction(t *testing.T) {
 	}
 }
 
-func TestNewTextMessageWithSender(t *testing.T) {
+func TestNewTextMessageWithConsistentSender(t *testing.T) {
 	tests := []struct {
 		name           string
 		text           string
@@ -321,7 +323,8 @@ func TestNewTextMessageWithSender(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			msg := NewTextMessageWithSender(tt.text, tt.senderName, tt.stickerIconURL)
+			sender := &messaging_api.Sender{Name: tt.senderName, IconUrl: tt.stickerIconURL}
+			msg := NewTextMessageWithConsistentSender(tt.text, sender)
 
 			if msg.Text != tt.text {
 				t.Errorf("Expected text %q, got %q", tt.text, msg.Text)

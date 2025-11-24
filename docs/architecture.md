@@ -61,7 +61,7 @@ NTPU LineBot 是一個為國立臺北大學設計的 LINE 聊天機器人，提�
 │  Tables:                                                        │
 │  • students (id, name, year, department, cached_at)           │
 │  • contacts (uid, type, name, organization, ..., cached_at)   │
-│  • courses (uid, year, term, title, teachers, teacher_urls,  │
+│  • courses (uid, year, term, no, title, teachers, teacher_urls,  │
 │             times, locations, detail_url, note, cached_at)    │
 │  • stickers (url, source, cached_at, success/failure_count)   │
 └────────────────────────────┬────────────────────────────────────┘
