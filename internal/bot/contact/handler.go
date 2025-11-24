@@ -378,11 +378,11 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 			// Hero: Name with colored background
 			hero := lineutil.NewFlexBox("vertical",
 				lineutil.NewFlexText(headerText).WithWeight("bold").WithSize("lg").WithColor("#ffffff").WithWrap(true).WithMaxLines(2).FlexText,
-				lineutil.NewFlexText(subText).WithSize("xs").WithColor("#ffffff").WithMargin("xs").FlexText,
+				lineutil.NewFlexText(subText).WithSize("xs").WithColor("#ffffff").WithMargin("md").FlexText,
 			).FlexBox
 			hero.BackgroundColor = "#1DB446"
-			hero.PaddingAll = "15px"
-			hero.PaddingBottom = "12px"
+			hero.PaddingAll = "20px"
+			hero.PaddingBottom = "16px"
 
 			// Body: Details
 			var bodyContents []messaging_api.FlexComponentInterface

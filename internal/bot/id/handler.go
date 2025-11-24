@@ -562,12 +562,11 @@ func (h *Handler) formatStudentResponse(student *storage.Student, fromCache bool
 	// Hero: Name with NTPU green background
 	hero := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexText(student.Name).WithWeight("bold").WithSize("xl").WithColor("#ffffff").WithWrap(true).WithMaxLines(2).FlexText,
-		lineutil.NewFlexText("國立臺北大學").WithSize("xs").WithColor("#ffffff").WithMargin("sm").FlexText,
+		lineutil.NewFlexText("國立臺北大學").WithSize("xs").WithColor("#ffffff").WithMargin("md").FlexText,
 	).FlexBox
 	hero.BackgroundColor = "#1DB446"
-	hero.PaddingAll = "15px"
-	hero.PaddingTop = "18px"
-	hero.PaddingBottom = "18px"
+	hero.PaddingAll = "20px"
+	hero.PaddingBottom = "16px"
 
 	// Body: Student details
 	contents := []messaging_api.FlexComponentInterface{
