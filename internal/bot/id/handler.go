@@ -566,7 +566,6 @@ func (h *Handler) formatStudentResponse(student *storage.Student, fromCache bool
 	).FlexBox
 	hero.BackgroundColor = "#1DB446"
 	hero.PaddingAll = "20px"
-	hero.PaddingTop = "20px"
 	hero.PaddingBottom = "16px"
 
 	// Body: Student details

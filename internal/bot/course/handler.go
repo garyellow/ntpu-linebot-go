@@ -455,7 +455,6 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 	).FlexBox
 	hero.BackgroundColor = "#1DB446"
 	hero.PaddingAll = "20px"
-	hero.PaddingTop = "20px"
 	hero.PaddingBottom = "16px"
 
 	// Build body contents
@@ -581,12 +580,12 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 		).FlexBox
 		hero.BackgroundColor = "#1DB446"
 		hero.PaddingAll = "15px"
-		hero.PaddingBottom = "12px"
+		hero.PaddingBottom = "13px"
 
 		// Build body contents
 		contents := []messaging_api.FlexComponentInterface{
 			lineutil.NewFlexText(course.UID).WithSize("xs").WithColor("#999999").WithMargin("md").FlexText,
-			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
+			lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 		}
 
 		if len(course.Teachers) > 0 {

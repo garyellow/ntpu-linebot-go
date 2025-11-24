@@ -382,8 +382,9 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 			).FlexBox
 			hero.BackgroundColor = "#1DB446"
 			hero.PaddingAll = "20px"
-			hero.PaddingTop = "20px"
-			hero.PaddingBottom = "16px" // Body: Details
+			hero.PaddingBottom = "16px"
+
+			// Body: Details
 			var bodyContents []messaging_api.FlexComponentInterface
 
 			// Organization / Superior
