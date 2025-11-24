@@ -292,18 +292,14 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 
 	wg.Wait()
 
-	// Record metrics
+	// Record metrics using batch operations
 	if m != nil {
 		successCount := completed.Load() - errorCount.Load()
 		if successCount > 0 {
-			for i := int64(0); i < successCount; i++ {
-				m.RecordWarmupTask("id", "success")
-			}
+			m.WarmupTasksTotal.WithLabelValues("id", "success").Add(float64(successCount))
 		}
 		if errorCount.Load() > 0 {
-			for i := int64(0); i < errorCount.Load(); i++ {
-				m.RecordWarmupTask("id", "error")
-			}
+			m.WarmupTasksTotal.WithLabelValues("id", "error").Add(float64(errorCount.Load()))
 		}
 	}
 
