@@ -202,16 +202,20 @@ func main() {
 // setupRoutes configures all HTTP routes
 func setupRoutes(router *gin.Engine, webhookHandler *webhook.Handler, db *storage.DB, registry *prometheus.Registry, scraperClient *scraper.Client, stickerManager *sticker.Manager) {
 	// Root endpoint - redirect to GitHub
-	router.GET("/", func(c *gin.Context) {
+	rootHandler := func(c *gin.Context) {
 		c.Redirect(http.StatusMovedPermanently, "https://github.com/garyellow/ntpu-linebot-go")
-	})
+	}
+	router.GET("/", rootHandler)
+	router.HEAD("/", rootHandler)
 
 	// Health check endpoints
 	// Liveness Probe - checks if the application is alive (minimal check)
 	// This should NEVER check dependencies - only that the process is running
-	router.GET("/healthz", func(c *gin.Context) {
+	healthHandler := func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
-	})
+	}
+	router.GET("/healthz", healthHandler)
+	router.HEAD("/healthz", healthHandler)
 
 	// Readiness Probe - checks if the application is ready to serve traffic (full dependency check)
 	readyHandler := func(c *gin.Context) {
@@ -276,6 +280,7 @@ func setupRoutes(router *gin.Engine, webhookHandler *webhook.Handler, db *storag
 		})
 	}
 	router.GET("/ready", readyHandler)
+	router.HEAD("/ready", readyHandler)
 
 	// LINE webhook callback endpoint
 	router.POST("/callback", webhookHandler.Handle)
