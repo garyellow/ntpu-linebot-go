@@ -293,6 +293,9 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 }
 
 // warmupContactModule warms contact cache
+// Returns error only if BOTH administrative and academic contact scraping fail.
+// Allows partial success: if one source succeeds, the function returns nil.
+// Use logs to identify which source failed when partial success occurs.
 func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats) error {
 	log.Info("Starting contact module warmup")
 
@@ -335,8 +338,14 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 	}
 
 	// Return error only if both failed
+	// This allows the warmup to succeed with partial data (e.g., only academic or only administrative)
 	if len(errs) == 2 {
-		return fmt.Errorf("failed to scrape contacts: %v", errs)
+		return fmt.Errorf("both contact sources failed - administrative: %v, academic: %v", errs[0], errs[1])
+	}
+
+	// Log partial success details
+	if len(errs) == 1 {
+		log.WithField("failed_source", errs[0]).Info("Contact module completed with partial success")
 	}
 
 	return nil
