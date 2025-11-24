@@ -580,7 +580,6 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 		).FlexBox
 		hero.BackgroundColor = "#1DB446"
 		hero.PaddingAll = "15px"
-		hero.PaddingBottom = "13px"
 
 		// Build body contents
 		contents := []messaging_api.FlexComponentInterface{
