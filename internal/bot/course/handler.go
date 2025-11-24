@@ -451,11 +451,12 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 	displayTitle := lineutil.TruncateRunes(course.Title, MaxTitleDisplayChars)
 	hero := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexText(displayTitle).WithWeight("bold").WithSize("xl").WithColor("#ffffff").WithWrap(true).WithMaxLines(2).FlexText,
-		lineutil.NewFlexText(course.UID).WithSize("xs").WithColor("#ffffff").WithMargin("sm").FlexText,
+		lineutil.NewFlexText(course.UID).WithSize("xs").WithColor("#ffffff").WithMargin("md").FlexText,
 	).FlexBox
 	hero.BackgroundColor = "#1DB446"
-	hero.PaddingAll = "15px"
-	hero.PaddingBottom = "12px"
+	hero.PaddingAll = "20px"
+	hero.PaddingTop = "20px"
+	hero.PaddingBottom = "16px"
 
 	// Build body contents
 	contents := []messaging_api.FlexComponentInterface{}
