@@ -101,6 +101,11 @@ func (t *FlexText) WithMargin(margin string) *FlexText {
 	return t
 }
 
+func (t *FlexText) WithMaxLines(lines int) *FlexText {
+	t.MaxLines = int32(lines)
+	return t
+}
+
 // FlexButton wrapper
 type FlexButton struct {
 	*messaging_api.FlexButton
@@ -146,11 +151,25 @@ func (s *FlexSeparator) WithMargin(margin string) *FlexSeparator {
 	return s
 }
 
-// Helper to create a key-value row for Flex Box
-// Note: value text has wrap enabled to handle long content gracefully
+// TruncateRunes truncates text by rune count (not byte count) to properly handle UTF-8.
+// Returns truncated string with "..." if exceeds maxRunes.
+func TruncateRunes(text string, maxRunes int) string {
+	runes := []rune(text)
+	if len(runes) <= maxRunes {
+		return text
+	}
+	if maxRunes <= 3 {
+		return string(runes[:maxRunes])
+	}
+	return string(runes[:maxRunes-3]) + "..."
+}
+
+// NewKeyValueRow creates a key-value row for Flex Box with consistent styling
+// Key is aligned baseline, value wraps with MaxLines to prevent overflow
+// Designed for Flex Message body content (not hero/header)
 func NewKeyValueRow(key, value string) *FlexBox {
 	return NewFlexBox("baseline",
-		NewFlexText(key).WithColor("#aaaaaa").WithSize("sm").WithFlex(1).FlexText,
-		NewFlexText(value).WithWrap(true).WithColor("#666666").WithSize("sm").WithFlex(5).FlexText,
+		NewFlexText(key).WithColor("#aaaaaa").WithSize("sm").WithFlex(1).WithAlign("start").FlexText,
+		NewFlexText(value).WithWrap(true).WithMaxLines(3).WithColor("#666666").WithSize("sm").WithFlex(5).FlexText,
 	)
 }

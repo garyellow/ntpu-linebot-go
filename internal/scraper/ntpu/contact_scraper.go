@@ -20,24 +20,25 @@ const (
 	academicPath       = "/pls/ld/CAMPUS_DIR_M.p1?kind=2"
 )
 
-// getWorkingSEABaseURL attempts to find a working SEA base URL with failover support
+// getWorkingSEABaseURL gets the working SEA base URL using URLCache abstraction.
+// Returns cached URL if available (fast path), otherwise triggers failover detection.
+// Auto-recovery: caller should call clearSEACache() on scrape errors.
 func getWorkingSEABaseURL(ctx context.Context, client *scraper.Client) (string, error) {
-	baseURL, err := client.TryFailoverURLs(ctx, "sea")
-	if err != nil {
-		// Fallback to all configured URLs
-		urls := client.GetBaseURLs("sea")
-		if len(urls) > 0 {
-			return urls[0], nil // Return first URL as last resort
-		}
-		return "", fmt.Errorf("no SEA URLs available: %w", err)
-	}
-	return baseURL, nil
+	cache := scraper.NewURLCache(client, "sea")
+	return cache.Get(ctx)
+}
+
+// clearSEACache invalidates the SEA URL cache to trigger re-detection on next request.
+// Call this when a scrape operation fails to enable automatic failover.
+func clearSEACache(client *scraper.Client) {
+	cache := scraper.NewURLCache(client, "sea")
+	cache.Clear()
 }
 
 // ScrapeContacts scrapes contacts by search term
 // URL: {baseURL}/pls/ld/CAMPUS_DIR_M.pq?q={searchTerm}
 // The search term must be URL-encoded in Big5 encoding
-// Supports automatic URL failover across multiple SEA endpoints
+// Supports automatic URL failover across multiple SEA endpoints with cache invalidation
 func ScrapeContacts(ctx context.Context, client *scraper.Client, searchTerm string) ([]*storage.Contact, error) {
 	// Get working base URL with failover support
 	contactBaseURL, err := getWorkingSEABaseURL(ctx, client)
@@ -58,6 +59,8 @@ func ScrapeContacts(ctx context.Context, client *scraper.Client, searchTerm stri
 
 	doc, err := client.GetDocument(ctx, url)
 	if err != nil {
+		// Clear cached URL on error to trigger re-detection on next request
+		clearSEACache(client)
 		return nil, fmt.Errorf("failed to fetch contacts: %w", err)
 	}
 
@@ -177,8 +180,14 @@ func ScrapeAdministrativeContacts(ctx context.Context, client *scraper.Client) (
 	if err != nil {
 		return nil, fmt.Errorf("failed to get working SEA URL: %w", err)
 	}
-	url := contactBaseURL + administrativePath
-	return scrapeContactPages(ctx, client, contactBaseURL, url)
+	url := contactBaseURL + academicPath
+	contacts, err := scrapeContactPages(ctx, client, contactBaseURL, url)
+	if err != nil {
+		// Clear cached URL on error to trigger re-detection
+		clearSEACache(client)
+		return nil, err
+	}
+	return contacts, nil
 }
 
 // ScrapeAcademicContacts scrapes all academic contacts
@@ -189,7 +198,13 @@ func ScrapeAcademicContacts(ctx context.Context, client *scraper.Client) ([]*sto
 		return nil, fmt.Errorf("failed to get working SEA URL: %w", err)
 	}
 	url := contactBaseURL + academicPath
-	return scrapeContactPages(ctx, client, contactBaseURL, url)
+	contacts, err := scrapeContactPages(ctx, client, contactBaseURL, url)
+	if err != nil {
+		// Clear cached URL on error to trigger re-detection
+		clearSEACache(client)
+		return nil, err
+	}
+	return contacts, nil
 }
 
 // scrapeContactPages scrapes contact information from department listing pages

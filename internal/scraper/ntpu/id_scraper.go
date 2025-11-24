@@ -127,18 +127,20 @@ const (
 	studentSearchPath = "/portfolio/search.php"
 )
 
-// getWorkingBaseURL attempts to find a working LMS base URL with failover support
+// getWorkingBaseURL gets the working LMS base URL using URLCache abstraction.
+// Returns cached URL if available (fast path), otherwise triggers failover detection.
+// Auto-recovery: caller should call clearLMSCache() on scrape errors.
 func getWorkingBaseURL(ctx context.Context, client *scraper.Client) (string, error) {
-	baseURL, err := client.TryFailoverURLs(ctx, "lms")
-	if err != nil {
-		// Fallback to all configured URLs
-		urls := client.GetBaseURLs("lms")
-		if len(urls) > 0 {
-			return urls[0], nil // Return first URL as last resort
-		}
-		return "", fmt.Errorf("no LMS URLs available: %w", err)
-	}
-	return baseURL, nil
+	cache := scraper.NewURLCache(client, "lms")
+	return cache.Get(ctx)
+}
+
+// clearLMSCache invalidates the LMS URL cache to trigger re-detection on next request.
+// Call this when a scrape operation fails to enable automatic failover.
+// Currently unused but kept for future URL failover error handling.
+func clearLMSCache(client *scraper.Client) { // nolint:unused
+	cache := scraper.NewURLCache(client, "lms")
+	cache.Clear()
 }
 
 // ScrapeStudentsByYear scrapes students by year and department code

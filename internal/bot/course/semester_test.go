@@ -5,6 +5,25 @@ import (
 	"time"
 )
 
+// TestGetSemestersToSearchLive tests with current date (for verification only)
+func TestGetSemestersToSearchLive(t *testing.T) {
+	years, terms := getSemestersToSearch()
+
+	// Basic validation
+	if len(years) != 2 {
+		t.Errorf("Expected 2 years, got %d", len(years))
+	}
+	if len(terms) != 2 {
+		t.Errorf("Expected 2 terms, got %d", len(terms))
+	}
+
+	// Log current results for manual verification
+	now := time.Now()
+	t.Logf("Current date: %s (ROC year %d, month %d)",
+		now.Format("2006-01-02"), now.Year()-1911, now.Month())
+	t.Logf("Search semesters: %d-%d, %d-%d", years[0], terms[0], years[1], terms[1])
+}
+
 // TestSemesterDetectionLogic tests the semester detection logic for course queries
 func TestSemesterDetectionLogic(t *testing.T) {
 	tests := []struct {
@@ -29,45 +48,45 @@ func TestSemesterDetectionLogic(t *testing.T) {
 			name:          "February (下學期開始)",
 			year:          2025,
 			month:         2,
-			expectedYear1: 114, // 2025年2月 currentYear = 2025-1911 = 114
+			expectedYear1: 113, // 2024學年度下學期 (2025/2~2025/6)
 			expectedTerm1: 2,
-			expectedYear2: 114,
+			expectedYear2: 113,
 			expectedTerm2: 1,
 		},
 		{
 			name:          "March (下學期進行中)",
 			year:          2025,
 			month:         3,
-			expectedYear1: 114,
+			expectedYear1: 113,
 			expectedTerm1: 2,
-			expectedYear2: 114,
+			expectedYear2: 113,
 			expectedTerm2: 1,
 		},
 		{
 			name:          "June (下學期結束)",
 			year:          2025,
 			month:         6,
-			expectedYear1: 114,
+			expectedYear1: 113,
 			expectedTerm1: 2,
-			expectedYear2: 114,
+			expectedYear2: 113,
 			expectedTerm2: 1,
 		},
 		{
 			name:          "July (暑假期間)",
 			year:          2025,
 			month:         7,
-			expectedYear1: 114,
+			expectedYear1: 113,
 			expectedTerm1: 2,
-			expectedYear2: 114,
+			expectedYear2: 113,
 			expectedTerm2: 1,
 		},
 		{
 			name:          "August (暑假期間)",
 			year:          2025,
 			month:         8,
-			expectedYear1: 114,
+			expectedYear1: 113,
 			expectedTerm1: 2,
-			expectedYear2: 114,
+			expectedYear2: 113,
 			expectedTerm2: 1,
 		},
 		{
@@ -101,28 +120,10 @@ func TestSemesterDetectionLogic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Simulate the logic in handleCourseTitleSearch
-			currentYear := tt.year - 1911
-			currentMonth := tt.month
+			// Create a time object for the test case
+			testDate := time.Date(tt.year, time.Month(tt.month), 15, 0, 0, 0, 0, time.Local)
 
-			var searchYears, searchTerms []int
-			if currentMonth >= 2 && currentMonth <= 6 {
-				searchYears = []int{currentYear, currentYear}
-				searchTerms = []int{2, 1}
-			} else if currentMonth >= 7 && currentMonth <= 8 {
-				searchYears = []int{currentYear, currentYear}
-				searchTerms = []int{2, 1}
-			} else {
-				// 9-12月 + 1月: 上學期進行中或寒假
-				var academicYear int
-				if currentMonth >= 9 {
-					academicYear = currentYear
-				} else {
-					academicYear = currentYear - 1
-				}
-				searchYears = []int{academicYear, academicYear - 1}
-				searchTerms = []int{1, 2}
-			}
+			searchYears, searchTerms := getSemestersForDate(testDate)
 
 			// Verify results
 			if searchYears[0] != tt.expectedYear1 {
@@ -151,23 +152,7 @@ func TestCurrentMonth(t *testing.T) {
 	t.Logf("Current ROC year: %d", currentYear)
 	t.Logf("Current month: %d", currentMonth)
 
-	var searchYears, searchTerms []int
-	if currentMonth >= 2 && currentMonth <= 6 {
-		searchYears = []int{currentYear, currentYear}
-		searchTerms = []int{2, 1}
-	} else if currentMonth >= 7 && currentMonth <= 8 {
-		searchYears = []int{currentYear, currentYear}
-		searchTerms = []int{2, 1}
-	} else {
-		var academicYear int
-		if currentMonth >= 9 {
-			academicYear = currentYear
-		} else {
-			academicYear = currentYear - 1
-		}
-		searchYears = []int{academicYear, academicYear - 1}
-		searchTerms = []int{1, 2}
-	}
+	searchYears, searchTerms := getSemestersForDate(now)
 
 	t.Logf("Search semesters: %d-%d, %d-%d", searchYears[0], searchTerms[0], searchYears[1], searchTerms[1])
 }

@@ -189,7 +189,7 @@ ntpu_scraper_duration_seconds_count{module="id"} 1000
 # ... 更多指標
 ```
 
-**指標列表**:
+**指標列表**（節錄常用，目前實作可能略有調整）:
 
 | 指標名稱 | 類型 | 說明 | Labels |
 |---------|------|------|--------|
@@ -199,11 +199,8 @@ ntpu_scraper_duration_seconds_count{module="id"} 1000
 | `ntpu_scraper_duration_seconds` | Histogram | 爬蟲請求耗時 | `module` |
 | `ntpu_cache_hits_total` | Counter | 快取命中次數 | `module` |
 | `ntpu_cache_misses_total` | Counter | 快取未命中次數 | `module` |
-| `ntpu_cache_entries` | Gauge | 快取項目數量 | `module` |
-| `ntpu_active_goroutines` | Gauge | 活躍 Goroutine 數量 | - |
-| `ntpu_memory_bytes` | Gauge | 記憶體使用量 (bytes) | - |
-| `ntpu_http_requests_total` | Counter | HTTP 請求總數 | `method`, `path`, `status` |
-| `ntpu_http_request_size_bytes` | Counter | HTTP 請求大小 | - |
+| `ntpu_rate_limiter_wait_duration_seconds` | Histogram | 限流等待時間 | `limiter_type` |
+| `ntpu_rate_limiter_dropped_total` | Counter | 因限流被丟棄的請求數 | `limiter_type` |
 
 **PromQL 查詢範例**:
 

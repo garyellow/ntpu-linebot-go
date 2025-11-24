@@ -123,6 +123,12 @@ func TestParseYear(t *testing.T) {
 		{"Too short - must error", "1", 0, true},
 		{"Too long - must error", "12345", 0, true},
 		{"Non-numeric - must error", "abc", 0, true},
+
+		// Boundary tests
+		{"Year 89 (NTPU founded)", "89", 89, false},
+		{"Year 88 (too early)", "88", 0, true},
+		{"Year 130 (upper limit)", "130", 130, false},
+		{"Year 131 (too late)", "131", 0, true},
 	}
 
 	for _, tt := range tests {
@@ -136,5 +142,121 @@ func TestParseYear(t *testing.T) {
 				t.Errorf("parseYear(%q) = %d, want %d", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestIsNumeric tests numeric validation (important for student ID detection)
+func TestIsNumeric(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"Valid numeric", "12345678", true},
+		{"With letters", "1234a5678", false},
+		{"Empty string", "", false},
+		{"Only spaces", "   ", false},
+		{"With special chars", "1234-5678", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isNumeric(tt.input); got != tt.want {
+				t.Errorf("isNumeric(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestFormatStudentResponse verifies Flex Message formatting
+func TestFormatStudentResponse(t *testing.T) {
+	h := setupTestHandler(t)
+
+	student := &storage.Student{
+		ID:         "41247001",
+		Name:       "測試學生",
+		Department: "資訊工程學系",
+		Year:       112,
+	}
+
+	// Test with cache flag false
+	msgs := h.formatStudentResponse(student, false)
+	if len(msgs) != 1 {
+		t.Errorf("Expected 1 message, got %d", len(msgs))
+	}
+
+	// Test with cache flag true
+	msgsWithCache := h.formatStudentResponse(student, true)
+	if len(msgsWithCache) != 1 {
+		t.Errorf("Expected 1 message with cache, got %d", len(msgsWithCache))
+	}
+}
+
+// TestHandleMessage_DepartmentName tests department name query
+func TestHandleMessage_DepartmentName(t *testing.T) {
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	// Valid department
+	msgs := h.HandleMessage(ctx, "系 資工")
+	if len(msgs) == 0 {
+		t.Error("Expected response for department query")
+	}
+
+	// Invalid department
+	msgs = h.HandleMessage(ctx, "系 不存在的系")
+	if len(msgs) == 0 {
+		t.Error("Expected error message for invalid department")
+	}
+}
+
+// TestHandleMessage_DepartmentCode tests department code query
+func TestHandleMessage_DepartmentCode(t *testing.T) {
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	// Valid department code
+	msgs := h.HandleMessage(ctx, "系代碼 85")
+	if len(msgs) == 0 {
+		t.Error("Expected response for department code query")
+	}
+
+	// Invalid department code
+	msgs = h.HandleMessage(ctx, "系代碼 999")
+	if len(msgs) == 0 {
+		t.Error("Expected error message for invalid department code")
+	}
+}
+
+// TestHandleYearQuery_FutureYear tests future year warning
+func TestHandleYearQuery_FutureYear(t *testing.T) {
+	h := setupTestHandler(t)
+
+	// Future year should trigger "你未來人？"
+	msgs := h.handleYearQuery("999")
+	if len(msgs) == 0 {
+		t.Error("Expected future year warning")
+	}
+}
+
+// TestHandleYearQuery_Year113Plus tests 113+ year data unavailable warning
+func TestHandleYearQuery_Year113Plus(t *testing.T) {
+	h := setupTestHandler(t)
+
+	// Year >= 113 should show RIP image
+	msgs := h.handleYearQuery("113")
+	if len(msgs) < 2 { // Should have text + image
+		t.Error("Expected RIP warning with image for year 113+")
+	}
+}
+
+// TestHandlePostback_Easter tests "復" easter egg
+func TestHandlePostback_Easter(t *testing.T) {
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	msgs := h.HandlePostback(ctx, "復")
+	if len(msgs) == 0 {
+		t.Error("Expected easter egg response")
 	}
 }

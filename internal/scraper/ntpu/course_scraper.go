@@ -23,6 +23,10 @@ var AllEduCodes = []string{"U", "M", "N", "P"}
 // Classroom regex patterns
 var classroomRegex = regexp.MustCompile(`(?:教室|上課地點)[:：為](.*?)(?:$|[ .，。；【])`)
 
+// getWorkingSEABaseURL gets the working SEA base URL (shared with contact_scraper).
+// See contact_scraper.go for implementation details.
+// clearSEACache is also defined in contact_scraper.go
+
 // ScrapeCourses scrapes courses by year, term, and optional filters
 // URL: {baseURL}/pls/dev_stud/course_query_all.queryByKeyword
 // Parameters: qYear, qTerm, courseno (optional), seq1=A, seq2=M
@@ -44,6 +48,8 @@ func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, 
 		url := fmt.Sprintf("%s%s%s&title=%s", courseBaseURL, courseQueryPath, baseParams, title)
 		doc, err := client.GetDocument(ctx, url)
 		if err != nil {
+			// Clear cached URL on error to trigger re-detection
+			clearSEACache(client)
 			return nil, fmt.Errorf("failed to fetch courses: %w", err)
 		}
 		return parseCoursesPage(doc, courseBaseURL, year, term), nil
@@ -55,6 +61,8 @@ func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, 
 
 		doc, err := client.GetDocument(ctx, url)
 		if err != nil {
+			// Clear cached URL on error to trigger re-detection
+			clearSEACache(client)
 			return nil, fmt.Errorf("failed to fetch courses for code %s: %w", eduCode, err)
 		}
 
@@ -101,6 +109,8 @@ func ScrapeCourseByUID(ctx context.Context, client *scraper.Client, uid string) 
 
 	doc, err := client.GetDocument(ctx, url)
 	if err != nil {
+		// Clear cached URL on error to trigger re-detection
+		clearSEACache(client)
 		return nil, fmt.Errorf("failed to fetch course: %w", err)
 	}
 
