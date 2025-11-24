@@ -81,6 +81,115 @@ func TestSearchStudentsByName(t *testing.T) {
 	}
 }
 
+// TestSaveStudentsBatch tests batch student save operation
+func TestSaveStudentsBatch(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	students := []*Student{
+		{ID: "41247001", Name: "王小明", Department: "資工系", Year: 112},
+		{ID: "41247002", Name: "王大華", Department: "電機系", Year: 112},
+		{ID: "41247003", Name: "李小明", Department: "資工系", Year: 111},
+	}
+
+	// Test batch save
+	err := db.SaveStudentsBatch(students)
+	if err != nil {
+		t.Fatalf("SaveStudentsBatch failed: %v", err)
+	}
+
+	// Verify all students were saved
+	for _, student := range students {
+		retrieved, err := db.GetStudentByID(student.ID)
+		if err != nil {
+			t.Fatalf("GetStudentByID failed for %s: %v", student.ID, err)
+		}
+		if retrieved == nil {
+			t.Errorf("Expected student %s, got nil", student.ID)
+		}
+		if retrieved != nil && retrieved.Name != student.Name {
+			t.Errorf("Expected name %s, got %s", student.Name, retrieved.Name)
+		}
+	}
+}
+
+// TestSaveContactsBatch tests batch contact save operation
+func TestSaveContactsBatch(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	contacts := []*Contact{
+		{UID: "c1", Type: "individual", Name: "陳大華", Organization: "資工系"},
+		{UID: "c2", Type: "individual", Name: "陳小明", Organization: "電機系"},
+		{UID: "c3", Type: "organization", Name: "資訊工程學系", Organization: "工學院"},
+	}
+
+	// Test batch save
+	err := db.SaveContactsBatch(contacts)
+	if err != nil {
+		t.Fatalf("SaveContactsBatch failed: %v", err)
+	}
+
+	// Verify all contacts were saved
+	for _, contact := range contacts {
+		retrieved, err := db.GetContactByUID(contact.UID)
+		if err != nil {
+			t.Fatalf("GetContactByUID failed for %s: %v", contact.UID, err)
+		}
+		if retrieved == nil {
+			t.Errorf("Expected contact %s, got nil", contact.UID)
+		}
+		if retrieved != nil && retrieved.Name != contact.Name {
+			t.Errorf("Expected name %s, got %s", contact.Name, retrieved.Name)
+		}
+	}
+}
+
+// TestSaveCoursesBatch tests batch course save operation
+func TestSaveCoursesBatch(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	courses := []*Course{
+		{
+			UID:      "1121U1234",
+			Year:     112,
+			Term:     1,
+			No:       "CS101",
+			Title:    "計算機概論",
+			Teachers: []string{"張教授"},
+		},
+		{
+			UID:      "1121U5678",
+			Year:     112,
+			Term:     1,
+			No:       "CS102",
+			Title:    "程式設計",
+			Teachers: []string{"李教授"},
+		},
+	}
+
+	// Test batch save
+	err := db.SaveCoursesBatch(courses)
+	if err != nil {
+		t.Fatalf("SaveCoursesBatch failed: %v", err)
+	}
+
+	// Verify all courses were saved
+	for _, course := range courses {
+		retrieved, err := db.GetCourseByUID(course.UID)
+		if err != nil {
+			t.Fatalf("GetCourseByUID failed for %s: %v", course.UID, err)
+		}
+		if retrieved == nil {
+			t.Errorf("Expected course %s, got nil", course.UID)
+		}
+		if retrieved != nil && retrieved.Title != course.Title {
+			t.Errorf("Expected title %s, got %s", course.Title, retrieved.Title)
+		}
+	}
+}
+
 // TestSearchContactsByName tests core contact search (critical for directory lookup)
 func TestSearchContactsByName(t *testing.T) {
 	db := setupTestDB(t)

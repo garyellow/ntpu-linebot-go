@@ -81,8 +81,8 @@ func LoadForMode(mode ValidationMode) (*Config, error) {
 		ScraperWorkers:    getIntEnv("SCRAPER_WORKERS", 3),
 		ScraperMinDelay:   getDurationEnv("SCRAPER_MIN_DELAY", 5*time.Second),
 		ScraperMaxDelay:   getDurationEnv("SCRAPER_MAX_DELAY", 10*time.Second),
-		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", 60*time.Second),
-		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 5),
+		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", 120*time.Second), // Increased for large student data
+		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 3),                // Reduced retries, rely on longer timeout
 
 		// Warmup Configuration
 		WarmupTimeout: getDurationEnv("WARMUP_TIMEOUT", 20*time.Minute),

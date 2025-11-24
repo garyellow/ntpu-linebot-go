@@ -260,19 +260,18 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 					continue
 				}
 
-				// Save to database
-				savedCount := 0
-				for _, s := range students {
-					if err := db.SaveStudent(s); err != nil {
-						log.WithError(err).
-							WithField("id", s.ID).
-							Warn("Failed to save student")
-					} else {
-						savedCount++
-					}
+				// Save to database using batch operation to reduce lock contention
+				if err := db.SaveStudentsBatch(students); err != nil {
+					log.WithError(err).
+						WithField("year", t.year).
+						WithField("dept", t.dept).
+						WithField("count", len(students)).
+						Warn("Failed to save student batch")
+					errorCount.Add(1)
+					continue
 				}
 
-				stats.Students.Add(int64(savedCount))
+				stats.Students.Add(int64(len(students)))
 				count := completed.Add(1)
 
 				if count%10 == 0 || count == int64(totalTasks) {
@@ -307,16 +306,14 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 		log.WithError(err).Warn("Failed to scrape administrative contacts, continuing anyway")
 		errs = append(errs, fmt.Errorf("administrative contacts: %w", err))
 	} else {
-		adminSavedCount := 0
-		for _, c := range adminContacts {
-			if err := db.SaveContact(c); err != nil {
-				log.WithError(err).WithField("uid", c.UID).Warn("Failed to save administrative contact")
-			} else {
-				adminSavedCount++
-			}
+		// Save using batch operation to reduce lock contention
+		if err := db.SaveContactsBatch(adminContacts); err != nil {
+			log.WithError(err).Warn("Failed to save administrative contacts batch")
+			errs = append(errs, fmt.Errorf("save administrative contacts: %w", err))
+		} else {
+			stats.Contacts.Add(int64(len(adminContacts)))
+			log.WithField("count", len(adminContacts)).Info("Administrative contacts cached")
 		}
-		stats.Contacts.Add(int64(adminSavedCount))
-		log.WithField("count", adminSavedCount).Info("Administrative contacts cached")
 	}
 
 	// Scrape academic contacts
@@ -325,16 +322,14 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 		log.WithError(err).Warn("Failed to scrape academic contacts, continuing anyway")
 		errs = append(errs, fmt.Errorf("academic contacts: %w", err))
 	} else {
-		academicSavedCount := 0
-		for _, c := range academicContacts {
-			if err := db.SaveContact(c); err != nil {
-				log.WithError(err).WithField("uid", c.UID).Warn("Failed to save academic contact")
-			} else {
-				academicSavedCount++
-			}
+		// Save using batch operation to reduce lock contention
+		if err := db.SaveContactsBatch(academicContacts); err != nil {
+			log.WithError(err).Warn("Failed to save academic contacts batch")
+			errs = append(errs, fmt.Errorf("save academic contacts: %w", err))
+		} else {
+			stats.Contacts.Add(int64(len(academicContacts)))
+			log.WithField("count", len(academicContacts)).Info("Academic contacts cached")
 		}
-		stats.Contacts.Add(int64(academicSavedCount))
-		log.WithField("count", academicSavedCount).Info("Academic contacts cached")
 	}
 
 	// Return error only if both failed
@@ -393,19 +388,20 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 			continue
 		}
 
-		savedCount := 0
-		for _, c := range courses {
-			if err := db.SaveCourse(c); err != nil {
-				log.WithError(err).WithField("uid", c.UID).Warn("Failed to save course")
-			} else {
-				savedCount++
-			}
+		// Save using batch operation to reduce lock contention
+		if err := db.SaveCoursesBatch(courses); err != nil {
+			log.WithError(err).
+				WithField("year", t.year).
+				WithField("term", t.term).
+				WithField("count", len(courses)).
+				Warn("Failed to save courses batch")
+			continue
 		}
 
-		stats.Courses.Add(int64(savedCount))
+		stats.Courses.Add(int64(len(courses)))
 		log.WithField("year", t.year).
 			WithField("term", t.term).
-			WithField("count", savedCount).
+			WithField("count", len(courses)).
 			Info("Courses cached")
 	}
 
