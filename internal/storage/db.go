@@ -44,8 +44,10 @@ func New(dbPath string, cacheTTL time.Duration) (*DB, error) {
 	}
 
 	// Set connection pool settings
-	conn.SetMaxOpenConns(25)
+	// Reduce max open connections to minimize lock contention during warmup
+	conn.SetMaxOpenConns(10)
 	conn.SetMaxIdleConns(5)
+	conn.SetConnMaxLifetime(time.Hour)
 
 	// Enable WAL mode for better concurrency
 	if _, err := conn.Exec("PRAGMA journal_mode=WAL"); err != nil {
@@ -53,8 +55,8 @@ func New(dbPath string, cacheTTL time.Duration) (*DB, error) {
 		return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
 	}
 
-	// Set busy timeout to 5 seconds
-	if _, err := conn.Exec("PRAGMA busy_timeout=5000"); err != nil {
+	// Set busy timeout to 30 seconds to handle concurrent writes during warmup
+	if _, err := conn.Exec("PRAGMA busy_timeout=30000"); err != nil {
 		_ = conn.Close()
 		return nil, fmt.Errorf("failed to set busy timeout: %w", err)
 	}

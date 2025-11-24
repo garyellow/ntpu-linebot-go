@@ -28,6 +28,8 @@ scrape_configs:
           - 'ntpu-linebot:10000'
         labels:
           service: 'ntpu-linebot'
+          app: 'linebot'
+          component: 'backend'
 
   - job_name: 'prometheus'
     scrape_interval: 15s

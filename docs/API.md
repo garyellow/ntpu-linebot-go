@@ -18,7 +18,7 @@
 
 ### 1.1 Liveness Probe (存活探測)
 
-檢查服務是否存活（最小化檢查）。
+檢查服務是否存活（最小化檢查）。此端點**永不**檢查外部依賴，僅確認程序運行中。
 
 ```http
 GET /healthz
@@ -34,13 +34,13 @@ GET /healthz
 **用途**:
 - Kubernetes/Docker liveness probe
 - 簡單的服務健康檢查
-- 不檢查依賴服務
+- **不檢查依賴服務**（避免級聯失敗導致 pod 重啟）
 
 ---
 
 ### 1.2 Readiness Probe (就緒探測)
 
-檢查服務是否準備好處理流量（完整檢查）。
+檢查服務是否準備好處理流量（完整依賴檢查）。失敗時返回 503，Kubernetes 會暫時移除流量，但不重啟 pod。
 
 ```http
 GET /ready

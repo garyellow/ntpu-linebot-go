@@ -25,6 +25,51 @@ func (db *DB) SaveStudent(student *Student) error {
 	return nil
 }
 
+// SaveStudentsBatch inserts or updates multiple student records in a single transaction
+// This reduces lock contention during warmup by batching writes
+func (db *DB) SaveStudentsBatch(students []*Student) error {
+	if len(students) == 0 {
+		return nil
+	}
+
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO students (id, name, department, year, cached_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			name = excluded.name,
+			department = excluded.department,
+			year = excluded.year,
+			cached_at = excluded.cached_at
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer func() { _ = stmt.Close() }()
+
+	cachedAt := time.Now().Unix()
+	for _, student := range students {
+		if _, err = stmt.Exec(student.ID, student.Name, student.Department, student.Year, cachedAt); err != nil {
+			return fmt.Errorf("failed to execute statement for student %s: %w", student.ID, err)
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
 // GetStudentByID retrieves a student by ID and validates cache freshness (7 days = 168 hours)
 func (db *DB) GetStudentByID(id string) (*Student, error) {
 	query := `SELECT id, name, department, year, cached_at FROM students WHERE id = ?`
@@ -177,6 +222,72 @@ func (db *DB) SaveContact(contact *Contact) error {
 	if err != nil {
 		return fmt.Errorf("failed to save contact: %w", err)
 	}
+	return nil
+}
+
+// SaveContactsBatch inserts or updates multiple contact records in a single transaction
+// This reduces lock contention during warmup by batching writes
+func (db *DB) SaveContactsBatch(contacts []*Contact) error {
+	if len(contacts) == 0 {
+		return nil
+	}
+
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO contacts (uid, type, name, title, organization, extension, phone, email, website, location, superior, cached_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(uid) DO UPDATE SET
+			type = excluded.type,
+			name = excluded.name,
+			title = excluded.title,
+			organization = excluded.organization,
+			extension = excluded.extension,
+			phone = excluded.phone,
+			email = excluded.email,
+			website = excluded.website,
+			location = excluded.location,
+			superior = excluded.superior,
+			cached_at = excluded.cached_at
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer func() { _ = stmt.Close() }()
+
+	cachedAt := time.Now().Unix()
+	for _, contact := range contacts {
+		_, err = stmt.Exec(
+			contact.UID,
+			contact.Type,
+			contact.Name,
+			nullString(contact.Title),
+			nullString(contact.Organization),
+			nullString(contact.Extension),
+			nullString(contact.Phone),
+			nullString(contact.Email),
+			nullString(contact.Website),
+			nullString(contact.Location),
+			nullString(contact.Superior),
+			cachedAt,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to execute statement for contact %s: %w", contact.UID, err)
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
 	return nil
 }
 
@@ -396,6 +507,93 @@ func (db *DB) SaveCourse(course *Course) error {
 	if err != nil {
 		return fmt.Errorf("failed to save course: %w", err)
 	}
+	return nil
+}
+
+// SaveCoursesBatch inserts or updates multiple course records in a single transaction
+// This reduces lock contention during warmup by batching writes
+func (db *DB) SaveCoursesBatch(courses []*Course) error {
+	if len(courses) == 0 {
+		return nil
+	}
+
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO courses (uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(uid) DO UPDATE SET
+			year = excluded.year,
+			term = excluded.term,
+			no = excluded.no,
+			title = excluded.title,
+			teachers = excluded.teachers,
+			teacher_urls = excluded.teacher_urls,
+			times = excluded.times,
+			locations = excluded.locations,
+			detail_url = excluded.detail_url,
+			note = excluded.note,
+			cached_at = excluded.cached_at
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer func() { _ = stmt.Close() }()
+
+	cachedAt := time.Now().Unix()
+	for _, course := range courses {
+		// Serialize JSON fields
+		teachersJSON, err := json.Marshal(course.Teachers)
+		if err != nil {
+			return fmt.Errorf("failed to marshal teachers for course %s: %w", course.UID, err)
+		}
+
+		teacherURLsJSON, err := json.Marshal(course.TeacherURLs)
+		if err != nil {
+			return fmt.Errorf("failed to marshal teacher URLs for course %s: %w", course.UID, err)
+		}
+
+		timesJSON, err := json.Marshal(course.Times)
+		if err != nil {
+			return fmt.Errorf("failed to marshal times for course %s: %w", course.UID, err)
+		}
+
+		locationsJSON, err := json.Marshal(course.Locations)
+		if err != nil {
+			return fmt.Errorf("failed to marshal locations for course %s: %w", course.UID, err)
+		}
+
+		_, err = stmt.Exec(
+			course.UID,
+			course.Year,
+			course.Term,
+			course.No,
+			course.Title,
+			string(teachersJSON),
+			string(teacherURLsJSON),
+			string(timesJSON),
+			string(locationsJSON),
+			nullString(course.DetailURL),
+			nullString(course.Note),
+			cachedAt,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to execute statement for course %s: %w", course.UID, err)
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
 	return nil
 }
 

@@ -39,7 +39,7 @@ services:
       - SCRAPER_MAX_RETRIES=${SCRAPER_MAX_RETRIES:-3}
       - SHUTDOWN_TIMEOUT=${SHUTDOWN_TIMEOUT:-30s}
       - WARMUP_MODULES=${WARMUP_MODULES:-sticker,id,contact,course}
-      - WARMUP_TIMEOUT=${WARMUP_TIMEOUT:-20m}
+      - WARMUP_TIMEOUT=${WARMUP_TIMEOUT:-30m}
     security_opt:
       - no-new-privileges:true
     healthcheck:
