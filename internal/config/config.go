@@ -85,7 +85,7 @@ func LoadForMode(mode ValidationMode) (*Config, error) {
 		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 3),                // Reduced retries, rely on longer timeout
 
 		// Warmup Configuration
-		WarmupTimeout: getDurationEnv("WARMUP_TIMEOUT", 20*time.Minute),
+		WarmupTimeout: getDurationEnv("WARMUP_TIMEOUT", 30*time.Minute),
 		WarmupModules: getEnv("WARMUP_MODULES", "sticker,id,contact,course"),
 
 		// Webhook Configuration

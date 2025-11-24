@@ -84,6 +84,7 @@ func main() {
 		Workers: cfg.ScraperWorkers,
 		Timeout: cfg.WarmupTimeout,
 		Reset:   false, // Never reset in production
+		Metrics: m,     // Pass metrics for monitoring
 	})
 	log.Info("Background cache warming started")
 
@@ -207,12 +208,13 @@ func setupRoutes(router *gin.Engine, webhookHandler *webhook.Handler, db *storag
 
 	// Health check endpoints
 	// Liveness Probe - checks if the application is alive (minimal check)
+	// This should NEVER check dependencies - only that the process is running
 	router.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
 	// Readiness Probe - checks if the application is ready to serve traffic (full dependency check)
-	router.GET("/ready", func(c *gin.Context) {
+	readyHandler := func(c *gin.Context) {
 		// Check database connection
 		if err := db.Conn().Ping(); err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
@@ -272,7 +274,8 @@ func setupRoutes(router *gin.Engine, webhookHandler *webhook.Handler, db *storag
 				"stickers": stickerCount,
 			},
 		})
-	})
+	}
+	router.GET("/ready", readyHandler)
 
 	// LINE webhook callback endpoint
 	router.POST("/callback", webhookHandler.Handle)

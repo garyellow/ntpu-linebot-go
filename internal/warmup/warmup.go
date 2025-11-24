@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
+	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper/ntpu"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
@@ -26,10 +27,11 @@ type Stats struct {
 
 // Options configures cache warming behavior
 type Options struct {
-	Modules []string      // Modules to warm (id, contact, course, sticker)
-	Workers int           // Worker pool size for ID module
-	Timeout time.Duration // Overall timeout
-	Reset   bool          // Whether to reset cache before warming
+	Modules []string         // Modules to warm (id, contact, course, sticker)
+	Workers int              // Worker pool size for ID module
+	Timeout time.Duration    // Overall timeout
+	Reset   bool             // Whether to reset cache before warming
+	Metrics *metrics.Metrics // Optional metrics recorder
 }
 
 // min returns the minimum of two integers
@@ -83,22 +85,22 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 
 			switch moduleName {
 			case "id":
-				if err := warmupIDModule(ctx, db, client, log, stats, opts.Workers); err != nil {
+				if err := warmupIDModule(ctx, db, client, log, stats, opts.Workers, opts.Metrics); err != nil {
 					log.WithError(err).Error("ID module warmup failed")
 					errChan <- fmt.Errorf("id module: %w", err)
 				}
 			case "contact":
-				if err := warmupContactModule(ctx, db, client, log, stats); err != nil {
+				if err := warmupContactModule(ctx, db, client, log, stats, opts.Metrics); err != nil {
 					log.WithError(err).Error("Contact module warmup failed")
 					errChan <- fmt.Errorf("contact module: %w", err)
 				}
 			case "course":
-				if err := warmupCourseModule(ctx, db, client, log, stats); err != nil {
+				if err := warmupCourseModule(ctx, db, client, log, stats, opts.Metrics); err != nil {
 					log.WithError(err).Error("Course module warmup failed")
 					errChan <- fmt.Errorf("course module: %w", err)
 				}
 			case "sticker":
-				if err := warmupStickerModule(ctx, stickerMgr, log, stats); err != nil {
+				if err := warmupStickerModule(ctx, stickerMgr, log, stats, opts.Metrics); err != nil {
 					log.WithError(err).Error("Sticker module warmup failed")
 					errChan <- fmt.Errorf("sticker module: %w", err)
 				}
@@ -129,6 +131,11 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 		WithField("courses", stats.Courses.Load()).
 		WithField("stickers", stats.Stickers.Load()).
 		Info("Cache warming complete")
+
+	// Record warmup metrics if available
+	if opts.Metrics != nil {
+		opts.Metrics.RecordWarmupDuration(duration.Seconds())
+	}
 
 	return stats, nil
 }
@@ -204,7 +211,7 @@ func resetCache(db *storage.DB) error {
 }
 
 // warmupIDModule warms student ID cache
-func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, workers int) error {
+func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, workers int, m *metrics.Metrics) error {
 	// Match Python version: range(min(112, current_year), 100, -1)
 	currentYear := time.Now().Year() - 1911
 	fromYear := min(112, currentYear)
@@ -285,6 +292,21 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 
 	wg.Wait()
 
+	// Record metrics
+	if m != nil {
+		successCount := completed.Load() - errorCount.Load()
+		if successCount > 0 {
+			for i := int64(0); i < successCount; i++ {
+				m.RecordWarmupTask("id", "success")
+			}
+		}
+		if errorCount.Load() > 0 {
+			for i := int64(0); i < errorCount.Load(); i++ {
+				m.RecordWarmupTask("id", "error")
+			}
+		}
+	}
+
 	if errorCount.Load() > 0 {
 		return fmt.Errorf("completed with %d errors", errorCount.Load())
 	}
@@ -295,7 +317,7 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 // Returns error only if BOTH administrative and academic contact scraping fail.
 // Allows partial success: if one source succeeds, the function returns nil.
 // Use logs to identify which source failed when partial success occurs.
-func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats) error {
+func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
 	log.Info("Starting contact module warmup")
 
 	var errs []error
@@ -332,6 +354,18 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 		}
 	}
 
+	// Record metrics
+	if m != nil {
+		if len(errs) < 2 {
+			// At least one source succeeded
+			m.RecordWarmupTask("contact", "success")
+		}
+		if len(errs) > 0 {
+			// At least one source failed
+			m.RecordWarmupTask("contact", "error")
+		}
+	}
+
 	// Return error only if both failed
 	// This allows the warmup to succeed with partial data (e.g., only academic or only administrative)
 	if len(errs) == 2 {
@@ -347,7 +381,7 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 }
 
 // warmupCourseModule warms course cache
-func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats) error {
+func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
 	log.Info("Starting course module warmup")
 
 	currentYear := time.Now().Year() - 1911
@@ -385,6 +419,9 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 				WithField("year", t.year).
 				WithField("term", t.term).
 				Warn("Failed to scrape courses")
+			if m != nil {
+				m.RecordWarmupTask("course", "error")
+			}
 			continue
 		}
 
@@ -395,10 +432,16 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 				WithField("term", t.term).
 				WithField("count", len(courses)).
 				Warn("Failed to save courses batch")
+			if m != nil {
+				m.RecordWarmupTask("course", "error")
+			}
 			continue
 		}
 
 		stats.Courses.Add(int64(len(courses)))
+		if m != nil {
+			m.RecordWarmupTask("course", "success")
+		}
 		log.WithField("year", t.year).
 			WithField("term", t.term).
 			WithField("count", len(courses)).
@@ -409,15 +452,21 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 }
 
 // warmupStickerModule warms sticker cache
-func warmupStickerModule(ctx context.Context, stickerMgr *sticker.Manager, log *logger.Logger, stats *Stats) error {
+func warmupStickerModule(ctx context.Context, stickerMgr *sticker.Manager, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
 	log.Info("Starting sticker module warmup")
 
 	if err := stickerMgr.LoadStickers(ctx); err != nil {
+		if m != nil {
+			m.RecordWarmupTask("sticker", "error")
+		}
 		return fmt.Errorf("failed to load stickers: %w", err)
 	}
 
 	count := stickerMgr.Count()
 	stats.Stickers.Store(int64(count))
+	if m != nil {
+		m.RecordWarmupTask("sticker", "success")
+	}
 	log.WithField("count", count).Info("Stickers cached")
 
 	return nil

@@ -58,7 +58,11 @@ cp .env.example .env
 docker compose up -d
 ```
 
-服務網址：http://localhost:10000/callback （設定為 LINE Webhook URL）
+**服務端點**：
+- Webhook: http://localhost:10000/callback （設定為 LINE Webhook URL）
+- Liveness: http://localhost:10000/healthz
+- Readiness: http://localhost:10000/ready
+- Metrics: http://localhost:10000/metrics
 
 **注意**：若本機測試，需使用 ngrok 或 localtunnel 等工具將 localhost 轉發至公網 IP。
 
