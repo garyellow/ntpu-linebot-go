@@ -179,7 +179,9 @@ func TestFlexBoxChaining(t *testing.T) {
 	box := NewFlexBox("vertical", NewFlexText("Test").FlexText).
 		WithSpacing("sm").
 		WithMargin("md").
-		WithPaddingBottom("16px")
+		WithPaddingBottom("16px").
+		WithPaddingAll("20px").
+		WithBackgroundColor("#1DB446")
 
 	if box.Spacing != "sm" {
 		t.Errorf("Expected spacing 'sm', got %v", box.Spacing)
@@ -189,6 +191,65 @@ func TestFlexBoxChaining(t *testing.T) {
 	}
 	if box.PaddingBottom != "16px" {
 		t.Errorf("Expected paddingBottom '16px', got %v", box.PaddingBottom)
+	}
+	if box.PaddingAll != "20px" {
+		t.Errorf("Expected paddingAll '20px', got %v", box.PaddingAll)
+	}
+	if box.BackgroundColor != "#1DB446" {
+		t.Errorf("Expected backgroundColor '#1DB446', got %v", box.BackgroundColor)
+	}
+}
+
+// TestNewHeroBox tests standardized hero box creation
+func TestNewHeroBox(t *testing.T) {
+	hero := NewHeroBox("測試標題", "副標題")
+
+	// Check background color
+	if hero.BackgroundColor != "#1DB446" {
+		t.Errorf("Expected backgroundColor '#1DB446', got %v", hero.BackgroundColor)
+	}
+	// Check padding
+	if hero.PaddingAll != "20px" {
+		t.Errorf("Expected paddingAll '20px', got %v", hero.PaddingAll)
+	}
+	if hero.PaddingBottom != "16px" {
+		t.Errorf("Expected paddingBottom '16px', got %v", hero.PaddingBottom)
+	}
+	// Check contents
+	if len(hero.Contents) != 2 {
+		t.Errorf("Expected 2 contents (title + subtitle), got %d", len(hero.Contents))
+	}
+}
+
+// TestNewCompactHeroBox tests compact hero box for carousel
+func TestNewCompactHeroBox(t *testing.T) {
+	hero := NewCompactHeroBox("輪播標題")
+
+	// Check background color
+	if hero.BackgroundColor != "#1DB446" {
+		t.Errorf("Expected backgroundColor '#1DB446', got %v", hero.BackgroundColor)
+	}
+	// Check compact padding
+	if hero.PaddingAll != "15px" {
+		t.Errorf("Expected paddingAll '15px', got %v", hero.PaddingAll)
+	}
+	// Check contents (only title)
+	if len(hero.Contents) != 1 {
+		t.Errorf("Expected 1 content (title only), got %d", len(hero.Contents))
+	}
+}
+
+// TestNewHeaderBadge tests header badge creation
+func TestNewHeaderBadge(t *testing.T) {
+	badge := NewHeaderBadge("📚", "測試標籤")
+
+	// Check layout
+	if badge.Layout != "vertical" {
+		t.Errorf("Expected layout 'vertical', got %v", badge.Layout)
+	}
+	// Check contents
+	if len(badge.Contents) != 1 {
+		t.Errorf("Expected 1 content (baseline box), got %d", len(badge.Contents))
 	}
 }
 

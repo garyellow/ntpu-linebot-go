@@ -55,6 +55,16 @@ func (b *FlexBox) WithPaddingBottom(padding string) *FlexBox {
 	return b
 }
 
+func (b *FlexBox) WithPaddingAll(padding string) *FlexBox {
+	b.PaddingAll = padding
+	return b
+}
+
+func (b *FlexBox) WithBackgroundColor(color string) *FlexBox {
+	b.BackgroundColor = color
+	return b
+}
+
 // FlexText wrapper
 type FlexText struct {
 	*messaging_api.FlexText
@@ -165,11 +175,51 @@ func TruncateRunes(text string, maxRunes int) string {
 }
 
 // NewKeyValueRow creates a key-value row for Flex Box with consistent styling
-// Key is aligned baseline, value wraps with MaxLines to prevent overflow
+// Key uses flex:0 for natural width (prevents truncation of emoji + text labels)
+// Value uses flex:1 to fill remaining space with word wrap
 // Designed for Flex Message body content (not hero/header)
 func NewKeyValueRow(key, value string) *FlexBox {
 	return NewFlexBox("baseline",
-		NewFlexText(key).WithColor("#aaaaaa").WithSize("sm").WithFlex(1).WithAlign("start").FlexText,
-		NewFlexText(value).WithWrap(true).WithMaxLines(3).WithColor("#666666").WithSize("sm").WithFlex(5).FlexText,
+		NewFlexText(key).WithColor("#555555").WithSize("sm").WithFlex(0).WithWeight("bold").FlexText,
+		NewFlexText(value).WithWrap(true).WithMaxLines(3).WithColor("#666666").WithSize("sm").WithFlex(1).FlexText,
+	)
+}
+
+// NewHeroBox creates a standardized Hero box with NTPU green background
+// Provides consistent styling across all modules:
+// - Background: #1DB446 (NTPU green)
+// - Padding: 20px all, 16px bottom (for visual balance)
+// - Title: Bold, XL size, white color, max 2 lines with wrap
+// - Subtitle: XS size, white color, md margin top
+func NewHeroBox(title, subtitle string) *FlexBox {
+	box := NewFlexBox("vertical",
+		NewFlexText(title).WithWeight("bold").WithSize("xl").WithColor("#ffffff").WithWrap(true).WithMaxLines(2).FlexText,
+		NewFlexText(subtitle).WithSize("xs").WithColor("#ffffff").WithMargin("md").FlexText,
+	)
+	box.BackgroundColor = "#1DB446"
+	box.PaddingAll = "20px"
+	box.PaddingBottom = "16px"
+	return box
+}
+
+// NewCompactHeroBox creates a compact Hero box for carousel/list views
+// Uses smaller padding (15px) to fit more content
+func NewCompactHeroBox(title string) *FlexBox {
+	box := NewFlexBox("vertical",
+		NewFlexText(title).WithWeight("bold").WithSize("md").WithColor("#ffffff").WithWrap(true).WithMaxLines(2).FlexText,
+	)
+	box.BackgroundColor = "#1DB446"
+	box.PaddingAll = "15px"
+	return box
+}
+
+// NewHeaderBadge creates a consistent header badge for Flex Messages
+// Format: [emoji] [label] with NTPU green color
+func NewHeaderBadge(emoji, label string) *FlexBox {
+	return NewFlexBox("vertical",
+		NewFlexBox("baseline",
+			NewFlexText(emoji).WithSize("lg").FlexText,
+			NewFlexText(label).WithWeight("bold").WithColor("#1DB446").WithSize("sm").WithMargin("sm").FlexText,
+		).FlexBox,
 	)
 }

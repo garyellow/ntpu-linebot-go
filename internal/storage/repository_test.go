@@ -293,9 +293,12 @@ func TestDeleteExpiredStudents(t *testing.T) {
 	}
 
 	// Delete expired
-	err = db.DeleteExpiredStudents(7 * 24 * time.Hour)
+	deleted, err := db.DeleteExpiredStudents(7 * 24 * time.Hour)
 	if err != nil {
 		t.Fatalf("DeleteExpiredStudents failed: %v", err)
+	}
+	if deleted != 1 {
+		t.Errorf("Expected 1 deleted, got %d", deleted)
 	}
 
 	// Count after delete
@@ -323,6 +326,160 @@ func TestDeleteExpiredStudents(t *testing.T) {
 	}
 	if retrieved != nil {
 		t.Error("Old student should be deleted")
+	}
+}
+
+func TestDeleteExpiredContacts(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	// Insert fresh contact
+	fresh := &Contact{
+		UID:          "fresh001",
+		Type:         "individual",
+		Name:         "新聯絡人",
+		Organization: "資工系",
+	}
+	if err := db.SaveContact(fresh); err != nil {
+		t.Fatalf("SaveContact failed: %v", err)
+	}
+
+	// Insert old contact (manually set cached_at to 8 days ago)
+	old := &Contact{
+		UID:          "old001",
+		Type:         "individual",
+		Name:         "舊聯絡人",
+		Organization: "電機系",
+	}
+	query := `INSERT INTO contacts (uid, type, name, organization, cached_at) VALUES (?, ?, ?, ?, ?)`
+	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
+	_, err := db.conn.Exec(query, old.UID, old.Type, old.Name, old.Organization, oldTime)
+	if err != nil {
+		t.Fatalf("Manual insert failed: %v", err)
+	}
+
+	// Delete expired
+	deleted, err := db.DeleteExpiredContacts(7 * 24 * time.Hour)
+	if err != nil {
+		t.Fatalf("DeleteExpiredContacts failed: %v", err)
+	}
+	if deleted != 1 {
+		t.Errorf("Expected 1 deleted, got %d", deleted)
+	}
+
+	// Verify fresh contact still exists
+	retrieved, err := db.GetContactByUID(fresh.UID)
+	if err != nil {
+		t.Fatalf("GetContactByUID failed: %v", err)
+	}
+	if retrieved == nil {
+		t.Error("Fresh contact should still exist")
+	}
+
+	// Verify old contact is gone
+	retrieved, err = db.GetContactByUID(old.UID)
+	if err != nil {
+		t.Fatalf("GetContactByUID failed: %v", err)
+	}
+	if retrieved != nil {
+		t.Error("Old contact should be deleted")
+	}
+}
+
+func TestDeleteExpiredCourses(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	// Insert fresh course
+	fresh := &Course{
+		UID:      "1131A0001",
+		Year:     113,
+		Term:     1,
+		No:       "A0001",
+		Title:    "新課程",
+		Teachers: []string{"王老師"},
+		Times:    []string{"一1-2"},
+	}
+	if err := db.SaveCourse(fresh); err != nil {
+		t.Fatalf("SaveCourse failed: %v", err)
+	}
+
+	// Insert old course (manually set cached_at to 8 days ago)
+	query := `INSERT INTO courses (uid, year, term, no, title, teachers, teacher_urls, times, locations, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
+	_, err := db.conn.Exec(query, "1121A0002", 112, 1, "A0002", "舊課程", `["李老師"]`, `[]`, `["二3-4"]`, `[]`, oldTime)
+	if err != nil {
+		t.Fatalf("Manual insert failed: %v", err)
+	}
+
+	// Delete expired
+	deleted, err := db.DeleteExpiredCourses(7 * 24 * time.Hour)
+	if err != nil {
+		t.Fatalf("DeleteExpiredCourses failed: %v", err)
+	}
+	if deleted != 1 {
+		t.Errorf("Expected 1 deleted, got %d", deleted)
+	}
+
+	// Verify fresh course still exists
+	retrieved, err := db.GetCourseByUID(fresh.UID)
+	if err != nil {
+		t.Fatalf("GetCourseByUID failed: %v", err)
+	}
+	if retrieved == nil {
+		t.Error("Fresh course should still exist")
+	}
+
+	// Verify old course is gone
+	retrieved, err = db.GetCourseByUID("1121A0002")
+	if err != nil {
+		t.Fatalf("GetCourseByUID failed: %v", err)
+	}
+	if retrieved != nil {
+		t.Error("Old course should be deleted")
+	}
+}
+
+func TestCleanupExpiredStickers(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	// Insert fresh sticker
+	fresh := &Sticker{
+		URL:    "https://example.com/fresh.png",
+		Source: "spy_family",
+	}
+	if err := db.SaveSticker(fresh); err != nil {
+		t.Fatalf("SaveSticker failed: %v", err)
+	}
+
+	// Insert old sticker (manually set cached_at to 8 days ago)
+	query := `INSERT INTO stickers (url, source, cached_at, success_count, failure_count) VALUES (?, ?, ?, ?, ?)`
+	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
+	_, err := db.conn.Exec(query, "https://example.com/old.png", "spy_family", oldTime, 0, 0)
+	if err != nil {
+		t.Fatalf("Manual insert failed: %v", err)
+	}
+
+	// Verify we have 2 stickers
+	count, _ := db.CountStickers()
+	if count != 2 {
+		t.Fatalf("Expected 2 stickers, got %d", count)
+	}
+
+	// Cleanup expired
+	deleted, err := db.CleanupExpiredStickers()
+	if err != nil {
+		t.Fatalf("CleanupExpiredStickers failed: %v", err)
+	}
+	if deleted != 1 {
+		t.Errorf("Expected 1 deleted, got %d", deleted)
+	}
+
+	// Verify only fresh sticker remains
+	count, _ = db.CountStickers()
+	if count != 1 {
+		t.Errorf("Expected 1 sticker remaining, got %d", count)
 	}
 }
 

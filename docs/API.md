@@ -189,7 +189,7 @@ ntpu_scraper_duration_seconds_count{module="id"} 1000
 # ... 更多指標
 ```
 
-**指標列表**（節錄常用，目前實作可能略有調整）:
+**指標列表**:
 
 | 指標名稱 | 類型 | 說明 | Labels |
 |---------|------|------|--------|
@@ -201,6 +201,11 @@ ntpu_scraper_duration_seconds_count{module="id"} 1000
 | `ntpu_cache_misses_total` | Counter | 快取未命中次數 | `module` |
 | `ntpu_rate_limiter_wait_duration_seconds` | Histogram | 限流等待時間 | `limiter_type` |
 | `ntpu_rate_limiter_dropped_total` | Counter | 因限流被丟棄的請求數 | `limiter_type` |
+| `ntpu_singleflight_dedup_total` | Counter | 去重複請求次數 | `module` |
+| `ntpu_warmup_tasks_total` | Counter | Warmup 任務次數 | `module`, `status` |
+| `ntpu_warmup_duration_seconds` | Histogram | Warmup 總耗時 | - |
+| `ntpu_http_errors_total` | Counter | HTTP 錯誤次數 | `error_type`, `module` |
+| `ntpu_course_data_integrity_issues_total` | Counter | 課程資料完整性問題 | `issue_type` |
 
 **PromQL 查詢範例**:
 

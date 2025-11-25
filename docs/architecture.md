@@ -287,31 +287,30 @@ cfg, err := config.Load(false) // false 代表什麼？
 
 ## 效能優化
 
-### 1. 快取策略
+### 1. 快取策略（Soft TTL / Hard TTL）
 
-**TTL 設定**: 7 天
+採用業界最佳實踐的雙層 TTL 策略：
+
+| TTL 類型 | 預設值 | 用途 |
+|---------|--------|------|
+| **Soft TTL** | 5 天 | 觸發主動刷新，資料仍可使用 |
+| **Hard TTL** | 7 天 | 絕對過期，資料必須刪除 |
+
+**資料類型考量**:
 - 學生資料：學期內穩定
 - 通訊錄：變動頻率低
 - 課程資料：學期內穩定
 
-**Cache Eviction**:
-```go
-// 每 12 小時執行一次清理
-func cleanupExpiredCache(ctx context.Context, db *storage.DB, ttl time.Duration) {
-    ticker := time.NewTicker(12 * time.Hour)
-    defer ticker.Stop()
+**背景任務排程**:
+- **主動 Warmup**: 每日凌晨 3:00，刷新接近 Soft TTL 的資料
+- **Cache Cleanup**: 每 12 小時，刪除超過 Hard TTL 的資料
+- **Sticker Refresh**: 每 24 小時，更新貼圖快取
 
-    for {
-        select {
-        case <-ctx.Done():
-            return
-        case <-ticker.C:
-            db.DeleteExpiredStudents(ttl)
-            db.DeleteExpiredContacts(ttl)
-            db.DeleteExpiredCourses(ttl)
-            db.Exec("VACUUM") // 回收空間
-        }
-    }
+```go
+// 主動 warmup：每日 3:00 AM 檢查並刷新即將過期的資料
+func proactiveWarmup(ctx context.Context, db *storage.DB, ...) {
+    // 只刷新 Soft TTL <= 資料年齡 < Hard TTL 的資料
+    // 確保使用者永遠從快取取得資料，而非觸發即時爬蟲
 }
 ```
 

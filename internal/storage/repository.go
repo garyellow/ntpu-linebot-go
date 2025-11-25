@@ -162,15 +162,18 @@ func (db *DB) GetStudentsByYearDept(year int, dept string) ([]Student, error) {
 }
 
 // DeleteExpiredStudents removes students older than the specified TTL
-func (db *DB) DeleteExpiredStudents(ttl time.Duration) error {
+// Returns the number of deleted entries
+func (db *DB) DeleteExpiredStudents(ttl time.Duration) (int64, error) {
 	query := `DELETE FROM students WHERE cached_at < ?`
 	expiryTime := time.Now().Add(-ttl).Unix()
 
-	_, err := db.conn.Exec(query, expiryTime)
+	result, err := db.conn.Exec(query, expiryTime)
 	if err != nil {
-		return fmt.Errorf("failed to delete expired students: %w", err)
+		return 0, fmt.Errorf("failed to delete expired students: %w", err)
 	}
-	return nil
+
+	rowsAffected, _ := result.RowsAffected()
+	return rowsAffected, nil
 }
 
 // CountStudents returns the total number of students
@@ -417,15 +420,18 @@ func (db *DB) GetContactsByOrganization(org string) ([]Contact, error) {
 }
 
 // DeleteExpiredContacts removes contacts older than the specified TTL
-func (db *DB) DeleteExpiredContacts(ttl time.Duration) error {
+// Returns the number of deleted entries
+func (db *DB) DeleteExpiredContacts(ttl time.Duration) (int64, error) {
 	query := `DELETE FROM contacts WHERE cached_at < ?`
 	expiryTime := time.Now().Add(-ttl).Unix()
 
-	_, err := db.conn.Exec(query, expiryTime)
+	result, err := db.conn.Exec(query, expiryTime)
 	if err != nil {
-		return fmt.Errorf("failed to delete expired contacts: %w", err)
+		return 0, fmt.Errorf("failed to delete expired contacts: %w", err)
 	}
-	return nil
+
+	rowsAffected, _ := result.RowsAffected()
+	return rowsAffected, nil
 }
 
 // CountContacts returns the total number of contacts
@@ -654,6 +660,7 @@ func (db *DB) GetCourseByUID(uid string) (*Course, error) {
 }
 
 // SearchCoursesByTitle searches courses by partial title match (max 500 results)
+// Only returns non-expired cache entries based on configured TTL
 func (db *DB) SearchCoursesByTitle(title string) ([]Course, error) {
 	// Validate input
 	if len(title) > 100 {
@@ -663,9 +670,13 @@ func (db *DB) SearchCoursesByTitle(title string) ([]Course, error) {
 	// Sanitize search term to prevent SQL LIKE special character issues
 	sanitized := sanitizeSearchTerm(title)
 
-	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at FROM courses WHERE title LIKE ? ESCAPE '\' ORDER BY year DESC, term DESC LIMIT 500`
+	// Calculate TTL cutoff timestamp
+	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
 
-	rows, err := db.conn.Query(query, "%"+sanitized+"%")
+	// Add TTL filter to prevent returning stale data
+	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at FROM courses WHERE title LIKE ? ESCAPE '\' AND cached_at > ? ORDER BY year DESC, term DESC LIMIT 500`
+
+	rows, err := db.conn.Query(query, "%"+sanitized+"%", ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search courses by title: %w", err)
 	}
@@ -675,6 +686,7 @@ func (db *DB) SearchCoursesByTitle(title string) ([]Course, error) {
 }
 
 // SearchCoursesByTeacher searches courses by teacher name (max 500 results)
+// Only returns non-expired cache entries based on configured TTL
 func (db *DB) SearchCoursesByTeacher(teacher string) ([]Course, error) {
 	// Validate input
 	if len(teacher) > 100 {
@@ -684,9 +696,13 @@ func (db *DB) SearchCoursesByTeacher(teacher string) ([]Course, error) {
 	// Sanitize search term to prevent SQL LIKE special character issues
 	sanitized := sanitizeSearchTerm(teacher)
 
-	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at FROM courses WHERE teachers LIKE ? ESCAPE '\' ORDER BY year DESC, term DESC LIMIT 500`
+	// Calculate TTL cutoff timestamp
+	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
 
-	rows, err := db.conn.Query(query, "%"+sanitized+"%")
+	// Add TTL filter to prevent returning stale data
+	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at FROM courses WHERE teachers LIKE ? ESCAPE '\' AND cached_at > ? ORDER BY year DESC, term DESC LIMIT 500`
+
+	rows, err := db.conn.Query(query, "%"+sanitized+"%", ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search courses by teacher: %w", err)
 	}
@@ -696,10 +712,15 @@ func (db *DB) SearchCoursesByTeacher(teacher string) ([]Course, error) {
 }
 
 // GetCoursesByYearTerm retrieves courses by year and term
+// Only returns non-expired cache entries based on configured TTL
 func (db *DB) GetCoursesByYearTerm(year, term int) ([]Course, error) {
-	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at FROM courses WHERE year = ? AND term = ?`
+	// Calculate TTL cutoff timestamp
+	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
 
-	rows, err := db.conn.Query(query, year, term)
+	// Add TTL filter to prevent returning stale data
+	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at FROM courses WHERE year = ? AND term = ? AND cached_at > ?`
+
+	rows, err := db.conn.Query(query, year, term, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get courses by year and term: %w", err)
 	}
@@ -709,15 +730,18 @@ func (db *DB) GetCoursesByYearTerm(year, term int) ([]Course, error) {
 }
 
 // DeleteExpiredCourses removes courses older than the specified TTL
-func (db *DB) DeleteExpiredCourses(ttl time.Duration) error {
+// Returns the number of deleted entries
+func (db *DB) DeleteExpiredCourses(ttl time.Duration) (int64, error) {
 	query := `DELETE FROM courses WHERE cached_at < ?`
 	expiryTime := time.Now().Add(-ttl).Unix()
 
-	_, err := db.conn.Exec(query, expiryTime)
+	result, err := db.conn.Exec(query, expiryTime)
 	if err != nil {
-		return fmt.Errorf("failed to delete expired courses: %w", err)
+		return 0, fmt.Errorf("failed to delete expired courses: %w", err)
 	}
-	return nil
+
+	rowsAffected, _ := result.RowsAffected()
+	return rowsAffected, nil
 }
 
 // CountCourses returns the total number of courses
@@ -897,23 +921,20 @@ func (db *DB) UpdateStickerFailure(url string) error {
 	return nil
 }
 
-// CleanupExpiredStickers removes stickers older than 7 days TTL
-func (db *DB) CleanupExpiredStickers() error {
-	ttl := time.Duration(168 * time.Hour) // 7 days
+// CleanupExpiredStickers removes stickers older than configured TTL
+// Returns the number of deleted entries
+func (db *DB) CleanupExpiredStickers() (int64, error) {
+	// Use configured cache duration instead of hardcoded value
 	query := `DELETE FROM stickers WHERE cached_at < ?`
-	expiryTime := time.Now().Add(-ttl).Unix()
+	expiryTime := time.Now().Add(-db.cacheTTL).Unix()
 
 	result, err := db.conn.Exec(query, expiryTime)
 	if err != nil {
-		return fmt.Errorf("failed to cleanup expired stickers: %w", err)
+		return 0, fmt.Errorf("failed to cleanup expired stickers: %w", err)
 	}
 
 	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected > 0 {
-		fmt.Printf("Cleaned up %d expired stickers\n", rowsAffected)
-	}
-
-	return nil
+	return rowsAffected, nil
 }
 
 // CountStickers returns the total number of stickers

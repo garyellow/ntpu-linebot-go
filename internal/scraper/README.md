@@ -5,7 +5,7 @@
 ## 核心元件
 
 - **Client**: HTTP 客戶端，支援多 URL Failover、User-Agent 輪替、指數退避重試
-- **Rate Limiter**: Token bucket 限流（3 workers，15 秒補充週期）
+- **Rate Limiter**: Token bucket 限流（預設 3 workers，15 秒補充週期）
 - **Singleflight**: 去重複請求（多人同時查詢只執行一次爬蟲）
 
 ## 資料來源
@@ -20,7 +20,7 @@
 
 - **User-Agent 輪替**: 11 種主流瀏覽器
 - **Token bucket 限流**: 3 workers (預設), 15s 補充週期
-- **隨機延遲**: 2-5s (預設, 可配置)
-- **指數退避**: 1s → 2s → 4s → 8s → 16s (max 30s), 最多 5 次重試 (共 6 次嘗試), 帶 jitter (±25%)
+- **隨機延遲**: 5-10s (預設, 可配置)
+- **指數退避**: 1s → 2s → 4s → 8s → 16s (max 30s), 最多 3 次重試, 帶 jitter (±25%)
 - **HTTP 狀態處理**: 429/503 重試, 404/403 不重試
 - **URL Failover**: IP + 網域自動切換

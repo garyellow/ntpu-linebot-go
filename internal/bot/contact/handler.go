@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -67,8 +68,18 @@ var (
 )
 
 // buildRegex creates a regex pattern from keywords
+// Sorts keywords by length (longest first) to ensure correct regex alternation matching
 func buildRegex(keywords []string) *regexp.Regexp {
-	pattern := "(?i)" + strings.Join(keywords, "|")
+	// Create a copy to avoid modifying the original slice
+	sortedKeywords := make([]string, len(keywords))
+	copy(sortedKeywords, keywords)
+
+	// Sort by length in descending order (longest first)
+	sort.Slice(sortedKeywords, func(i, j int) bool {
+		return len(sortedKeywords[i]) > len(sortedKeywords[j])
+	})
+
+	pattern := "(?i)" + strings.Join(sortedKeywords, "|")
 	return regexp.MustCompile(pattern)
 }
 
@@ -114,8 +125,19 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 
 	// Handle contact search - extract search term after keyword
 	if match := contactRegex.FindString(text); match != "" {
-		// Extract what comes after the keyword
-		searchTerm := strings.TrimSpace(strings.Replace(text, match, "", 1))
+		// Determine if keyword is at the beginning or end
+		var searchTerm string
+		if strings.HasPrefix(text, match) {
+			// Keyword at beginning: "聯絡 資工系" -> extract after
+			searchTerm = strings.TrimSpace(strings.TrimPrefix(text, match))
+		} else if strings.HasSuffix(text, match) {
+			// Keyword at end: "資工系聯絡" -> extract before
+			searchTerm = strings.TrimSpace(strings.TrimSuffix(text, match))
+		} else {
+			// Keyword in middle: remove it and use the rest
+			searchTerm = strings.TrimSpace(strings.Replace(text, match, "", 1))
+		}
+
 		if searchTerm == "" {
 			// If no search term provided, give helpful message
 			sender := lineutil.GetSender(senderName, h.stickerManager)
@@ -195,7 +217,7 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 		).FlexBox
 	}
 
-	// Header - 與其他模組保持一致的設計風格
+	// Header - using standardized component (with emergency red color variant)
 	header := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexBox("baseline",
 			lineutil.NewFlexText("🚨").WithSize("lg").FlexText,
@@ -250,9 +272,11 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 		footer,
 	)
 
-	return []messaging_api.MessageInterface{
-		lineutil.NewFlexMessage("緊急聯絡電話", bubble.FlexBubble),
-	}
+	sender := lineutil.GetSender(senderName, h.stickerManager)
+	msg := lineutil.NewFlexMessage("緊急聯絡電話", bubble.FlexBubble)
+	msg.Sender = sender
+
+	return []messaging_api.MessageInterface{msg}
 }
 
 // handleContactSearch handles contact search queries
@@ -340,6 +364,7 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 		}
 	}
 
+	sender := lineutil.GetSender(senderName, h.stickerManager)
 	var messages []messaging_api.MessageInterface
 	chunkSize := 10 // LINE API limit: max 10 bubbles per Flex Carousel
 
@@ -367,22 +392,11 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 				subText = c.Title
 			}
 
-			// Header: Contact badge (consistent with other modules)
-			header := lineutil.NewFlexBox("vertical",
-				lineutil.NewFlexBox("baseline",
-					lineutil.NewFlexText("📞").WithSize("lg").FlexText,
-					lineutil.NewFlexText("聯絡資訊").WithWeight("bold").WithColor("#1DB446").WithSize("sm").WithMargin("sm").FlexText,
-				).FlexBox,
-			)
+			// Header: Contact badge (using standardized component)
+			header := lineutil.NewHeaderBadge("📞", "聯絡資訊")
 
-			// Hero: Name with colored background
-			hero := lineutil.NewFlexBox("vertical",
-				lineutil.NewFlexText(headerText).WithWeight("bold").WithSize("lg").WithColor("#ffffff").WithWrap(true).WithMaxLines(2).FlexText,
-				lineutil.NewFlexText(subText).WithSize("xs").WithColor("#ffffff").WithMargin("md").FlexText,
-			).FlexBox
-			hero.BackgroundColor = "#1DB446"
-			hero.PaddingAll = "20px"
-			hero.PaddingBottom = "16px"
+			// Hero: Name with colored background (using standardized component)
+			hero := lineutil.NewHeroBox(headerText, subText)
 
 			// Body: Details
 			var bodyContents []messaging_api.FlexComponentInterface
@@ -463,7 +477,7 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 			// Assemble Bubble
 			bubble := lineutil.NewFlexBubble(
 				header,
-				hero,
+				hero.FlexBox,
 				lineutil.NewFlexBox("vertical", bodyContents...).WithSpacing("sm"), // Body
 				nil, // Footer (handled below)
 			)
@@ -485,6 +499,7 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 		}
 
 		msg := lineutil.NewFlexMessage(altText, carousel)
+		msg.Sender = sender
 		messages = append(messages, msg)
 	}
 

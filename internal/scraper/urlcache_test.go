@@ -8,6 +8,10 @@ import (
 )
 
 func TestURLCache_Get(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network test in short mode")
+	}
+
 	client := NewClient(5*time.Second, 3, 100*time.Millisecond, 200*time.Millisecond, 3)
 	cache := NewURLCache(client, "lms")
 
@@ -39,6 +43,10 @@ func TestURLCache_Get(t *testing.T) {
 }
 
 func TestURLCache_Clear(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network test in short mode")
+	}
+
 	client := NewClient(5*time.Second, 3, 100*time.Millisecond, 200*time.Millisecond, 3)
 	cache := NewURLCache(client, "sea")
 
@@ -88,6 +96,10 @@ func TestURLCache_InvalidDomain(t *testing.T) {
 }
 
 func TestURLCache_ConcurrentAccess(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network test in short mode")
+	}
+
 	client := NewClient(5*time.Second, 3, 100*time.Millisecond, 200*time.Millisecond, 3)
 	cache := NewURLCache(client, "lms")
 

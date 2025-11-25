@@ -31,6 +31,10 @@ func TestNewRateLimiter(t *testing.T) {
 }
 
 func TestRateLimiter_Wait(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping slow rate limiter test in short mode")
+	}
+
 	rl := NewRateLimiter(2, 10*time.Millisecond, 20*time.Millisecond)
 	ctx := context.Background()
 

@@ -3,6 +3,7 @@ package ntpu
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -14,7 +15,8 @@ import (
 )
 
 const (
-	courseQueryPath = "/pls/dev_stud/course_query_all.queryByKeyword"
+	courseQueryByKeywordPath       = "/pls/dev_stud/course_query_all.queryByKeyword"
+	courseQueryByAllConditionsPath = "/pls/dev_stud/course_query_all.queryByAllConditions"
 )
 
 // Education level codes (U=大學部, M=碩士班, N=碩士在職專班, P=博士班)
@@ -27,9 +29,43 @@ var classroomRegex = regexp.MustCompile(`(?:教室|上課地點)[:：為](.*?)(?
 // See contact_scraper.go for implementation details.
 // clearSEACache is also defined in contact_scraper.go
 
+// ScrapeCoursesByYear scrapes ALL courses for a given year (both semesters)
+// This matches Python's get_simple_courses_by_year which doesn't use qTerm parameter
+// More efficient for warmup: 4 requests per year vs 8 requests (4 per semester × 2)
+// Supports automatic URL failover across multiple SEA endpoints
+func ScrapeCoursesByYear(ctx context.Context, client *scraper.Client, year int) ([]*storage.Course, error) {
+	courses := make([]*storage.Course, 0)
+
+	// Get working base URL with failover support
+	courseBaseURL, err := getWorkingSEABaseURL(ctx, client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get working SEA URL: %w", err)
+	}
+
+	// Query without qTerm to get ALL courses for the year (both semesters)
+	// This matches Python's behavior: params = {"qYear": str(year), "seq1": "A", "seq2": "M"}
+	baseParams := fmt.Sprintf("?qYear=%d&seq1=A&seq2=M", year)
+	for _, eduCode := range AllEduCodes {
+		queryURL := fmt.Sprintf("%s%s%s&courseno=%s", courseBaseURL, courseQueryByKeywordPath, baseParams, eduCode)
+
+		doc, err := client.GetDocument(ctx, queryURL)
+		if err != nil {
+			// Clear cached URL on error to trigger re-detection
+			clearSEACache(client)
+			return nil, fmt.Errorf("failed to fetch courses for year %d code %s: %w", year, eduCode, err)
+		}
+
+		// Parse courses - term will be extracted from the page data
+		pageCourses := parseCoursesPageByYear(doc, courseBaseURL, year)
+		courses = append(courses, pageCourses...)
+	}
+
+	return courses, nil
+}
+
 // ScrapeCourses scrapes courses by year, term, and optional filters
-// URL: {baseURL}/pls/dev_stud/course_query_all.queryByKeyword
-// Parameters: qYear, qTerm, courseno (optional), seq1=A, seq2=M
+// For title search: uses POST to {baseURL}/pls/dev_stud/course_query_all.queryByAllConditions with 'cour' parameter
+// For general query: uses GET to {baseURL}/pls/dev_stud/course_query_all.queryByKeyword with 'courseno' parameter
 // Supports automatic URL failover across multiple SEA endpoints
 func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, title string) ([]*storage.Course, error) {
 	courses := make([]*storage.Course, 0)
@@ -40,13 +76,21 @@ func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, 
 		return nil, fmt.Errorf("failed to get working SEA URL: %w", err)
 	}
 
-	// Build base URL and parameters
-	baseParams := fmt.Sprintf("?qYear=%d&qTerm=%d&seq1=A&seq2=M", year, term)
-
-	// If title is provided, search specifically
+	// If title is provided, use POST to queryByAllConditions endpoint with 'cour' parameter
 	if title != "" {
-		url := fmt.Sprintf("%s%s%s&title=%s", courseBaseURL, courseQueryPath, baseParams, title)
-		doc, err := client.GetDocument(ctx, url)
+		queryURL := fmt.Sprintf("%s%s", courseBaseURL, courseQueryByAllConditionsPath)
+
+		// Encode title to Big5 for SEA system compatibility
+		big5Title, err := encodeToBig5(title)
+		if err != nil {
+			return nil, fmt.Errorf("failed to encode title to Big5: %w", err)
+		}
+
+		// Build POST form data with URL-encoded Big5 title
+		formData := fmt.Sprintf("qYear=%d&qTerm=%d&cour=%s&seq1=A&seq2=M",
+			year, term, url.QueryEscape(big5Title))
+
+		doc, err := client.PostFormDocumentRaw(ctx, queryURL, formData)
 		if err != nil {
 			// Clear cached URL on error to trigger re-detection
 			clearSEACache(client)
@@ -55,11 +99,12 @@ func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, 
 		return parseCoursesPage(doc, courseBaseURL, year, term), nil
 	}
 
-	// Otherwise, iterate through all education codes
+	// Otherwise, use GET to queryByKeyword and iterate through all education codes
+	baseParams := fmt.Sprintf("?qYear=%d&qTerm=%d&seq1=A&seq2=M", year, term)
 	for _, eduCode := range AllEduCodes {
-		url := fmt.Sprintf("%s%s%s&courseno=%s", courseBaseURL, courseQueryPath, baseParams, eduCode)
+		queryURL := fmt.Sprintf("%s%s%s&courseno=%s", courseBaseURL, courseQueryByKeywordPath, baseParams, eduCode)
 
-		doc, err := client.GetDocument(ctx, url)
+		doc, err := client.GetDocument(ctx, queryURL)
 		if err != nil {
 			// Clear cached URL on error to trigger re-detection
 			clearSEACache(client)
@@ -104,10 +149,10 @@ func ScrapeCourseByUID(ctx context.Context, client *scraper.Client, uid string) 
 	}
 
 	// Build query URL
-	url := fmt.Sprintf("%s%s?qYear=%d&qTerm=%d&courseno=%s&seq1=A&seq2=M",
-		courseBaseURL, courseQueryPath, year, term, no)
+	queryURL := fmt.Sprintf("%s%s?qYear=%d&qTerm=%d&courseno=%s&seq1=A&seq2=M",
+		courseBaseURL, courseQueryByKeywordPath, year, term, no)
 
-	doc, err := client.GetDocument(ctx, url)
+	doc, err := client.GetDocument(ctx, queryURL)
 	if err != nil {
 		// Clear cached URL on error to trigger re-detection
 		clearSEACache(client)
@@ -120,6 +165,80 @@ func ScrapeCourseByUID(ctx context.Context, client *scraper.Client, uid string) 
 	}
 
 	return courses[0], nil
+}
+
+// parseCoursesPageByYear extracts course information from a search result page
+// Unlike parseCoursesPage, this extracts term from each row (field 2) instead of using a fixed value
+// Used by ScrapeCoursesByYear when qTerm is not specified in the query
+func parseCoursesPageByYear(doc *goquery.Document, courseBaseURL string, year int) []*storage.Course {
+	courses := make([]*storage.Course, 0)
+	cachedAt := time.Now().Unix()
+
+	// Find course table
+	table := doc.Find("table")
+	if table.Length() == 0 {
+		return courses
+	}
+
+	// Parse each course row in tbody
+	table.Find("tbody tr").Each(func(i int, tr *goquery.Selection) {
+		tds := tr.Find("td")
+		if tds.Length() < 14 {
+			return
+		}
+
+		// Extract term from field 2 (column index 2)
+		termStr := strings.TrimSpace(tds.Eq(2).Text())
+		term, _ := strconv.Atoi(termStr)
+		if term == 0 {
+			term = 1 // Default to first semester if parsing fails
+		}
+
+		// Extract course number (field 3)
+		no := strings.TrimSpace(tds.Eq(3).Text())
+
+		// Extract title, detail URL, note, location (field 7)
+		title, detailURL, note, location := parseTitleField(tds.Eq(7))
+
+		// Extract teachers and teacher URLs (field 8)
+		teachers, teacherURLs := parseTeacherField(tds.Eq(8), courseBaseURL)
+
+		// Extract times and locations (field 13)
+		times, locations := parseTimeLocationField(tds.Eq(13))
+
+		// Add location from title field if present
+		if location != "" {
+			locations = append(locations, location)
+		}
+
+		// Generate UID
+		uid := fmt.Sprintf("%d%d%s", year, term, no)
+
+		// Build full detail URL
+		fullDetailURL := ""
+		if detailURL != "" {
+			fullDetailURL = courseBaseURL + "/pls/dev_stud/course_query.queryGuide" + detailURL
+		}
+
+		course := &storage.Course{
+			UID:         uid,
+			Year:        year,
+			Term:        term,
+			No:          no,
+			Title:       title,
+			Teachers:    teachers,
+			TeacherURLs: teacherURLs,
+			Times:       times,
+			Locations:   locations,
+			DetailURL:   fullDetailURL,
+			Note:        note,
+			CachedAt:    cachedAt,
+		}
+
+		courses = append(courses, course)
+	})
+
+	return courses
 }
 
 // parseCoursesPage extracts course information from a search result page

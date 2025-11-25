@@ -2,7 +2,6 @@ package ntpu
 
 import (
 	"regexp"
-	"strings"
 	"testing"
 )
 
@@ -72,37 +71,4 @@ func TestClassroomRegex(t *testing.T) {
 
 // Note: UID parsing logic is tested in the course handler module.
 // Scraper tests focus on format validation and regex patterns only.
-
-// TestCourseNameExtraction tests extracting course names from HTML
-func TestCourseNameExtraction(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "Standard course name",
-			input:    "資料結構",
-			expected: "資料結構",
-		},
-		{
-			name:     "Course name with spaces",
-			input:    " 計算機概論 ",
-			expected: "計算機概論",
-		},
-		{
-			name:     "English course name",
-			input:    "Introduction to Computer Science",
-			expected: "Introduction to Computer Science",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := strings.TrimSpace(tt.input)
-			if result != tt.expected {
-				t.Errorf("Expected %q, got %q", tt.expected, result)
-			}
-		})
-	}
-}
+// Course name extraction uses standard library strings.TrimSpace - no need to test stdlib.

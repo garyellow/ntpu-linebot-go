@@ -136,7 +136,7 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	// Cache cleanup goroutine
+	// Cache cleanup goroutine (every 12 hours)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -148,6 +148,14 @@ func main() {
 	go func() {
 		defer wg.Done()
 		refreshStickers(ctx, stickerManager, log)
+	}()
+
+	// Proactive cache warmup goroutine (daily at 3:00 AM)
+	// Refreshes data approaching Soft TTL to prevent user-triggered scraping
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		proactiveWarmup(ctx, db, scraperClient, stickerManager, log, cfg)
 	}()
 
 	// Start server in goroutine
@@ -347,38 +355,54 @@ func cleanupExpiredCache(ctx context.Context, db *storage.DB, ttl time.Duration,
 func performCacheCleanup(db *storage.DB, ttl time.Duration, log *logger.Logger) {
 	log.Info("Starting cache cleanup...")
 
-	var totalDeleted int
+	var totalDeleted int64
 
 	// Cleanup students
-	if err := db.DeleteExpiredStudents(ttl); err != nil {
+	if deleted, err := db.DeleteExpiredStudents(ttl); err != nil {
 		log.WithError(err).Error("Failed to cleanup expired students")
 	} else {
+		totalDeleted += deleted
 		count, _ := db.CountStudents()
-		log.WithField("remaining", count).Debug("Students cleanup complete")
+		log.WithFields(map[string]interface{}{
+			"deleted":   deleted,
+			"remaining": count,
+		}).Debug("Students cleanup complete")
 	}
 
 	// Cleanup contacts
-	if err := db.DeleteExpiredContacts(ttl); err != nil {
+	if deleted, err := db.DeleteExpiredContacts(ttl); err != nil {
 		log.WithError(err).Error("Failed to cleanup expired contacts")
 	} else {
+		totalDeleted += deleted
 		count, _ := db.CountContacts()
-		log.WithField("remaining", count).Debug("Contacts cleanup complete")
+		log.WithFields(map[string]interface{}{
+			"deleted":   deleted,
+			"remaining": count,
+		}).Debug("Contacts cleanup complete")
 	}
 
 	// Cleanup courses
-	if err := db.DeleteExpiredCourses(ttl); err != nil {
+	if deleted, err := db.DeleteExpiredCourses(ttl); err != nil {
 		log.WithError(err).Error("Failed to cleanup expired courses")
 	} else {
+		totalDeleted += deleted
 		count, _ := db.CountCourses()
-		log.WithField("remaining", count).Debug("Courses cleanup complete")
+		log.WithFields(map[string]interface{}{
+			"deleted":   deleted,
+			"remaining": count,
+		}).Debug("Courses cleanup complete")
 	}
 
 	// Cleanup stickers
-	if err := db.CleanupExpiredStickers(); err != nil {
+	if deleted, err := db.CleanupExpiredStickers(); err != nil {
 		log.WithError(err).Error("Failed to cleanup expired stickers")
 	} else {
+		totalDeleted += deleted
 		count, _ := db.CountStickers()
-		log.WithField("remaining", count).Debug("Stickers cleanup complete")
+		log.WithFields(map[string]interface{}{
+			"deleted":   deleted,
+			"remaining": count,
+		}).Debug("Stickers cleanup complete")
 	}
 
 	// Run SQLite VACUUM to reclaim space (optional, may be slow)
@@ -428,5 +452,100 @@ func performStickerRefresh(ctx context.Context, stickerManager *sticker.Manager,
 		log.WithField("count", count).
 			WithField("stats", stats).
 			Info("Sticker refresh complete")
+	}
+}
+
+// proactiveWarmup runs cache warmup proactively to prevent user-triggered scraping
+// Uses Soft TTL strategy: refresh data before it expires to ensure users always get cached data
+// Runs daily at 3:00 AM to minimize impact on system resources
+func proactiveWarmup(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, cfg *config.Config) {
+	// Wait until 3:00 AM for first run
+	waitUntilTime := func() time.Duration {
+		now := time.Now()
+		targetHour := 3 // 3:00 AM
+
+		next := time.Date(now.Year(), now.Month(), now.Day(), targetHour, 0, 0, 0, now.Location())
+		if now.After(next) {
+			// Already past today's target time, schedule for tomorrow
+			next = next.Add(24 * time.Hour)
+		}
+		return next.Sub(now)
+	}
+
+	for {
+		// Calculate wait time until next 3:00 AM
+		waitDuration := waitUntilTime()
+		log.WithField("next_run", time.Now().Add(waitDuration).Format("2006-01-02 15:04:05")).
+			Debug("Proactive warmup scheduled")
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(waitDuration):
+			performProactiveWarmup(ctx, db, client, stickerMgr, log, cfg)
+		}
+	}
+}
+
+// performProactiveWarmup checks for expiring data and triggers warmup if needed
+func performProactiveWarmup(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, cfg *config.Config) {
+	log.Info("Starting proactive cache warmup check...")
+
+	// Check how much data is approaching expiration (past Soft TTL but not Hard TTL)
+	expiringStudents, _ := db.CountExpiringStudents(cfg.SoftTTL)
+	expiringCourses, _ := db.CountExpiringCourses(cfg.SoftTTL)
+	expiringContacts, _ := db.CountExpiringContacts(cfg.SoftTTL)
+
+	totalExpiring := expiringStudents + expiringCourses + expiringContacts
+
+	log.WithFields(map[string]interface{}{
+		"expiring_students": expiringStudents,
+		"expiring_courses":  expiringCourses,
+		"expiring_contacts": expiringContacts,
+		"total_expiring":    totalExpiring,
+		"soft_ttl_hours":    cfg.SoftTTL.Hours(),
+	}).Info("Checked expiring cache entries")
+
+	// Only run warmup if there's data approaching expiration
+	// This prevents unnecessary scraping when cache is fresh
+	if totalExpiring == 0 {
+		log.Info("No expiring data found, skipping proactive warmup")
+		return
+	}
+
+	// Determine which modules need warming based on expiring data
+	var modules []string
+	if expiringStudents > 0 {
+		modules = append(modules, "id")
+	}
+	if expiringCourses > 0 {
+		modules = append(modules, "course")
+	}
+	if expiringContacts > 0 {
+		modules = append(modules, "contact")
+	}
+
+	log.WithField("modules", modules).Info("Starting proactive warmup for expiring modules")
+
+	// Create warmup context with timeout
+	warmupCtx, cancel := context.WithTimeout(ctx, cfg.WarmupTimeout)
+	defer cancel()
+
+	// Run warmup (non-blocking, logs progress internally)
+	stats, err := warmup.Run(warmupCtx, db, client, stickerMgr, log, warmup.Options{
+		Modules: modules,
+		Workers: cfg.ScraperWorkers,
+		Timeout: cfg.WarmupTimeout,
+		Reset:   false, // Never reset existing data
+	})
+
+	if err != nil {
+		log.WithError(err).Warn("Proactive warmup finished with errors")
+	} else {
+		log.WithFields(map[string]interface{}{
+			"students_refreshed": stats.Students.Load(),
+			"courses_refreshed":  stats.Courses.Load(),
+			"contacts_refreshed": stats.Contacts.Load(),
+		}).Info("Proactive warmup completed successfully")
 	}
 }

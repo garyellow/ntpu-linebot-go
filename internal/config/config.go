@@ -23,7 +23,8 @@ type Config struct {
 
 	// SQLite Configuration
 	SQLitePath string
-	CacheTTL   time.Duration // Cache TTL for all operations (queries and cleanup)
+	CacheTTL   time.Duration // Hard TTL: absolute expiration for cache entries (default: 7 days)
+	SoftTTL    time.Duration // Soft TTL: when to proactively refresh data (default: 5 days)
 
 	// Scraper Configuration
 	ScraperWorkers    int
@@ -75,7 +76,8 @@ func LoadForMode(mode ValidationMode) (*Config, error) {
 
 		// SQLite Configuration
 		SQLitePath: getEnv("SQLITE_PATH", getDefaultDBPath()),
-		CacheTTL:   getDurationEnv("CACHE_TTL", 168*time.Hour), // 7 days
+		CacheTTL:   getDurationEnv("CACHE_TTL", 168*time.Hour), // Hard TTL: 7 days
+		SoftTTL:    getDurationEnv("SOFT_TTL", 120*time.Hour),  // Soft TTL: 5 days (trigger warmup)
 
 		// Scraper Configuration
 		ScraperWorkers:    getIntEnv("SCRAPER_WORKERS", 3),

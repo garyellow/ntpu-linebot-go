@@ -313,6 +313,29 @@ func NewFlexMessage(altText string, contents messaging_api.FlexContainerInterfac
 	}
 }
 
+// SetSender sets the Sender field on a message.
+// This is a helper function to add consistent sender information to any message type.
+// Returns the same message for method chaining.
+// Supports: TextMessage, FlexMessage, TemplateMessage, ImageMessage
+func SetSender(msg messaging_api.MessageInterface, sender *messaging_api.Sender) messaging_api.MessageInterface {
+	if sender == nil {
+		return msg
+	}
+
+	switch m := msg.(type) {
+	case *messaging_api.TextMessage:
+		m.Sender = sender
+	case *messaging_api.FlexMessage:
+		m.Sender = sender
+	case *messaging_api.TemplateMessage:
+		m.Sender = sender
+	case *messaging_api.ImageMessage:
+		m.Sender = sender
+	}
+
+	return msg
+}
+
 // ValidationError represents an input validation error.
 type ValidationError struct {
 	Field   string

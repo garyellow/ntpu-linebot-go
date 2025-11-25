@@ -63,6 +63,7 @@
 - 使用 `go-version-file` 而非硬編碼版本
 - `setup-go@v6` 的 `cache: true` 自動處理依賴和構建緩存
 - `go mod verify` 驗證依賴完整性（防止供應鏈攻擊）
+- 使用 `-short` flag 跳過網路測試（確保 CI 穩定、快速）
 - 覆蓋率支援本地顯示（不上傳第三方）
 
 ### ✅ Docker 構建
@@ -164,13 +165,15 @@ GITHUB_TOKEN=<auto>
 ## 本地測試
 
 ```powershell
-# 運行測試（模擬 CI）
+# 運行測試（模擬 CI，跳過網路測試）
 task test
+
+# 運行完整測試（包含網路測試，較慢）
+task test:full
 
 # 構建 Docker（不需要 QEMU）
 docker build -t test:local .
 
 # 查看覆蓋率
-go test -coverprofile=coverage.out ./...
-go tool cover -func=coverage.out
+task test:coverage
 ```

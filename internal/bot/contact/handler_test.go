@@ -118,6 +118,10 @@ func TestHandleMessage_Emergency(t *testing.T) {
 }
 
 func TestHandleMessage_Contact(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network test in short mode")
+	}
+
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -208,6 +212,10 @@ func TestFormatContactResults_LargeList(t *testing.T) {
 }
 
 func TestHandlePostback_ViewMore(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network test in short mode")
+	}
+
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -220,6 +228,10 @@ func TestHandlePostback_ViewMore(t *testing.T) {
 }
 
 func TestHandlePostback_ViewInfo(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network test in short mode")
+	}
+
 	h := setupTestHandler(t)
 	ctx := context.Background()
 

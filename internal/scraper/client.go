@@ -6,11 +6,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/corpix/uarand"
+	"golang.org/x/text/encoding/traditionalchinese"
+	"golang.org/x/text/transform"
 )
 
 // Client is an HTTP client for web scraping with rate limiting and URL failover
@@ -125,7 +129,7 @@ func (c *Client) GetDocument(ctx context.Context, url string) (*goquery.Document
 	defer func() { _ = resp.Body.Close() }()
 
 	// Handle gzip encoding
-	var reader io.ReadCloser
+	var reader io.Reader
 	if resp.Header.Get("Content-Encoding") == "gzip" {
 		gzipReader, err := gzip.NewReader(resp.Body)
 		if err != nil {
@@ -135,6 +139,105 @@ func (c *Client) GetDocument(ctx context.Context, url string) (*goquery.Document
 		reader = gzipReader
 	} else {
 		reader = resp.Body
+	}
+
+	// Check if content is Big5 encoded (common for Taiwan websites)
+	contentType := resp.Header.Get("Content-Type")
+	if strings.Contains(strings.ToUpper(contentType), "BIG5") {
+		// Wrap reader with Big5 to UTF-8 decoder
+		reader = transform.NewReader(reader, traditionalchinese.Big5.NewDecoder())
+	}
+
+	// Parse HTML from reader
+	doc, err := goquery.NewDocumentFromReader(reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse HTML: %w", err)
+	}
+
+	return doc, nil
+}
+
+// PostFormDocument performs a POST request with form data and parses the response as HTML
+func (c *Client) PostFormDocument(ctx context.Context, postURL string, formData url.Values) (*goquery.Document, error) {
+	return c.PostFormDocumentRaw(ctx, postURL, formData.Encode())
+}
+
+// PostFormDocumentRaw performs a POST request with raw form data string and parses the response as HTML
+// Use this when you need custom encoding (e.g., Big5) instead of standard UTF-8 url.Values encoding
+func (c *Client) PostFormDocumentRaw(ctx context.Context, postURL string, formDataStr string) (*goquery.Document, error) {
+	var resp *http.Response
+	var lastErr error
+
+	// Retry with exponential backoff
+	err := RetryWithBackoff(ctx, c.maxRetries, 1*time.Second, 30*time.Second, func() error {
+		// Wait for rate limiter
+		if err := c.rateLimiter.Wait(ctx); err != nil {
+			return err
+		}
+
+		// Create POST request with form data
+		req, err := http.NewRequestWithContext(ctx, "POST", postURL, strings.NewReader(formDataStr))
+		if err != nil {
+			return fmt.Errorf("failed to create request: %w", err)
+		}
+
+		// Set headers for form POST
+		req.Header.Set("User-Agent", c.randomUserAgent())
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+		req.Header.Set("Accept-Language", "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7")
+		req.Header.Set("Accept-Encoding", "gzip, deflate")
+
+		// Perform request
+		resp, err = c.httpClient.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("request failed: %w", err)
+			return lastErr
+		}
+
+		// Check status code
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			_ = resp.Body.Close()
+
+			switch resp.StatusCode {
+			case 429:
+				lastErr = fmt.Errorf("rate limited for %s: status %d", postURL, resp.StatusCode)
+			case 503, 502, 504:
+				lastErr = fmt.Errorf("server error for %s: status %d", postURL, resp.StatusCode)
+			case 404, 403, 401:
+				return fmt.Errorf("client error for %s: status %d (not retrying)", postURL, resp.StatusCode)
+			default:
+				lastErr = fmt.Errorf("unexpected status for %s: %d", postURL, resp.StatusCode)
+			}
+			return lastErr
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	// Handle gzip encoding
+	var reader io.Reader
+	if resp.Header.Get("Content-Encoding") == "gzip" {
+		gzipReader, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decompress gzip: %w", err)
+		}
+		defer func() { _ = gzipReader.Close() }()
+		reader = gzipReader
+	} else {
+		reader = resp.Body
+	}
+
+	// Check if content is Big5 encoded (common for Taiwan websites)
+	contentType := resp.Header.Get("Content-Type")
+	if strings.Contains(strings.ToUpper(contentType), "BIG5") {
+		// Wrap reader with Big5 to UTF-8 decoder
+		reader = transform.NewReader(reader, traditionalchinese.Big5.NewDecoder())
 	}
 
 	// Parse HTML from reader
