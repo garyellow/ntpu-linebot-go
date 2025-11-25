@@ -144,7 +144,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			msg := lineutil.NewTextMessageWithConsistentSender("📞 請輸入查詢內容\n\n例如：\n• 聯絡 資工系\n• 電話 圖書館\n• 分機 學務處\n\n💡 也可直接輸入「緊急」查看緊急聯絡電話", sender)
 			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 				{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
-				{Action: lineutil.NewMessageAction("📌 使用說明", "使用說明")},
+				{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
 			})
 			return []messaging_api.MessageInterface{msg}
 		}
@@ -167,7 +167,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			msg := lineutil.NewTextMessageWithConsistentSender("📞 請輸入要查詢的單位或人員\n\n例如：\n• 電話 資工系\n• 分機 圖書館", sender)
 			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 				{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
-				{Action: lineutil.NewMessageAction("📌 使用說明", "使用說明")},
+				{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
 			})
 			return []messaging_api.MessageInterface{msg}
 		}
@@ -445,8 +445,11 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 		var bubbles []messaging_api.FlexBubble
 
 		for _, c := range displayContacts {
-			// Determine display text
-			headerText := c.Name
+			// Format display name: if Chinese == English, show Chinese only
+			// Otherwise show "ChineseName EnglishName"
+			displayName := lineutil.FormatDisplayName(c.Name, c.NameEn)
+
+			// Determine subtitle
 			subText := c.Type
 			if c.Type == "organization" {
 				subText = "單位"
@@ -458,9 +461,9 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 			header := lineutil.NewHeaderBadge("📞", "聯絡資訊")
 
 			// Hero: Name with colored background (using standardized component)
-			hero := lineutil.NewHeroBox(headerText, subText)
+			hero := lineutil.NewHeroBox(displayName, subText)
 
-			// Body: Details with improved vertical layout to prevent truncation
+			// Body: Details - avoid duplicating phone/extension info
 			var bodyContents []messaging_api.FlexComponentInterface
 
 			// Organization / Superior - use vertical layout
@@ -472,22 +475,24 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 					lineutil.NewInfoRowWithMargin("🏢", "所屬單位", c.Organization, lineutil.DefaultInfoRowStyle(), "lg"))
 			}
 
-			// Contact Info - Extension
-			if c.Extension != "" {
+			// Contact Info - Display full phone (main+extension) OR just extension
+			// This prevents duplicate display of extension in both body and footer
+			if c.Phone != "" {
+				// Show full phone number (e.g., "0286741111,12345")
+				if len(bodyContents) > 0 {
+					bodyContents = append(bodyContents, lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator)
+				}
+				bodyContents = append(bodyContents,
+					lineutil.NewInfoRowWithMargin("📞", "聯絡電話", c.Phone, lineutil.BoldInfoRowStyle(), "md"))
+			} else if c.Extension != "" {
+				// Only extension available (no full phone)
 				if len(bodyContents) > 0 {
 					bodyContents = append(bodyContents, lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator)
 				}
 				bodyContents = append(bodyContents,
 					lineutil.NewInfoRowWithMargin("☎️", "分機號碼", c.Extension, lineutil.BoldInfoRowStyle(), "md"))
 			}
-			// Contact Info - Phone
-			if c.Phone != "" {
-				if len(bodyContents) > 0 {
-					bodyContents = append(bodyContents, lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator)
-				}
-				bodyContents = append(bodyContents,
-					lineutil.NewInfoRowWithMargin("📞", "電話號碼", c.Phone, lineutil.BoldInfoRowStyle(), "md"))
-			}
+
 			// Contact Info - Location
 			if c.Location != "" {
 				if len(bodyContents) > 0 {
@@ -496,6 +501,7 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 				bodyContents = append(bodyContents,
 					lineutil.NewInfoRowWithMargin("📍", "辦公位置", c.Location, lineutil.DefaultInfoRowStyle(), "md"))
 			}
+
 			// Contact Info - Email
 			if c.Email != "" {
 				if len(bodyContents) > 0 {
@@ -505,36 +511,43 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 					lineutil.NewInfoRowWithMargin("✉️", "電子郵件", c.Email, lineutil.DefaultInfoRowStyle(), "md"))
 			}
 
-			// Footer: Actions
-			var footerContents []messaging_api.FlexComponentInterface
+			// Footer: Multi-row button layout for optimal UX
+			// Row 1: Phone actions (call, copy)
+			// Row 2: Email actions (send, copy)
+			// Row 3: Website (if available)
+			var row1Buttons []*lineutil.FlexButton
+			var row2Buttons []*lineutil.FlexButton
+			var row3Buttons []*lineutil.FlexButton
 
-			// Call button (Extension or Phone)
+			// Row 1: Phone-related buttons
 			if c.Phone != "" {
-				// Clean phone number for tel link
-				phoneNum := strings.ReplaceAll(c.Phone, "-", "")
-				phoneNum = strings.ReplaceAll(phoneNum, " ", "")
-				footerContents = append(footerContents, lineutil.NewFlexButton(
-					lineutil.NewURIAction("📞 撥打專線", "tel:"+phoneNum),
-				).WithStyle("primary").WithHeight("sm").FlexButton)
+				// Has full phone (main + extension), enable direct dial
+				telURI := lineutil.BuildTelURI(sanxiaNormalPhone, c.Extension)
+				row1Buttons = append(row1Buttons,
+					lineutil.NewFlexButton(lineutil.NewURIAction("📞 撥打電話", telURI)).WithStyle("primary").WithHeight("sm"))
+				row1Buttons = append(row1Buttons,
+					lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製號碼", c.Phone)).WithStyle("secondary").WithHeight("sm"))
 			} else if c.Extension != "" {
-				// For extension, we can't dial directly, but we can copy
-				footerContents = append(footerContents, lineutil.NewFlexButton(
-					lineutil.NewClipboardAction("📋 複製分機", c.Extension),
-				).WithStyle("primary").WithHeight("sm").FlexButton)
+				// Only short extension (< 5 digits), can still dial via main + extension
+				telURI := lineutil.BuildTelURI(sanxiaNormalPhone, c.Extension)
+				row1Buttons = append(row1Buttons,
+					lineutil.NewFlexButton(lineutil.NewURIAction("📞 撥打電話", telURI)).WithStyle("primary").WithHeight("sm"))
+				row1Buttons = append(row1Buttons,
+					lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製分機", c.Extension)).WithStyle("secondary").WithHeight("sm"))
 			}
 
-			// Email button
+			// Row 2: Email actions
 			if c.Email != "" {
-				footerContents = append(footerContents, lineutil.NewFlexButton(
-					lineutil.NewURIAction("✉️ 寄送郵件", "mailto:"+c.Email),
-				).WithStyle("secondary").WithHeight("sm").FlexButton)
+				row2Buttons = append(row2Buttons,
+					lineutil.NewFlexButton(lineutil.NewURIAction("✉️ 寄送郵件", "mailto:"+c.Email)).WithStyle("primary").WithHeight("sm"))
+				row2Buttons = append(row2Buttons,
+					lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製信箱", c.Email)).WithStyle("secondary").WithHeight("sm"))
 			}
 
-			// Website button (for organizations)
+			// Row 3: Website (standalone for better visibility)
 			if c.Website != "" {
-				footerContents = append(footerContents, lineutil.NewFlexButton(
-					lineutil.NewURIAction("🌐 瀏覽網站", c.Website),
-				).WithStyle("secondary").WithHeight("sm").FlexButton)
+				row3Buttons = append(row3Buttons,
+					lineutil.NewFlexButton(lineutil.NewURIAction("🌐 開啟網站", c.Website)).WithStyle("secondary").WithHeight("sm"))
 			}
 
 			// Assemble Bubble
@@ -545,8 +558,9 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 				nil, // Footer (handled below)
 			)
 
-			if len(footerContents) > 0 {
-				bubble.Footer = lineutil.NewFlexBox("vertical", footerContents...).WithSpacing("sm").FlexBox
+			// Build footer with multi-row button layout
+			if len(row1Buttons) > 0 || len(row2Buttons) > 0 || len(row3Buttons) > 0 {
+				bubble.Footer = lineutil.NewButtonFooter(row1Buttons, row2Buttons, row3Buttons).FlexBox
 			}
 
 			bubbles = append(bubbles, *bubble.FlexBubble)

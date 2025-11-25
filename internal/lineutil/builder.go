@@ -386,3 +386,76 @@ func NewValidationError(field, message string) error {
 		Message: message,
 	}
 }
+
+// BuildTelURI creates a tel: URI for phone dialing with optional extension.
+// Format: tel:+886286741111,12345 (E.164 format without dashes, comma for pause dial)
+//
+// Parameters:
+//   - mainPhone: The main phone number (e.g., "0286741111")
+//   - extension: Optional extension number (e.g., "12345")
+//
+// Returns: tel: URI string that works on iOS/Android
+// Example: BuildTelURI("0286741111", "12345") -> "tel:+886286741111,12345"
+func BuildTelURI(mainPhone, extension string) string {
+	// Remove any existing formatting (dashes, spaces)
+	phone := strings.ReplaceAll(mainPhone, "-", "")
+	phone = strings.ReplaceAll(phone, " ", "")
+
+	// Convert to international format (Taiwan +886)
+	// Remove leading 0 and add +886
+	if strings.HasPrefix(phone, "0") {
+		phone = "+886" + phone[1:]
+	} else if !strings.HasPrefix(phone, "+") {
+		phone = "+886" + phone
+	}
+
+	// Add extension with comma (pause dial)
+	if extension != "" {
+		// Use first 5 digits of extension (standard practice)
+		ext := strings.TrimSpace(extension)
+		if len(ext) > 5 {
+			ext = ext[:5]
+		}
+		return "tel:" + phone + "," + ext
+	}
+
+	return "tel:" + phone
+}
+
+// BuildFullPhone creates a full phone number string combining main phone and extension.
+// Format: "0286741111,12345" (main phone + comma + extension first 5 digits)
+//
+// Parameters:
+//   - mainPhone: The main phone number (e.g., "0286741111")
+//   - extension: The extension number (e.g., "12345")
+//
+// Returns: Full phone string for display/clipboard, or empty string if extension < 5 digits
+func BuildFullPhone(mainPhone, extension string) string {
+	if len(extension) < 5 {
+		return ""
+	}
+	return mainPhone + "," + extension[:5]
+}
+
+// FormatDisplayName formats Chinese and English names for display.
+// Rules:
+//   - If English name is empty or same as Chinese name: return Chinese name only
+//   - If different: return "ChineseName EnglishName" with a space separator
+//
+// Parameters:
+//   - nameCN: Chinese name
+//   - nameEN: English name (may be empty or same as Chinese)
+//
+// Returns: Formatted display name
+func FormatDisplayName(nameCN, nameEN string) string {
+	nameCN = strings.TrimSpace(nameCN)
+	nameEN = strings.TrimSpace(nameEN)
+
+	// If English name is empty or same as Chinese, return Chinese only
+	if nameEN == "" || nameEN == nameCN {
+		return nameCN
+	}
+
+	// Return combined name with space
+	return nameCN + " " + nameEN
+}

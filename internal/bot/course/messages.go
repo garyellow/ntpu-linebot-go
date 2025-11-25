@@ -12,7 +12,7 @@ const (
 	MsgEnterTeacherName = "👨‍🏫 請輸入教師名稱\n\n例如：\n• 教師 王教授\n• 老師 李\n• 陳老師\n\n💡 可只輸入姓氏進行模糊搜尋"
 
 	// Search results messages
-	MsgSearchResults        = "🔍 找到 %d 門課程"
+	MsgSearchResults        = "📋 找到 %d 門課程"
 	MsgSearchResultsPartial = "⚠️ 找到超過 %d 門課程\n\n已顯示前 %d 門\n建議使用更精確的關鍵字"
 
 	// Help messages
@@ -29,6 +29,6 @@ const (
 	MsgErrorScrape  = "🌐 資料來源暫時無法存取\n\n請稍後再試"
 
 	// Input validation messages
-	MsgInvalidUID   = "課號格式不正確\n\n正確格式：3141U0001\n（年度+學期+課號）"
-	MsgInvalidInput = "輸入格式不正確\n\n輸入「使用說明」查看正確格式"
+	MsgInvalidUID   = "🔢 課號格式不正確\n\n正確格式：3141U0001\n（年度+學期+課號）"
+	MsgInvalidInput = "❓ 輸入格式不正確\n\n輸入「使用說明」查看正確格式"
 )

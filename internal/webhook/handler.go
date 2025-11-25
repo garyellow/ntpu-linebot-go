@@ -520,7 +520,7 @@ func (h *Handler) getHelpMessage() []messaging_api.MessageInterface {
 
 // getDetailedInstructionMessages returns detailed instruction messages (matches Python version)
 func (h *Handler) getDetailedInstructionMessages() []messaging_api.MessageInterface {
-	senderName := "進階魔法師"
+	senderName := "小幫手"
 
 	// Message 1: Main instruction text
 	instructionText := "使用說明：\n\n" +

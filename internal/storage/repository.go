@@ -196,11 +196,12 @@ func (db *DB) CountStudents() (int, error) {
 // SaveContact inserts or updates a contact record
 func (db *DB) SaveContact(contact *Contact) error {
 	query := `
-		INSERT INTO contacts (uid, type, name, title, organization, extension, phone, email, website, location, superior, cached_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO contacts (uid, type, name, name_en, title, organization, extension, phone, email, website, location, superior, cached_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(uid) DO UPDATE SET
 			type = excluded.type,
 			name = excluded.name,
+			name_en = excluded.name_en,
 			title = excluded.title,
 			organization = excluded.organization,
 			extension = excluded.extension,
@@ -215,6 +216,7 @@ func (db *DB) SaveContact(contact *Contact) error {
 		contact.UID,
 		contact.Type,
 		contact.Name,
+		nullString(contact.NameEn),
 		nullString(contact.Title),
 		nullString(contact.Organization),
 		nullString(contact.Extension),
@@ -249,11 +251,12 @@ func (db *DB) SaveContactsBatch(contacts []*Contact) error {
 	}()
 
 	stmt, err := tx.Prepare(`
-		INSERT INTO contacts (uid, type, name, title, organization, extension, phone, email, website, location, superior, cached_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO contacts (uid, type, name, name_en, title, organization, extension, phone, email, website, location, superior, cached_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(uid) DO UPDATE SET
 			type = excluded.type,
 			name = excluded.name,
+			name_en = excluded.name_en,
 			title = excluded.title,
 			organization = excluded.organization,
 			extension = excluded.extension,
@@ -275,6 +278,7 @@ func (db *DB) SaveContactsBatch(contacts []*Contact) error {
 			contact.UID,
 			contact.Type,
 			contact.Name,
+			nullString(contact.NameEn),
 			nullString(contact.Title),
 			nullString(contact.Organization),
 			nullString(contact.Extension),
@@ -299,15 +303,16 @@ func (db *DB) SaveContactsBatch(contacts []*Contact) error {
 
 // GetContactByUID retrieves a contact by UID and validates cache freshness
 func (db *DB) GetContactByUID(uid string) (*Contact, error) {
-	query := `SELECT uid, type, name, title, organization, extension, phone, email, website, location, superior, cached_at FROM contacts WHERE uid = ?`
+	query := `SELECT uid, type, name, name_en, title, organization, extension, phone, email, website, location, superior, cached_at FROM contacts WHERE uid = ?`
 
 	var contact Contact
-	var title, org, extension, phone, email, website, location, superior sql.NullString
+	var nameEn, title, org, extension, phone, email, website, location, superior sql.NullString
 
 	err := db.conn.QueryRow(query, uid).Scan(
 		&contact.UID,
 		&contact.Type,
 		&contact.Name,
+		&nameEn,
 		&title,
 		&org,
 		&extension,
@@ -326,6 +331,7 @@ func (db *DB) GetContactByUID(uid string) (*Contact, error) {
 		return nil, fmt.Errorf("failed to get contact by UID: %w", err)
 	}
 
+	contact.NameEn = nameEn.String
 	contact.Title = title.String
 	contact.Organization = org.String
 	contact.Extension = extension.String
@@ -359,7 +365,7 @@ func (db *DB) SearchContactsByName(name string) ([]Contact, error) {
 	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
 
 	// Add TTL filter to prevent returning stale data
-	query := `SELECT uid, name, title, organization, phone, email, cached_at FROM contacts WHERE name LIKE ? ESCAPE '\' AND cached_at > ? ORDER BY type, name LIMIT 500`
+	query := `SELECT uid, name, name_en, title, organization, extension, phone, email, cached_at FROM contacts WHERE name LIKE ? ESCAPE '\' AND cached_at > ? ORDER BY type, name LIMIT 500`
 
 	rows, err := db.conn.Query(query, "%"+sanitized+"%", ttlTimestamp)
 	if err != nil {
@@ -370,14 +376,16 @@ func (db *DB) SearchContactsByName(name string) ([]Contact, error) {
 	var contacts []Contact
 	for rows.Next() {
 		var contact Contact
-		var title, org, phone, email sql.NullString
+		var nameEn, title, org, extension, phone, email sql.NullString
 
-		if err := rows.Scan(&contact.UID, &contact.Name, &title, &org, &phone, &email, &contact.CachedAt); err != nil {
+		if err := rows.Scan(&contact.UID, &contact.Name, &nameEn, &title, &org, &extension, &phone, &email, &contact.CachedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan contact row: %w", err)
 		}
 
+		contact.NameEn = nameEn.String
 		contact.Title = title.String
 		contact.Organization = org.String
+		contact.Extension = extension.String
 		contact.Phone = phone.String
 		contact.Email = email.String
 
@@ -394,7 +402,7 @@ func (db *DB) GetContactsByOrganization(org string) ([]Contact, error) {
 	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
 
 	// Add TTL filter to prevent returning stale data
-	query := `SELECT uid, name, title, organization, phone, email, cached_at FROM contacts WHERE organization = ? AND cached_at > ?`
+	query := `SELECT uid, name, name_en, title, organization, extension, phone, email, cached_at FROM contacts WHERE organization = ? AND cached_at > ?`
 
 	rows, err := db.conn.Query(query, org, ttlTimestamp)
 	if err != nil {
@@ -405,14 +413,16 @@ func (db *DB) GetContactsByOrganization(org string) ([]Contact, error) {
 	var contacts []Contact
 	for rows.Next() {
 		var contact Contact
-		var title, org, phone, email sql.NullString
+		var nameEn, title, org, extension, phone, email sql.NullString
 
-		if err := rows.Scan(&contact.UID, &contact.Name, &title, &org, &phone, &email, &contact.CachedAt); err != nil {
+		if err := rows.Scan(&contact.UID, &contact.Name, &nameEn, &title, &org, &extension, &phone, &email, &contact.CachedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan contact row: %w", err)
 		}
 
+		contact.NameEn = nameEn.String
 		contact.Title = title.String
 		contact.Organization = org.String
+		contact.Extension = extension.String
 		contact.Phone = phone.String
 		contact.Email = email.String
 
@@ -429,7 +439,7 @@ func (db *DB) GetAllContacts() ([]Contact, error) {
 	// Calculate TTL cutoff timestamp
 	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
 
-	query := `SELECT uid, type, name, title, organization, extension, phone, email, website, location, superior, cached_at
+	query := `SELECT uid, type, name, name_en, title, organization, extension, phone, email, website, location, superior, cached_at
 		FROM contacts WHERE cached_at > ? ORDER BY type, name LIMIT 1000`
 
 	rows, err := db.conn.Query(query, ttlTimestamp)
@@ -441,12 +451,13 @@ func (db *DB) GetAllContacts() ([]Contact, error) {
 	var contacts []Contact
 	for rows.Next() {
 		var contact Contact
-		var title, org, extension, phone, email, website, location, superior sql.NullString
+		var nameEn, title, org, extension, phone, email, website, location, superior sql.NullString
 
-		if err := rows.Scan(&contact.UID, &contact.Type, &contact.Name, &title, &org, &extension, &phone, &email, &website, &location, &superior, &contact.CachedAt); err != nil {
+		if err := rows.Scan(&contact.UID, &contact.Type, &contact.Name, &nameEn, &title, &org, &extension, &phone, &email, &website, &location, &superior, &contact.CachedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan contact row: %w", err)
 		}
 
+		contact.NameEn = nameEn.String
 		contact.Title = title.String
 		contact.Organization = org.String
 		contact.Extension = extension.String

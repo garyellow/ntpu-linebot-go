@@ -173,10 +173,10 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		if searchTerm == "" {
 			// If no search term provided, give helpful message
 			sender := lineutil.GetSender(senderName, h.stickerManager)
-			msg := lineutil.NewTextMessageWithConsistentSender("請在關鍵字後輸入查詢內容\n\n例如：學號 小明、學號 412345678\n或直接輸入8-9 位學號（如：412345678）", sender)
+			msg := lineutil.NewTextMessageWithConsistentSender("🔢 請在關鍵字後輸入查詢內容\n\n例如：\n• 學號 小明\n• 學號 412345678\n\n💡 也可直接輸入 8-9 位學號", sender)
 			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("按學年查詢", "學年")},
-				{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+				{Action: lineutil.NewMessageAction("📅 按學年查詢", "學年")},
+				{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
 			})
 			return []messaging_api.MessageInterface{msg}
 		}
@@ -197,19 +197,11 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 	log := h.logger.WithModule(moduleName)
 	log.Infof("Handling ID postback: %s", data)
 
-	// Handle "復" (easter egg) - support both with and without prefix
-	if data == "復" || data == "id:復" {
-		sender := lineutil.GetSender(senderName, h.stickerManager)
-		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithConsistentSender("泥好復喔~~ந்ந", sender),
-		}
-	}
-
 	// Handle "兇" (easter egg) - support both with and without prefix
 	if data == "兇" || data == "id:兇" {
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithConsistentSender("泥好兇喔~~இ௰இ", sender),
+			lineutil.NewTextMessageWithConsistentSender("泥好兇喔～～(⊙﹏⊙)", sender),
 		}
 	}
 
@@ -266,11 +258,11 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 // handleAllDepartmentCodes returns all department codes
 func (h *Handler) handleAllDepartmentCodes() []messaging_api.MessageInterface {
 	var builder strings.Builder
-	builder.WriteString("📚 所有系代碼：\n\n")
+	builder.WriteString("📚 所有系代碼：\n")
 
 	// Group by department
 	for name, code := range ntpu.DepartmentCodes {
-		builder.WriteString(fmt.Sprintf("%s系 → %s\n", name, code))
+		builder.WriteString(fmt.Sprintf("\n%s系 → %s", name, code))
 	}
 
 	sender := lineutil.GetSender(senderName, h.stickerManager)
@@ -306,10 +298,10 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	msg := lineutil.NewTextMessageWithConsistentSender("❌ 找不到該系所\n\n請輸入正確的系名，例如：資工、法律、企管", sender)
+	msg := lineutil.NewTextMessageWithConsistentSender("🔍 找不到該系所\n\n請輸入正確的系名，例如：資工、法律、企管", sender)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		{Action: lineutil.NewMessageAction(allDeptCodeText, allDeptCodeText)},
-		{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+		{Action: lineutil.NewMessageAction("📋 "+allDeptCodeText, allDeptCodeText)},
+		{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
 	})
 	return []messaging_api.MessageInterface{msg}
 }
@@ -327,10 +319,10 @@ func (h *Handler) handleDepartmentCodeQuery(code string) []messaging_api.Message
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	msg := lineutil.NewTextMessageWithConsistentSender("❌ 找不到該系代碼\n\n請輸入正確的系代碼，例如：85（資工系）", sender)
+	msg := lineutil.NewTextMessageWithConsistentSender("🔍 找不到該系代碼\n\n請輸入正確的系代碼，例如：85（資工系）", sender)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		{Action: lineutil.NewMessageAction(allDeptCodeText, allDeptCodeText)},
-		{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+		{Action: lineutil.NewMessageAction("📋 "+allDeptCodeText, allDeptCodeText)},
+		{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
 	})
 	return []messaging_api.MessageInterface{msg}
 }
@@ -342,27 +334,28 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 	// Parse year
 	year, err := parseYear(yearStr)
 	if err != nil {
-		msg := lineutil.NewTextMessageWithConsistentSender("❌ 無效的年份格式\n\n請輸入 2-4 位數字，例如：112 或 2023", sender)
+		msg := lineutil.NewTextMessageWithConsistentSender("📅 無效的年份格式\n\n請輸入 2-4 位數字\n例如：112 或 2023", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("查詢 112 學年度", "學年 112")},
-			{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+			{Action: lineutil.NewMessageAction("📅 查詢 112 學年度", "學年 112")},
+			{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
 
 	currentYear := time.Now().Year() - 1911
 
-	// Validate year
+	// Validate year - order matters for proper responses!
+	// 1. Check future year first
 	if year > currentYear {
-		msg := lineutil.NewTextMessageWithConsistentSender("你未來人？(⊙ˍ⊙)", sender)
+		msg := lineutil.NewTextMessageWithConsistentSender("🔮 哎呀～你是未來人嗎？", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction(fmt.Sprintf("查詢 %d 學年度", currentYear), fmt.Sprintf("學年 %d", currentYear))},
-			{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+			{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", currentYear), fmt.Sprintf("學年 %d", currentYear))},
+			{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	// Check for 2024+ data warning (year >= 113)
+	// 2. Check for 2024+ data warning (year >= 113) - LMS 2.0 is deprecated
 	if year >= 113 {
 		imageURL := "https://raw.githubusercontent.com/garyellow/ntpu-linebot-go/main/assets/rip.png"
 		return []messaging_api.MessageInterface{
@@ -371,31 +364,33 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 		}
 	}
 
+	// 3. Check if year is before NTPU was founded (ROC 89 = 2000)
 	if year < 90 {
-		msg := lineutil.NewTextMessageWithConsistentSender("💡 學年度過早\n\n臺北大學於民國 89 年成立\n請輸入 90 學年度以後的年份", sender)
+		msg := lineutil.NewTextMessageWithConsistentSender("🏫 學校都還沒蓋好啦\n\n臺北大學於民國 89 年成立", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("查詢 95 學年度", "學年 95")},
-			{Action: lineutil.NewMessageAction("查詢學號", "學號")},
+			{Action: lineutil.NewMessageAction("📅 查詢 95 學年度", "學年 95")},
+			{Action: lineutil.NewMessageAction("🔢 查詢學號", "學號")},
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
 
+	// 4. Check if year is before LMS was launched (ROC 95)
 	if year >= 90 && year < 95 {
-		msg := lineutil.NewTextMessageWithConsistentSender("💡 此學年度資料不可用\n\n數位學苑系統於 95 學年度啟用\n目前僅提供 95-112 學年度資料", sender)
+		msg := lineutil.NewTextMessageWithConsistentSender("📒 數位學苑還沒出生喔\n\n請輸入 95 學年度以後的年份", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("查詢 95 學年度", "學年 95")},
-			{Action: lineutil.NewMessageAction("查詢學號", "學號")},
+			{Action: lineutil.NewMessageAction("📅 查詢 95 學年度", "學年 95")},
+			{Action: lineutil.NewMessageAction("🔢 查詢學號", "學號")},
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	// Create confirmation message with flow explanation
+	// Create confirmation message with flow explanation + Python-style meme buttons
 	confirmText := fmt.Sprintf("📅 %d 學年度學生查詢\n\n📋 查詢流程：\n1️⃣ 選擇學院群\n2️⃣ 選擇學院\n3️⃣ 選擇科系\n\n確定要查詢嗎？", year)
 	confirmMsg := lineutil.NewConfirmTemplate(
 		"確認學年度",
 		confirmText,
-		lineutil.NewPostbackAction("開始查詢", fmt.Sprintf("id:搜尋全系%s%d", splitChar, year)),
-		lineutil.NewPostbackAction("取消", "id:兇"),
+		lineutil.NewPostbackActionWithDisplayText("哪次不是", "哪次不是", fmt.Sprintf("id:搜尋全系%s%d", splitChar, year)),
+		lineutil.NewPostbackActionWithDisplayText("我在想想", "再啦乾ಠ_ಠ", "id:兇"),
 	)
 	return []messaging_api.MessageInterface{
 		lineutil.SetSender(confirmMsg, sender),
@@ -415,7 +410,7 @@ func (h *Handler) handleYearSearchConfirm(yearStr string) []messaging_api.Messag
 	msg := lineutil.NewButtonsTemplateWithImage(
 		fmt.Sprintf("%s 學年度學生查詢", yearStr),
 		fmt.Sprintf("%s 學年度", yearStr),
-		"請選擇科系所屬學院群\n\n📚 文法商：人文、法律、商學院\n🏛️ 公社電資：公共事務、社科、電資學院",
+		"請選擇科系所屬學院群\n\n📚 文法商：人文、法律、商學院\n🏛️ 公社電資：公共、社科、電資學院",
 		"https://new.ntpu.edu.tw/assets/logo/ntpu_logo.png",
 		actions,
 	)
@@ -464,10 +459,10 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	if err != nil {
 		log.WithError(err).Errorf("Failed to scrape student ID: %s", studentID)
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("❌ 學號 %s 不存在OAO\n\n請確認學號是否正確", studentID), sender)
+		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🔍 學號 %s 不存在喔\n\n請確認學號是否正確", studentID), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("查詢其他學號", "學號")},
-			{Action: lineutil.NewMessageAction("查詢系所代碼", allDeptCodeText)},
+			{Action: lineutil.NewMessageAction("🔢 查詢其他學號", "學號")},
+			{Action: lineutil.NewMessageAction("🏛️ 查詢系所代碼", allDeptCodeText)},
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
@@ -504,12 +499,12 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 
 	if len(students) == 0 {
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf(
-			"🔍 查無姓名包含「%s」的學生\n\n請注意：\n• 僅提供 101-112 學年度資料\n• 請確認姓名拼寫是否正確\n• 可嘗試輸入完整姓名或部分姓名",
+			"🔍 查無姓名包含「%s」的學生\n\n💡 請注意：\n• 僅提供 101-112 學年度資料\n• 請確認姓名拼寫是否正確\n• 可嘗試輸入完整姓名或部分姓名",
 			name,
 		), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("重新搜尋", "學號")},
-			{Action: lineutil.NewMessageAction("按學年查詢", "學年")},
+			{Action: lineutil.NewMessageAction("🔄 重新搜尋", "學號")},
+			{Action: lineutil.NewMessageAction("📅 按學年查詢", "學年")},
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
@@ -520,7 +515,7 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	var messages []messaging_api.MessageInterface
 	if len(students) >= MaxStudentsPerSearch {
 		warningMsg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("⚠️ 搜尋結果達到上限 %d 筆，可能有更多結果未顯示。\n\n建議：\n• 輸入更完整的姓名\n• 使用「學年」功能按年度查詢", MaxStudentsPerSearch),
+			fmt.Sprintf("⚠️ 搜尋結果達到上限 %d 筆\n\n可能有更多結果未顯示，建議：\n• 輸入更完整的姓名\n• 使用「學年」功能按年度查詢", MaxStudentsPerSearch),
 			sender,
 		)
 		messages = append(messages, warningMsg)
@@ -539,7 +534,7 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 		}
 
 		var builder strings.Builder
-		builder.WriteString(fmt.Sprintf("🔍 搜尋結果 (第 %d-%d 筆，共 %d 筆)：\n\n", i+1, end, len(students)))
+		builder.WriteString(fmt.Sprintf("📋 搜尋結果（第 %d-%d 筆，共 %d 筆）\n\n", i+1, end, len(students)))
 
 		for j := i; j < end; j++ {
 			student := students[j]
@@ -554,8 +549,8 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	if len(messages) > 0 {
 		if lastMsg, ok := messages[len(messages)-1].(*messaging_api.TextMessage); ok {
 			lastMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("重新搜尋", "學號")},
-				{Action: lineutil.NewMessageAction("查詢系所代碼", allDeptCodeText)},
+				{Action: lineutil.NewMessageAction("🔄 重新搜尋", "學號")},
+				{Action: lineutil.NewMessageAction("🏛️ 查詢系所代碼", allDeptCodeText)},
 			})
 		}
 	}
@@ -638,8 +633,7 @@ func isNumeric(s string) bool {
 }
 
 // parseYear parses a year string (2-4 digits) to ROC year
-// Validates year is within reasonable range (89-130)
-// NTPU founded in ROC 89 (2000), upper bound allows future planning
+// Only validates format, not range (range validation is done in handleYearQuery for proper error messages)
 func parseYear(yearStr string) (int, error) {
 	if len(yearStr) < 2 || len(yearStr) > 4 {
 		return 0, fmt.Errorf("invalid year length")
@@ -653,11 +647,6 @@ func parseYear(yearStr string) (int, error) {
 	// Convert to ROC year if AD year
 	if year >= 1911 {
 		year = year - 1911
-	}
-
-	// Validate reasonable range (NTPU founded in ROC 89 = 2000)
-	if year < 89 || year > 130 {
-		return 0, fmt.Errorf("year %d out of reasonable range (89-130)", year)
 	}
 
 	return year, nil
@@ -906,10 +895,10 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 		if strings.HasPrefix(deptCode, "71") {
 			departmentType = "組"
 		}
-		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("%d學年度%s%s好像沒有人耶OAO", year, deptName, departmentType), sender)
+		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🤔 %d 學年度%s%s好像沒有人耶", year, deptName, departmentType), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("重新選擇", fmt.Sprintf("學年 %d", year))},
-			{Action: lineutil.NewMessageAction("查詢學號", "學號")},
+			{Action: lineutil.NewMessageAction("🔄 重新選擇", fmt.Sprintf("學年 %d", year))},
+			{Action: lineutil.NewMessageAction("🔢 查詢學號", "學號")},
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
@@ -935,8 +924,8 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 	// Note: sender was already created at the start of handleDepartmentSelection, reuse it
 	msg := lineutil.NewTextMessageWithConsistentSender(builder.String(), sender)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		{Action: lineutil.NewMessageAction("查詢其他學年", "學年")},
-		{Action: lineutil.NewMessageAction("查詢系所代碼", allDeptCodeText)},
+		{Action: lineutil.NewMessageAction("📅 查詢其他學年", "學年")},
+		{Action: lineutil.NewMessageAction("🏛️ 查詢系所代碼", allDeptCodeText)},
 	})
 	return []messaging_api.MessageInterface{msg}
 }
