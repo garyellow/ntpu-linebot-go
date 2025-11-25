@@ -186,7 +186,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			msg := lineutil.NewTextMessageWithConsistentSender("👨‍🏫 請輸入教師姓名\n\n例如：\n• 老師 王小明\n• 教師 李大華\n• 王小明老師\n\n💡 只輸入姓氏也可以（如：老師 王）", sender)
 			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 				{Action: lineutil.NewMessageAction("📚 按課程查詢", "課程")},
-				{Action: lineutil.NewMessageAction("📌 使用說明", "使用說明")},
+				{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
 			})
 			return []messaging_api.MessageInterface{msg}
 		}
@@ -258,10 +258,10 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 	if err != nil {
 		log.WithError(err).Errorf("Failed to scrape course UID: %s", uid)
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("❌ 查無課程編號 %s\n\n請確認課程編號是否正確", uid), sender)
+		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🔍 查無課程編號 %s\n\n請確認課程編號是否正確", uid), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("按課名查詢", "課程")},
-			{Action: lineutil.NewMessageAction("按教師查詢", "老師")},
+			{Action: lineutil.NewMessageAction("📚 按課名查詢", "課程")},
+			{Action: lineutil.NewMessageAction("👨‍🏫 按教師查詢", "老師")},
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
@@ -271,13 +271,13 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 		log.Warnf("Course UID %s not found after scraping", uid)
 		h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("❌ 查無課程編號 %s\n\n💡 請確認：\n• 課程編號拼寫是否正確\n• 該課程是否在本學期或上學期開設", uid),
+			fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 請確認：\n• 課程編號拼寫是否正確\n• 該課程是否在本學期或上學期開設", uid),
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			{Action: lineutil.NewMessageAction("📚 按課名查詢", "課程")},
 			{Action: lineutil.NewMessageAction("👨‍🏫 按教師查詢", "老師")},
-			{Action: lineutil.NewMessageAction("📌 使用說明", "使用說明")},
+			{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
@@ -361,12 +361,12 @@ func (h *Handler) handleCourseTitleSearch(ctx context.Context, title string) []m
 	// No results found even after scraping
 	h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
 	msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf(
-		"🔍 查無包含「%s」的課程\n\n請確認：\n• 課程名稱是否正確\n• 該課程是否在本學期或上學期開設\n• 或使用課程編號直接查詢（如：3141U0001）",
+		"🔍 查無包含「%s」的課程\n\n💡 請確認：\n• 課程名稱是否正確\n• 該課程是否在本學期或上學期開設\n• 或使用課程編號直接查詢（如：3141U0001）",
 		title,
 	), sender)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		{Action: lineutil.NewMessageAction("重新查詢", "課程")},
-		{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+		{Action: lineutil.NewMessageAction("🔄 重新查詢", "課程")},
+		{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
 	})
 	return []messaging_api.MessageInterface{msg}
 }
@@ -488,12 +488,12 @@ func (h *Handler) handleTeacherSearch(ctx context.Context, teacherName string) [
 	// No results found
 	h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
 	msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf(
-		"🔍 查無教師「%s」的授課課程\n\n請確認：\n• 教師姓名是否正確（可嘗試只輸入姓氏）\n• 該教師本學期或上學期是否有開課\n• 若為兼任或新進教師，資料可能尚未更新",
+		"🔍 查無教師「%s」的授課課程\n\n💡 請確認：\n• 教師姓名是否正確（可嘗試只輸入姓氏）\n• 該教師本學期或上學期是否有開課\n• 若為兼任或新進教師，資料可能尚未更新",
 		teacherName,
 	), sender)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		{Action: lineutil.NewMessageAction("重試", "老師 "+teacherName)},
-		{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+		{Action: lineutil.NewMessageAction("🔄 重試", "老師 "+teacherName)},
+		{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
 	})
 	return []messaging_api.MessageInterface{msg}
 }

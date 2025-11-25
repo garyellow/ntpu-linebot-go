@@ -144,7 +144,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			msg := lineutil.NewTextMessageWithConsistentSender("📞 請輸入查詢內容\n\n例如：\n• 聯絡 資工系\n• 電話 圖書館\n• 分機 學務處\n\n💡 也可直接輸入「緊急」查看緊急聯絡電話", sender)
 			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 				{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
-				{Action: lineutil.NewMessageAction("📌 使用說明", "使用說明")},
+				{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
 			})
 			return []messaging_api.MessageInterface{msg}
 		}
@@ -167,7 +167,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			msg := lineutil.NewTextMessageWithConsistentSender("📞 請輸入要查詢的單位或人員\n\n例如：\n• 電話 資工系\n• 分機 圖書館", sender)
 			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 				{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
-				{Action: lineutil.NewMessageAction("📌 使用說明", "使用說明")},
+				{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
 			})
 			return []messaging_api.MessageInterface{msg}
 		}
