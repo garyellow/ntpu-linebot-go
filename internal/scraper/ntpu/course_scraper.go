@@ -189,9 +189,10 @@ func parseCoursesPageByYear(doc *goquery.Document, courseBaseURL string, year in
 
 		// Extract term from field 2 (column index 2)
 		termStr := strings.TrimSpace(tds.Eq(2).Text())
-		term, _ := strconv.Atoi(termStr)
-		if term == 0 {
-			term = 1 // Default to first semester if parsing fails
+		term, err := strconv.Atoi(termStr)
+		if err != nil || term == 0 {
+			// Invalid term value, default to first semester
+			term = 1
 		}
 
 		// Extract course number (field 3)

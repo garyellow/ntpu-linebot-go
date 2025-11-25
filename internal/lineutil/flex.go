@@ -175,13 +175,13 @@ func TruncateRunes(text string, maxRunes int) string {
 }
 
 // NewKeyValueRow creates a key-value row for Flex Box with consistent styling
-// Key uses flex:0 for natural width (prevents truncation of emoji + text labels)
-// Value uses flex:1 to fill remaining space with word wrap
+// Key uses flex:1 and Value uses flex:5 for predictable spacing ratio
+// This ensures alignment when keys have varying lengths (e.g., "📍" vs "🏫 教室")
 // Designed for Flex Message body content (not hero/header)
 func NewKeyValueRow(key, value string) *FlexBox {
 	return NewFlexBox("baseline",
-		NewFlexText(key).WithColor("#555555").WithSize("sm").WithFlex(0).WithWeight("bold").FlexText,
-		NewFlexText(value).WithWrap(true).WithMaxLines(3).WithColor("#666666").WithSize("sm").WithFlex(1).FlexText,
+		NewFlexText(key).WithColor("#555555").WithSize("sm").WithFlex(1).WithWeight("bold").FlexText,
+		NewFlexText(value).WithWrap(true).WithMaxLines(3).WithColor("#666666").WithSize("sm").WithFlex(5).FlexText,
 	)
 }
 

@@ -172,7 +172,10 @@ func (db *DB) DeleteExpiredStudents(ttl time.Duration) (int64, error) {
 		return 0, fmt.Errorf("failed to delete expired students: %w", err)
 	}
 
-	rowsAffected, _ := result.RowsAffected()
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get rows affected for students: %w", err)
+	}
 	return rowsAffected, nil
 }
 
@@ -430,7 +433,10 @@ func (db *DB) DeleteExpiredContacts(ttl time.Duration) (int64, error) {
 		return 0, fmt.Errorf("failed to delete expired contacts: %w", err)
 	}
 
-	rowsAffected, _ := result.RowsAffected()
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get rows affected for contacts: %w", err)
+	}
 	return rowsAffected, nil
 }
 
@@ -740,7 +746,10 @@ func (db *DB) DeleteExpiredCourses(ttl time.Duration) (int64, error) {
 		return 0, fmt.Errorf("failed to delete expired courses: %w", err)
 	}
 
-	rowsAffected, _ := result.RowsAffected()
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get rows affected for courses: %w", err)
+	}
 	return rowsAffected, nil
 }
 
@@ -933,7 +942,10 @@ func (db *DB) CleanupExpiredStickers() (int64, error) {
 		return 0, fmt.Errorf("failed to cleanup expired stickers: %w", err)
 	}
 
-	rowsAffected, _ := result.RowsAffected()
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get rows affected for stickers: %w", err)
+	}
 	return rowsAffected, nil
 }
 

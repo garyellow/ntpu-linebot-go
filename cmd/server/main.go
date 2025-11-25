@@ -459,23 +459,19 @@ func performStickerRefresh(ctx context.Context, stickerManager *sticker.Manager,
 // Uses Soft TTL strategy: refresh data before it expires to ensure users always get cached data
 // Runs daily at 3:00 AM to minimize impact on system resources
 func proactiveWarmup(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, cfg *config.Config) {
-	// Wait until 3:00 AM for first run
-	waitUntilTime := func() time.Duration {
-		now := time.Now()
-		targetHour := 3 // 3:00 AM
+	const targetHour = 3 // 3:00 AM
 
+	for {
+		// Recalculate wait time on each iteration to ensure accurate scheduling
+		now := time.Now()
 		next := time.Date(now.Year(), now.Month(), now.Day(), targetHour, 0, 0, 0, now.Location())
 		if now.After(next) {
 			// Already past today's target time, schedule for tomorrow
 			next = next.Add(24 * time.Hour)
 		}
-		return next.Sub(now)
-	}
+		waitDuration := next.Sub(now)
 
-	for {
-		// Calculate wait time until next 3:00 AM
-		waitDuration := waitUntilTime()
-		log.WithField("next_run", time.Now().Add(waitDuration).Format("2006-01-02 15:04:05")).
+		log.WithField("next_run", next.Format("2006-01-02 15:04:05")).
 			Debug("Proactive warmup scheduled")
 
 		select {
