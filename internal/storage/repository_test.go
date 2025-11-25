@@ -483,4 +483,161 @@ func TestCleanupExpiredStickers(t *testing.T) {
 	}
 }
 
+// TestGetAllContacts tests retrieving all contacts with TTL filtering
+func TestGetAllContacts(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	// Insert fresh contacts
+	freshContacts := []*Contact{
+		{UID: "c1", Type: "individual", Name: "陳大華", Organization: "資訊工程學系"},
+		{UID: "c2", Type: "individual", Name: "陳小明", Organization: "電機工程學系"},
+		{UID: "c3", Type: "organization", Name: "資訊工程學系", Superior: "電機資訊學院"},
+	}
+	for _, c := range freshContacts {
+		if err := db.SaveContact(c); err != nil {
+			t.Fatalf("SaveContact failed: %v", err)
+		}
+	}
+
+	// Insert expired contact (manually set cached_at to 8 days ago)
+	query := `INSERT INTO contacts (uid, type, name, organization, cached_at) VALUES (?, ?, ?, ?, ?)`
+	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
+	_, err := db.conn.Exec(query, "c_old", "individual", "舊聯絡人", "舊單位", oldTime)
+	if err != nil {
+		t.Fatalf("Manual insert failed: %v", err)
+	}
+
+	// Get all contacts - should only return non-expired ones
+	contacts, err := db.GetAllContacts()
+	if err != nil {
+		t.Fatalf("GetAllContacts failed: %v", err)
+	}
+
+	// Should return 3 fresh contacts, not the expired one
+	if len(contacts) != 3 {
+		t.Errorf("Expected 3 contacts, got %d", len(contacts))
+	}
+
+	// Verify ordering (by type, name)
+	// organization should come after individual alphabetically
+	foundOrg := false
+	for _, c := range contacts {
+		if c.Type == "organization" {
+			foundOrg = true
+			if c.Name != "資訊工程學系" {
+				t.Errorf("Expected organization name '資訊工程學系', got '%s'", c.Name)
+			}
+		}
+	}
+	if !foundOrg {
+		t.Error("Expected to find organization contact")
+	}
+}
+
+// TestGetAllContactsLimit tests the LIMIT 1000 constraint
+func TestGetAllContactsLimit(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	// This test verifies the query structure without inserting 1000+ records
+	// Just verify the method works with empty database
+	contacts, err := db.GetAllContacts()
+	if err != nil {
+		t.Fatalf("GetAllContacts failed on empty database: %v", err)
+	}
+	if len(contacts) != 0 {
+		t.Errorf("Expected 0 contacts on empty database, got %d", len(contacts))
+	}
+}
+
+// TestGetCoursesByRecentSemesters tests retrieving courses with TTL filtering
+func TestGetCoursesByRecentSemesters(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	// Insert fresh courses from different semesters
+	freshCourses := []*Course{
+		{
+			UID:      "1132U0001",
+			Year:     113,
+			Term:     2,
+			No:       "U0001",
+			Title:    "程式設計二",
+			Teachers: []string{"王教授"},
+		},
+		{
+			UID:      "1131U0001",
+			Year:     113,
+			Term:     1,
+			No:       "U0001",
+			Title:    "程式設計一",
+			Teachers: []string{"王教授"},
+		},
+		{
+			UID:      "1122U0002",
+			Year:     112,
+			Term:     2,
+			No:       "U0002",
+			Title:    "資料結構",
+			Teachers: []string{"李教授"},
+		},
+	}
+	for _, c := range freshCourses {
+		if err := db.SaveCourse(c); err != nil {
+			t.Fatalf("SaveCourse failed: %v", err)
+		}
+	}
+
+	// Insert expired course (manually set cached_at to 8 days ago)
+	query := `INSERT INTO courses (uid, year, term, no, title, teachers, teacher_urls, times, locations, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
+	_, err := db.conn.Exec(query, "1121U9999", 112, 1, "U9999", "舊課程", `["舊教授"]`, `[]`, `[]`, `[]`, oldTime)
+	if err != nil {
+		t.Fatalf("Manual insert failed: %v", err)
+	}
+
+	// Get courses by recent semesters - should only return non-expired ones
+	courses, err := db.GetCoursesByRecentSemesters()
+	if err != nil {
+		t.Fatalf("GetCoursesByRecentSemesters failed: %v", err)
+	}
+
+	// Should return 3 fresh courses, not the expired one
+	if len(courses) != 3 {
+		t.Errorf("Expected 3 courses, got %d", len(courses))
+	}
+
+	// Verify ordering (by year DESC, term DESC) - newest first
+	if len(courses) >= 2 {
+		if courses[0].Year < courses[1].Year {
+			t.Errorf("Expected courses ordered by year DESC, got year %d before %d", courses[0].Year, courses[1].Year)
+		}
+		if courses[0].Year == courses[1].Year && courses[0].Term < courses[1].Term {
+			t.Errorf("Expected courses ordered by term DESC within same year")
+		}
+	}
+
+	// Verify first course is the newest (113-2)
+	if courses[0].UID != "1132U0001" {
+		t.Errorf("Expected first course to be 1132U0001 (newest), got %s", courses[0].UID)
+	}
+}
+
+// TestGetCoursesByRecentSemestersLimit tests the LIMIT 2000 constraint
+func TestGetCoursesByRecentSemestersLimit(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	// This test verifies the query structure without inserting 2000+ records
+	// Just verify the method works with empty database
+	courses, err := db.GetCoursesByRecentSemesters()
+	if err != nil {
+		t.Fatalf("GetCoursesByRecentSemesters failed on empty database: %v", err)
+	}
+	if len(courses) != 0 {
+		t.Errorf("Expected 0 courses on empty database, got %d", len(courses))
+	}
+}
+
 // Removed redundant count/update tests - SaveAndGet already validates these

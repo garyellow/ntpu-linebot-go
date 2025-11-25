@@ -38,7 +38,7 @@ LINE Webhook → Gin Handler (25s timeout) → Bot Module Dispatcher
 
 **Contact Module**: Emergency phones (hardcoded), multilingual keywords, organization/individual contacts, Flex Message cards
 
-**All modules**: UTF-8 safe truncation with `TruncateRunes()`, consistent Sender pattern, cache-first strategy
+**All modules**: Prefer text wrapping over truncation for complete info display, use `TruncateRunes()` only for LINE API limits (altText, displayText), consistent Sender pattern, cache-first strategy
 
 ## Data Layer: Cache-First Strategy with Soft/Hard TTL
 
@@ -84,8 +84,9 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
 **Flex Message 設計規範**:
 - **配色**: Hero 背景 `#1DB446` (NTPU 綠), 標題白色, Body 內容灰色
 - **間距**: Hero padding `15px`, Body/Footer spacing `sm`, 按鈕高度 `sm`
-- **文字**: Hero 標題 `WithMaxLines(2)`, Body 使用 `TruncateRunes()` 防止溢出
-- **設計原則**: 對稱、現代、一致 - 確保視覺和諧，無截斷文字
+- **文字**: 優先使用 `wrap: true` + `lineSpacing` 完整顯示資訊；僅 carousel 使用 `WithMaxLines()` 控制高度
+- **截斷**: `TruncateRunes()` 僅用於 LINE API 限制 (altText 400 字, displayText 長度限制)
+- **設計原則**: 對稱、現代、一致 - 確保視覺和諧，完整呈現資訊
 
 **Postback format** (300 byte limit): Use module prefix `"module:data"` for routing. Reply token is single-use - batch all messages into one array.
 
@@ -97,10 +98,16 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
 
 ## UTF-8 Handling
 
-**ALWAYS use `TruncateRunes()`** - byte slicing breaks multi-byte CJK characters:
+**Use `TruncateRunes()` only for LINE API limits** (altText, displayText) - byte slicing breaks multi-byte CJK characters:
 ```go
-lineutil.TruncateRunes(text, maxChars)  // ✅ Safe
+lineutil.TruncateRunes(text, maxChars)  // ✅ Safe for API limits
 text[:10] + "..."                       // ❌ Corrupts UTF-8
+```
+
+**Prefer text wrapping** for Flex Message content - use `wrap: true` with `lineSpacing` for readability:
+```go
+lineutil.NewInfoRow("標籤", value).WithWrap(true).WithLineSpacing("4px")  // ✅ Full display
+lineutil.TruncateRunes(value, 20)                                         // ❌ Hides information
 ```
 
 ## Testing

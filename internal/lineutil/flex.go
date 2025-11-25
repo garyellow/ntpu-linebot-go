@@ -116,6 +116,16 @@ func (t *FlexText) WithMaxLines(lines int) *FlexText {
 	return t
 }
 
+func (t *FlexText) WithLineSpacing(spacing string) *FlexText {
+	t.LineSpacing = spacing
+	return t
+}
+
+func (t *FlexText) WithAdjustMode(mode string) *FlexText {
+	t.AdjustMode = messaging_api.FlexTextADJUST_MODE(mode)
+	return t
+}
+
 // FlexButton wrapper
 type FlexButton struct {
 	*messaging_api.FlexButton
@@ -175,26 +185,28 @@ func TruncateRunes(text string, maxRunes int) string {
 }
 
 // NewKeyValueRow creates a key-value row for Flex Box with consistent styling
-// Key uses flex:1 and Value uses flex:5 for predictable spacing ratio
-// This ensures alignment when keys have varying lengths (e.g., "📍" vs "🏫 教室")
+// Key uses flex:0 (auto-width based on content) to prevent truncation
+// Value uses flex:1 (fill remaining space) with alignment end for better visibility
+// This ensures keys like "🆔 學號" are never truncated
 // Designed for Flex Message body content (not hero/header)
+// Value supports full wrapping to show complete information
 func NewKeyValueRow(key, value string) *FlexBox {
-	return NewFlexBox("baseline",
-		NewFlexText(key).WithColor("#555555").WithSize("sm").WithFlex(1).WithWeight("bold").FlexText,
-		NewFlexText(value).WithWrap(true).WithMaxLines(3).WithColor("#666666").WithSize("sm").WithFlex(5).FlexText,
-	)
+	return NewFlexBox("horizontal",
+		NewFlexText(key).WithColor("#555555").WithSize("sm").WithFlex(0).WithWeight("bold").FlexText,
+		NewFlexText(value).WithWrap(true).WithColor("#333333").WithSize("sm").WithFlex(1).WithAlign("end").WithLineSpacing("4px").FlexText,
+	).WithSpacing("md")
 }
 
 // NewHeroBox creates a standardized Hero box with NTPU green background
 // Provides consistent styling across all modules:
 // - Background: #1DB446 (NTPU green)
 // - Padding: 20px all, 16px bottom (for visual balance)
-// - Title: Bold, XL size, white color, max 2 lines with wrap
+// - Title: Bold, XL size, white color, full wrap for complete display
 // - Subtitle: XS size, white color, md margin top
 func NewHeroBox(title, subtitle string) *FlexBox {
 	box := NewFlexBox("vertical",
-		NewFlexText(title).WithWeight("bold").WithSize("xl").WithColor("#ffffff").WithWrap(true).WithMaxLines(2).FlexText,
-		NewFlexText(subtitle).WithSize("xs").WithColor("#ffffff").WithMargin("md").FlexText,
+		NewFlexText(title).WithWeight("bold").WithSize("xl").WithColor("#ffffff").WithWrap(true).WithLineSpacing("6px").FlexText,
+		NewFlexText(subtitle).WithSize("xs").WithColor("#ffffff").WithMargin("md").WithWrap(true).FlexText,
 	)
 	box.BackgroundColor = "#1DB446"
 	box.PaddingAll = "20px"
@@ -204,9 +216,10 @@ func NewHeroBox(title, subtitle string) *FlexBox {
 
 // NewCompactHeroBox creates a compact Hero box for carousel/list views
 // Uses smaller padding (15px) to fit more content
+// Max 3 lines for carousel to balance visibility
 func NewCompactHeroBox(title string) *FlexBox {
 	box := NewFlexBox("vertical",
-		NewFlexText(title).WithWeight("bold").WithSize("md").WithColor("#ffffff").WithWrap(true).WithMaxLines(2).FlexText,
+		NewFlexText(title).WithWeight("bold").WithSize("md").WithColor("#ffffff").WithWrap(true).WithMaxLines(3).WithLineSpacing("4px").FlexText,
 	)
 	box.BackgroundColor = "#1DB446"
 	box.PaddingAll = "15px"
@@ -222,4 +235,69 @@ func NewHeaderBadge(emoji, label string) *FlexBox {
 			NewFlexText(label).WithWeight("bold").WithColor("#1DB446").WithSize("sm").WithMargin("sm").FlexText,
 		).FlexBox,
 	)
+}
+
+// InfoRowStyle defines the visual style for an info row
+type InfoRowStyle struct {
+	ValueSize   string // Value text size: "xs", "sm", "md" (default: "sm")
+	ValueWeight string // Value text weight: "regular", "bold" (default: "regular")
+	ValueColor  string // Value text color (default: "#333333")
+	Wrap        bool   // Whether to wrap long text (default: true)
+}
+
+// DefaultInfoRowStyle returns the standard info row style
+func DefaultInfoRowStyle() InfoRowStyle {
+	return InfoRowStyle{
+		ValueSize:   "sm",
+		ValueWeight: "regular",
+		ValueColor:  "#333333",
+		Wrap:        true,
+	}
+}
+
+// BoldInfoRowStyle returns a style with bold value text (for important data like phone/ID)
+func BoldInfoRowStyle() InfoRowStyle {
+	return InfoRowStyle{
+		ValueSize:   "md",
+		ValueWeight: "bold",
+		ValueColor:  "#333333",
+		Wrap:        false,
+	}
+}
+
+// NewInfoRow creates a vertical info row with icon + label on top, value below
+// This is a standardized pattern used across all modules for Flex Message body content
+//
+// Layout:
+//
+//	┌─────────────────────────────┐
+//	│ [emoji] [label]             │  <- icon + label (horizontal, gray)
+//	│ [value text with wrap]      │  <- value (full width, wrappable)
+//	└─────────────────────────────┘
+//
+// Example usage:
+//
+//	NewInfoRow("👨‍🏫", "授課教師", "王教授、李教授", DefaultInfoRowStyle())
+//	NewInfoRow("☎️", "分機號碼", "12345", BoldInfoRowStyle())
+func NewInfoRow(emoji, label, value string, style InfoRowStyle) *FlexBox {
+	valueText := NewFlexText(value).WithColor(style.ValueColor).WithSize(style.ValueSize).WithMargin("sm")
+	if style.ValueWeight == "bold" {
+		valueText = valueText.WithWeight("bold")
+	}
+	if style.Wrap {
+		valueText = valueText.WithWrap(true).WithLineSpacing("4px")
+	}
+
+	return NewFlexBox("vertical",
+		NewFlexBox("horizontal",
+			NewFlexText(emoji).WithSize("sm").WithFlex(0).FlexText,
+			NewFlexText(label).WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
+		).WithSpacing("sm").FlexBox,
+		valueText.FlexText,
+	)
+}
+
+// NewInfoRowWithMargin creates an info row with specified margin (convenience wrapper)
+func NewInfoRowWithMargin(emoji, label, value string, style InfoRowStyle, margin string) messaging_api.FlexComponentInterface {
+	return NewInfoRow(emoji, label, value, style).WithMargin(margin).FlexBox
 }

@@ -422,6 +422,46 @@ func (db *DB) GetContactsByOrganization(org string) ([]Contact, error) {
 	return contacts, nil
 }
 
+// GetAllContacts retrieves all non-expired contacts from cache
+// Used for fuzzy character-set matching when SQL LIKE doesn't find results
+// Only returns non-expired cache entries based on configured TTL
+func (db *DB) GetAllContacts() ([]Contact, error) {
+	// Calculate TTL cutoff timestamp
+	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
+
+	query := `SELECT uid, type, name, title, organization, extension, phone, email, website, location, superior, cached_at
+		FROM contacts WHERE cached_at > ? ORDER BY type, name LIMIT 1000`
+
+	rows, err := db.conn.Query(query, ttlTimestamp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all contacts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var contacts []Contact
+	for rows.Next() {
+		var contact Contact
+		var title, org, extension, phone, email, website, location, superior sql.NullString
+
+		if err := rows.Scan(&contact.UID, &contact.Type, &contact.Name, &title, &org, &extension, &phone, &email, &website, &location, &superior, &contact.CachedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan contact row: %w", err)
+		}
+
+		contact.Title = title.String
+		contact.Organization = org.String
+		contact.Extension = extension.String
+		contact.Phone = phone.String
+		contact.Email = email.String
+		contact.Website = website.String
+		contact.Location = location.String
+		contact.Superior = superior.String
+
+		contacts = append(contacts, contact)
+	}
+
+	return contacts, nil
+}
+
 // DeleteExpiredContacts removes contacts older than the specified TTL
 // Returns the number of deleted entries
 func (db *DB) DeleteExpiredContacts(ttl time.Duration) (int64, error) {
@@ -729,6 +769,26 @@ func (db *DB) GetCoursesByYearTerm(year, term int) ([]Course, error) {
 	rows, err := db.conn.Query(query, year, term, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get courses by year and term: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	return scanCourses(rows)
+}
+
+// GetCoursesByRecentSemesters retrieves all courses from recent semesters (current + previous)
+// Used for fuzzy character-set matching when SQL LIKE doesn't find results
+// Only returns non-expired cache entries based on configured TTL
+func (db *DB) GetCoursesByRecentSemesters() ([]Course, error) {
+	// Calculate TTL cutoff timestamp
+	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
+
+	// Get up to 2000 most recent courses ordered by semester (year, term)
+	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at
+		FROM courses WHERE cached_at > ? ORDER BY year DESC, term DESC LIMIT 2000`
+
+	rows, err := db.conn.Query(query, ttlTimestamp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get courses by recent semesters: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 

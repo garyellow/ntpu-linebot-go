@@ -87,6 +87,58 @@ func TestTruncateText(t *testing.T) {
 	}
 }
 
+// TestContainsAllRunes tests the fuzzy matching function for contact/course search
+func TestContainsAllRunes(t *testing.T) {
+	tests := []struct {
+		name     string
+		s        string
+		chars    string
+		expected bool
+	}{
+		// Chinese department matching (key use case)
+		{"資工系 matches 資訊工程學系", "資訊工程學系", "資工系", true},
+		{"電機系 matches 電機工程學系", "電機工程學系", "電機系", true},
+		{"通訊系 matches 通訊工程學系", "通訊工程學系", "通訊系", true},
+		{"社工系 matches 社會工作學系", "社會工作學系", "社工系", true},
+		{"企管系 matches 企業管理學系", "企業管理學系", "企管系", true},
+		{"會計系 matches 會計學系", "會計學系", "會計系", true},
+		{"統計系 matches 統計學系", "統計學系", "統計系", true},
+		{"金融系 matches 金融與合作經營學系", "金融與合作經營學系", "金融系", true},
+		{"公行系 matches 公共行政暨政策學系", "公共行政暨政策學系", "公行系", true}, // 公共"行"政 contains 行
+		{"財法組 matches 財經法組", "財經法組", "財法組", true},
+
+		// Teacher name matching
+		{"王 matches 王小明", "王小明", "王", true},
+		{"陳老師 matches 陳大明教授", "陳大明教授", "陳", true},
+		{"Full name match", "張三", "張三", true},
+
+		// Edge cases
+		{"Empty chars", "任意字串", "", true},
+		{"Empty s", "", "abc", false},
+		{"Both empty", "", "", true},
+		{"Exact match", "資工系", "資工系", true},
+		{"Superset chars - no match", "資工", "資工系", false}, // 資工 doesn't have 系
+
+		// Case insensitivity (for ASCII)
+		{"Case insensitive English", "Computer Science", "cs", true},
+		{"Mixed case", "ABCDEF", "abc", true},
+
+		// Course title matching
+		{"程式 in 程式設計", "程式設計", "程式", true},
+		{"微積分 matches", "微積分（一）", "微積分", true},
+		{"資料結構 matches", "資料結構與演算法", "資料", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ContainsAllRunes(tt.s, tt.chars)
+			if result != tt.expected {
+				t.Errorf("ContainsAllRunes(%q, %q) = %v, expected %v", tt.s, tt.chars, result, tt.expected)
+			}
+		})
+	}
+}
+
 // TestSplitMessages tests critical LINE API constraint (5 messages max per reply)
 func TestSplitMessages(t *testing.T) {
 	tests := []struct {

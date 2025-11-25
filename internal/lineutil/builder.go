@@ -254,6 +254,38 @@ func TruncateText(text string, maxLen int) string {
 	return string(runes[:maxLen-3]) + "..."
 }
 
+// ContainsAllRunes checks if string s contains all runes from string chars.
+// Implements Python's set(chars).issubset(s) logic for fuzzy matching.
+// Example: ContainsAllRunes("資訊工程學系", "資工系") returns true
+// because all characters in "資工系" exist in "資訊工程學系".
+// This is case-insensitive for ASCII characters.
+func ContainsAllRunes(s, chars string) bool {
+	if chars == "" {
+		return true
+	}
+	if s == "" {
+		return false
+	}
+
+	// Convert to lowercase for case-insensitive matching (for ASCII)
+	sLower := strings.ToLower(s)
+	charsLower := strings.ToLower(chars)
+
+	// Build a set of runes from s
+	runeSet := make(map[rune]struct{})
+	for _, r := range sLower {
+		runeSet[r] = struct{}{}
+	}
+
+	// Check if all runes in chars exist in s
+	for _, r := range charsLower {
+		if _, exists := runeSet[r]; !exists {
+			return false
+		}
+	}
+	return true
+}
+
 // SplitMessages splits a slice of messages into batches of a specified size.
 // The messages parameter contains all messages to split, and maxCount is the batch size.
 // LINE API has a limit of 5 messages per request, so the default should be 5.
