@@ -371,8 +371,26 @@ func (h *Handler) handleCourseTitleSearch(ctx context.Context, title string) []m
 	return []messaging_api.MessageInterface{msg}
 }
 
-// handleTeacherSearch handles teacher search queries
-// Uses fuzzy character-set matching for teacher names
+// handleTeacherSearch handles teacher search queries with a 2-tier search strategy:
+//
+// Search Strategy:
+//
+//  1. SQL LIKE (fast path): Direct database LIKE query for teacher name substrings.
+//     Example: "王教授" matches courses where any teacher contains "王教授"
+//
+//  2. Fuzzy character-set matching (cache fallback): If SQL LIKE returns no results,
+//     loads up to 2000 recent courses and checks if all runes in teacherName exist in each teacher.
+//     Example: "王" matches "王小明" because all chars exist in the teacher name
+//     This enables single-character surname search.
+//
+// Note: Unlike contact search, teacher search does NOT use search variants for scraping.
+// If cache miss occurs, it triggers a full semester scrape (heavy operation).
+// Future optimization: Add "semester fully scraped" flag to avoid repeated scrapes.
+//
+// Performance notes:
+//   - SQL LIKE is indexed and fast; most queries resolve here
+//   - Fuzzy matching iterates O(n*m) where n=courses, m=teachers per course
+//   - Current limit of 2000 courses is acceptable within 25s webhook timeout
 func (h *Handler) handleTeacherSearch(ctx context.Context, teacherName string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(moduleName)
 	startTime := time.Now()
@@ -496,26 +514,14 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 	if len(course.Teachers) > 0 {
 		teacherNames := strings.Join(course.Teachers, "、")
 		contents = append(contents,
-			lineutil.NewFlexBox("vertical",
-				lineutil.NewFlexBox("horizontal",
-					lineutil.NewFlexText("👨‍🏫").WithSize("sm").WithFlex(0).FlexText,
-					lineutil.NewFlexText("授課教師").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
-				).WithSpacing("sm").FlexBox,
-				lineutil.NewFlexText(teacherNames).WithColor("#333333").WithSize("sm").WithMargin("sm").WithWrap(true).WithLineSpacing("4px").FlexText,
-			).WithMargin("lg").FlexBox,
+			lineutil.NewInfoRowWithMargin("👨‍🏫", "授課教師", teacherNames, lineutil.DefaultInfoRowStyle(), "lg"),
 		)
 	}
 
 	// 學期 info
 	contents = append(contents,
 		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-		lineutil.NewFlexBox("vertical",
-			lineutil.NewFlexBox("horizontal",
-				lineutil.NewFlexText("📅").WithSize("sm").WithFlex(0).FlexText,
-				lineutil.NewFlexText("開課學期").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
-			).WithSpacing("sm").FlexBox,
-			lineutil.NewFlexText(fmt.Sprintf("%d 學年度 第 %d 學期", course.Year, course.Term)).WithColor("#333333").WithSize("sm").WithMargin("sm").FlexText,
-		).WithMargin("md").FlexBox,
+		lineutil.NewInfoRowWithMargin("📅", "開課學期", fmt.Sprintf("%d 學年度 第 %d 學期", course.Year, course.Term), lineutil.DefaultInfoRowStyle(), "md"),
 	)
 
 	// 時間 info - full display with wrap
@@ -523,13 +529,7 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 		timeStr := strings.Join(course.Times, "、")
 		contents = append(contents,
 			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-			lineutil.NewFlexBox("vertical",
-				lineutil.NewFlexBox("horizontal",
-					lineutil.NewFlexText("⏰").WithSize("sm").WithFlex(0).FlexText,
-					lineutil.NewFlexText("上課時間").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
-				).WithSpacing("sm").FlexBox,
-				lineutil.NewFlexText(timeStr).WithColor("#333333").WithSize("sm").WithMargin("sm").WithWrap(true).WithLineSpacing("4px").FlexText,
-			).WithMargin("md").FlexBox,
+			lineutil.NewInfoRowWithMargin("⏰", "上課時間", timeStr, lineutil.DefaultInfoRowStyle(), "md"),
 		)
 	}
 
@@ -538,27 +538,18 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 		locationStr := strings.Join(course.Locations, "、")
 		contents = append(contents,
 			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-			lineutil.NewFlexBox("vertical",
-				lineutil.NewFlexBox("horizontal",
-					lineutil.NewFlexText("📍").WithSize("sm").WithFlex(0).FlexText,
-					lineutil.NewFlexText("上課地點").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
-				).WithSpacing("sm").FlexBox,
-				lineutil.NewFlexText(locationStr).WithColor("#333333").WithSize("sm").WithMargin("sm").WithWrap(true).WithLineSpacing("4px").FlexText,
-			).WithMargin("md").FlexBox,
+			lineutil.NewInfoRowWithMargin("📍", "上課地點", locationStr, lineutil.DefaultInfoRowStyle(), "md"),
 		)
 	}
 
 	// 備註 info - full display with wrap for complete information
 	if course.Note != "" {
+		noteStyle := lineutil.DefaultInfoRowStyle()
+		noteStyle.ValueSize = "xs"
+		noteStyle.ValueColor = "#666666"
 		contents = append(contents,
 			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-			lineutil.NewFlexBox("vertical",
-				lineutil.NewFlexBox("horizontal",
-					lineutil.NewFlexText("📝").WithSize("sm").WithFlex(0).FlexText,
-					lineutil.NewFlexText("備註").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
-				).WithSpacing("sm").FlexBox,
-				lineutil.NewFlexText(course.Note).WithColor("#666666").WithSize("xs").WithMargin("sm").WithWrap(true).WithLineSpacing("4px").FlexText,
-			).WithMargin("md").FlexBox,
+			lineutil.NewInfoRowWithMargin("📝", "備註", course.Note, noteStyle, "md"),
 		)
 	}
 

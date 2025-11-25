@@ -578,31 +578,13 @@ func (h *Handler) formatStudentResponse(student *storage.Student, fromCache bool
 	// Each info row uses vertical stacking: icon+label on top, value below
 	contents := []messaging_api.FlexComponentInterface{
 		// 學號 row
-		lineutil.NewFlexBox("vertical",
-			lineutil.NewFlexBox("horizontal",
-				lineutil.NewFlexText("🆔").WithSize("sm").WithFlex(0).FlexText,
-				lineutil.NewFlexText("學號").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
-			).WithSpacing("sm").FlexBox,
-			lineutil.NewFlexText(student.ID).WithColor("#333333").WithSize("md").WithWeight("bold").WithMargin("sm").FlexText,
-		).WithMargin("md").FlexBox,
+		lineutil.NewInfoRowWithMargin("🆔", "學號", student.ID, lineutil.BoldInfoRowStyle(), "md"),
 		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
 		// 系所 row
-		lineutil.NewFlexBox("vertical",
-			lineutil.NewFlexBox("horizontal",
-				lineutil.NewFlexText("🏫").WithSize("sm").WithFlex(0).FlexText,
-				lineutil.NewFlexText("系所").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
-			).WithSpacing("sm").FlexBox,
-			lineutil.NewFlexText(student.Department).WithColor("#333333").WithSize("md").WithWeight("bold").WithMargin("sm").WithWrap(true).WithLineSpacing("4px").FlexText,
-		).WithMargin("md").FlexBox,
+		lineutil.NewInfoRowWithMargin("🏫", "系所", student.Department, lineutil.BoldInfoRowStyle(), "md"),
 		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
 		// 學年度 row
-		lineutil.NewFlexBox("vertical",
-			lineutil.NewFlexBox("horizontal",
-				lineutil.NewFlexText("📅").WithSize("sm").WithFlex(0).FlexText,
-				lineutil.NewFlexText("入學學年").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
-			).WithSpacing("sm").FlexBox,
-			lineutil.NewFlexText(fmt.Sprintf("%d 學年度", student.Year)).WithColor("#333333").WithSize("md").WithWeight("bold").WithMargin("sm").FlexText,
-		).WithMargin("md").FlexBox,
+		lineutil.NewInfoRowWithMargin("📅", "入學學年", fmt.Sprintf("%d 學年度", student.Year), lineutil.BoldInfoRowStyle(), "md"),
 	}
 
 	if fromCache {

@@ -279,8 +279,28 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 	return []messaging_api.MessageInterface{msg}
 }
 
-// handleContactSearch handles contact search queries
-// Uses fuzzy character-set matching: "資工系" matches "資訊工程學系"
+// handleContactSearch handles contact search queries with a multi-tier search strategy:
+//
+// Search Strategy (3-tier cascade):
+//
+//  1. SQL LIKE (fast path): Direct database LIKE query for exact substrings.
+//     Example: "資工" matches "資訊工程學系" via SQL LIKE '%資工%'
+//
+//  2. Fuzzy character-set matching (cache fallback): If SQL LIKE returns no results,
+//     loads all cached contacts and checks if all runes in searchTerm exist in target.
+//     Example: "資工系" matches "資訊工程學系" because all chars (資,工,系) exist in target
+//     This enables abbreviation matching where chars are scattered in the full name.
+//
+//  3. Web scraping with search variants (external fallback): If cache has no results,
+//     scrape from NTPU website using multiple search variants.
+//     buildSearchVariants() expands abbreviations for scraping only (not cache search)
+//     because fuzzy matching already handles abbreviations in cached data.
+//     Example: "資工" expands to ["資工", "資訊工程學系"] for scraping
+//
+// Performance notes:
+//   - SQL LIKE is indexed and fast; most queries resolve here
+//   - Fuzzy matching loads up to 1000 contacts; acceptable since it's a fallback
+//   - Search variants only affect scraping, not cache lookups
 func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(moduleName)
 	startTime := time.Now()
@@ -288,44 +308,36 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 
 	var contacts []storage.Contact
 
-	// First, try fuzzy character-set matching on all cached contacts
-	// This enables "資工系" to match "資訊工程學系" even before SQL LIKE
-	allContacts, err := h.db.GetAllContacts()
-	if err == nil && len(allContacts) > 0 {
-		for _, c := range allContacts {
-			// Check exact substring match first (faster)
-			if strings.Contains(c.Name, searchTerm) ||
-				strings.Contains(c.Organization, searchTerm) ||
-				strings.Contains(c.Superior, searchTerm) {
-				contacts = append(contacts, c)
-				continue
-			}
-			// Then check fuzzy character-set matching (slower but more flexible)
-			// This enables "資工系" to match "資訊工程學系"
-			if lineutil.ContainsAllRunes(c.Name, searchTerm) ||
-				lineutil.ContainsAllRunes(c.Organization, searchTerm) ||
-				lineutil.ContainsAllRunes(c.Superior, searchTerm) {
-				contacts = append(contacts, c)
-			}
+	// Step 1: Try SQL LIKE search first (fast path for exact substrings)
+	sqlContacts, err := h.db.SearchContactsByName(searchTerm)
+	if err != nil {
+		log.WithError(err).Error("Failed to search contacts in cache")
+		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
+		msg := lineutil.ErrorMessageWithDetailAndSender("查詢聯絡資訊時發生問題", sender)
+		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+				{Action: lineutil.NewMessageAction("重試", "聯絡 "+searchTerm)},
+				{Action: lineutil.NewMessageAction("緊急電話", "緊急")},
+			})
 		}
+		return []messaging_api.MessageInterface{msg}
 	}
+	contacts = sqlContacts
 
-	// If fuzzy matching didn't find results, try SQL LIKE (in case cache is outdated)
+	// Step 2: If SQL LIKE didn't find results, try fuzzy character-set matching
+	// This enables "資工系" to match "資訊工程學系" by checking if all characters exist
 	if len(contacts) == 0 {
-		sqlContacts, err := h.db.SearchContactsByName(searchTerm)
-		if err != nil {
-			log.WithError(err).Error("Failed to search contacts in cache")
-			h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-			msg := lineutil.ErrorMessageWithDetailAndSender("查詢聯絡資訊時發生問題", sender)
-			if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
-				textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-					{Action: lineutil.NewMessageAction("重試", "聯絡 "+searchTerm)},
-					{Action: lineutil.NewMessageAction("緊急電話", "緊急")},
-				})
+		allContacts, err := h.db.GetAllContacts()
+		if err == nil && len(allContacts) > 0 {
+			for _, c := range allContacts {
+				// Fuzzy character-set matching: check if all runes in searchTerm exist in target
+				if lineutil.ContainsAllRunes(c.Name, searchTerm) ||
+					lineutil.ContainsAllRunes(c.Organization, searchTerm) ||
+					lineutil.ContainsAllRunes(c.Superior, searchTerm) {
+					contacts = append(contacts, c)
+				}
 			}
-			return []messaging_api.MessageInterface{msg}
 		}
-		contacts = sqlContacts
 	}
 
 	// If found in cache, return results
@@ -453,21 +465,11 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 
 			// Organization / Superior - use vertical layout
 			if c.Type == "organization" && c.Superior != "" {
-				bodyContents = append(bodyContents, lineutil.NewFlexBox("vertical",
-					lineutil.NewFlexBox("horizontal",
-						lineutil.NewFlexText("🏢").WithSize("sm").WithFlex(0).FlexText,
-						lineutil.NewFlexText("上級單位").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
-					).WithSpacing("sm").FlexBox,
-					lineutil.NewFlexText(c.Superior).WithColor("#333333").WithSize("sm").WithMargin("sm").WithWrap(true).WithLineSpacing("4px").FlexText,
-				).WithMargin("lg").FlexBox)
+				bodyContents = append(bodyContents,
+					lineutil.NewInfoRowWithMargin("🏢", "上級單位", c.Superior, lineutil.DefaultInfoRowStyle(), "lg"))
 			} else if c.Organization != "" {
-				bodyContents = append(bodyContents, lineutil.NewFlexBox("vertical",
-					lineutil.NewFlexBox("horizontal",
-						lineutil.NewFlexText("🏢").WithSize("sm").WithFlex(0).FlexText,
-						lineutil.NewFlexText("所屬單位").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
-					).WithSpacing("sm").FlexBox,
-					lineutil.NewFlexText(c.Organization).WithColor("#333333").WithSize("sm").WithMargin("sm").WithWrap(true).WithLineSpacing("4px").FlexText,
-				).WithMargin("lg").FlexBox)
+				bodyContents = append(bodyContents,
+					lineutil.NewInfoRowWithMargin("🏢", "所屬單位", c.Organization, lineutil.DefaultInfoRowStyle(), "lg"))
 			}
 
 			// Contact Info - Extension
@@ -475,52 +477,32 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 				if len(bodyContents) > 0 {
 					bodyContents = append(bodyContents, lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator)
 				}
-				bodyContents = append(bodyContents, lineutil.NewFlexBox("vertical",
-					lineutil.NewFlexBox("horizontal",
-						lineutil.NewFlexText("☎️").WithSize("sm").WithFlex(0).FlexText,
-						lineutil.NewFlexText("分機號碼").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
-					).WithSpacing("sm").FlexBox,
-					lineutil.NewFlexText(c.Extension).WithColor("#333333").WithSize("md").WithWeight("bold").WithMargin("sm").FlexText,
-				).WithMargin("md").FlexBox)
+				bodyContents = append(bodyContents,
+					lineutil.NewInfoRowWithMargin("☎️", "分機號碼", c.Extension, lineutil.BoldInfoRowStyle(), "md"))
 			}
 			// Contact Info - Phone
 			if c.Phone != "" {
 				if len(bodyContents) > 0 {
 					bodyContents = append(bodyContents, lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator)
 				}
-				bodyContents = append(bodyContents, lineutil.NewFlexBox("vertical",
-					lineutil.NewFlexBox("horizontal",
-						lineutil.NewFlexText("📞").WithSize("sm").WithFlex(0).FlexText,
-						lineutil.NewFlexText("電話號碼").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
-					).WithSpacing("sm").FlexBox,
-					lineutil.NewFlexText(c.Phone).WithColor("#333333").WithSize("md").WithWeight("bold").WithMargin("sm").FlexText,
-				).WithMargin("md").FlexBox)
+				bodyContents = append(bodyContents,
+					lineutil.NewInfoRowWithMargin("📞", "電話號碼", c.Phone, lineutil.BoldInfoRowStyle(), "md"))
 			}
 			// Contact Info - Location
 			if c.Location != "" {
 				if len(bodyContents) > 0 {
 					bodyContents = append(bodyContents, lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator)
 				}
-				bodyContents = append(bodyContents, lineutil.NewFlexBox("vertical",
-					lineutil.NewFlexBox("horizontal",
-						lineutil.NewFlexText("📍").WithSize("sm").WithFlex(0).FlexText,
-						lineutil.NewFlexText("辦公位置").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
-					).WithSpacing("sm").FlexBox,
-					lineutil.NewFlexText(c.Location).WithColor("#333333").WithSize("sm").WithMargin("sm").WithWrap(true).WithLineSpacing("4px").FlexText,
-				).WithMargin("md").FlexBox)
+				bodyContents = append(bodyContents,
+					lineutil.NewInfoRowWithMargin("📍", "辦公位置", c.Location, lineutil.DefaultInfoRowStyle(), "md"))
 			}
 			// Contact Info - Email
 			if c.Email != "" {
 				if len(bodyContents) > 0 {
 					bodyContents = append(bodyContents, lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator)
 				}
-				bodyContents = append(bodyContents, lineutil.NewFlexBox("vertical",
-					lineutil.NewFlexBox("horizontal",
-						lineutil.NewFlexText("✉️").WithSize("sm").WithFlex(0).FlexText,
-						lineutil.NewFlexText("電子郵件").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
-					).WithSpacing("sm").FlexBox,
-					lineutil.NewFlexText(c.Email).WithColor("#333333").WithSize("sm").WithMargin("sm").WithWrap(true).WithLineSpacing("4px").FlexText,
-				).WithMargin("md").FlexBox)
+				bodyContents = append(bodyContents,
+					lineutil.NewInfoRowWithMargin("✉️", "電子郵件", c.Email, lineutil.DefaultInfoRowStyle(), "md"))
 			}
 
 			// Footer: Actions

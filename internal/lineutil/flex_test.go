@@ -292,3 +292,127 @@ func BenchmarkNewKeyValueRow(b *testing.B) {
 		_ = NewKeyValueRow("測試標籤", "測試數值內容比較長一點的情況")
 	}
 }
+
+// TestNewInfoRow tests the standardized info row creation
+func TestNewInfoRow(t *testing.T) {
+	tests := []struct {
+		name       string
+		emoji      string
+		label      string
+		value      string
+		style      InfoRowStyle
+		checkWrap  bool
+		checkBold  bool
+		valueSize  string
+		valueColor string
+	}{
+		{
+			name:       "Default style with wrap",
+			emoji:      "👨‍🏫",
+			label:      "授課教師",
+			value:      "王教授、李教授",
+			style:      DefaultInfoRowStyle(),
+			checkWrap:  true,
+			checkBold:  false,
+			valueSize:  "sm",
+			valueColor: "#333333",
+		},
+		{
+			name:       "Bold style without wrap",
+			emoji:      "☎️",
+			label:      "分機號碼",
+			value:      "12345",
+			style:      BoldInfoRowStyle(),
+			checkWrap:  false,
+			checkBold:  true,
+			valueSize:  "md",
+			valueColor: "#333333",
+		},
+		{
+			name:  "Custom style",
+			emoji: "📝",
+			label: "備註",
+			value: "這是備註內容",
+			style: InfoRowStyle{
+				ValueSize:   "xs",
+				ValueWeight: "regular",
+				ValueColor:  "#666666",
+				Wrap:        true,
+			},
+			checkWrap:  true,
+			checkBold:  false,
+			valueSize:  "xs",
+			valueColor: "#666666",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			row := NewInfoRow(tt.emoji, tt.label, tt.value, tt.style)
+
+			// Check it's a vertical box
+			if row.Layout != "vertical" {
+				t.Errorf("Expected layout 'vertical', got %v", row.Layout)
+			}
+
+			// Check it has 2 contents (header row + value)
+			if len(row.Contents) != 2 {
+				t.Errorf("Expected 2 contents, got %d", len(row.Contents))
+			}
+		})
+	}
+}
+
+// TestNewInfoRowWithMargin tests the convenience wrapper with margin
+func TestNewInfoRowWithMargin(t *testing.T) {
+	result := NewInfoRowWithMargin("🆔", "學號", "41247001", BoldInfoRowStyle(), "lg")
+
+	// Should not be nil
+	if result == nil {
+		t.Fatal("Expected non-nil result")
+	}
+}
+
+// TestInfoRowStyles tests the predefined styles
+func TestInfoRowStyles(t *testing.T) {
+	t.Run("DefaultInfoRowStyle", func(t *testing.T) {
+		style := DefaultInfoRowStyle()
+		if style.ValueSize != "sm" {
+			t.Errorf("Expected ValueSize 'sm', got %s", style.ValueSize)
+		}
+		if style.ValueWeight != "regular" {
+			t.Errorf("Expected ValueWeight 'regular', got %s", style.ValueWeight)
+		}
+		if style.ValueColor != "#333333" {
+			t.Errorf("Expected ValueColor '#333333', got %s", style.ValueColor)
+		}
+		if !style.Wrap {
+			t.Error("Expected Wrap to be true")
+		}
+	})
+
+	t.Run("BoldInfoRowStyle", func(t *testing.T) {
+		style := BoldInfoRowStyle()
+		if style.ValueSize != "md" {
+			t.Errorf("Expected ValueSize 'md', got %s", style.ValueSize)
+		}
+		if style.ValueWeight != "bold" {
+			t.Errorf("Expected ValueWeight 'bold', got %s", style.ValueWeight)
+		}
+		if style.ValueColor != "#333333" {
+			t.Errorf("Expected ValueColor '#333333', got %s", style.ValueColor)
+		}
+		if style.Wrap {
+			t.Error("Expected Wrap to be false")
+		}
+	})
+}
+
+// BenchmarkNewInfoRow benchmarks the NewInfoRow function
+func BenchmarkNewInfoRow(b *testing.B) {
+	style := DefaultInfoRowStyle()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = NewInfoRow("👨‍🏫", "授課教師", "王教授、李教授、陳教授", style)
+	}
+}

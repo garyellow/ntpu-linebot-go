@@ -236,3 +236,68 @@ func NewHeaderBadge(emoji, label string) *FlexBox {
 		).FlexBox,
 	)
 }
+
+// InfoRowStyle defines the visual style for an info row
+type InfoRowStyle struct {
+	ValueSize   string // Value text size: "xs", "sm", "md" (default: "sm")
+	ValueWeight string // Value text weight: "regular", "bold" (default: "regular")
+	ValueColor  string // Value text color (default: "#333333")
+	Wrap        bool   // Whether to wrap long text (default: true)
+}
+
+// DefaultInfoRowStyle returns the standard info row style
+func DefaultInfoRowStyle() InfoRowStyle {
+	return InfoRowStyle{
+		ValueSize:   "sm",
+		ValueWeight: "regular",
+		ValueColor:  "#333333",
+		Wrap:        true,
+	}
+}
+
+// BoldInfoRowStyle returns a style with bold value text (for important data like phone/ID)
+func BoldInfoRowStyle() InfoRowStyle {
+	return InfoRowStyle{
+		ValueSize:   "md",
+		ValueWeight: "bold",
+		ValueColor:  "#333333",
+		Wrap:        false,
+	}
+}
+
+// NewInfoRow creates a vertical info row with icon + label on top, value below
+// This is a standardized pattern used across all modules for Flex Message body content
+//
+// Layout:
+//
+//	┌─────────────────────────────┐
+//	│ [emoji] [label]             │  <- icon + label (horizontal, gray)
+//	│ [value text with wrap]      │  <- value (full width, wrappable)
+//	└─────────────────────────────┘
+//
+// Example usage:
+//
+//	NewInfoRow("👨‍🏫", "授課教師", "王教授、李教授", DefaultInfoRowStyle())
+//	NewInfoRow("☎️", "分機號碼", "12345", BoldInfoRowStyle())
+func NewInfoRow(emoji, label, value string, style InfoRowStyle) *FlexBox {
+	valueText := NewFlexText(value).WithColor(style.ValueColor).WithSize(style.ValueSize).WithMargin("sm")
+	if style.ValueWeight == "bold" {
+		valueText = valueText.WithWeight("bold")
+	}
+	if style.Wrap {
+		valueText = valueText.WithWrap(true).WithLineSpacing("4px")
+	}
+
+	return NewFlexBox("vertical",
+		NewFlexBox("horizontal",
+			NewFlexText(emoji).WithSize("sm").WithFlex(0).FlexText,
+			NewFlexText(label).WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
+		).WithSpacing("sm").FlexBox,
+		valueText.FlexText,
+	)
+}
+
+// NewInfoRowWithMargin creates an info row with specified margin (convenience wrapper)
+func NewInfoRowWithMargin(emoji, label, value string, style InfoRowStyle, margin string) messaging_api.FlexComponentInterface {
+	return NewInfoRow(emoji, label, value, style).WithMargin(margin).FlexBox
+}
