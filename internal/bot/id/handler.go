@@ -152,6 +152,18 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		if searchTerm != "" {
 			return h.handleYearQuery(searchTerm)
 		}
+		// No year provided - show guidance message
+		sender := lineutil.GetSender(senderName, h.stickerManager)
+		msg := lineutil.NewTextMessageWithConsistentSender(
+			"📅 按學年查詢學生\n\n請輸入要查詢的學年度\n例如：學年 112、學年 110\n\n📋 查詢流程：\n1️⃣ 選擇學院群（文法商/公社電資）\n2️⃣ 選擇學院\n3️⃣ 選擇科系\n4️⃣ 查看該年度該科系所有學生\n\n⚠️ 僅提供 95-112 學年度資料",
+			sender,
+		)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			{Action: lineutil.NewMessageAction("查詢 112 學年度", "學年 112")},
+			{Action: lineutil.NewMessageAction("查詢 111 學年度", "學年 111")},
+			{Action: lineutil.NewMessageAction("查詢 110 學年度", "學年 110")},
+		})
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	// Handle student ID or name query
@@ -377,13 +389,13 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	// Create confirmation message
-	confirmText := fmt.Sprintf("是否要搜尋 %d 學年度的學生？", year)
+	// Create confirmation message with flow explanation
+	confirmText := fmt.Sprintf("📅 %d 學年度學生查詢\n\n📋 查詢流程：\n1️⃣ 選擇學院群\n2️⃣ 選擇學院\n3️⃣ 選擇科系\n\n確定要查詢嗎？", year)
 	confirmMsg := lineutil.NewConfirmTemplate(
 		"確認學年度",
 		confirmText,
-		lineutil.NewPostbackAction("哪次不是", fmt.Sprintf("id:搜尋全系%s%d", splitChar, year)),
-		lineutil.NewPostbackAction("我在想想", "id:兇"),
+		lineutil.NewPostbackAction("開始查詢", fmt.Sprintf("id:搜尋全系%s%d", splitChar, year)),
+		lineutil.NewPostbackAction("取消", "id:兇"),
 	)
 	return []messaging_api.MessageInterface{
 		lineutil.SetSender(confirmMsg, sender),
@@ -394,16 +406,16 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 func (h *Handler) handleYearSearchConfirm(yearStr string) []messaging_api.MessageInterface {
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
-	// Create college group selection template
+	// Create college group selection template with clear guidance
 	actions := []messaging_api.ActionInterface{
-		lineutil.NewPostbackActionWithDisplayText("文法商", "文法商", fmt.Sprintf("id:文法商%s%s", splitChar, yearStr)),
-		lineutil.NewPostbackActionWithDisplayText("公社電資", "公社電資", fmt.Sprintf("id:公社電資%s%s", splitChar, yearStr)),
+		lineutil.NewPostbackActionWithDisplayText("文法商", fmt.Sprintf("搜尋 %s 學年度文法商學院群", yearStr), fmt.Sprintf("id:文法商%s%s", splitChar, yearStr)),
+		lineutil.NewPostbackActionWithDisplayText("公社電資", fmt.Sprintf("搜尋 %s 學年度公社電資學院群", yearStr), fmt.Sprintf("id:公社電資%s%s", splitChar, yearStr)),
 	}
 
 	msg := lineutil.NewButtonsTemplateWithImage(
-		"選擇學院群",
-		"選擇學院群",
-		"請選擇科系所屬學院群",
+		fmt.Sprintf("%s 學年度學生查詢", yearStr),
+		fmt.Sprintf("%s 學年度", yearStr),
+		"請選擇科系所屬學院群\n\n📚 文法商：人文、法律、商學院\n🏛️ 公社電資：公共事務、社科、電資學院",
 		"https://new.ntpu.edu.tw/assets/logo/ntpu_logo.png",
 		actions,
 	)
@@ -562,19 +574,41 @@ func (h *Handler) formatStudentResponse(student *storage.Student, fromCache bool
 	// Hero: Name with NTPU green background (using standardized component)
 	hero := lineutil.NewHeroBox(student.Name, "國立臺北大學")
 
-	// Body: Student details
+	// Body: Student details with improved vertical layout to prevent truncation
+	// Each info row uses vertical stacking: icon+label on top, value below
 	contents := []messaging_api.FlexComponentInterface{
-		lineutil.NewKeyValueRow("🆔 學號", student.ID).WithMargin("lg").FlexBox,
+		// 學號 row
+		lineutil.NewFlexBox("vertical",
+			lineutil.NewFlexBox("horizontal",
+				lineutil.NewFlexText("🆔").WithSize("sm").WithFlex(0).FlexText,
+				lineutil.NewFlexText("學號").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
+			).WithSpacing("sm").FlexBox,
+			lineutil.NewFlexText(student.ID).WithColor("#333333").WithSize("md").WithWeight("bold").WithMargin("sm").FlexText,
+		).WithMargin("lg").FlexBox,
 		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-		lineutil.NewKeyValueRow("🏫 系所", student.Department).WithMargin("md").FlexBox,
+		// 系所 row
+		lineutil.NewFlexBox("vertical",
+			lineutil.NewFlexBox("horizontal",
+				lineutil.NewFlexText("🏫").WithSize("sm").WithFlex(0).FlexText,
+				lineutil.NewFlexText("系所").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
+			).WithSpacing("sm").FlexBox,
+			lineutil.NewFlexText(student.Department).WithColor("#333333").WithSize("md").WithWeight("bold").WithMargin("sm").WithWrap(true).WithLineSpacing("4px").FlexText,
+		).WithMargin("md").FlexBox,
 		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-		lineutil.NewKeyValueRow("📅 學年度", fmt.Sprintf("%d", student.Year)).WithMargin("md").FlexBox,
+		// 學年度 row
+		lineutil.NewFlexBox("vertical",
+			lineutil.NewFlexBox("horizontal",
+				lineutil.NewFlexText("📅").WithSize("sm").WithFlex(0).FlexText,
+				lineutil.NewFlexText("入學學年").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
+			).WithSpacing("sm").FlexBox,
+			lineutil.NewFlexText(fmt.Sprintf("%d 學年度", student.Year)).WithColor("#333333").WithSize("md").WithWeight("bold").WithMargin("sm").FlexText,
+		).WithMargin("md").FlexBox,
 	}
 
 	if fromCache {
 		contents = append(contents,
 			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-			lineutil.NewFlexText("📌 資料來自快取").WithSize("xs").WithColor("#999999").WithMargin("md").FlexText,
+			lineutil.NewFlexText("📌 資料來自快取").WithSize("xs").WithColor("#aaaaaa").WithMargin("md").FlexText,
 		)
 	}
 
@@ -651,25 +685,28 @@ func parseYear(yearStr string) (int, error) {
 func (h *Handler) handleCollegeGroupSelection(group, year string) []messaging_api.MessageInterface {
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	var actions []messaging_api.ActionInterface
+	var collegeList string
 
 	if group == "文法商" {
+		collegeList = "📖 人文：中文、應外、歷史\n⚖️ 法律：法學、司法、財法\n💼 商學：企管、金融、會計、統計、休運"
 		actions = []messaging_api.ActionInterface{
-			lineutil.NewPostbackActionWithDisplayText("人文學院", "人文學院", fmt.Sprintf("id:人文學院%s%s", splitChar, year)),
-			lineutil.NewPostbackActionWithDisplayText("法律學院", "法律學院", fmt.Sprintf("id:法律學院%s%s", splitChar, year)),
-			lineutil.NewPostbackActionWithDisplayText("商學院", "商學院", fmt.Sprintf("id:商學院%s%s", splitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("📖 人文學院", fmt.Sprintf("搜尋 %s 學年度人文學院", year), fmt.Sprintf("id:人文學院%s%s", splitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("⚖️ 法律學院", fmt.Sprintf("搜尋 %s 學年度法律學院", year), fmt.Sprintf("id:法律學院%s%s", splitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("💼 商學院", fmt.Sprintf("搜尋 %s 學年度商學院", year), fmt.Sprintf("id:商學院%s%s", splitChar, year)),
 		}
 	} else { // 公社電資
+		collegeList = "🏛️ 公共事務：公行、不動、財政\n👥 社科：經濟、社學、社工\n💻 電資：電機、資工、通訊"
 		actions = []messaging_api.ActionInterface{
-			lineutil.NewPostbackActionWithDisplayText("公共事務學院", "公共事務學院", fmt.Sprintf("id:公共事務學院%s%s", splitChar, year)),
-			lineutil.NewPostbackActionWithDisplayText("社會科學學院", "社會科學學院", fmt.Sprintf("id:社會科學學院%s%s", splitChar, year)),
-			lineutil.NewPostbackActionWithDisplayText("電機資訊學院", "電機資訊學院", fmt.Sprintf("id:電機資訊學院%s%s", splitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("🏛️ 公共事務學院", fmt.Sprintf("搜尋 %s 學年度公共事務學院", year), fmt.Sprintf("id:公共事務學院%s%s", splitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("👥 社會科學學院", fmt.Sprintf("搜尋 %s 學年度社會科學學院", year), fmt.Sprintf("id:社會科學學院%s%s", splitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("💻 電機資訊學院", fmt.Sprintf("搜尋 %s 學年度電機資訊學院", year), fmt.Sprintf("id:電機資訊學院%s%s", splitChar, year)),
 		}
 	}
 
 	msg := lineutil.NewButtonsTemplate(
-		"選擇學院",
-		"選擇學院",
-		"請選擇科系所屬學院",
+		fmt.Sprintf("%s 學年度 %s", year, group),
+		fmt.Sprintf("%s 學年度・%s", year, group),
+		fmt.Sprintf("請選擇學院\n\n%s", collegeList),
 		actions,
 	)
 

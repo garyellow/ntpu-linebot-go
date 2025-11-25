@@ -280,49 +280,99 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 }
 
 // handleContactSearch handles contact search queries
+// Uses fuzzy character-set matching: "資工系" matches "資訊工程學系"
 func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(moduleName)
 	startTime := time.Now()
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
-	// Search in cache first
-	contacts, err := h.db.SearchContactsByName(searchTerm)
-	if err != nil {
-		log.WithError(err).Error("Failed to search contacts in cache")
-		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		msg := lineutil.ErrorMessageWithDetailAndSender("查詢聯絡資訊時發生問題", sender)
-		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
-			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("重試", "聯絡 "+searchTerm)},
-				{Action: lineutil.NewMessageAction("緊急電話", "緊急")},
-			})
+	var contacts []storage.Contact
+
+	// First, try fuzzy character-set matching on all cached contacts
+	// This enables "資工系" to match "資訊工程學系" even before SQL LIKE
+	allContacts, err := h.db.GetAllContacts()
+	if err == nil && len(allContacts) > 0 {
+		for _, c := range allContacts {
+			// Check exact substring match first (faster)
+			if strings.Contains(c.Name, searchTerm) ||
+				strings.Contains(c.Organization, searchTerm) ||
+				strings.Contains(c.Superior, searchTerm) {
+				contacts = append(contacts, c)
+				continue
+			}
+			// Then check fuzzy character-set matching (slower but more flexible)
+			// This enables "資工系" to match "資訊工程學系"
+			if lineutil.ContainsAllRunes(c.Name, searchTerm) ||
+				lineutil.ContainsAllRunes(c.Organization, searchTerm) ||
+				lineutil.ContainsAllRunes(c.Superior, searchTerm) {
+				contacts = append(contacts, c)
+			}
 		}
-		return []messaging_api.MessageInterface{msg}
 	}
 
-	// If found in cache and not expired, return results
+	// If fuzzy matching didn't find results, try SQL LIKE (in case cache is outdated)
+	if len(contacts) == 0 {
+		sqlContacts, err := h.db.SearchContactsByName(searchTerm)
+		if err != nil {
+			log.WithError(err).Error("Failed to search contacts in cache")
+			h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
+			msg := lineutil.ErrorMessageWithDetailAndSender("查詢聯絡資訊時發生問題", sender)
+			if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+				textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+					{Action: lineutil.NewMessageAction("重試", "聯絡 "+searchTerm)},
+					{Action: lineutil.NewMessageAction("緊急電話", "緊急")},
+				})
+			}
+			return []messaging_api.MessageInterface{msg}
+		}
+		contacts = sqlContacts
+	}
+
+	// If found in cache, return results
 	if len(contacts) > 0 {
 		h.metrics.RecordCacheHit(moduleName)
-		log.Infof("Cache hit for contact search: %s", searchTerm)
+		log.Infof("Cache hit for contact search: %s (found %d)", searchTerm, len(contacts))
 		return h.formatContactResults(contacts)
 	}
 
 	// Cache miss - scrape from website
+	// Try multiple search variants to increase hit rate
 	h.metrics.RecordCacheMiss(moduleName)
 	log.Infof("Cache miss for contact search: %s, scraping...", searchTerm)
 
-	contactsPtr, err := ntpu.ScrapeContacts(ctx, h.scraper, searchTerm)
-	if err != nil {
-		log.WithError(err).Errorf("Failed to scrape contacts for: %s", searchTerm)
-		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		msg := lineutil.ErrorMessageWithDetailAndSender("無法取得聯絡資料，可能是網路問題或資料來源暫時無法使用", sender)
-		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
-			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("緊急電話", "緊急")},
-				{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
-			})
+	// Build search variants (e.g., "資工系" -> also try "資訊工程")
+	searchVariants := h.buildSearchVariants(searchTerm)
+
+	var contactsPtr []*storage.Contact
+	for _, variant := range searchVariants {
+		log.Debugf("Trying search variant: %s", variant)
+		result, err := ntpu.ScrapeContacts(ctx, h.scraper, variant)
+		if err != nil {
+			log.WithError(err).Debugf("Failed to scrape contacts for variant: %s", variant)
+			continue
 		}
-		return []messaging_api.MessageInterface{msg}
+		if len(result) > 0 {
+			contactsPtr = result
+			break
+		}
+	}
+
+	if len(contactsPtr) == 0 {
+		// Final attempt with original search term
+		result, err := ntpu.ScrapeContacts(ctx, h.scraper, searchTerm)
+		if err != nil {
+			log.WithError(err).Errorf("Failed to scrape contacts for: %s", searchTerm)
+			h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
+			msg := lineutil.ErrorMessageWithDetailAndSender("無法取得聯絡資料，可能是網路問題或資料來源暫時無法使用", sender)
+			if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+				textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+					{Action: lineutil.NewMessageAction("緊急電話", "緊急")},
+					{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+				})
+			}
+			return []messaging_api.MessageInterface{msg}
+		}
+		contactsPtr = result
 	}
 
 	// Convert []*storage.Contact to []storage.Contact
@@ -398,48 +448,79 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 			// Hero: Name with colored background (using standardized component)
 			hero := lineutil.NewHeroBox(headerText, subText)
 
-			// Body: Details
+			// Body: Details with improved vertical layout to prevent truncation
 			var bodyContents []messaging_api.FlexComponentInterface
 
-			// Organization / Superior
+			// Organization / Superior - use vertical layout
 			if c.Type == "organization" && c.Superior != "" {
-				// Truncate superior name if too long (max ~30 chars, using rune slicing for UTF-8 safety)
-				superiorName := lineutil.TruncateRunes(c.Superior, 30)
-				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("🏢 上級", superiorName).WithMargin("lg").FlexBox)
+				bodyContents = append(bodyContents, lineutil.NewFlexBox("vertical",
+					lineutil.NewFlexBox("horizontal",
+						lineutil.NewFlexText("🏢").WithSize("sm").WithFlex(0).FlexText,
+						lineutil.NewFlexText("上級單位").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
+					).WithSpacing("sm").FlexBox,
+					lineutil.NewFlexText(c.Superior).WithColor("#333333").WithSize("sm").WithMargin("sm").WithWrap(true).WithLineSpacing("4px").FlexText,
+				).WithMargin("lg").FlexBox)
 			} else if c.Organization != "" {
-				// Truncate organization name if too long (max ~30 chars, using rune slicing for UTF-8 safety)
-				orgName := lineutil.TruncateRunes(c.Organization, 30)
-				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("🏢 單位", orgName).WithMargin("lg").FlexBox)
+				bodyContents = append(bodyContents, lineutil.NewFlexBox("vertical",
+					lineutil.NewFlexBox("horizontal",
+						lineutil.NewFlexText("🏢").WithSize("sm").WithFlex(0).FlexText,
+						lineutil.NewFlexText("所屬單位").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
+					).WithSpacing("sm").FlexBox,
+					lineutil.NewFlexText(c.Organization).WithColor("#333333").WithSize("sm").WithMargin("sm").WithWrap(true).WithLineSpacing("4px").FlexText,
+				).WithMargin("lg").FlexBox)
 			}
 
-			// Contact Info
+			// Contact Info - Extension
 			if c.Extension != "" {
 				if len(bodyContents) > 0 {
 					bodyContents = append(bodyContents, lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator)
 				}
-				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("☎️ 分機", c.Extension).WithMargin("md").FlexBox)
+				bodyContents = append(bodyContents, lineutil.NewFlexBox("vertical",
+					lineutil.NewFlexBox("horizontal",
+						lineutil.NewFlexText("☎️").WithSize("sm").WithFlex(0).FlexText,
+						lineutil.NewFlexText("分機號碼").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
+					).WithSpacing("sm").FlexBox,
+					lineutil.NewFlexText(c.Extension).WithColor("#333333").WithSize("md").WithWeight("bold").WithMargin("sm").FlexText,
+				).WithMargin("md").FlexBox)
 			}
+			// Contact Info - Phone
 			if c.Phone != "" {
 				if len(bodyContents) > 0 {
 					bodyContents = append(bodyContents, lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator)
 				}
-				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("📞 專線", c.Phone).WithMargin("md").FlexBox)
+				bodyContents = append(bodyContents, lineutil.NewFlexBox("vertical",
+					lineutil.NewFlexBox("horizontal",
+						lineutil.NewFlexText("📞").WithSize("sm").WithFlex(0).FlexText,
+						lineutil.NewFlexText("電話號碼").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
+					).WithSpacing("sm").FlexBox,
+					lineutil.NewFlexText(c.Phone).WithColor("#333333").WithSize("md").WithWeight("bold").WithMargin("sm").FlexText,
+				).WithMargin("md").FlexBox)
 			}
+			// Contact Info - Location
 			if c.Location != "" {
-				// Truncate location if too long (max ~40 chars for better readability, using rune slicing)
-				location := lineutil.TruncateRunes(c.Location, 40)
 				if len(bodyContents) > 0 {
 					bodyContents = append(bodyContents, lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator)
 				}
-				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("📍 地點", location).WithMargin("md").FlexBox)
+				bodyContents = append(bodyContents, lineutil.NewFlexBox("vertical",
+					lineutil.NewFlexBox("horizontal",
+						lineutil.NewFlexText("📍").WithSize("sm").WithFlex(0).FlexText,
+						lineutil.NewFlexText("辦公位置").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
+					).WithSpacing("sm").FlexBox,
+					lineutil.NewFlexText(c.Location).WithColor("#333333").WithSize("sm").WithMargin("sm").WithWrap(true).WithLineSpacing("4px").FlexText,
+				).WithMargin("md").FlexBox)
 			}
+			// Contact Info - Email
 			if c.Email != "" {
-				// Truncate email if too long to prevent layout break (max 40 chars, using rune slicing)
-				email := lineutil.TruncateRunes(c.Email, 40)
 				if len(bodyContents) > 0 {
 					bodyContents = append(bodyContents, lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator)
 				}
-				bodyContents = append(bodyContents, lineutil.NewKeyValueRow("✉️ Email", email).WithMargin("md").FlexBox)
+				bodyContents = append(bodyContents, lineutil.NewFlexBox("vertical",
+					lineutil.NewFlexBox("horizontal",
+						lineutil.NewFlexText("✉️").WithSize("sm").WithFlex(0).FlexText,
+						lineutil.NewFlexText("電子郵件").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
+					).WithSpacing("sm").FlexBox,
+					lineutil.NewFlexText(c.Email).WithColor("#333333").WithSize("sm").WithMargin("sm").WithWrap(true).WithLineSpacing("4px").FlexText,
+				).WithMargin("md").FlexBox)
 			}
 
 			// Footer: Actions
@@ -515,4 +596,82 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 	}
 
 	return messages
+}
+
+// buildSearchVariants generates search variants for better matching
+// Maps common abbreviations to full names that the school website understands
+// Priority: Full name first (more likely to match), then abbreviations
+func (h *Handler) buildSearchVariants(searchTerm string) []string {
+	// Common department abbreviation mappings - prioritize full names first
+	abbreviationMap := map[string][]string{
+		// 電機資訊學院
+		"資工":  {"資訊工程學系", "資訊工程", "資工系"},
+		"資工系": {"資訊工程學系", "資訊工程"},
+		"電機":  {"電機工程學系", "電機工程", "電機系"},
+		"電機系": {"電機工程學系", "電機工程"},
+		"通訊":  {"通訊工程學系", "通訊工程", "通訊系"},
+		"通訊系": {"通訊工程學系", "通訊工程"},
+		// 商學院
+		"企管":  {"企業管理學系", "企業管理", "企管系"},
+		"企管系": {"企業管理學系", "企業管理"},
+		"會計":  {"會計學系", "會計系"},
+		"會計系": {"會計學系"},
+		"統計":  {"統計學系", "統計系"},
+		"統計系": {"統計學系"},
+		"金融":  {"金融與合作經營學系", "金融系"},
+		"金融系": {"金融與合作經營學系"},
+		"休運":  {"休閒運動管理學系", "休運系"},
+		"休運系": {"休閒運動管理學系"},
+		// 社會科學學院
+		"經濟":  {"經濟學系", "經濟系"},
+		"經濟系": {"經濟學系"},
+		"社工":  {"社會工作學系", "社工系"},
+		"社工系": {"社會工作學系"},
+		"社學":  {"社會學系", "社學系"},
+		"社學系": {"社會學系"},
+		// 法律學院
+		"法律":  {"法律學系", "法律系"},
+		"法律系": {"法律學系"},
+		// 公共事務學院
+		"公行":  {"公共行政暨政策學系", "公共行政", "公行系"},
+		"公行系": {"公共行政暨政策學系", "公共行政"},
+		"財政":  {"財政學系", "財政系"},
+		"財政系": {"財政學系"},
+		"不動產": {"不動產與城鄉環境學系", "不動"},
+		"不動":  {"不動產與城鄉環境學系"},
+		// 人文學院
+		"中文":  {"中國文學系", "中文系"},
+		"中文系": {"中國文學系"},
+		"應外":  {"應用外語學系", "應外系"},
+		"應外系": {"應用外語學系"},
+		"歷史":  {"歷史學系", "歷史系"},
+		"歷史系": {"歷史學系"},
+		// 行政單位
+		"圖書館": {"圖書館", "圖書"},
+		"學務處": {"學務處", "學務"},
+		"教務處": {"教務處", "教務"},
+		"總務處": {"總務處", "總務"},
+		"研發處": {"研發處", "研究發展"},
+		"人事室": {"人事室", "人事"},
+		"註冊組": {"註冊組", "註冊"},
+	}
+
+	variants := []string{}
+
+	// Check if search term matches any abbreviation
+	if mappedVariants, ok := abbreviationMap[searchTerm]; ok {
+		variants = append(variants, mappedVariants...)
+	}
+
+	// Also add the original term with/without "系" suffix
+	if strings.HasSuffix(searchTerm, "系") {
+		// Remove "系" suffix and add variants
+		base := strings.TrimSuffix(searchTerm, "系")
+		variants = append(variants, base)
+	} else {
+		// Add "系" suffix variant
+		variants = append(variants, searchTerm+"系")
+	}
+
+	return variants
 }

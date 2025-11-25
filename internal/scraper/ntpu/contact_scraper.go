@@ -122,8 +122,9 @@ func parseContactsPage(doc *goquery.Document) []*storage.Contact {
 		}
 		contacts = append(contacts, orgContact)
 
-		// Find member table (next sibling after next sibling)
-		memberTable := orgDiv.Next().Next()
+		// Find member table (first sibling after organization div)
+		// The w100 div contains the member table directly after the alert-info div
+		memberTable := orgDiv.Next()
 		if memberTable.HasClass("w100") {
 			// Parse individual members from table
 			memberTable.Find("tbody tr").Each(func(k int, tr *goquery.Selection) {
@@ -180,7 +181,7 @@ func ScrapeAdministrativeContacts(ctx context.Context, client *scraper.Client) (
 	if err != nil {
 		return nil, fmt.Errorf("failed to get working SEA URL: %w", err)
 	}
-	url := contactBaseURL + academicPath
+	url := contactBaseURL + administrativePath
 	contacts, err := scrapeContactPages(ctx, client, contactBaseURL, url)
 	if err != nil {
 		// Clear cached URL on error to trigger re-detection

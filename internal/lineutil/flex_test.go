@@ -135,7 +135,8 @@ func TestFlexTextChaining(t *testing.T) {
 		WithWrap(true).
 		WithMaxLines(2).
 		WithAlign("center").
-		WithMargin("md")
+		WithMargin("md").
+		WithLineSpacing("4px")
 
 	if text.Weight != "bold" {
 		t.Errorf("Expected weight 'bold', got %v", text.Weight)
@@ -151,6 +152,9 @@ func TestFlexTextChaining(t *testing.T) {
 	}
 	if text.MaxLines != 2 {
 		t.Errorf("Expected maxLines 2, got %v", text.MaxLines)
+	}
+	if text.LineSpacing != "4px" {
+		t.Errorf("Expected lineSpacing '4px', got %v", text.LineSpacing)
 	}
 }
 

@@ -201,18 +201,19 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 	log := h.logger.WithModule(moduleName)
 	log.Infof("Handling course postback: %s", data)
 
-	// Check for course UID in postback (with or without prefix)
-	if uidRegex.MatchString(data) {
-		return h.handleCourseUIDQuery(ctx, data)
-	}
-
-	// Handle "授課課程" postback (with or without prefix)
+	// Handle "授課課程" postback FIRST (before UID check, since teacher name might contain numbers)
 	if strings.HasPrefix(data, "授課課程") {
 		parts := strings.Split(data, splitChar)
 		if len(parts) >= 2 {
 			teacherName := parts[1]
+			log.Infof("Handling teacher courses postback for: %s", teacherName)
 			return h.handleTeacherSearch(ctx, teacherName)
 		}
+	}
+
+	// Check for course UID in postback (with or without prefix)
+	if uidRegex.MatchString(data) {
+		return h.handleCourseUIDQuery(ctx, data)
 	}
 
 	return []messaging_api.MessageInterface{}
@@ -371,12 +372,13 @@ func (h *Handler) handleCourseTitleSearch(ctx context.Context, title string) []m
 }
 
 // handleTeacherSearch handles teacher search queries
+// Uses fuzzy character-set matching for teacher names
 func (h *Handler) handleTeacherSearch(ctx context.Context, teacherName string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(moduleName)
 	startTime := time.Now()
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
-	// Search in cache
+	// Search in cache using SQL LIKE first
 	courses, err := h.db.SearchCoursesByTeacher(teacherName)
 	if err != nil {
 		log.WithError(err).Error("Failed to search courses by teacher")
@@ -389,6 +391,22 @@ func (h *Handler) handleTeacherSearch(ctx context.Context, teacherName string) [
 			})
 		}
 		return []messaging_api.MessageInterface{msg}
+	}
+
+	// If SQL LIKE didn't find results, try fuzzy character-set matching
+	// This enables "王" to match "王小明" teacher names
+	if len(courses) == 0 {
+		allCourses, err := h.db.GetCoursesByRecentSemesters()
+		if err == nil && len(allCourses) > 0 {
+			for _, c := range allCourses {
+				for _, teacher := range c.Teachers {
+					if lineutil.ContainsAllRunes(teacher, teacherName) {
+						courses = append(courses, c)
+						break
+					}
+				}
+			}
+		}
 	}
 
 	if len(courses) > 0 {
@@ -429,9 +447,9 @@ func (h *Handler) handleTeacherSearch(ctx context.Context, teacherName string) [
 				log.WithError(err).Warn("Failed to save course to cache")
 			}
 
-			// Check if teacher matches
+			// Check if teacher matches using fuzzy matching
 			for _, teacher := range course.Teachers {
-				if strings.Contains(teacher, teacherName) {
+				if lineutil.ContainsAllRunes(teacher, teacherName) || strings.Contains(teacher, teacherName) {
 					foundCourses = append(foundCourses, course)
 					break
 				}
@@ -468,46 +486,79 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 	header := lineutil.NewHeaderBadge("📚", "課程資訊")
 
 	// Hero: Course title and code (using standardized component)
-	// Truncate title if too long (max ~60 chars for better display)
-	// Use rune slicing for proper UTF-8 multi-byte character handling
-	displayTitle := lineutil.TruncateRunes(course.Title, MaxTitleDisplayChars)
-	hero := lineutil.NewHeroBox(displayTitle, course.UID)
+	// Full title display with wrap enabled in NewHeroBox
+	hero := lineutil.NewHeroBox(course.Title, course.UID)
 
-	// Build body contents
+	// Build body contents with improved vertical layout to prevent truncation
 	contents := []messaging_api.FlexComponentInterface{}
 
-	// Add details
+	// 教師 info - use vertical layout, full display with wrap
 	if len(course.Teachers) > 0 {
-		// Truncate teacher names if too long (max ~40 chars, using rune slicing)
-		teacherNames := lineutil.TruncateRunes(strings.Join(course.Teachers, "、"), 40)
-		contents = append(contents, lineutil.NewKeyValueRow("👨‍🏫 教師", teacherNames).WithMargin("lg").FlexBox)
+		teacherNames := strings.Join(course.Teachers, "、")
+		contents = append(contents,
+			lineutil.NewFlexBox("vertical",
+				lineutil.NewFlexBox("horizontal",
+					lineutil.NewFlexText("👨‍🏫").WithSize("sm").WithFlex(0).FlexText,
+					lineutil.NewFlexText("授課教師").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
+				).WithSpacing("sm").FlexBox,
+				lineutil.NewFlexText(teacherNames).WithColor("#333333").WithSize("sm").WithMargin("sm").WithWrap(true).WithLineSpacing("4px").FlexText,
+			).WithMargin("lg").FlexBox,
+		)
 	}
+
+	// 學期 info
 	contents = append(contents,
 		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-		lineutil.NewKeyValueRow("📅 學期", fmt.Sprintf("%d-%d", course.Year, course.Term)).WithMargin("md").FlexBox,
+		lineutil.NewFlexBox("vertical",
+			lineutil.NewFlexBox("horizontal",
+				lineutil.NewFlexText("📅").WithSize("sm").WithFlex(0).FlexText,
+				lineutil.NewFlexText("開課學期").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
+			).WithSpacing("sm").FlexBox,
+			lineutil.NewFlexText(fmt.Sprintf("%d 學年度 第 %d 學期", course.Year, course.Term)).WithColor("#333333").WithSize("sm").WithMargin("sm").FlexText,
+		).WithMargin("md").FlexBox,
 	)
+
+	// 時間 info - full display with wrap
 	if len(course.Times) > 0 {
-		// Truncate times if too long (max ~50 chars, using rune slicing)
-		timeStr := lineutil.TruncateRunes(strings.Join(course.Times, "、"), 50)
+		timeStr := strings.Join(course.Times, "、")
 		contents = append(contents,
 			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-			lineutil.NewKeyValueRow("⏰ 時間", timeStr).WithMargin("md").FlexBox,
+			lineutil.NewFlexBox("vertical",
+				lineutil.NewFlexBox("horizontal",
+					lineutil.NewFlexText("⏰").WithSize("sm").WithFlex(0).FlexText,
+					lineutil.NewFlexText("上課時間").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
+				).WithSpacing("sm").FlexBox,
+				lineutil.NewFlexText(timeStr).WithColor("#333333").WithSize("sm").WithMargin("sm").WithWrap(true).WithLineSpacing("4px").FlexText,
+			).WithMargin("md").FlexBox,
 		)
 	}
+
+	// 地點 info - full display with wrap
 	if len(course.Locations) > 0 {
-		// Truncate locations if too long (max ~40 chars, using rune slicing)
-		locationStr := lineutil.TruncateRunes(strings.Join(course.Locations, "、"), 40)
+		locationStr := strings.Join(course.Locations, "、")
 		contents = append(contents,
 			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-			lineutil.NewKeyValueRow("📍 地點", locationStr).WithMargin("md").FlexBox,
+			lineutil.NewFlexBox("vertical",
+				lineutil.NewFlexBox("horizontal",
+					lineutil.NewFlexText("📍").WithSize("sm").WithFlex(0).FlexText,
+					lineutil.NewFlexText("上課地點").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
+				).WithSpacing("sm").FlexBox,
+				lineutil.NewFlexText(locationStr).WithColor("#333333").WithSize("sm").WithMargin("sm").WithWrap(true).WithLineSpacing("4px").FlexText,
+			).WithMargin("md").FlexBox,
 		)
 	}
+
+	// 備註 info - full display with wrap for complete information
 	if course.Note != "" {
-		// Truncate note if too long (max ~80 chars for better readability, using rune slicing)
-		noteStr := lineutil.TruncateRunes(course.Note, 80)
 		contents = append(contents,
 			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-			lineutil.NewKeyValueRow("📝 備註", noteStr).WithMargin("md").FlexBox,
+			lineutil.NewFlexBox("vertical",
+				lineutil.NewFlexBox("horizontal",
+					lineutil.NewFlexText("📝").WithSize("sm").WithFlex(0).FlexText,
+					lineutil.NewFlexText("備註").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
+				).WithSpacing("sm").FlexBox,
+				lineutil.NewFlexText(course.Note).WithColor("#666666").WithSize("xs").WithMargin("sm").WithWrap(true).WithLineSpacing("4px").FlexText,
+			).WithMargin("md").FlexBox,
 		)
 	}
 
@@ -528,16 +579,17 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 		lineutil.NewURIAction("🔍 查詢系統", courseQueryURL),
 	).WithStyle("secondary").WithHeight("sm").FlexButton)
 
-	// Teacher schedule button (if teachers exist) (label: 6 chars + emoji)
+	// Teacher schedule button (if teachers exist)
 	if len(course.Teachers) > 0 {
 		teacherName := course.Teachers[0]
 		// Truncate teacher name in display text if too long (using rune slicing for UTF-8 safety)
 		displayText := lineutil.TruncateRunes(fmt.Sprintf("搜尋 %s 的授課課程", teacherName), 40)
+		// Use course: prefix for proper postback routing
 		footerContents = append(footerContents, lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText(
 				"👤 教師課程",
 				displayText,
-				fmt.Sprintf("授課課程%s%s", splitChar, teacherName),
+				fmt.Sprintf("course:授課課程%s%s", splitChar, teacherName),
 			),
 		).WithStyle("secondary").WithHeight("sm").FlexButton)
 	}
@@ -591,33 +643,42 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 	var bubbles []messaging_api.FlexBubble
 	for _, course := range courses {
 		// Hero: Course title with color background (using standardized compact component)
-		// Truncate title for carousel display (max ~50 chars, using rune slicing)
-		carouselTitle := lineutil.TruncateRunes(course.Title, 50)
-		hero := lineutil.NewCompactHeroBox(carouselTitle)
+		// NewCompactHeroBox allows 3 lines with wrap for better visibility
+		hero := lineutil.NewCompactHeroBox(course.Title)
 
-		// Build body contents
+		// Build body contents with improved layout
 		contents := []messaging_api.FlexComponentInterface{
 			lineutil.NewFlexText(course.UID).WithSize("xs").WithColor("#999999").WithMargin("md").FlexText,
 			lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 		}
 
 		if len(course.Teachers) > 0 {
-			// Truncate teachers for carousel (max ~30 chars, using rune slicing)
-			carouselTeachers := lineutil.TruncateRunes(strings.Join(course.Teachers, "、"), 30)
-			contents = append(contents, lineutil.NewKeyValueRow("👨‍🏫 教師", carouselTeachers).WithMargin("md").FlexBox)
-		}
-		if len(course.Times) > 0 {
-			// Truncate times for carousel (max ~35 chars, using rune slicing)
-			carouselTimes := lineutil.TruncateRunes(strings.Join(course.Times, "、"), 35)
+			// Full teacher display with wrap (max 2 lines for carousel balance)
+			carouselTeachers := strings.Join(course.Teachers, "、")
 			contents = append(contents,
-				lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
-				lineutil.NewKeyValueRow("⏰ 時間", carouselTimes).WithMargin("sm").FlexBox,
+				lineutil.NewFlexBox("horizontal",
+					lineutil.NewFlexText("👨‍🏫").WithSize("xs").WithFlex(0).FlexText,
+					lineutil.NewFlexText(carouselTeachers).WithColor("#666666").WithSize("xs").WithFlex(1).WithMargin("sm").WithWrap(true).WithMaxLines(2).FlexText,
+				).WithMargin("md").WithSpacing("sm").FlexBox,
 			)
 		}
-		// Footer with "View Detail" button
+		if len(course.Times) > 0 {
+			// Full time display with wrap (max 2 lines for carousel balance)
+			carouselTimes := strings.Join(course.Times, "、")
+			contents = append(contents,
+				lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
+				lineutil.NewFlexBox("horizontal",
+					lineutil.NewFlexText("⏰").WithSize("xs").WithFlex(0).FlexText,
+					lineutil.NewFlexText(carouselTimes).WithColor("#666666").WithSize("xs").WithFlex(1).WithMargin("sm").WithWrap(true).WithMaxLines(2).FlexText,
+				).WithMargin("sm").WithSpacing("sm").FlexBox,
+			)
+		}
+		// Footer with "View Detail" button - displayText shows course title
+		displayText := fmt.Sprintf("查詢課程 %s", course.UID)
+		// Use course: prefix for proper postback routing
 		footer := lineutil.NewFlexBox("vertical",
 			lineutil.NewFlexButton(
-				lineutil.NewPostbackActionWithDisplayText("📝 查看詳細", fmt.Sprintf("查詢課程 %s", course.UID), course.UID),
+				lineutil.NewPostbackActionWithDisplayText("📝 查看詳細", displayText, "course:"+course.UID),
 			).WithStyle("primary").WithHeight("sm").FlexButton,
 		).WithSpacing("sm")
 

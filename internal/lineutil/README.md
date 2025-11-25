@@ -34,5 +34,20 @@ LINE 訊息建構工具，基於 LINE Bot SDK v8。
 2. **顯示 Loading Animation**：長查詢前顯示載入動畫 (由 webhook handler 處理)
 3. **Flex Message 優先**：使用 Flex Message 提供豐富的卡片式介面
 4. **錯誤訊息友善化**：隱藏技術細節，提供可操作的 Quick Reply
+5. **完整顯示資訊**：優先使用 `wrap: true` + `lineSpacing` 讓文字換行，而非截斷
+6. **截斷限制**：`TruncateRunes()` 僅用於 LINE API 硬性限制 (altText、displayText)
+
+### Flex Message 文字處理
+
+```go
+// ✅ 推薦：完整顯示資訊
+lineutil.NewInfoRow("標籤", value).WithWrap(true).WithLineSpacing("4px")
+
+// ❌ 避免：隱藏資訊
+lineutil.NewFlexText(lineutil.TruncateRunes(value, 20))
+
+// ✅ 僅在 LINE API 限制時使用截斷
+altText := lineutil.TruncateRunes(title, 400)  // LINE altText 限制
+```
 
 詳細範例請參考 `example_test.go`。
