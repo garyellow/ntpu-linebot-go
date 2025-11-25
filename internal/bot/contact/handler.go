@@ -521,8 +521,16 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 
 			// Row 1: Phone-related buttons
 			if c.Phone != "" {
-				// Has full phone (main + extension), enable direct dial
-				telURI := lineutil.BuildTelURI(sanxiaNormalPhone, c.Extension)
+				// Parse phone number - may be "mainPhone,extension" format or standalone
+				var telURI string
+				if strings.Contains(c.Phone, ",") {
+					// Format: "0286741111,67114" - parse to extract components
+					parts := strings.SplitN(c.Phone, ",", 2)
+					telURI = lineutil.BuildTelURI(parts[0], parts[1])
+				} else {
+					// Standalone phone number
+					telURI = lineutil.BuildTelURI(c.Phone, "")
+				}
 				row1Buttons = append(row1Buttons,
 					lineutil.NewFlexButton(lineutil.NewURIAction("📞 撥打電話", telURI)).WithStyle("primary").WithHeight("sm"))
 				row1Buttons = append(row1Buttons,

@@ -372,3 +372,183 @@ func BenchmarkNewInfoRow(b *testing.B) {
 		_ = NewInfoRow("👨‍🏫", "授課教師", "王教授、李教授、陳教授", style)
 	}
 }
+
+// TestNewButtonRow tests the button row creation for footer layouts
+func TestNewButtonRow(t *testing.T) {
+	action := NewMessageAction("Test", "test")
+
+	tests := []struct {
+		name            string
+		buttons         []*FlexButton
+		expectedLen     int
+		expectedSpacing string
+	}{
+		{
+			name:            "Empty button list",
+			buttons:         []*FlexButton{},
+			expectedLen:     0,
+			expectedSpacing: "sm",
+		},
+		{
+			name:            "All nil buttons",
+			buttons:         []*FlexButton{nil, nil, nil},
+			expectedLen:     0,
+			expectedSpacing: "sm",
+		},
+		{
+			name: "Single button",
+			buttons: []*FlexButton{
+				NewFlexButton(action).WithStyle("primary"),
+			},
+			expectedLen:     1,
+			expectedSpacing: "sm",
+		},
+		{
+			name: "Multiple buttons",
+			buttons: []*FlexButton{
+				NewFlexButton(action).WithStyle("primary"),
+				NewFlexButton(action).WithStyle("secondary"),
+			},
+			expectedLen:     2,
+			expectedSpacing: "sm",
+		},
+		{
+			name: "Mixed nil and valid buttons",
+			buttons: []*FlexButton{
+				NewFlexButton(action).WithStyle("primary"),
+				nil,
+				NewFlexButton(action).WithStyle("secondary"),
+				nil,
+			},
+			expectedLen:     2,
+			expectedSpacing: "sm",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			row := NewButtonRow(tt.buttons...)
+
+			// Check layout is horizontal
+			if row.Layout != "horizontal" {
+				t.Errorf("Expected layout 'horizontal', got %v", row.Layout)
+			}
+
+			// Check spacing
+			if row.Spacing != tt.expectedSpacing {
+				t.Errorf("Expected spacing '%s', got %v", tt.expectedSpacing, row.Spacing)
+			}
+
+			// Check content count
+			if len(row.Contents) != tt.expectedLen {
+				t.Errorf("Expected %d contents, got %d", tt.expectedLen, len(row.Contents))
+			}
+		})
+	}
+}
+
+// TestNewButtonFooter tests the multi-row button footer creation
+func TestNewButtonFooter(t *testing.T) {
+	action := NewMessageAction("Test", "test")
+	primaryBtn := NewFlexButton(action).WithStyle("primary").WithHeight("sm")
+	secondaryBtn := NewFlexButton(action).WithStyle("secondary").WithHeight("sm")
+
+	tests := []struct {
+		name        string
+		rows        [][]*FlexButton
+		expectedLen int
+	}{
+		{
+			name:        "Empty rows",
+			rows:        [][]*FlexButton{},
+			expectedLen: 0,
+		},
+		{
+			name: "All empty rows",
+			rows: [][]*FlexButton{
+				{},
+				{nil, nil},
+				{},
+			},
+			expectedLen: 0,
+		},
+		{
+			name: "Single row with buttons",
+			rows: [][]*FlexButton{
+				{primaryBtn, secondaryBtn},
+			},
+			expectedLen: 1,
+		},
+		{
+			name: "Multiple rows with buttons",
+			rows: [][]*FlexButton{
+				{primaryBtn, secondaryBtn},
+				{primaryBtn},
+				{secondaryBtn},
+			},
+			expectedLen: 3,
+		},
+		{
+			name: "Mixed empty and non-empty rows",
+			rows: [][]*FlexButton{
+				{primaryBtn, secondaryBtn},
+				{nil, nil},
+				{primaryBtn},
+				{},
+			},
+			expectedLen: 2,
+		},
+		{
+			name: "Rows with mixed nil and valid buttons",
+			rows: [][]*FlexButton{
+				{primaryBtn, nil, secondaryBtn},
+				{nil, primaryBtn, nil},
+			},
+			expectedLen: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			footer := NewButtonFooter(tt.rows...)
+
+			// Check layout is vertical
+			if footer.Layout != "vertical" {
+				t.Errorf("Expected layout 'vertical', got %v", footer.Layout)
+			}
+
+			// Check spacing
+			if footer.Spacing != "sm" {
+				t.Errorf("Expected spacing 'sm', got %v", footer.Spacing)
+			}
+
+			// Check row count
+			if len(footer.Contents) != tt.expectedLen {
+				t.Errorf("Expected %d rows, got %d", tt.expectedLen, len(footer.Contents))
+			}
+		})
+	}
+}
+
+// TestButtonRowFlexDistribution tests that buttons get equal flex distribution
+func TestButtonRowFlexDistribution(t *testing.T) {
+	action := NewMessageAction("Test", "test")
+	btn1 := NewFlexButton(action).WithStyle("primary")
+	btn2 := NewFlexButton(action).WithStyle("secondary")
+	btn3 := NewFlexButton(action).WithStyle("primary")
+
+	row := NewButtonRow(btn1, btn2, btn3)
+
+	// Each button should be wrapped in a box with Flex=1
+	for i, content := range row.Contents {
+		// The content should be a FlexBox wrapping the button
+		if content == nil {
+			t.Errorf("Content at index %d is nil", i)
+		}
+	}
+
+	// Check that we have 3 wrapped buttons
+	if len(row.Contents) != 3 {
+		t.Errorf("Expected 3 contents, got %d", len(row.Contents))
+	}
+}
