@@ -133,7 +133,8 @@ if err != nil {
 **Go 版本**:
 - 使用 SQLite WAL 模式（持久化）
 - 重啟後快取保留
-- 7 天自動過期
+- Soft TTL 5 天（觸發主動刷新）+ Hard TTL 7 天（自動過期）
+- 主動 Warmup（每日 3:00 AM 刷新接近 Soft TTL 的資料）
 
 ### 防爬蟲機制
 

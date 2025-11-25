@@ -14,7 +14,8 @@
 - `SQLITE_PATH` - SQLite 路徑
   - Windows: `./data/cache.db`（預設）
   - Linux/Mac: `/data/cache.db`（預設）
-- `CACHE_TTL=168h` - 快取有效期（7 天）
+- `CACHE_TTL=168h` - Hard TTL：快取絕對過期時間（7 天）
+- `SOFT_TTL=120h` - Soft TTL：觸發主動刷新時間（5 天）
 - `SCRAPER_WORKERS=3` - 爬蟲並發數
 - `SCRAPER_MIN_DELAY=5s` - 爬蟲最小延遲
 - `SCRAPER_MAX_DELAY=10s` - 爬蟲最大延遲

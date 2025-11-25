@@ -133,6 +133,10 @@ func TestFormatStudentResponse_LongFields(t *testing.T) {
 
 // TestHandleStudentSearch_Limits tests search result limits
 func TestHandleStudentSearch_Limits(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network test in short mode")
+	}
+
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -146,6 +150,10 @@ func TestHandleStudentSearch_Limits(t *testing.T) {
 
 // TestHandleMessage_SpecialCharacters tests handling of special characters
 func TestHandleMessage_SpecialCharacters(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network test in short mode")
+	}
+
 	h := setupTestHandler(t)
 	ctx := context.Background()
 

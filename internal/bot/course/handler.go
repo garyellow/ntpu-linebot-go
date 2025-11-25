@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -58,14 +59,30 @@ var (
 
 	courseRegex  = buildRegex(validCourseKeywords)
 	teacherRegex = buildRegex(validTeacherKeywords)
-	// UID format: {year}{term}{course_no} where term is U/M/N/P (case-insensitive)
-	// Example: 11312U0001, 11312u0001, 11312M0001, 11312m0001
+	// UID format: {year}{term}{no} where:
+	// - year: 2-3 digits (e.g., 113, 12)
+	// - term: 1 digit (1=上學期, 2=下學期)
+	// - no: course number starting with U/M/N/P (case-insensitive) + 4 digits
+	// Full UID example: 11312U0001 (year=113, term=1, no=2U0001) or 9921U0001
+	// User input format: just the course_no part with term prefix, e.g., 1U0001, 2M0002
+	// So regex matches: 3-4 digits (year+term) + U/M/N/P + 4 digits
 	uidRegex = regexp.MustCompile(`(?i)\d{3,4}[umnp]\d{4}`)
 )
 
 // buildRegex creates a regex pattern from keywords
+// Sorts keywords by length (longest first) to ensure correct regex alternation matching
+// e.g., "課程" should match before "課" to prevent partial matches
 func buildRegex(keywords []string) *regexp.Regexp {
-	pattern := "(?i)" + strings.Join(keywords, "|")
+	// Create a copy to avoid modifying the original slice
+	sortedKeywords := make([]string, len(keywords))
+	copy(sortedKeywords, keywords)
+
+	// Sort by length in descending order (longest first)
+	sort.Slice(sortedKeywords, func(i, j int) bool {
+		return len(sortedKeywords[i]) > len(sortedKeywords[j])
+	})
+
+	pattern := "(?i)" + strings.Join(sortedKeywords, "|")
 	return regexp.MustCompile(pattern)
 }
 
@@ -118,13 +135,18 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	// Support both "keyword term" and "term keyword" patterns
 	if courseRegex.MatchString(text) {
 		match := courseRegex.FindString(text)
-		// Try extracting term after keyword first
-		searchTerm := strings.TrimSpace(strings.Replace(text, match, "", 1))
 
-		// If keyword is at the end or no search term, extract from beginning
-		if searchTerm == "" || strings.HasSuffix(text, match) {
-			// Extract what comes before the keyword
+		// Determine if keyword is at the beginning or end
+		var searchTerm string
+		if strings.HasPrefix(text, match) {
+			// Keyword at beginning: "課程 微積分" -> extract after
+			searchTerm = strings.TrimSpace(strings.TrimPrefix(text, match))
+		} else if strings.HasSuffix(text, match) {
+			// Keyword at end: "微積分課" -> extract before
 			searchTerm = strings.TrimSpace(strings.TrimSuffix(text, match))
+		} else {
+			// Keyword in middle: remove it and use the rest
+			searchTerm = strings.TrimSpace(strings.Replace(text, match, "", 1))
 		}
 
 		if searchTerm == "" {
@@ -144,13 +166,18 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	// Support both "keyword term" and "term keyword" patterns
 	if teacherRegex.MatchString(text) {
 		match := teacherRegex.FindString(text)
-		// Try extracting term after keyword first
-		searchTerm := strings.TrimSpace(strings.Replace(text, match, "", 1))
 
-		// If keyword is at the end or no search term, extract from beginning
-		if searchTerm == "" || strings.HasSuffix(text, match) {
-			// Extract what comes before the keyword
+		// Determine if keyword is at the beginning or end
+		var searchTerm string
+		if strings.HasPrefix(text, match) {
+			// Keyword at beginning: "老師 王小明" -> extract after
+			searchTerm = strings.TrimSpace(strings.TrimPrefix(text, match))
+		} else if strings.HasSuffix(text, match) {
+			// Keyword at end: "王小明老師" -> extract before
 			searchTerm = strings.TrimSpace(strings.TrimSuffix(text, match))
+		} else {
+			// Keyword in middle: remove it and use the rest
+			searchTerm = strings.TrimSpace(strings.Replace(text, match, "", 1))
 		}
 
 		if searchTerm == "" {
@@ -437,25 +464,14 @@ func (h *Handler) handleTeacherSearch(ctx context.Context, teacherName string) [
 
 // formatCourseResponse formats a single course as a LINE message
 func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.MessageInterface {
-	// Header: Course badge
-	header := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexBox("baseline",
-			lineutil.NewFlexText("📚").WithSize("lg").FlexText,
-			lineutil.NewFlexText("課程資訊").WithWeight("bold").WithColor("#1DB446").WithSize("sm").WithMargin("sm").FlexText,
-		).FlexBox,
-	)
+	// Header: Course badge (using standardized component)
+	header := lineutil.NewHeaderBadge("📚", "課程資訊")
 
-	// Hero: Course title and code
+	// Hero: Course title and code (using standardized component)
 	// Truncate title if too long (max ~60 chars for better display)
 	// Use rune slicing for proper UTF-8 multi-byte character handling
 	displayTitle := lineutil.TruncateRunes(course.Title, MaxTitleDisplayChars)
-	hero := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexText(displayTitle).WithWeight("bold").WithSize("xl").WithColor("#ffffff").WithWrap(true).WithMaxLines(2).FlexText,
-		lineutil.NewFlexText(course.UID).WithSize("xs").WithColor("#ffffff").WithMargin("md").FlexText,
-	).FlexBox
-	hero.BackgroundColor = "#1DB446"
-	hero.PaddingAll = "20px"
-	hero.PaddingBottom = "16px"
+	hero := lineutil.NewHeroBox(displayTitle, course.UID)
 
 	// Build body contents
 	contents := []messaging_api.FlexComponentInterface{}
@@ -528,7 +544,7 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 
 	bubble := lineutil.NewFlexBubble(
 		header,
-		hero,
+		hero.FlexBox,
 		lineutil.NewFlexBox("vertical", contents...).WithSpacing("sm"),
 		lineutil.NewFlexBox("vertical", footerContents...).WithSpacing("sm"),
 	)
@@ -536,6 +552,8 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 	// Limit altText to 400 chars (LINE API limit, using rune slicing for UTF-8 safety)
 	altText := lineutil.TruncateRunes(fmt.Sprintf("課程：%s", course.Title), 400)
 	msg := lineutil.NewFlexMessage(altText, bubble.FlexBubble)
+	sender := lineutil.GetSender(senderName, h.stickerManager)
+	msg.Sender = sender
 
 	// Add Quick Reply for related actions
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -572,14 +590,10 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 	// Create bubbles for carousel (LINE API limit: max 10 bubbles per Flex Carousel)
 	var bubbles []messaging_api.FlexBubble
 	for _, course := range courses {
-		// Hero: Course title with color background
+		// Hero: Course title with color background (using standardized compact component)
 		// Truncate title for carousel display (max ~50 chars, using rune slicing)
 		carouselTitle := lineutil.TruncateRunes(course.Title, 50)
-		hero := lineutil.NewFlexBox("vertical",
-			lineutil.NewFlexText(carouselTitle).WithWeight("bold").WithSize("md").WithColor("#ffffff").WithWrap(true).WithMaxLines(2).FlexText,
-		).FlexBox
-		hero.BackgroundColor = "#1DB446"
-		hero.PaddingAll = "15px"
+		hero := lineutil.NewCompactHeroBox(carouselTitle)
 
 		// Build body contents
 		contents := []messaging_api.FlexComponentInterface{
@@ -609,7 +623,7 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 
 		bubble := lineutil.NewFlexBubble(
 			nil,
-			hero,
+			hero.FlexBox,
 			lineutil.NewFlexBox("vertical", contents...).WithSpacing("sm"),
 			footer,
 		)
@@ -628,7 +642,9 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 			Contents: carouselBubbles,
 		}
 
-		messages = append(messages, lineutil.NewFlexMessage("課程列表", carousel))
+		flexMsg := lineutil.NewFlexMessage("課程列表", carousel)
+		flexMsg.Sender = sender
+		messages = append(messages, flexMsg)
 	}
 
 	// Add Quick Reply to the last message

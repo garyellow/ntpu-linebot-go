@@ -137,6 +137,56 @@ func (db *DB) SetMetrics(recorder MetricsRecorder) {
 	db.metrics = recorder
 }
 
+// GetCacheTTL returns the configured cache TTL
+func (db *DB) GetCacheTTL() time.Duration {
+	return db.cacheTTL
+}
+
+// CountExpiringStudents counts students that will expire within the given duration
+// Used by warmup scheduler to determine if proactive refresh is needed
+func (db *DB) CountExpiringStudents(softTTL time.Duration) (int, error) {
+	// Count entries where: softTTL <= age < hardTTL
+	// These are entries that should be refreshed proactively
+	softTimestamp := time.Now().Unix() - int64(softTTL.Seconds())
+	hardTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
+
+	query := `SELECT COUNT(*) FROM students WHERE cached_at <= ? AND cached_at > ?`
+	var count int
+	err := db.conn.QueryRow(query, softTimestamp, hardTimestamp).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count expiring students: %w", err)
+	}
+	return count, nil
+}
+
+// CountExpiringCourses counts courses that will expire within the given duration
+func (db *DB) CountExpiringCourses(softTTL time.Duration) (int, error) {
+	softTimestamp := time.Now().Unix() - int64(softTTL.Seconds())
+	hardTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
+
+	query := `SELECT COUNT(*) FROM courses WHERE cached_at <= ? AND cached_at > ?`
+	var count int
+	err := db.conn.QueryRow(query, softTimestamp, hardTimestamp).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count expiring courses: %w", err)
+	}
+	return count, nil
+}
+
+// CountExpiringContacts counts contacts that will expire within the given duration
+func (db *DB) CountExpiringContacts(softTTL time.Duration) (int, error) {
+	softTimestamp := time.Now().Unix() - int64(softTTL.Seconds())
+	hardTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
+
+	query := `SELECT COUNT(*) FROM contacts WHERE cached_at <= ? AND cached_at > ?`
+	var count int
+	err := db.conn.QueryRow(query, softTimestamp, hardTimestamp).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count expiring contacts: %w", err)
+	}
+	return count, nil
+}
+
 // NewTestDB creates an in-memory database for testing.
 // This ensures consistent test data isolation across all test files.
 // The database is automatically cleaned up when closed.

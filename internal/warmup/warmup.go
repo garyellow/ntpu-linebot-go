@@ -377,44 +377,40 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 }
 
 // warmupCourseModule warms course cache
+// Uses ScrapeCoursesByYear to fetch all courses for a year in one batch (no qTerm parameter)
+// This matches Python's get_simple_courses_by_year behavior: 4 requests per year (U/M/N/P)
+// More efficient than per-semester scraping: 20 requests total vs 40 requests
 func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
 	log.Info("Starting course module warmup")
 
 	currentYear := time.Now().Year() - 1911
-	// Course terms to warm: Load 5 years of course data (matching Python version)
+	// Load 5 years of course data (matching Python version)
 	// This includes historical course data for queries about past courses
-	var terms []struct {
-		year int
-		term int
-	}
-	// Generate terms for current year and previous 4 years (5 years total)
+	var years []int
 	for year := currentYear; year > currentYear-5; year-- {
-		terms = append(terms, struct {
-			year int
-			term int
-		}{year, 1}) // First semester
-		terms = append(terms, struct {
-			year int
-			term int
-		}{year, 2}) // Second semester
+		years = append(years, year)
 	}
 
-	// Scrape all courses for each term (ScrapeCourses with empty title will fetch all education codes)
-	for _, t := range terms {
+	log.WithField("years", years).
+		WithField("total_years", len(years)).
+		Info("Course warmup: fetching all courses by year (no term filter)")
+
+	// Scrape all courses for each year (both semesters in one request batch)
+	// This matches Python's get_simple_courses_by_year which doesn't use qTerm
+	for _, year := range years {
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("course module cancelled: %w", ctx.Err())
 		default:
 		}
 
-		// Pass empty string as title to fetch ALL courses (all education codes: U, M, N, P)
-		// This matches Python's get_simple_courses_by_year which iterates ALL_EDU_CODE
-		courses, err := ntpu.ScrapeCourses(ctx, client, t.year, t.term, "")
+		// Fetch ALL courses for this year (both semesters) using ScrapeCoursesByYear
+		// This makes 4 HTTP requests (one per education code: U/M/N/P)
+		courses, err := ntpu.ScrapeCoursesByYear(ctx, client, year)
 		if err != nil {
 			log.WithError(err).
-				WithField("year", t.year).
-				WithField("term", t.term).
-				Warn("Failed to scrape courses")
+				WithField("year", year).
+				Warn("Failed to scrape courses for year")
 			if m != nil {
 				m.RecordWarmupTask("course", "error")
 			}
@@ -424,8 +420,7 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 		// Save using batch operation to reduce lock contention
 		if err := db.SaveCoursesBatch(courses); err != nil {
 			log.WithError(err).
-				WithField("year", t.year).
-				WithField("term", t.term).
+				WithField("year", year).
 				WithField("count", len(courses)).
 				Warn("Failed to save courses batch")
 			if m != nil {
@@ -438,10 +433,9 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 		if m != nil {
 			m.RecordWarmupTask("course", "success")
 		}
-		log.WithField("year", t.year).
-			WithField("term", t.term).
+		log.WithField("year", year).
 			WithField("count", len(courses)).
-			Info("Courses cached")
+			Info("Courses cached for year")
 	}
 
 	return nil

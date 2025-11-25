@@ -315,7 +315,8 @@ func (m *Manager) RefreshStickers(ctx context.Context) error {
 }
 
 // CleanupExpiredStickers removes expired stickers from database
-func (m *Manager) CleanupExpiredStickers() error {
+// Returns the number of deleted entries
+func (m *Manager) CleanupExpiredStickers() (int64, error) {
 	return m.db.CleanupExpiredStickers()
 }
 

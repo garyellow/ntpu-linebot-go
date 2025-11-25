@@ -281,16 +281,18 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 	defer cancel()
 
 	// Dispatch to appropriate bot module based on CanHandle
-	if h.idHandler.CanHandle(text) {
-		return h.idHandler.HandleMessage(processCtx, text), nil
-	}
-
+	// Order matters: Contact and Course have more specific keywords,
+	// ID handler's "系" keyword is too broad and would catch "聯繫 資工系"
 	if h.contactHandler.CanHandle(text) {
 		return h.contactHandler.HandleMessage(processCtx, text), nil
 	}
 
 	if h.courseHandler.CanHandle(text) {
 		return h.courseHandler.HandleMessage(processCtx, text), nil
+	}
+
+	if h.idHandler.CanHandle(text) {
+		return h.idHandler.HandleMessage(processCtx, text), nil
 	}
 
 	// No handler matched - return help message
@@ -371,16 +373,19 @@ func (h *Handler) handlePostbackEvent(ctx context.Context, event webhook.Postbac
 func (h *Handler) handleStickerMessage(event webhook.MessageEvent) []messaging_api.MessageInterface {
 	h.logger.Info("Received sticker message, replying with random sticker image")
 
-	// Get random sticker URL
+	// Get random sticker URL and create consistent sender
 	stickerURL := h.stickerManager.GetRandomSticker()
+	sender := lineutil.GetSender("貼圖魔法師", h.stickerManager)
 
 	// Reply with image message using the sticker URL
-	return []messaging_api.MessageInterface{
-		&messaging_api.ImageMessage{
-			OriginalContentUrl: stickerURL,
-			PreviewImageUrl:    stickerURL,
-		},
+	// Note: ImageMessage supports Sender field for consistent visual identity
+	imageMsg := &messaging_api.ImageMessage{
+		OriginalContentUrl: stickerURL,
+		PreviewImageUrl:    stickerURL,
+		Sender:             sender,
 	}
+
+	return []messaging_api.MessageInterface{imageMsg}
 }
 
 // handleFollowEvent processes follow events (when user adds the bot)

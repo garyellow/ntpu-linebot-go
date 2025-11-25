@@ -40,12 +40,19 @@ LINE Webhook → Gin Handler (25s timeout) → Bot Module Dispatcher
 
 **All modules**: UTF-8 safe truncation with `TruncateRunes()`, consistent Sender pattern, cache-first strategy
 
-## Data Layer: Cache-First Strategy
+## Data Layer: Cache-First Strategy with Soft/Hard TTL
 
 **SQLite cache** (`internal/storage/`):
-- WAL mode, 7-day TTL (configurable), pure Go (`modernc.org/sqlite`)
+- WAL mode, Soft/Hard TTL (configurable), pure Go (`modernc.org/sqlite`)
+- **Soft TTL (5 days)**: Data considered stale, triggers proactive warmup
+- **Hard TTL (7 days)**: Data absolutely expired, must be deleted
 - TTL enforced at SQL level: `WHERE cached_at > ?`
 - Singleflight wrapper prevents cache stampede
+
+**Background Jobs** (`cmd/server/main.go`):
+- **Proactive Warmup**: Daily 3:00 AM, refreshes data past Soft TTL
+- **Cache Cleanup**: Every 12 hours, deletes data past Hard TTL + VACUUM
+- **Sticker Refresh**: Every 24 hours
 
 **Data availability**:
 - Student: 101-112 學年度 (≥113 shows deprecation notice)

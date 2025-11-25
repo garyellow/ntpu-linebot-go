@@ -379,32 +379,37 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 
 	// Create confirmation message
 	confirmText := fmt.Sprintf("是否要搜尋 %d 學年度的學生？", year)
+	confirmMsg := lineutil.NewConfirmTemplate(
+		"確認學年度",
+		confirmText,
+		lineutil.NewPostbackAction("哪次不是", fmt.Sprintf("id:搜尋全系%s%d", splitChar, year)),
+		lineutil.NewPostbackAction("我在想想", "id:兇"),
+	)
 	return []messaging_api.MessageInterface{
-		lineutil.NewConfirmTemplate(
-			"確認學年度",
-			confirmText,
-			lineutil.NewPostbackAction("哪次不是", fmt.Sprintf("id:搜尋全系%s%d", splitChar, year)),
-			lineutil.NewPostbackAction("我在想想", "id:兇"),
-		),
+		lineutil.SetSender(confirmMsg, sender),
 	}
 }
 
 // handleYearSearchConfirm handles the year search confirmation - shows college group selection
 func (h *Handler) handleYearSearchConfirm(yearStr string) []messaging_api.MessageInterface {
+	sender := lineutil.GetSender(senderName, h.stickerManager)
+
 	// Create college group selection template
 	actions := []messaging_api.ActionInterface{
 		lineutil.NewPostbackActionWithDisplayText("文法商", "文法商", fmt.Sprintf("id:文法商%s%s", splitChar, yearStr)),
 		lineutil.NewPostbackActionWithDisplayText("公社電資", "公社電資", fmt.Sprintf("id:公社電資%s%s", splitChar, yearStr)),
 	}
 
+	msg := lineutil.NewButtonsTemplateWithImage(
+		"選擇學院群",
+		"選擇學院群",
+		"請選擇科系所屬學院群",
+		"https://new.ntpu.edu.tw/assets/logo/ntpu_logo.png",
+		actions,
+	)
+
 	return []messaging_api.MessageInterface{
-		lineutil.NewButtonsTemplateWithImage(
-			"選擇學院群",
-			"選擇學院群",
-			"請選擇科系所屬學院群",
-			"https://new.ntpu.edu.tw/assets/logo/ntpu_logo.png",
-			actions,
-		),
+		lineutil.SetSender(msg, sender),
 	}
 }
 
@@ -551,22 +556,11 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 func (h *Handler) formatStudentResponse(student *storage.Student, fromCache bool) []messaging_api.MessageInterface {
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
-	// Header: Student badge
-	header := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexBox("baseline",
-			lineutil.NewFlexText("🎓").WithSize("lg").FlexText,
-			lineutil.NewFlexText("學生資訊").WithWeight("bold").WithColor("#1DB446").WithSize("sm").WithMargin("sm").FlexText,
-		).FlexBox,
-	)
+	// Header: Student badge (using standardized component)
+	header := lineutil.NewHeaderBadge("🎓", "學生資訊")
 
-	// Hero: Name with NTPU green background
-	hero := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexText(student.Name).WithWeight("bold").WithSize("xl").WithColor("#ffffff").WithWrap(true).WithMaxLines(2).FlexText,
-		lineutil.NewFlexText("國立臺北大學").WithSize("xs").WithColor("#ffffff").WithMargin("md").FlexText,
-	).FlexBox
-	hero.BackgroundColor = "#1DB446"
-	hero.PaddingAll = "20px"
-	hero.PaddingBottom = "16px"
+	// Hero: Name with NTPU green background (using standardized component)
+	hero := lineutil.NewHeroBox(student.Name, "國立臺北大學")
 
 	// Body: Student details
 	contents := []messaging_api.FlexComponentInterface{
@@ -596,7 +590,7 @@ func (h *Handler) formatStudentResponse(student *storage.Student, fromCache bool
 
 	bubble := lineutil.NewFlexBubble(
 		header,
-		hero,
+		hero.FlexBox,
 		lineutil.NewFlexBox("vertical", contents...).WithSpacing("sm"),
 		footer,
 	)
@@ -655,6 +649,7 @@ func parseYear(yearStr string) (int, error) {
 
 // handleCollegeGroupSelection handles college group selection (文法商 or 公社電資)
 func (h *Handler) handleCollegeGroupSelection(group, year string) []messaging_api.MessageInterface {
+	sender := lineutil.GetSender(senderName, h.stickerManager)
 	var actions []messaging_api.ActionInterface
 
 	if group == "文法商" {
@@ -671,13 +666,15 @@ func (h *Handler) handleCollegeGroupSelection(group, year string) []messaging_ap
 		}
 	}
 
+	msg := lineutil.NewButtonsTemplate(
+		"選擇學院",
+		"選擇學院",
+		"請選擇科系所屬學院",
+		actions,
+	)
+
 	return []messaging_api.MessageInterface{
-		lineutil.NewButtonsTemplate(
-			"選擇學院",
-			"選擇學院",
-			"請選擇科系所屬學院",
-			actions,
-		),
+		lineutil.SetSender(msg, sender),
 	}
 }
 
@@ -772,15 +769,18 @@ func (h *Handler) buildDepartmentSelectionTemplate(year, imageURL string, depart
 
 	// If actions <= 4, use ButtonsTemplate; otherwise use CarouselTemplate
 	// LINE API limits: ButtonsTemplate max 4 actions, CarouselTemplate max 10 columns
+	sender := lineutil.GetSender(senderName, h.stickerManager)
+
 	if len(actions) <= 4 {
+		msg := lineutil.NewButtonsTemplateWithImage(
+			fmt.Sprintf("選擇%s", departmentClass),
+			fmt.Sprintf("選擇%s", departmentClass),
+			fmt.Sprintf("請選擇要查詢的%s", departmentClass),
+			imageURL,
+			actions,
+		)
 		return []messaging_api.MessageInterface{
-			lineutil.NewButtonsTemplateWithImage(
-				fmt.Sprintf("選擇%s", departmentClass),
-				fmt.Sprintf("選擇%s", departmentClass),
-				fmt.Sprintf("請選擇要查詢的%s", departmentClass),
-				imageURL,
-				actions,
-			),
+			lineutil.SetSender(msg, sender),
 		}
 	}
 
@@ -806,8 +806,9 @@ func (h *Handler) buildDepartmentSelectionTemplate(year, imageURL string, depart
 		})
 	}
 
+	msg := lineutil.NewCarouselTemplate(fmt.Sprintf("選擇%s", departmentClass), columns)
 	return []messaging_api.MessageInterface{
-		lineutil.NewCarouselTemplate(fmt.Sprintf("選擇%s", departmentClass), columns),
+		lineutil.SetSender(msg, sender),
 	}
 }
 

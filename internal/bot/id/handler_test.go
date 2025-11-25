@@ -61,6 +61,10 @@ func TestCanHandle(t *testing.T) {
 }
 
 func TestHandleMessage_StudentID(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network test in short mode")
+	}
+
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
