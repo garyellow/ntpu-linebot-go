@@ -18,6 +18,9 @@ const (
 	contactSearchPath  = "/pls/ld/CAMPUS_DIR_M.pq"
 	administrativePath = "/pls/ld/CAMPUS_DIR_M.p1?kind=1"
 	academicPath       = "/pls/ld/CAMPUS_DIR_M.p1?kind=2"
+
+	// Phone constants for Sanxia campus (assumed default)
+	sanxiaNormalPhone = "0286741111"
 )
 
 // getWorkingSEABaseURL gets the working SEA base URL using URLCache abstraction.
@@ -133,10 +136,24 @@ func parseContactsPage(doc *goquery.Document) []*storage.Contact {
 					return
 				}
 
-				// Extract member information
-				memberName := strings.TrimSpace(tds.Eq(0).Find("span").Text())
+				// Extract member information - Chinese name from lang-zh-Hant span
+				nameCell := tds.Eq(0)
+				memberName := strings.TrimSpace(nameCell.Find("span.lang-zh-Hant").Text())
+				if memberName == "" {
+					// Fallback: try first span if class not found
+					memberName = strings.TrimSpace(nameCell.Find("span").First().Text())
+				}
+
+				// Extract English name from lang-en span (if exists)
+				memberNameEn := strings.TrimSpace(nameCell.Find("span.lang-en").Text())
+
 				title := strings.TrimSpace(tds.Eq(1).Text())
-				extension := strings.TrimSpace(tds.Eq(2).Find("span").Text())
+				// Extension field may have multiple spans (zh-Hant and en-US with same value)
+				// Just take the first span's text to avoid duplication
+				extension := strings.TrimSpace(tds.Eq(2).Find("span").First().Text())
+
+				// Build full phone number if extension >= 5 digits
+				phone := buildFullPhone(extension)
 
 				// Extract email (may contain @ as image)
 				email := ""
@@ -155,9 +172,11 @@ func parseContactsPage(doc *goquery.Document) []*storage.Contact {
 					UID:          memberUID,
 					Type:         "individual",
 					Name:         memberName,
+					NameEn:       memberNameEn,
 					Organization: orgName,
 					Title:        title,
 					Extension:    extension,
+					Phone:        phone,
 					Email:        email,
 					CachedAt:     cachedAt,
 				}
@@ -167,6 +186,17 @@ func parseContactsPage(doc *goquery.Document) []*storage.Contact {
 	})
 
 	return contacts
+}
+
+// buildFullPhone creates a full phone number combining main phone and extension.
+// Format: "0286741111,12345" (main phone + comma + extension first 5 digits)
+// Returns empty string if extension < 5 digits (per Python implementation)
+func buildFullPhone(extension string) string {
+	extension = strings.TrimSpace(extension)
+	if len(extension) < 5 {
+		return ""
+	}
+	return sanxiaNormalPhone + "," + extension[:5]
 }
 
 // generateUID generates a unique identifier for contacts

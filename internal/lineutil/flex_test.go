@@ -90,42 +90,6 @@ func TestFlexBubbleComponents(t *testing.T) {
 	})
 }
 
-// TestKeyValueRow tests key-value row formatting
-func TestKeyValueRow(t *testing.T) {
-	t.Run("Standard row", func(t *testing.T) {
-		row := NewKeyValueRow("Key", "Value")
-
-		if len(row.Contents) != 2 {
-			t.Errorf("Expected 2 components, got %d", len(row.Contents))
-		}
-	})
-
-	t.Run("Long value", func(t *testing.T) {
-		longValue := "This is a very long value that should wrap properly in the Flex Message layout without breaking the UI"
-		longRow := NewKeyValueRow("Label", longValue)
-
-		if len(longRow.Contents) != 2 {
-			t.Errorf("Expected 2 components for long value, got %d", len(longRow.Contents))
-		}
-	})
-
-	t.Run("Chinese characters", func(t *testing.T) {
-		row := NewKeyValueRow("系所", "資訊工程學系資訊科學組")
-
-		if len(row.Contents) != 2 {
-			t.Errorf("Expected 2 components for Chinese text, got %d", len(row.Contents))
-		}
-	})
-
-	t.Run("Empty values", func(t *testing.T) {
-		row := NewKeyValueRow("", "")
-
-		if len(row.Contents) != 2 {
-			t.Errorf("Expected 2 components even for empty strings, got %d", len(row.Contents))
-		}
-	})
-}
-
 // TestFlexTextChaining tests method chaining for FlexText
 func TestFlexTextChaining(t *testing.T) {
 	text := NewFlexText("Test").
@@ -282,14 +246,6 @@ func BenchmarkTruncateRunes(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = TruncateRunes(testString, 20)
-	}
-}
-
-// BenchmarkNewKeyValueRow benchmarks key-value row creation
-func BenchmarkNewKeyValueRow(b *testing.B) {
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = NewKeyValueRow("測試標籤", "測試數值內容比較長一點的情況")
 	}
 }
 

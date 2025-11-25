@@ -22,6 +22,7 @@ type Contact struct {
 	UID          string `json:"uid"`
 	Type         string `json:"type"` // "individual" or "organization"
 	Name         string `json:"name"`
+	NameEn       string `json:"name_en,omitempty"` // English name (if different from Chinese)
 	Organization string `json:"organization,omitempty"`
 	Title        string `json:"title,omitempty"`
 	Extension    string `json:"extension,omitempty"`

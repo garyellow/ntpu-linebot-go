@@ -128,11 +128,12 @@ func TestParseYear(t *testing.T) {
 		{"Too long - must error", "12345", 0, true},
 		{"Non-numeric - must error", "abc", 0, true},
 
-		// Boundary tests
+		// Boundary tests (parseYear only validates format, not range)
+		// Range validation (NTPU founded 89, data cutoff 113+) is done in handleYearQuery
 		{"Year 89 (NTPU founded)", "89", 89, false},
-		{"Year 88 (too early)", "88", 0, true},
-		{"Year 130 (upper limit)", "130", 130, false},
-		{"Year 131 (too late)", "131", 0, true},
+		{"Year 88 (valid format)", "88", 88, false},
+		{"Year 130 (valid format)", "130", 130, false},
+		{"Year 131 (valid format)", "131", 131, false},
 	}
 
 	for _, tt := range tests {
@@ -254,12 +255,12 @@ func TestHandleYearQuery_Year113Plus(t *testing.T) {
 	}
 }
 
-// TestHandlePostback_Easter tests "復" easter egg
+// TestHandlePostback_Easter tests "兇" easter egg
 func TestHandlePostback_Easter(t *testing.T) {
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
-	msgs := h.HandlePostback(ctx, "復")
+	msgs := h.HandlePostback(ctx, "兇")
 	if len(msgs) == 0 {
 		t.Error("Expected easter egg response")
 	}

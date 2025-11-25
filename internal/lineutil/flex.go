@@ -184,19 +184,6 @@ func TruncateRunes(text string, maxRunes int) string {
 	return string(runes[:maxRunes-3]) + "..."
 }
 
-// NewKeyValueRow creates a key-value row for Flex Box with consistent styling
-// Key uses flex:0 (auto-width based on content) to prevent truncation
-// Value uses flex:1 (fill remaining space) with alignment end for better visibility
-// This ensures keys like "🆔 學號" are never truncated
-// Designed for Flex Message body content (not hero/header)
-// Value supports full wrapping to show complete information
-func NewKeyValueRow(key, value string) *FlexBox {
-	return NewFlexBox("horizontal",
-		NewFlexText(key).WithColor("#555555").WithSize("sm").WithFlex(0).WithWeight("bold").FlexText,
-		NewFlexText(value).WithWrap(true).WithColor("#333333").WithSize("sm").WithFlex(1).WithAlign("end").WithLineSpacing("4px").FlexText,
-	).WithSpacing("md")
-}
-
 // NewHeroBox creates a standardized Hero box with NTPU green background
 // Provides consistent styling across all modules:
 // - Background: #1DB446 (NTPU green)
@@ -300,4 +287,62 @@ func NewInfoRow(emoji, label, value string, style InfoRowStyle) *FlexBox {
 // NewInfoRowWithMargin creates an info row with specified margin (convenience wrapper)
 func NewInfoRowWithMargin(emoji, label, value string, style InfoRowStyle, margin string) messaging_api.FlexComponentInterface {
 	return NewInfoRow(emoji, label, value, style).WithMargin(margin).FlexBox
+}
+
+// NewButtonRow creates a horizontal box containing buttons with equal width distribution.
+// Each button gets flex:1 to share space equally.
+// Use this for creating a row of action buttons in Flex Message footer.
+//
+// Parameters:
+//   - buttons: Variable number of FlexButton to include in the row
+//
+// Returns: FlexBox with horizontal layout containing the buttons
+func NewButtonRow(buttons ...*FlexButton) *FlexBox {
+	contents := make([]messaging_api.FlexComponentInterface, 0, len(buttons))
+	for _, btn := range buttons {
+		if btn != nil {
+			// Wrap button in a box with flex:1 for equal distribution
+			btnBox := NewFlexBox("vertical", btn.FlexButton)
+			btnBox.Flex = 1
+			contents = append(contents, btnBox.FlexBox)
+		}
+	}
+	return NewFlexBox("horizontal", contents...).WithSpacing("sm")
+}
+
+// NewButtonFooter creates a footer with multiple rows of buttons.
+// Each row is rendered horizontally, rows are stacked vertically.
+// Empty rows are automatically filtered out.
+//
+// Layout:
+//
+//	┌─────────────────────────────────────────┐
+//	│ [btn1]  [btn2]                          │ <- row 1 (e.g., phone)
+//	│ [btn3]  [btn4]                          │ <- row 2 (e.g., email)
+//	│ [btn5]                                  │ <- row 3 (e.g., website)
+//	└─────────────────────────────────────────┘
+//
+// Parameters:
+//   - rows: Variable number of button slices, each slice becomes one row
+//
+// Returns: FlexBox suitable for Flex Bubble footer
+func NewButtonFooter(rows ...[]*FlexButton) *FlexBox {
+	var contents []messaging_api.FlexComponentInterface
+
+	for _, row := range rows {
+		// Filter nil buttons from row
+		var validButtons []*FlexButton
+		for _, btn := range row {
+			if btn != nil {
+				validButtons = append(validButtons, btn)
+			}
+		}
+
+		// Add row if not empty
+		if len(validButtons) > 0 {
+			contents = append(contents, NewButtonRow(validButtons...).FlexBox)
+		}
+	}
+
+	return NewFlexBox("vertical", contents...).WithSpacing("sm")
 }

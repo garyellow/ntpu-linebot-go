@@ -67,6 +67,7 @@ func createContactsTable(db *sql.DB) error {
 		uid TEXT PRIMARY KEY,
 		type TEXT CHECK(type IN ('individual', 'organization')) NOT NULL,
 		name TEXT NOT NULL,
+		name_en TEXT,
 		organization TEXT,
 		title TEXT,
 		extension TEXT,

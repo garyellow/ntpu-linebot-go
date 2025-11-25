@@ -346,6 +346,174 @@ func TestNewClipboardAction(t *testing.T) {
 	}
 }
 
+func TestFormatDisplayName(t *testing.T) {
+	tests := []struct {
+		name     string
+		nameCN   string
+		nameEN   string
+		expected string
+	}{
+		{
+			name:     "Both names different",
+			nameCN:   "王小明",
+			nameEN:   "Wang Xiao Ming",
+			expected: "王小明 Wang Xiao Ming",
+		},
+		{
+			name:     "Names identical - show only Chinese",
+			nameCN:   "資訊中心",
+			nameEN:   "資訊中心",
+			expected: "資訊中心",
+		},
+		{
+			name:     "English name empty",
+			nameCN:   "陳大文",
+			nameEN:   "",
+			expected: "陳大文",
+		},
+		{
+			name:     "Chinese name empty",
+			nameCN:   "",
+			nameEN:   "John Doe",
+			expected: " John Doe",
+		},
+		{
+			name:     "Both names empty",
+			nameCN:   "",
+			nameEN:   "",
+			expected: "",
+		},
+		{
+			name:     "Case insensitive - still show both",
+			nameCN:   "ABC",
+			nameEN:   "abc",
+			expected: "ABC abc",
+		},
+		{
+			name:     "Whitespace trimmed - identical after trim",
+			nameCN:   "測試",
+			nameEN:   "測試 ",
+			expected: "測試",
+		},
+		{
+			name:     "Different after trim",
+			nameCN:   "測試 ",
+			nameEN:   "Test",
+			expected: "測試 Test",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FormatDisplayName(tt.nameCN, tt.nameEN)
+			if result != tt.expected {
+				t.Errorf("FormatDisplayName(%q, %q) = %q, want %q",
+					tt.nameCN, tt.nameEN, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestBuildTelURI(t *testing.T) {
+	tests := []struct {
+		name      string
+		mainPhone string
+		extension string
+		expected  string
+	}{
+		{
+			name:      "Phone with extension",
+			mainPhone: "0286741111",
+			extension: "67114",
+			expected:  "tel:+886286741111,67114",
+		},
+		{
+			name:      "Phone without extension",
+			mainPhone: "0286741111",
+			extension: "",
+			expected:  "tel:+886286741111",
+		},
+		{
+			name:      "Phone with dashes removed",
+			mainPhone: "02-8674-1111",
+			extension: "67114",
+			expected:  "tel:+886286741111,67114",
+		},
+		{
+			name:      "Short extension",
+			mainPhone: "0286741111",
+			extension: "123",
+			expected:  "tel:+886286741111,123",
+		},
+		{
+			name:      "Empty phone",
+			mainPhone: "",
+			extension: "67114",
+			expected:  "tel:+886,67114",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := BuildTelURI(tt.mainPhone, tt.extension)
+			if result != tt.expected {
+				t.Errorf("BuildTelURI(%q, %q) = %q, want %q",
+					tt.mainPhone, tt.extension, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestBuildFullPhone(t *testing.T) {
+	tests := []struct {
+		name      string
+		mainPhone string
+		extension string
+		expected  string
+	}{
+		{
+			name:      "Phone with 5-digit extension",
+			mainPhone: "0286741111",
+			extension: "67114",
+			expected:  "0286741111,67114",
+		},
+		{
+			name:      "Phone with 6-digit extension - truncate to 5",
+			mainPhone: "0286741111",
+			extension: "671145",
+			expected:  "0286741111,67114",
+		},
+		{
+			name:      "Phone without extension - returns empty",
+			mainPhone: "0286741111",
+			extension: "",
+			expected:  "",
+		},
+		{
+			name:      "Phone with short extension (4 digits) - returns empty",
+			mainPhone: "0286741111",
+			extension: "1234",
+			expected:  "",
+		},
+		{
+			name:      "Both empty - returns empty",
+			mainPhone: "",
+			extension: "",
+			expected:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := BuildFullPhone(tt.mainPhone, tt.extension)
+			if result != tt.expected {
+				t.Errorf("BuildFullPhone(%q, %q) = %q, want %q",
+					tt.mainPhone, tt.extension, result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestNewTextMessageWithConsistentSender(t *testing.T) {
 	tests := []struct {
 		name           string
