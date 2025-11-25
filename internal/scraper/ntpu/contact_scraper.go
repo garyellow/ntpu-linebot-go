@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 	"golang.org/x/text/encoding/traditionalchinese"
@@ -153,7 +154,7 @@ func parseContactsPage(doc *goquery.Document) []*storage.Contact {
 				extension := strings.TrimSpace(tds.Eq(2).Find("span").First().Text())
 
 				// Build full phone number if extension >= 5 digits
-				phone := buildFullPhone(extension)
+				phone := lineutil.BuildFullPhone(sanxiaNormalPhone, strings.TrimSpace(extension))
 
 				// Extract email (may contain @ as image)
 				email := ""
@@ -186,17 +187,6 @@ func parseContactsPage(doc *goquery.Document) []*storage.Contact {
 	})
 
 	return contacts
-}
-
-// buildFullPhone creates a full phone number combining main phone and extension.
-// Format: "0286741111,12345" (main phone + comma + extension first 5 digits)
-// Returns empty string if extension < 5 digits (per Python implementation)
-func buildFullPhone(extension string) string {
-	extension = strings.TrimSpace(extension)
-	if len(extension) < 5 {
-		return ""
-	}
-	return sanxiaNormalPhone + "," + extension[:5]
 }
 
 // generateUID generates a unique identifier for contacts
