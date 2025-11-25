@@ -266,11 +266,11 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 // handleAllDepartmentCodes returns all department codes
 func (h *Handler) handleAllDepartmentCodes() []messaging_api.MessageInterface {
 	var builder strings.Builder
-	builder.WriteString("📚 所有系代碼：\n\n")
+	builder.WriteString("📚 所有系代碼：\n")
 
 	// Group by department
 	for name, code := range ntpu.DepartmentCodes {
-		builder.WriteString(fmt.Sprintf("%s系 → %s\n", name, code))
+		builder.WriteString(fmt.Sprintf("\n%s系 → %s", name, code))
 	}
 
 	sender := lineutil.GetSender(senderName, h.stickerManager)
