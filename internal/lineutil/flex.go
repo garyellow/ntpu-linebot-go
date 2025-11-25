@@ -197,16 +197,6 @@ func NewKeyValueRow(key, value string) *FlexBox {
 	).WithSpacing("md")
 }
 
-// NewKeyValueRowCompact creates a compact key-value row for carousel/list views
-// Uses smaller text and tighter spacing with horizontal layout
-// For carousel, limit to 3 lines to balance space vs information
-func NewKeyValueRowCompact(key, value string) *FlexBox {
-	return NewFlexBox("horizontal",
-		NewFlexText(key).WithColor("#888888").WithSize("xs").WithFlex(0).FlexText,
-		NewFlexText(value).WithWrap(true).WithMaxLines(3).WithColor("#666666").WithSize("xs").WithFlex(1).WithAlign("end").WithLineSpacing("2px").FlexText,
-	).WithSpacing("sm")
-}
-
 // NewHeroBox creates a standardized Hero box with NTPU green background
 // Provides consistent styling across all modules:
 // - Background: #1DB446 (NTPU green)
@@ -234,16 +224,6 @@ func NewCompactHeroBox(title string) *FlexBox {
 	box.BackgroundColor = "#1DB446"
 	box.PaddingAll = "15px"
 	return box
-}
-
-// NewInfoRow creates a simple info row with icon and value (no key label)
-// Useful for contact info, location, etc.
-// Full wrap enabled to show complete information
-func NewInfoRow(icon, value string) *FlexBox {
-	return NewFlexBox("baseline",
-		NewFlexText(icon).WithSize("sm").WithFlex(0).FlexText,
-		NewFlexText(value).WithWrap(true).WithColor("#666666").WithSize("sm").WithMargin("sm").WithFlex(1).WithLineSpacing("4px").FlexText,
-	)
 }
 
 // NewHeaderBadge creates a consistent header badge for Flex Messages

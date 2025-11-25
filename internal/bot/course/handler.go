@@ -449,7 +449,7 @@ func (h *Handler) handleTeacherSearch(ctx context.Context, teacherName string) [
 
 			// Check if teacher matches using fuzzy matching
 			for _, teacher := range course.Teachers {
-				if lineutil.ContainsAllRunes(teacher, teacherName) || strings.Contains(teacher, teacherName) {
+				if lineutil.ContainsAllRunes(teacher, teacherName) {
 					foundCourses = append(foundCourses, course)
 					break
 				}
@@ -674,7 +674,7 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 			)
 		}
 		// Footer with "View Detail" button - displayText shows course title
-		displayText := fmt.Sprintf("查詢課程 %s", course.UID)
+		displayText := fmt.Sprintf("查詢「%s」課程", lineutil.TruncateRunes(course.Title, 30))
 		// Use course: prefix for proper postback routing
 		footer := lineutil.NewFlexBox("vertical",
 			lineutil.NewFlexButton(

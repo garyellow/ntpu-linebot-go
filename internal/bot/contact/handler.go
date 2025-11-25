@@ -673,5 +673,14 @@ func (h *Handler) buildSearchVariants(searchTerm string) []string {
 		variants = append(variants, searchTerm+"系")
 	}
 
-	return variants
+	// Deduplicate variants while preserving order
+	seen := make(map[string]bool)
+	uniqueVariants := []string{}
+	for _, v := range variants {
+		if !seen[v] {
+			seen[v] = true
+			uniqueVariants = append(uniqueVariants, v)
+		}
+	}
+	return uniqueVariants
 }

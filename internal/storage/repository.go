@@ -782,7 +782,7 @@ func (db *DB) GetCoursesByRecentSemesters() ([]Course, error) {
 	// Calculate TTL cutoff timestamp
 	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
 
-	// Get courses from recent 2 semesters, limit to 2000 for performance
+	// Get up to 2000 most recent courses ordered by semester (year, term)
 	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at
 		FROM courses WHERE cached_at > ? ORDER BY year DESC, term DESC LIMIT 2000`
 

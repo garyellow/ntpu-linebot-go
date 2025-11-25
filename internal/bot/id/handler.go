@@ -584,7 +584,7 @@ func (h *Handler) formatStudentResponse(student *storage.Student, fromCache bool
 				lineutil.NewFlexText("學號").WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
 			).WithSpacing("sm").FlexBox,
 			lineutil.NewFlexText(student.ID).WithColor("#333333").WithSize("md").WithWeight("bold").WithMargin("sm").FlexText,
-		).WithMargin("lg").FlexBox,
+		).WithMargin("md").FlexBox,
 		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
 		// 系所 row
 		lineutil.NewFlexBox("vertical",
