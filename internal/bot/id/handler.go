@@ -352,7 +352,8 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 
 	currentYear := time.Now().Year() - 1911
 
-	// Validate year
+	// Validate year - order matters for proper responses!
+	// 1. Check future year first
 	if year > currentYear {
 		msg := lineutil.NewTextMessageWithConsistentSender("你未來人？(⊙ˍ⊙)", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -362,7 +363,7 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	// Check for 2024+ data warning (year >= 113)
+	// 2. Check for 2024+ data warning (year >= 113) - LMS 2.0 is deprecated
 	if year >= 113 {
 		imageURL := "https://raw.githubusercontent.com/garyellow/ntpu-linebot-go/main/assets/rip.png"
 		return []messaging_api.MessageInterface{
@@ -371,8 +372,9 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 		}
 	}
 
+	// 3. Check if year is before NTPU was founded (ROC 89 = 2000)
 	if year < 90 {
-		msg := lineutil.NewTextMessageWithConsistentSender("💡 學年度過早\n\n臺北大學於民國 89 年成立\n請輸入 90 學年度以後的年份", sender)
+		msg := lineutil.NewTextMessageWithConsistentSender("學校都還沒蓋好(￣▽￣)", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			{Action: lineutil.NewMessageAction("查詢 95 學年度", "學年 95")},
 			{Action: lineutil.NewMessageAction("查詢學號", "學號")},
@@ -380,8 +382,9 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 		return []messaging_api.MessageInterface{msg}
 	}
 
+	// 4. Check if year is before LMS was launched (ROC 95)
 	if year >= 90 && year < 95 {
-		msg := lineutil.NewTextMessageWithConsistentSender("💡 此學年度資料不可用\n\n數位學苑系統於 95 學年度啟用\n目前僅提供 95-112 學年度資料", sender)
+		msg := lineutil.NewTextMessageWithConsistentSender("數位學苑還沒出生喔~~", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			{Action: lineutil.NewMessageAction("查詢 95 學年度", "學年 95")},
 			{Action: lineutil.NewMessageAction("查詢學號", "學號")},
@@ -389,13 +392,13 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	// Create confirmation message with flow explanation
+	// Create confirmation message with flow explanation + Python-style meme buttons
 	confirmText := fmt.Sprintf("📅 %d 學年度學生查詢\n\n📋 查詢流程：\n1️⃣ 選擇學院群\n2️⃣ 選擇學院\n3️⃣ 選擇科系\n\n確定要查詢嗎？", year)
 	confirmMsg := lineutil.NewConfirmTemplate(
 		"確認學年度",
 		confirmText,
-		lineutil.NewPostbackAction("開始查詢", fmt.Sprintf("id:搜尋全系%s%d", splitChar, year)),
-		lineutil.NewPostbackAction("取消", "id:兇"),
+		lineutil.NewPostbackActionWithDisplayText("哪次不是", "哪次不是", fmt.Sprintf("id:搜尋全系%s%d", splitChar, year)),
+		lineutil.NewPostbackActionWithDisplayText("我在想想", "再啦乾ಠ_ಠ", "id:兇"),
 	)
 	return []messaging_api.MessageInterface{
 		lineutil.SetSender(confirmMsg, sender),
@@ -415,7 +418,7 @@ func (h *Handler) handleYearSearchConfirm(yearStr string) []messaging_api.Messag
 	msg := lineutil.NewButtonsTemplateWithImage(
 		fmt.Sprintf("%s 學年度學生查詢", yearStr),
 		fmt.Sprintf("%s 學年度", yearStr),
-		"請選擇科系所屬學院群\n\n📚 文法商：人文、法律、商學院\n🏛️ 公社電資：公共事務、社科、電資學院",
+		"請選擇科系所屬學院群\n\n📚 文法商：人文、法律、商學院\n🏛️ 公社電資：公共、社科、電資學院",
 		"https://new.ntpu.edu.tw/assets/logo/ntpu_logo.png",
 		actions,
 	)
@@ -638,8 +641,7 @@ func isNumeric(s string) bool {
 }
 
 // parseYear parses a year string (2-4 digits) to ROC year
-// Validates year is within reasonable range (89-130)
-// NTPU founded in ROC 89 (2000), upper bound allows future planning
+// Only validates format, not range (range validation is done in handleYearQuery for proper error messages)
 func parseYear(yearStr string) (int, error) {
 	if len(yearStr) < 2 || len(yearStr) > 4 {
 		return 0, fmt.Errorf("invalid year length")
@@ -653,11 +655,6 @@ func parseYear(yearStr string) (int, error) {
 	// Convert to ROC year if AD year
 	if year >= 1911 {
 		year = year - 1911
-	}
-
-	// Validate reasonable range (NTPU founded in ROC 89 = 2000)
-	if year < 89 || year > 130 {
-		return 0, fmt.Errorf("year %d out of reasonable range (89-130)", year)
 	}
 
 	return year, nil
