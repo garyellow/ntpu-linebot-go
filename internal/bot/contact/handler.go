@@ -525,7 +525,7 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 	}
 
 	// Sort contacts based on type:
-	// - Organizations: by hierarchy level (superior units first, i.e., units with fewer superiors come first)
+	// - Organizations: by hierarchy level (top-level units first, i.e., units without superior field come first)
 	// - Individuals: by match count (descending), then name, title, organization
 	sort.SliceStable(contacts, func(i, j int) bool {
 		// Organization comes before individual

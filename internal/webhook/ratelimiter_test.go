@@ -104,9 +104,26 @@ func TestUserRateLimiter_RecordsDroppedRequests(t *testing.T) {
 		t.Error("4th request should be denied")
 	}
 
-	// Note: We can't easily verify the metric was recorded without
-	// exposing internal state or using a mock. The important thing
-	// is that the code path doesn't panic.
+	// Verify the metric was recorded
+	metricFamilies, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("Failed to gather metrics: %v", err)
+	}
+
+	var found bool
+	for _, mf := range metricFamilies {
+		if mf.GetName() == "ntpu_rate_limiter_dropped_total" {
+			for _, m := range mf.GetMetric() {
+				if m.GetCounter().GetValue() > 0 {
+					found = true
+					break
+				}
+			}
+		}
+	}
+	if !found {
+		t.Error("Expected dropped request to be recorded in metrics")
+	}
 }
 
 func TestRateLimiter_WaitForToken(t *testing.T) {

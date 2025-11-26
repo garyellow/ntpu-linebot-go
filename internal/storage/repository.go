@@ -351,7 +351,8 @@ func (db *DB) GetContactByUID(uid string) (*Contact, error) {
 }
 
 // SearchContactsByName searches contacts by partial name or title match (max 500 results)
-// Searches in: name, title fields
+// SQL searches in: name, title fields only
+// Note: The calling code may perform additional fuzzy matching on more fields (name, title, organization, superior)
 // Only returns non-expired cache entries based on configured TTL
 func (db *DB) SearchContactsByName(name string) ([]Contact, error) {
 	// Validate input
