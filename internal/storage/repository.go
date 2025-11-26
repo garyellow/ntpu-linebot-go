@@ -402,7 +402,7 @@ func (db *DB) GetContactsByOrganization(org string) ([]Contact, error) {
 	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
 
 	// Add TTL filter to prevent returning stale data
-	query := `SELECT uid, name, name_en, title, organization, extension, phone, email, cached_at FROM contacts WHERE organization = ? AND cached_at > ?`
+	query := `SELECT uid, type, name, name_en, title, organization, superior, extension, phone, email, cached_at FROM contacts WHERE organization = ? AND cached_at > ?`
 
 	rows, err := db.conn.Query(query, org, ttlTimestamp)
 	if err != nil {
@@ -413,15 +413,16 @@ func (db *DB) GetContactsByOrganization(org string) ([]Contact, error) {
 	var contacts []Contact
 	for rows.Next() {
 		var contact Contact
-		var nameEn, title, org, extension, phone, email sql.NullString
+		var nameEn, title, org, superior, extension, phone, email sql.NullString
 
-		if err := rows.Scan(&contact.UID, &contact.Name, &nameEn, &title, &org, &extension, &phone, &email, &contact.CachedAt); err != nil {
+		if err := rows.Scan(&contact.UID, &contact.Type, &contact.Name, &nameEn, &title, &org, &superior, &extension, &phone, &email, &contact.CachedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan contact row: %w", err)
 		}
 
 		contact.NameEn = nameEn.String
 		contact.Title = title.String
 		contact.Organization = org.String
+		contact.Superior = superior.String
 		contact.Extension = extension.String
 		contact.Phone = phone.String
 		contact.Email = email.String

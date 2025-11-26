@@ -186,7 +186,7 @@ func TruncateRunes(text string, maxRunes int) string {
 
 // NewHeroBox creates a standardized Hero box with LINE green background
 // Provides consistent styling across all modules:
-// - Background: ColorPrimary (LINE Green #06C755)
+// - Background: ColorHeroBg (LINE Green #06C755)
 // - Padding: 20px all, 16px bottom (for visual balance)
 // - Title: Bold, XL size, white color, full wrap for complete display
 // - Subtitle: XS size, white color, md margin top (omitted if empty)

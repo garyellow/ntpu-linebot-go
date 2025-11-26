@@ -641,3 +641,429 @@ func TestGetCoursesByRecentSemestersLimit(t *testing.T) {
 }
 
 // Removed redundant count/update tests - SaveAndGet already validates these
+
+// ===== Historical Courses Repository Tests =====
+
+// TestSaveHistoricalCourse tests single historical course save with conflict handling
+func TestSaveHistoricalCourse(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	course := &Course{
+		UID:         "1001U0001",
+		Year:        100,
+		Term:        1,
+		No:          "U0001",
+		Title:       "計算機概論",
+		Teachers:    []string{"王教授"},
+		TeacherURLs: []string{"https://example.com/teacher1"},
+		Times:       []string{"週一1-2"},
+		Locations:   []string{"資訊大樓 101"},
+		DetailURL:   "https://example.com/course/1001U0001",
+		Note:        "測試備註",
+	}
+
+	// Test save
+	err := db.SaveHistoricalCourse(course)
+	if err != nil {
+		t.Fatalf("SaveHistoricalCourse failed: %v", err)
+	}
+
+	// Verify saved by searching
+	courses, err := db.SearchHistoricalCoursesByYear(100)
+	if err != nil {
+		t.Fatalf("SearchHistoricalCoursesByYear failed: %v", err)
+	}
+	if len(courses) != 1 {
+		t.Fatalf("Expected 1 course, got %d", len(courses))
+	}
+	if courses[0].Title != course.Title {
+		t.Errorf("Expected title %q, got %q", course.Title, courses[0].Title)
+	}
+
+	// Test upsert (update on conflict)
+	course.Title = "計算機概論（更新）"
+	err = db.SaveHistoricalCourse(course)
+	if err != nil {
+		t.Fatalf("SaveHistoricalCourse (upsert) failed: %v", err)
+	}
+
+	courses, err = db.SearchHistoricalCoursesByYear(100)
+	if err != nil {
+		t.Fatalf("SearchHistoricalCoursesByYear after upsert failed: %v", err)
+	}
+	if len(courses) != 1 {
+		t.Fatalf("Expected 1 course after upsert, got %d", len(courses))
+	}
+	if courses[0].Title != "計算機概論（更新）" {
+		t.Errorf("Expected updated title, got %q", courses[0].Title)
+	}
+}
+
+// TestSaveHistoricalCoursesBatch tests batch historical course save
+func TestSaveHistoricalCoursesBatch(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	courses := []*Course{
+		{
+			UID:      "1001U0001",
+			Year:     100,
+			Term:     1,
+			No:       "U0001",
+			Title:    "計算機概論",
+			Teachers: []string{"王教授"},
+		},
+		{
+			UID:      "1001U0002",
+			Year:     100,
+			Term:     1,
+			No:       "U0002",
+			Title:    "程式設計",
+			Teachers: []string{"李教授"},
+		},
+		{
+			UID:      "1002M0001",
+			Year:     100,
+			Term:     2,
+			No:       "M0001",
+			Title:    "資料結構",
+			Teachers: []string{"陳教授", "林教授"},
+		},
+	}
+
+	// Test batch save
+	err := db.SaveHistoricalCoursesBatch(courses)
+	if err != nil {
+		t.Fatalf("SaveHistoricalCoursesBatch failed: %v", err)
+	}
+
+	// Verify all courses saved
+	result, err := db.SearchHistoricalCoursesByYear(100)
+	if err != nil {
+		t.Fatalf("SearchHistoricalCoursesByYear failed: %v", err)
+	}
+	if len(result) != 3 {
+		t.Errorf("Expected 3 courses, got %d", len(result))
+	}
+
+	// Verify count
+	count, err := db.CountHistoricalCourses()
+	if err != nil {
+		t.Fatalf("CountHistoricalCourses failed: %v", err)
+	}
+	if count != 3 {
+		t.Errorf("Expected count 3, got %d", count)
+	}
+}
+
+// TestSaveHistoricalCoursesBatchEmpty tests batch save with empty slice
+func TestSaveHistoricalCoursesBatchEmpty(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	// Test with empty slice - should return nil without error
+	err := db.SaveHistoricalCoursesBatch([]*Course{})
+	if err != nil {
+		t.Fatalf("SaveHistoricalCoursesBatch with empty slice failed: %v", err)
+	}
+}
+
+// TestSearchHistoricalCoursesByYearAndTitle tests search with title filter
+func TestSearchHistoricalCoursesByYearAndTitle(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	courses := []*Course{
+		{UID: "1001U0001", Year: 100, Term: 1, No: "U0001", Title: "計算機概論", Teachers: []string{"王教授"}},
+		{UID: "1001U0002", Year: 100, Term: 1, No: "U0002", Title: "程式設計基礎", Teachers: []string{"李教授"}},
+		{UID: "1001U0003", Year: 100, Term: 2, No: "U0003", Title: "進階程式設計", Teachers: []string{"陳教授"}},
+		{UID: "1011U0001", Year: 101, Term: 1, No: "U0001", Title: "程式設計", Teachers: []string{"張教授"}},
+	}
+
+	if err := db.SaveHistoricalCoursesBatch(courses); err != nil {
+		t.Fatalf("SaveHistoricalCoursesBatch failed: %v", err)
+	}
+
+	tests := []struct {
+		name          string
+		year          int
+		title         string
+		expectedCount int
+	}{
+		{
+			name:          "Match partial title in year 100",
+			year:          100,
+			title:         "程式設計",
+			expectedCount: 2, // 程式設計基礎, 進階程式設計
+		},
+		{
+			name:          "Match exact title",
+			year:          100,
+			title:         "計算機概論",
+			expectedCount: 1,
+		},
+		{
+			name:          "No match in year",
+			year:          100,
+			title:         "資料庫",
+			expectedCount: 0,
+		},
+		{
+			name:          "Different year",
+			year:          101,
+			title:         "程式設計",
+			expectedCount: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := db.SearchHistoricalCoursesByYearAndTitle(tt.year, tt.title)
+			if err != nil {
+				t.Fatalf("SearchHistoricalCoursesByYearAndTitle failed: %v", err)
+			}
+			if len(result) != tt.expectedCount {
+				t.Errorf("Expected %d courses, got %d", tt.expectedCount, len(result))
+			}
+		})
+	}
+}
+
+// TestSearchHistoricalCoursesByYearAndTitleTooLong tests search term length validation
+func TestSearchHistoricalCoursesByYearAndTitleTooLong(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	// Create a search term longer than 100 characters
+	longTitle := ""
+	for i := 0; i < 101; i++ {
+		longTitle += "測"
+	}
+
+	_, err := db.SearchHistoricalCoursesByYearAndTitle(100, longTitle)
+	if err == nil {
+		t.Error("Expected error for too long search term, got nil")
+	}
+}
+
+// TestSearchHistoricalCoursesByYear tests year-only search
+func TestSearchHistoricalCoursesByYear(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	courses := []*Course{
+		{UID: "1001U0001", Year: 100, Term: 1, No: "U0001", Title: "計算機概論", Teachers: []string{"王教授"}},
+		{UID: "1002U0002", Year: 100, Term: 2, No: "U0002", Title: "程式設計", Teachers: []string{"李教授"}},
+		{UID: "1011U0001", Year: 101, Term: 1, No: "U0001", Title: "資料結構", Teachers: []string{"陳教授"}},
+	}
+
+	if err := db.SaveHistoricalCoursesBatch(courses); err != nil {
+		t.Fatalf("SaveHistoricalCoursesBatch failed: %v", err)
+	}
+
+	// Search for year 100
+	result, err := db.SearchHistoricalCoursesByYear(100)
+	if err != nil {
+		t.Fatalf("SearchHistoricalCoursesByYear failed: %v", err)
+	}
+	if len(result) != 2 {
+		t.Errorf("Expected 2 courses for year 100, got %d", len(result))
+	}
+
+	// Verify ordering (term DESC) - term 2 should come first
+	if len(result) >= 2 {
+		if result[0].Term < result[1].Term {
+			t.Errorf("Expected courses ordered by term DESC, got term %d before %d", result[0].Term, result[1].Term)
+		}
+	}
+
+	// Search for year with no courses
+	result, err = db.SearchHistoricalCoursesByYear(99)
+	if err != nil {
+		t.Fatalf("SearchHistoricalCoursesByYear for empty year failed: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("Expected 0 courses for year 99, got %d", len(result))
+	}
+}
+
+// TestDeleteExpiredHistoricalCourses tests TTL-based cleanup
+func TestDeleteExpiredHistoricalCourses(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	// Insert fresh course
+	fresh := &Course{
+		UID:      "1001U0001",
+		Year:     100,
+		Term:     1,
+		No:       "U0001",
+		Title:    "新課程",
+		Teachers: []string{"新教授"},
+	}
+	if err := db.SaveHistoricalCourse(fresh); err != nil {
+		t.Fatalf("SaveHistoricalCourse failed: %v", err)
+	}
+
+	// Insert expired course (manually set cached_at to 8 days ago)
+	query := `INSERT INTO historical_courses (uid, year, term, no, title, teachers, teacher_urls, times, locations, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
+	_, err := db.conn.Exec(query, "1001U0002", 100, 1, "U0002", "舊課程", `["舊教授"]`, `[]`, `[]`, `[]`, oldTime)
+	if err != nil {
+		t.Fatalf("Manual insert failed: %v", err)
+	}
+
+	// Count before delete
+	countBefore, err := db.CountHistoricalCourses()
+	if err != nil {
+		t.Fatalf("CountHistoricalCourses failed: %v", err)
+	}
+	if countBefore != 2 {
+		t.Errorf("Expected 2 courses before delete, got %d", countBefore)
+	}
+
+	// Delete expired (7 day TTL)
+	deleted, err := db.DeleteExpiredHistoricalCourses(7 * 24 * time.Hour)
+	if err != nil {
+		t.Fatalf("DeleteExpiredHistoricalCourses failed: %v", err)
+	}
+	if deleted != 1 {
+		t.Errorf("Expected 1 deleted, got %d", deleted)
+	}
+
+	// Count after delete
+	countAfter, err := db.CountHistoricalCourses()
+	if err != nil {
+		t.Fatalf("CountHistoricalCourses failed: %v", err)
+	}
+	if countAfter != 1 {
+		t.Errorf("Expected 1 course after delete, got %d", countAfter)
+	}
+}
+
+// TestCountHistoricalCourses tests counting functionality
+func TestCountHistoricalCourses(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	// Count empty table
+	count, err := db.CountHistoricalCourses()
+	if err != nil {
+		t.Fatalf("CountHistoricalCourses failed: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("Expected 0 on empty table, got %d", count)
+	}
+
+	// Add courses and count again
+	courses := []*Course{
+		{UID: "1001U0001", Year: 100, Term: 1, No: "U0001", Title: "課程1", Teachers: []string{}},
+		{UID: "1001U0002", Year: 100, Term: 1, No: "U0002", Title: "課程2", Teachers: []string{}},
+	}
+	if err := db.SaveHistoricalCoursesBatch(courses); err != nil {
+		t.Fatalf("SaveHistoricalCoursesBatch failed: %v", err)
+	}
+
+	count, err = db.CountHistoricalCourses()
+	if err != nil {
+		t.Fatalf("CountHistoricalCourses failed: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("Expected 2 after insert, got %d", count)
+	}
+}
+
+// TestHistoricalCoursesArrayHandling tests JSON array serialization/deserialization
+func TestHistoricalCoursesArrayHandling(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	course := &Course{
+		UID:         "1001U0001",
+		Year:        100,
+		Term:        1,
+		No:          "U0001",
+		Title:       "資料結構",
+		Teachers:    []string{"王教授", "李教授"},
+		TeacherURLs: []string{"https://example.com/teacher1", "https://example.com/teacher2"},
+		Times:       []string{"週二 3-4", "週四 7-8"},
+		Locations:   []string{"資訊大樓 101", "資訊大樓 203"},
+	}
+
+	if err := db.SaveHistoricalCourse(course); err != nil {
+		t.Fatalf("SaveHistoricalCourse failed: %v", err)
+	}
+
+	courses, err := db.SearchHistoricalCoursesByYear(100)
+	if err != nil {
+		t.Fatalf("SearchHistoricalCoursesByYear failed: %v", err)
+	}
+	if len(courses) != 1 {
+		t.Fatalf("Expected 1 course, got %d", len(courses))
+	}
+
+	retrieved := courses[0]
+
+	// Verify array deserialization
+	if len(retrieved.Teachers) != 2 {
+		t.Errorf("Expected 2 teachers, got %d", len(retrieved.Teachers))
+	}
+	if len(retrieved.TeacherURLs) != 2 {
+		t.Errorf("Expected 2 teacher URLs, got %d", len(retrieved.TeacherURLs))
+	}
+	if len(retrieved.Times) != 2 {
+		t.Errorf("Expected 2 time slots, got %d", len(retrieved.Times))
+	}
+	if len(retrieved.Locations) != 2 {
+		t.Errorf("Expected 2 locations, got %d", len(retrieved.Locations))
+	}
+}
+
+// TestHistoricalCoursesTTLFiltering tests that expired courses are not returned
+func TestHistoricalCoursesTTLFiltering(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	// Insert fresh course
+	fresh := &Course{
+		UID:      "1001U0001",
+		Year:     100,
+		Term:     1,
+		No:       "U0001",
+		Title:    "新課程",
+		Teachers: []string{"新教授"},
+	}
+	if err := db.SaveHistoricalCourse(fresh); err != nil {
+		t.Fatalf("SaveHistoricalCourse failed: %v", err)
+	}
+
+	// Insert expired course (manually set cached_at to 8 days ago)
+	query := `INSERT INTO historical_courses (uid, year, term, no, title, teachers, teacher_urls, times, locations, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
+	_, err := db.conn.Exec(query, "1001U0002", 100, 1, "U0002", "舊課程", `["舊教授"]`, `[]`, `[]`, `[]`, oldTime)
+	if err != nil {
+		t.Fatalf("Manual insert failed: %v", err)
+	}
+
+	// SearchHistoricalCoursesByYear should not return expired course
+	courses, err := db.SearchHistoricalCoursesByYear(100)
+	if err != nil {
+		t.Fatalf("SearchHistoricalCoursesByYear failed: %v", err)
+	}
+	if len(courses) != 1 {
+		t.Errorf("Expected 1 non-expired course, got %d", len(courses))
+	}
+	if len(courses) > 0 && courses[0].Title != "新課程" {
+		t.Errorf("Expected fresh course, got %s", courses[0].Title)
+	}
+
+	// SearchHistoricalCoursesByYearAndTitle should not return expired course
+	courses, err = db.SearchHistoricalCoursesByYearAndTitle(100, "課程")
+	if err != nil {
+		t.Fatalf("SearchHistoricalCoursesByYearAndTitle failed: %v", err)
+	}
+	if len(courses) != 1 {
+		t.Errorf("Expected 1 non-expired course, got %d", len(courses))
+	}
+}

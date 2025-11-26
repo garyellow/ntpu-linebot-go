@@ -715,3 +715,146 @@ func indexOf(s, substr string) int {
 	}
 	return -1
 }
+
+// TestExtractCourseCode tests the course code extraction from UID strings
+func TestExtractCourseCode(t *testing.T) {
+	tests := []struct {
+		name     string
+		uid      string
+		expected string
+	}{
+		{
+			name:     "Valid UID with U code",
+			uid:      "11312U0001",
+			expected: "U0001",
+		},
+		{
+			name:     "Valid UID with M code",
+			uid:      "1131M0002",
+			expected: "M0002",
+		},
+		{
+			name:     "Valid UID with N code",
+			uid:      "11321N1234",
+			expected: "N1234",
+		},
+		{
+			name:     "Valid UID with P code",
+			uid:      "11312P9999",
+			expected: "P9999",
+		},
+		{
+			name:     "Lowercase code - returns uppercase",
+			uid:      "11312u0001",
+			expected: "U0001",
+		},
+		{
+			name:     "Mixed case code",
+			uid:      "11312m0002",
+			expected: "M0002",
+		},
+		{
+			name:     "Short year (2 digits)",
+			uid:      "121U0001",
+			expected: "U0001",
+		},
+		{
+			name:     "Empty string",
+			uid:      "",
+			expected: "",
+		},
+		{
+			name:     "No valid code pattern",
+			uid:      "11312X0001",
+			expected: "",
+		},
+		{
+			name:     "Incomplete code pattern",
+			uid:      "11312U001",
+			expected: "",
+		},
+		{
+			name:     "Only numbers",
+			uid:      "1131200001",
+			expected: "",
+		},
+		{
+			name:     "Code without year prefix",
+			uid:      "U0001",
+			expected: "U0001",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ExtractCourseCode(tt.uid)
+			if result != tt.expected {
+				t.Errorf("ExtractCourseCode(%q) = %q, want %q",
+					tt.uid, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestFormatSemester tests the semester formatting function
+func TestFormatSemester(t *testing.T) {
+	tests := []struct {
+		name     string
+		year     int
+		term     int
+		expected string
+	}{
+		{
+			name:     "First semester (上學期)",
+			year:     113,
+			term:     1,
+			expected: "113 學年度 上學期",
+		},
+		{
+			name:     "Second semester (下學期)",
+			year:     113,
+			term:     2,
+			expected: "113 學年度 下學期",
+		},
+		{
+			name:     "Older year - first semester",
+			year:     100,
+			term:     1,
+			expected: "100 學年度 上學期",
+		},
+		{
+			name:     "Older year - second semester",
+			year:     100,
+			term:     2,
+			expected: "100 學年度 下學期",
+		},
+		{
+			name:     "Invalid term value (defaults to 上學期)",
+			year:     113,
+			term:     0,
+			expected: "113 學年度 上學期",
+		},
+		{
+			name:     "Invalid term value 3 (defaults to 上學期)",
+			year:     113,
+			term:     3,
+			expected: "113 學年度 上學期",
+		},
+		{
+			name:     "Negative term (defaults to 上學期)",
+			year:     113,
+			term:     -1,
+			expected: "113 學年度 上學期",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FormatSemester(tt.year, tt.term)
+			if result != tt.expected {
+				t.Errorf("FormatSemester(%d, %d) = %q, want %q",
+					tt.year, tt.term, result, tt.expected)
+			}
+		})
+	}
+}
