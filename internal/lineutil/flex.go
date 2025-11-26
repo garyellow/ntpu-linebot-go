@@ -189,12 +189,16 @@ func TruncateRunes(text string, maxRunes int) string {
 // - Background: #1DB446 (NTPU green)
 // - Padding: 20px all, 16px bottom (for visual balance)
 // - Title: Bold, XL size, white color, full wrap for complete display
-// - Subtitle: XS size, white color, md margin top
+// - Subtitle: XS size, white color, md margin top (omitted if empty)
 func NewHeroBox(title, subtitle string) *FlexBox {
-	box := NewFlexBox("vertical",
+	contents := []messaging_api.FlexComponentInterface{
 		NewFlexText(title).WithWeight("bold").WithSize("xl").WithColor("#ffffff").WithWrap(true).WithLineSpacing("6px").FlexText,
-		NewFlexText(subtitle).WithSize("xs").WithColor("#ffffff").WithMargin("md").WithWrap(true).FlexText,
-	)
+	}
+	// Only add subtitle if not empty (LINE API rejects empty text)
+	if subtitle != "" {
+		contents = append(contents, NewFlexText(subtitle).WithSize("xs").WithColor("#ffffff").WithMargin("md").WithWrap(true).FlexText)
+	}
+	box := NewFlexBox("vertical", contents...)
 	box.BackgroundColor = "#1DB446"
 	box.PaddingAll = "20px"
 	box.PaddingBottom = "16px"

@@ -449,13 +449,15 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 			// Otherwise show "ChineseName EnglishName"
 			displayName := lineutil.FormatDisplayName(c.Name, c.NameEn)
 
-			// Determine subtitle
-			subText := c.Type
+			// Determine subtitle - show friendly text, fallback to empty if no meaningful info
+			var subText string
 			if c.Type == "organization" {
 				subText = "單位"
 			} else if c.Title != "" {
 				subText = c.Title
 			}
+			// If c.Type is "individual" with no title, subText remains empty
+			// NewHeroBox will handle empty subtitle gracefully
 
 			// Header: Contact badge (using standardized component)
 			header := lineutil.NewHeaderBadge("📞", "聯絡資訊")
