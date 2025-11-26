@@ -53,7 +53,7 @@ func New(registry *prometheus.Registry) *Metrics {
 			prometheus.HistogramOpts{
 				Name:    "ntpu_scraper_duration_seconds",
 				Help:    "Scraper request duration in seconds by module",
-				Buckets: []float64{0.5, 1, 2, 5, 10, 20, 30, 60}, // Matches 60s timeout + backoff
+				Buckets: []float64{0.5, 1, 2, 5, 10, 20, 30, 60, 120}, // Single request timeout is 120s
 			},
 			[]string{"module"}, // module: id, contact, course
 		),

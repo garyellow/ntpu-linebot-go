@@ -63,7 +63,7 @@ LINE Webhook → Gin Handler (25s timeout) → Bot Module Dispatcher
 
 ## Rate Limiting
 
-**Scraper** (`internal/scraper/ratelimiter.go`): Token bucket (3 workers), 5-10s random delays, 60s timeout, max 5 retries with exponential backoff
+**Scraper** (`internal/scraper/ratelimiter.go`): Token bucket (3 workers), 5-10s random delays, 120s timeout, max 3 retries with exponential backoff
 
 **Webhook**: Per-user (10 req/s, burst 2), global (80 rps), silently drops excess requests
 
