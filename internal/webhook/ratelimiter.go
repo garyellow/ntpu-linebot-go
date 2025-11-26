@@ -3,6 +3,8 @@ package webhook
 import (
 	"sync"
 	"time"
+
+	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 )
 
 // RateLimiter implements a token bucket rate limiter for LINE API calls
@@ -81,13 +83,16 @@ type UserRateLimiter struct {
 	mu       sync.RWMutex
 	limiters map[string]*RateLimiter
 	cleanup  time.Duration
+	metrics  *metrics.Metrics // Optional metrics recorder for tracking dropped requests
 }
 
 // NewUserRateLimiter creates a new per-user rate limiter
-func NewUserRateLimiter(cleanup time.Duration) *UserRateLimiter {
+// metrics parameter is optional and can be nil
+func NewUserRateLimiter(cleanup time.Duration, m *metrics.Metrics) *UserRateLimiter {
 	url := &UserRateLimiter{
 		limiters: make(map[string]*RateLimiter),
 		cleanup:  cleanup,
+		metrics:  m,
 	}
 
 	// Start cleanup goroutine
@@ -99,7 +104,7 @@ func NewUserRateLimiter(cleanup time.Duration) *UserRateLimiter {
 // Allow checks if a request from a specific user is allowed
 // userID: the LINE user ID
 // maxTokens: maximum tokens per user (e.g., 10)
-// refillRate: refill rate per second (e.g., 1.0 = 1 request per second)
+// refillRate: refill rate per second (e.g., 1.0/3.0 = 1 request per 3 seconds)
 func (url *UserRateLimiter) Allow(userID string, maxTokens, refillRate float64) bool {
 	url.mu.RLock()
 	limiter, exists := url.limiters[userID]
@@ -112,7 +117,11 @@ func (url *UserRateLimiter) Allow(userID string, maxTokens, refillRate float64) 
 		url.mu.Unlock()
 	}
 
-	return limiter.Allow()
+	allowed := limiter.Allow()
+	if !allowed && url.metrics != nil {
+		url.metrics.RecordRateLimiterDrop("user")
+	}
+	return allowed
 }
 
 // cleanupLoop periodically removes inactive rate limiters

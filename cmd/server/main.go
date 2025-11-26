@@ -98,6 +98,8 @@ func main() {
 		log,
 		stickerManager,
 		cfg.WebhookTimeout,
+		cfg.UserRateLimitTokens,
+		cfg.UserRateLimitRefillRate,
 	)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to create webhook handler")

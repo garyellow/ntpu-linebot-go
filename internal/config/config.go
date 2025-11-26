@@ -39,6 +39,10 @@ type Config struct {
 
 	// Webhook Configuration
 	WebhookTimeout time.Duration // Timeout for webhook bot processing (default: 30s)
+
+	// Rate Limit Configuration
+	UserRateLimitTokens     float64 // Maximum tokens per user (default: 10)
+	UserRateLimitRefillRate float64 // Tokens refill rate per second (default: 1/3, i.e., 1 token per 3 seconds)
 }
 
 // ValidationMode determines which fields are required during validation
@@ -92,6 +96,10 @@ func LoadForMode(mode ValidationMode) (*Config, error) {
 
 		// Webhook Configuration
 		WebhookTimeout: getDurationEnv("WEBHOOK_TIMEOUT", 30*time.Second),
+
+		// Rate Limit Configuration
+		UserRateLimitTokens:     getFloatEnv("USER_RATE_LIMIT_TOKENS", 10.0),
+		UserRateLimitRefillRate: getFloatEnv("USER_RATE_LIMIT_REFILL_RATE", 1.0/3.0),
 	}
 
 	// Validate based on mode
@@ -158,6 +166,16 @@ func getDurationEnv(key string, defaultValue time.Duration) time.Duration {
 	if value := os.Getenv(key); value != "" {
 		if duration, err := time.ParseDuration(value); err == nil {
 			return duration
+		}
+	}
+	return defaultValue
+}
+
+// getFloatEnv retrieves float64 environment variable with fallback to default value
+func getFloatEnv(key string, defaultValue float64) float64 {
+	if value := os.Getenv(key); value != "" {
+		if floatValue, err := strconv.ParseFloat(value, 64); err == nil {
+			return floatValue
 		}
 	}
 	return defaultValue
