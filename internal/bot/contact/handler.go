@@ -151,28 +151,6 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		return h.handleContactSearch(ctx, searchTerm)
 	}
 
-	// Handle phone/extension queries (fallback if not caught by regex)
-	if strings.Contains(text, "電話") || strings.Contains(text, "分機") {
-		// Extract the term (remove common keywords)
-		searchTerm := text
-		searchTerm = strings.ReplaceAll(searchTerm, "電話", "")
-		searchTerm = strings.ReplaceAll(searchTerm, "分機", "")
-		searchTerm = strings.TrimSpace(searchTerm)
-
-		if searchTerm != "" {
-			return h.handleContactSearch(ctx, searchTerm)
-		} else {
-			// No search term - provide guidance
-			sender := lineutil.GetSender(senderName, h.stickerManager)
-			msg := lineutil.NewTextMessageWithConsistentSender("📞 請輸入要查詢的單位或人員\n\n例如：\n• 電話 資工系\n• 分機 圖書館", sender)
-			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
-				{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
-			})
-			return []messaging_api.MessageInterface{msg}
-		}
-	}
-
 	return []messaging_api.MessageInterface{}
 }
 
@@ -301,16 +279,13 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 //     Example: "資工系" matches "資訊工程學系" because all chars (資,工,系) exist in target
 //     This enables abbreviation matching where chars are scattered in the full name.
 //
-//  3. Web scraping with search variants (external fallback): If cache has no results,
-//     scrape from NTPU website using multiple search variants.
-//     buildSearchVariants() expands abbreviations for scraping only (not cache search)
-//     because fuzzy matching already handles abbreviations in cached data.
-//     Example: "資工" expands to ["資工", "資訊工程學系"] for scraping
+//  3. Web scraping (external fallback): If cache has no results,
+//     scrape from NTPU website. The website natively supports partial name matching,
+//     so we simply pass the original search term directly.
 //
 // Performance notes:
 //   - SQL LIKE is indexed and fast; most queries resolve here
 //   - Fuzzy matching loads up to 1000 contacts; acceptable since it's a fallback
-//   - Search variants only affect scraping, not cache lookups
 func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(moduleName)
 	startTime := time.Now()
@@ -358,43 +333,22 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	}
 
 	// Cache miss - scrape from website
-	// Try multiple search variants to increase hit rate
+	// NTPU website natively supports partial name matching, so we use the original term directly
 	h.metrics.RecordCacheMiss(moduleName)
 	log.Infof("Cache miss for contact search: %s, scraping...", searchTerm)
 
-	// Build search variants (e.g., "資工系" -> also try "資訊工程")
-	searchVariants := h.buildSearchVariants(searchTerm)
-
-	var contactsPtr []*storage.Contact
-	for _, variant := range searchVariants {
-		log.Debugf("Trying search variant: %s", variant)
-		result, err := ntpu.ScrapeContacts(ctx, h.scraper, variant)
-		if err != nil {
-			log.WithError(err).Debugf("Failed to scrape contacts for variant: %s", variant)
-			continue
+	contactsPtr, err := ntpu.ScrapeContacts(ctx, h.scraper, searchTerm)
+	if err != nil {
+		log.WithError(err).Errorf("Failed to scrape contacts for: %s", searchTerm)
+		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
+		msg := lineutil.ErrorMessageWithDetailAndSender("無法取得聯絡資料，可能是網路問題或資料來源暫時無法使用", sender)
+		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+				{Action: lineutil.NewMessageAction("緊急電話", "緊急")},
+				{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+			})
 		}
-		if len(result) > 0 {
-			contactsPtr = result
-			break
-		}
-	}
-
-	if len(contactsPtr) == 0 {
-		// Final attempt with original search term
-		result, err := ntpu.ScrapeContacts(ctx, h.scraper, searchTerm)
-		if err != nil {
-			log.WithError(err).Errorf("Failed to scrape contacts for: %s", searchTerm)
-			h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-			msg := lineutil.ErrorMessageWithDetailAndSender("無法取得聯絡資料，可能是網路問題或資料來源暫時無法使用", sender)
-			if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
-				textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-					{Action: lineutil.NewMessageAction("緊急電話", "緊急")},
-					{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
-				})
-			}
-			return []messaging_api.MessageInterface{msg}
-		}
-		contactsPtr = result
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	// Convert []*storage.Contact to []storage.Contact
@@ -517,17 +471,34 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 		}
 	}
 
-	// Sort contacts: organizations before individuals, then alphabetically by name
-	// This ensures units/departments appear before individual staff members
+	// Build a set of organization names that appear as Superior of other contacts
+	// These "parent" organizations should be sorted first
+	parentOrgNames := make(map[string]bool)
+	for _, c := range contacts {
+		if c.Superior != "" {
+			parentOrgNames[c.Superior] = true
+		}
+	}
+
+	// Sort contacts: parent organizations first, then other organizations, then individuals
+	// Within each group, sort alphabetically by name
 	sort.SliceStable(contacts, func(i, j int) bool {
-		// Organization comes before individual
-		if contacts[i].Type == "organization" && contacts[j].Type != "organization" {
-			return true
+		// Priority: parent org (3) > org (2) > individual (1)
+		getPriority := func(c storage.Contact) int {
+			if c.Type == "organization" {
+				if parentOrgNames[c.Name] {
+					return 3 // Parent organization
+				}
+				return 2 // Regular organization
+			}
+			return 1 // Individual
 		}
-		if contacts[i].Type != "organization" && contacts[j].Type == "organization" {
-			return false
+
+		pi, pj := getPriority(contacts[i]), getPriority(contacts[j])
+		if pi != pj {
+			return pi > pj // Higher priority first
 		}
-		// Same type: sort by name
+		// Same priority: sort by name
 		return contacts[i].Name < contacts[j].Name
 	})
 
@@ -618,61 +589,56 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 					lineutil.NewInfoRowWithMargin("✉️", "電子郵件", c.Email, lineutil.DefaultInfoRowStyle(), "md"))
 			}
 
-			// Footer: Multi-row button layout for optimal UX
-			// Row 1: Phone actions (call, copy)
-			// Row 2: Email actions (send, copy)
-			// Row 3: Website (if available)
+			// Footer: 2-row button layout
+			// Organization: Row 1 = Website (secondary), Row 2 = View Members (primary)
+			// Individual: Row 1 = Phone (primary + secondary), Row 2 = Email (primary + secondary)
+			// Color scheme:
+			//   - primary (green): Main action user wants to do (call, email, view members)
+			//   - secondary (blue): Supporting action (copy, open website)
 			var row1Buttons []*lineutil.FlexButton
 			var row2Buttons []*lineutil.FlexButton
-			var row3Buttons []*lineutil.FlexButton
 
-			// Row 1: Phone-related buttons
-			if c.Phone != "" {
-				// Parse phone number - may be "mainPhone,extension" format or standalone
-				var telURI string
-				if strings.Contains(c.Phone, ",") {
-					// Format: "0286741111,67114" - parse to extract components
-					parts := strings.SplitN(c.Phone, ",", 2)
-					telURI = lineutil.BuildTelURI(parts[0], parts[1])
-				} else {
-					// Standalone phone number
-					telURI = lineutil.BuildTelURI(c.Phone, "")
-				}
-				row1Buttons = append(row1Buttons,
-					lineutil.NewFlexButton(lineutil.NewURIAction("📞 撥打電話", telURI)).WithStyle("primary").WithHeight("sm"))
-				row1Buttons = append(row1Buttons,
-					lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製號碼", c.Phone)).WithStyle("secondary").WithHeight("sm"))
-			} else if c.Extension != "" {
-				// Only short extension (< 5 digits), can still dial via main + extension
-				telURI := lineutil.BuildTelURI(sanxiaNormalPhone, c.Extension)
-				row1Buttons = append(row1Buttons,
-					lineutil.NewFlexButton(lineutil.NewURIAction("📞 撥打電話", telURI)).WithStyle("primary").WithHeight("sm"))
-				row1Buttons = append(row1Buttons,
-					lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製分機", c.Extension)).WithStyle("secondary").WithHeight("sm"))
-			}
-
-			// Row 2: Email actions
-			if c.Email != "" {
-				row2Buttons = append(row2Buttons,
-					lineutil.NewFlexButton(lineutil.NewURIAction("✉️ 寄送郵件", "mailto:"+c.Email)).WithStyle("primary").WithHeight("sm"))
-				row2Buttons = append(row2Buttons,
-					lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製信箱", c.Email)).WithStyle("secondary").WithHeight("sm"))
-			}
-
-			// Row 3: Website (standalone for better visibility)
-			if c.Website != "" {
-				row3Buttons = append(row3Buttons,
-					lineutil.NewFlexButton(lineutil.NewURIAction("🌐 開啟網站", c.Website)).WithStyle("secondary").WithHeight("sm"))
-			}
-
-			// Row 3 (continued): View Members button for organizations
-			// Allows querying all members belonging to this organization
 			if c.Type == "organization" {
+				// Organization: Website + View Members (2 rows)
+				if c.Website != "" {
+					row1Buttons = append(row1Buttons,
+						lineutil.NewFlexButton(lineutil.NewURIAction("🌐 開啟網站", c.Website)).WithStyle("secondary").WithHeight("sm"))
+				}
 				displayText := fmt.Sprintf("查詢「%s」的成員", lineutil.TruncateRunes(c.Name, 20))
-				row3Buttons = append(row3Buttons,
+				row2Buttons = append(row2Buttons,
 					lineutil.NewFlexButton(
 						lineutil.NewPostbackActionWithDisplayText("👥 查看成員", displayText, fmt.Sprintf("contact:members%s%s", splitChar, c.Name)),
-					).WithStyle("secondary").WithHeight("sm"))
+					).WithStyle("primary").WithHeight("sm"))
+			} else {
+				// Individual: Phone + Email (2 rows)
+				// Row 1: Phone - primary action is calling, secondary is copy
+				if c.Phone != "" {
+					var telURI string
+					if strings.Contains(c.Phone, ",") {
+						parts := strings.SplitN(c.Phone, ",", 2)
+						telURI = lineutil.BuildTelURI(parts[0], parts[1])
+					} else {
+						telURI = lineutil.BuildTelURI(c.Phone, "")
+					}
+					row1Buttons = append(row1Buttons,
+						lineutil.NewFlexButton(lineutil.NewURIAction("📞 撥打電話", telURI)).WithStyle("primary").WithHeight("sm"))
+					row1Buttons = append(row1Buttons,
+						lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製號碼", c.Phone)).WithStyle("secondary").WithHeight("sm"))
+				} else if c.Extension != "" {
+					telURI := lineutil.BuildTelURI(sanxiaNormalPhone, c.Extension)
+					row1Buttons = append(row1Buttons,
+						lineutil.NewFlexButton(lineutil.NewURIAction("📞 撥打電話", telURI)).WithStyle("primary").WithHeight("sm"))
+					row1Buttons = append(row1Buttons,
+						lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製分機", c.Extension)).WithStyle("secondary").WithHeight("sm"))
+				}
+
+				// Row 2: Email - primary action is sending, secondary is copy
+				if c.Email != "" {
+					row2Buttons = append(row2Buttons,
+						lineutil.NewFlexButton(lineutil.NewURIAction("✉️ 寄送郵件", "mailto:"+c.Email)).WithStyle("primary").WithHeight("sm"))
+					row2Buttons = append(row2Buttons,
+						lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製信箱", c.Email)).WithStyle("secondary").WithHeight("sm"))
+				}
 			}
 
 			// Assemble Bubble
@@ -684,8 +650,8 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 			)
 
 			// Build footer with multi-row button layout
-			if len(row1Buttons) > 0 || len(row2Buttons) > 0 || len(row3Buttons) > 0 {
-				bubble.Footer = lineutil.NewButtonFooter(row1Buttons, row2Buttons, row3Buttons).FlexBox
+			if len(row1Buttons) > 0 || len(row2Buttons) > 0 {
+				bubble.Footer = lineutil.NewButtonFooter(row1Buttons, row2Buttons).FlexBox
 			}
 
 			bubbles = append(bubbles, *bubble.FlexBubble)
@@ -717,91 +683,4 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 	}
 
 	return messages
-}
-
-// buildSearchVariants generates search variants for better matching
-// Maps common abbreviations to full names that the school website understands
-// Priority: Full name first (more likely to match), then abbreviations
-func (h *Handler) buildSearchVariants(searchTerm string) []string {
-	// Common department abbreviation mappings - prioritize full names first
-	abbreviationMap := map[string][]string{
-		// 電機資訊學院
-		"資工":  {"資訊工程學系", "資訊工程", "資工系"},
-		"資工系": {"資訊工程學系", "資訊工程"},
-		"電機":  {"電機工程學系", "電機工程", "電機系"},
-		"電機系": {"電機工程學系", "電機工程"},
-		"通訊":  {"通訊工程學系", "通訊工程", "通訊系"},
-		"通訊系": {"通訊工程學系", "通訊工程"},
-		// 商學院
-		"企管":  {"企業管理學系", "企業管理", "企管系"},
-		"企管系": {"企業管理學系", "企業管理"},
-		"會計":  {"會計學系", "會計系"},
-		"會計系": {"會計學系"},
-		"統計":  {"統計學系", "統計系"},
-		"統計系": {"統計學系"},
-		"金融":  {"金融與合作經營學系", "金融系"},
-		"金融系": {"金融與合作經營學系"},
-		"休運":  {"休閒運動管理學系", "休運系"},
-		"休運系": {"休閒運動管理學系"},
-		// 社會科學學院
-		"經濟":  {"經濟學系", "經濟系"},
-		"經濟系": {"經濟學系"},
-		"社工":  {"社會工作學系", "社工系"},
-		"社工系": {"社會工作學系"},
-		"社學":  {"社會學系", "社學系"},
-		"社學系": {"社會學系"},
-		// 法律學院
-		"法律":  {"法律學系", "法律系"},
-		"法律系": {"法律學系"},
-		// 公共事務學院
-		"公行":  {"公共行政暨政策學系", "公共行政", "公行系"},
-		"公行系": {"公共行政暨政策學系", "公共行政"},
-		"財政":  {"財政學系", "財政系"},
-		"財政系": {"財政學系"},
-		"不動產": {"不動產與城鄉環境學系", "不動"},
-		"不動":  {"不動產與城鄉環境學系"},
-		// 人文學院
-		"中文":  {"中國文學系", "中文系"},
-		"中文系": {"中國文學系"},
-		"應外":  {"應用外語學系", "應外系"},
-		"應外系": {"應用外語學系"},
-		"歷史":  {"歷史學系", "歷史系"},
-		"歷史系": {"歷史學系"},
-		// 行政單位
-		"圖書館": {"圖書館", "圖書"},
-		"學務處": {"學務處", "學務"},
-		"教務處": {"教務處", "教務"},
-		"總務處": {"總務處", "總務"},
-		"研發處": {"研發處", "研究發展"},
-		"人事室": {"人事室", "人事"},
-		"註冊組": {"註冊組", "註冊"},
-	}
-
-	variants := []string{}
-
-	// Check if search term matches any abbreviation
-	if mappedVariants, ok := abbreviationMap[searchTerm]; ok {
-		variants = append(variants, mappedVariants...)
-	}
-
-	// Also add the original term with/without "系" suffix
-	if strings.HasSuffix(searchTerm, "系") {
-		// Remove "系" suffix and add variants
-		base := strings.TrimSuffix(searchTerm, "系")
-		variants = append(variants, base)
-	} else {
-		// Add "系" suffix variant
-		variants = append(variants, searchTerm+"系")
-	}
-
-	// Deduplicate variants while preserving order
-	seen := make(map[string]bool)
-	uniqueVariants := []string{}
-	for _, v := range variants {
-		if !seen[v] {
-			seen[v] = true
-			uniqueVariants = append(uniqueVariants, v)
-		}
-	}
-	return uniqueVariants
 }
