@@ -173,9 +173,9 @@ func TestNewHeroBox(t *testing.T) {
 	t.Run("with subtitle", func(t *testing.T) {
 		hero := NewHeroBox("測試標題", "副標題")
 
-		// Check background color
-		if hero.BackgroundColor != "#1DB446" {
-			t.Errorf("Expected backgroundColor '#1DB446', got %v", hero.BackgroundColor)
+		// Check background color (should use ColorHeroBg = ColorLineGreen = #06C755)
+		if hero.BackgroundColor != ColorHeroBg {
+			t.Errorf("Expected backgroundColor '%s', got %v", ColorHeroBg, hero.BackgroundColor)
 		}
 		// Check padding
 		if hero.PaddingAll != "20px" {
@@ -198,8 +198,8 @@ func TestNewHeroBox(t *testing.T) {
 			t.Errorf("Expected 1 content (title only), got %d", len(hero.Contents))
 		}
 		// Check background color still applied
-		if hero.BackgroundColor != "#1DB446" {
-			t.Errorf("Expected backgroundColor '#1DB446', got %v", hero.BackgroundColor)
+		if hero.BackgroundColor != ColorHeroBg {
+			t.Errorf("Expected backgroundColor '%s', got %v", ColorHeroBg, hero.BackgroundColor)
 		}
 	})
 }
@@ -208,9 +208,9 @@ func TestNewHeroBox(t *testing.T) {
 func TestNewCompactHeroBox(t *testing.T) {
 	hero := NewCompactHeroBox("輪播標題")
 
-	// Check background color
-	if hero.BackgroundColor != "#1DB446" {
-		t.Errorf("Expected backgroundColor '#1DB446', got %v", hero.BackgroundColor)
+	// Check background color (should use ColorHeroBg = ColorLineGreen = #06C755)
+	if hero.BackgroundColor != ColorHeroBg {
+		t.Errorf("Expected backgroundColor '%s', got %v", ColorHeroBg, hero.BackgroundColor)
 	}
 	// Check compact padding
 	if hero.PaddingAll != "15px" {
@@ -354,8 +354,9 @@ func TestInfoRowStyles(t *testing.T) {
 		if style.ValueWeight != "regular" {
 			t.Errorf("Expected ValueWeight 'regular', got %s", style.ValueWeight)
 		}
-		if style.ValueColor != "#333333" {
-			t.Errorf("Expected ValueColor '#333333', got %s", style.ValueColor)
+		// Should use ColorText = ColorGray900 = #111111
+		if style.ValueColor != ColorText {
+			t.Errorf("Expected ValueColor '%s', got %s", ColorText, style.ValueColor)
 		}
 		if !style.Wrap {
 			t.Error("Expected Wrap to be true")
@@ -370,8 +371,9 @@ func TestInfoRowStyles(t *testing.T) {
 		if style.ValueWeight != "bold" {
 			t.Errorf("Expected ValueWeight 'bold', got %s", style.ValueWeight)
 		}
-		if style.ValueColor != "#333333" {
-			t.Errorf("Expected ValueColor '#333333', got %s", style.ValueColor)
+		// Should use ColorText = ColorGray900 = #111111
+		if style.ValueColor != ColorText {
+			t.Errorf("Expected ValueColor '%s', got %s", ColorText, style.ValueColor)
 		}
 		if style.Wrap {
 			t.Error("Expected Wrap to be false")

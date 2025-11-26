@@ -379,21 +379,24 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 // warmupCourseModule warms course cache
 // Uses ScrapeCoursesByYear to fetch all courses for a year in one batch (no qTerm parameter)
 // This matches Python's get_simple_courses_by_year behavior: 4 requests per year (U/M/N/P)
-// More efficient than per-semester scraping: 20 requests total vs 40 requests
+// More efficient than per-semester scraping: 8 requests total vs 16 requests
+// Only warms up 2 years (current + previous) for regular course queries
+// Historical courses (older than 2 years) use separate historical_courses table with on-demand scraping
 func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
 	log.Info("Starting course module warmup")
 
 	currentYear := time.Now().Year() - 1911
-	// Load 5 years of course data (matching Python version)
-	// This includes historical course data for queries about past courses
+	// Load 2 years of course data (current + previous year)
+	// Historical courses (older than 2 years) are handled by separate historical_courses table
+	// with on-demand scraping via "課程 {year} {keyword}" syntax
 	var years []int
-	for year := currentYear; year > currentYear-5; year-- {
+	for year := currentYear; year > currentYear-2; year-- {
 		years = append(years, year)
 	}
 
 	log.WithField("years", years).
 		WithField("total_years", len(years)).
-		Info("Course warmup: fetching all courses by year (no term filter)")
+		Info("Course warmup: fetching recent courses by year (no term filter)")
 
 	// Scrape all courses for each year (both semesters in one request batch)
 	// This matches Python's get_simple_courses_by_year which doesn't use qTerm

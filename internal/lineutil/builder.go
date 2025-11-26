@@ -3,6 +3,7 @@ package lineutil
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
@@ -458,4 +459,37 @@ func FormatDisplayName(nameCN, nameEN string) string {
 
 	// Return combined name with space
 	return nameCN + " " + nameEN
+}
+
+// ExtractCourseCode extracts the course code from a UID string.
+// UID format: {year}{term}{code} where:
+//   - year: 2-3 digits (e.g., 113, 12)
+//   - term: 1 digit (1=上學期, 2=下學期)
+//   - code: U/M/N/P + 4 digits (e.g., U0001, M0002)
+//
+// Returns the code part (e.g., "U0001" from "11312U0001")
+// Returns empty string if pattern not found.
+
+var courseCodeRegex = regexp.MustCompile(`(?i)([umnp]\d{4})`)
+
+func ExtractCourseCode(uid string) string {
+	matches := courseCodeRegex.FindStringSubmatch(uid)
+	if len(matches) >= 2 {
+		return strings.ToUpper(matches[1])
+	}
+	return ""
+}
+
+// FormatSemester formats year and term into a readable semester string.
+// Parameters:
+//   - year: Academic year in ROC calendar (e.g., 113)
+//   - term: 1 for 上學期, 2 for 下學期
+//
+// Returns: Formatted string like "113 學年度 上學期"
+func FormatSemester(year, term int) string {
+	termStr := "上學期"
+	if term == 2 {
+		termStr = "下學期"
+	}
+	return fmt.Sprintf("%d 學年度 %s", year, termStr)
 }
