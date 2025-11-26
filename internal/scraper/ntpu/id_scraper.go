@@ -139,12 +139,6 @@ func lmsCache(ctx context.Context, client *scraper.Client) (string, error) {
 	return scraper.NewURLCache(client, "lms").Get(ctx)
 }
 
-// clearLMSCache invalidates the LMS URL cache to trigger re-detection on next request.
-// Call this when a scrape operation fails to enable automatic failover.
-func clearLMSCache(client *scraper.Client) {
-	scraper.NewURLCache(client, "lms").Clear()
-}
-
 // ScrapeStudentsByYear scrapes students by year and department code
 // URL: {baseURL}/portfolio/search.php?fmScope=2&page=1&fmKeyword=4{year}{deptCode}
 // Returns a list of students matching the criteria

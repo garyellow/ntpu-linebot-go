@@ -658,15 +658,11 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	var messages []messaging_api.MessageInterface
 
-	// Limit to 50 courses - add warning if truncated
+	// Limit to 50 courses - track if truncated for warning message
 	originalCount := len(courses)
-	if len(courses) > MaxCoursesPerSearch {
+	truncated := len(courses) > MaxCoursesPerSearch
+	if truncated {
 		courses = courses[:MaxCoursesPerSearch]
-		warningMsg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("⚠️ 搜尋結果超過 %d 門課程，僅顯示前 %d 門。\n\n建議使用更精確的搜尋條件以縮小範圍。", originalCount, MaxCoursesPerSearch),
-			sender,
-		)
-		messages = append(messages, warningMsg)
 	}
 
 	// Create bubbles for carousel (LINE API limit: max 10 bubbles per Flex Carousel)
@@ -730,6 +726,15 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 
 	// Build carousel messages with automatic splitting (max 10 bubbles per carousel)
 	messages = lineutil.BuildCarouselMessages("課程列表", bubbles, sender)
+
+	// Prepend warning message if results were truncated
+	if truncated {
+		warningMsg := lineutil.NewTextMessageWithConsistentSender(
+			fmt.Sprintf("⚠️ 搜尋結果超過 %d 門課程，僅顯示前 %d 門。\n\n建議使用更精確的搜尋條件以縮小範圍。", originalCount, MaxCoursesPerSearch),
+			sender,
+		)
+		messages = append([]messaging_api.MessageInterface{warningMsg}, messages...)
+	}
 
 	// Add Quick Reply to the last message
 	lineutil.AddQuickReplyToMessages(messages,
