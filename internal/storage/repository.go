@@ -350,7 +350,8 @@ func (db *DB) GetContactByUID(uid string) (*Contact, error) {
 	return &contact, nil
 }
 
-// SearchContactsByName searches contacts by partial name match (max 500 results)
+// SearchContactsByName searches contacts by partial name or title match (max 500 results)
+// Searches in: name, title fields
 // Only returns non-expired cache entries based on configured TTL
 func (db *DB) SearchContactsByName(name string) ([]Contact, error) {
 	// Validate input
@@ -365,9 +366,14 @@ func (db *DB) SearchContactsByName(name string) ([]Contact, error) {
 	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
 
 	// Add TTL filter to prevent returning stale data
-	query := `SELECT uid, name, name_en, title, organization, extension, phone, email, cached_at FROM contacts WHERE name LIKE ? ESCAPE '\' AND cached_at > ? ORDER BY type, name LIMIT 500`
+	// Search in name and title fields
+	query := `SELECT uid, type, name, name_en, title, organization, superior, extension, phone, email, website, location, cached_at
+		FROM contacts
+		WHERE (name LIKE ? ESCAPE '\' OR title LIKE ? ESCAPE '\') AND cached_at > ?
+		ORDER BY type, name LIMIT 500`
 
-	rows, err := db.conn.Query(query, "%"+sanitized+"%", ttlTimestamp)
+	likePattern := "%" + sanitized + "%"
+	rows, err := db.conn.Query(query, likePattern, likePattern, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search contacts by name: %w", err)
 	}
@@ -376,18 +382,21 @@ func (db *DB) SearchContactsByName(name string) ([]Contact, error) {
 	var contacts []Contact
 	for rows.Next() {
 		var contact Contact
-		var nameEn, title, org, extension, phone, email sql.NullString
+		var nameEn, title, org, superior, extension, phone, email, website, location sql.NullString
 
-		if err := rows.Scan(&contact.UID, &contact.Name, &nameEn, &title, &org, &extension, &phone, &email, &contact.CachedAt); err != nil {
+		if err := rows.Scan(&contact.UID, &contact.Type, &contact.Name, &nameEn, &title, &org, &superior, &extension, &phone, &email, &website, &location, &contact.CachedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan contact row: %w", err)
 		}
 
 		contact.NameEn = nameEn.String
 		contact.Title = title.String
 		contact.Organization = org.String
+		contact.Superior = superior.String
 		contact.Extension = extension.String
 		contact.Phone = phone.String
 		contact.Email = email.String
+		contact.Website = website.String
+		contact.Location = location.String
 
 		contacts = append(contacts, contact)
 	}

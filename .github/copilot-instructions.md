@@ -37,6 +37,8 @@ LINE Webhook → Gin Handler (25s timeout) → Bot Module Dispatcher
 **Course Module**: Smart semester detection (`semester.go`), UID regex (`(?i)\d{3,4}[umnp]\d{4}`), max 50 results, Flex Message carousels
 
 **Contact Module**: Emergency phones (hardcoded), multilingual keywords, organization/individual contacts, Flex Message cards
+- **Search fields**: name, title (職稱)
+- **Sorting**: Organizations by hierarchy (top-level first), individuals by match count → name → title → organization
 
 **All modules**: Prefer text wrapping over truncation for complete info display, use `TruncateRunes()` only for LINE API limits (altText, displayText), consistent Sender pattern, cache-first strategy
 

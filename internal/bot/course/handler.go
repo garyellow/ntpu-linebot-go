@@ -494,7 +494,8 @@ scrapeLoop:
 //     Example: "王" matches "王小明" because all chars exist in the teacher name
 //     This enables single-character surname search.
 //
-// Note: If cache miss occurs, it triggers a full semester scrape (heavy operation).
+// Note: Unlike contact search, teacher search does NOT use search variants for scraping.
+// If cache miss occurs, it triggers a full semester scrape (heavy operation).
 // Future optimization: Add "semester fully scraped" flag to avoid repeated scrapes.
 //
 // Performance notes:
