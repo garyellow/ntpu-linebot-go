@@ -565,6 +565,142 @@ func TestNewTextMessageWithConsistentSender(t *testing.T) {
 	}
 }
 
+func TestFormatTeachers(t *testing.T) {
+	tests := []struct {
+		name     string
+		teachers []string
+		max      int
+		expected string
+	}{
+		{
+			name:     "Empty list",
+			teachers: []string{},
+			max:      5,
+			expected: "",
+		},
+		{
+			name:     "Single teacher",
+			teachers: []string{"王教授"},
+			max:      5,
+			expected: "王教授",
+		},
+		{
+			name:     "Under limit",
+			teachers: []string{"王教授", "李教授", "陳教授"},
+			max:      5,
+			expected: "王教授、李教授、陳教授",
+		},
+		{
+			name:     "Exactly at limit",
+			teachers: []string{"王教授", "李教授", "陳教授", "林教授", "張教授"},
+			max:      5,
+			expected: "王教授、李教授、陳教授、林教授、張教授",
+		},
+		{
+			name:     "Over limit - truncate",
+			teachers: []string{"王教授", "李教授", "陳教授", "林教授", "張教授", "劉教授", "黃教授"},
+			max:      5,
+			expected: "王教授、李教授、陳教授、林教授、張教授 等 2 人",
+		},
+		{
+			name:     "Over limit by 1",
+			teachers: []string{"王教授", "李教授", "陳教授", "林教授", "張教授", "劉教授"},
+			max:      5,
+			expected: "王教授、李教授、陳教授、林教授、張教授 等 1 人",
+		},
+		{
+			name:     "Max 0 - no limit",
+			teachers: []string{"王教授", "李教授", "陳教授", "林教授", "張教授", "劉教授"},
+			max:      0,
+			expected: "王教授、李教授、陳教授、林教授、張教授、劉教授",
+		},
+		{
+			name:     "Negative max - no limit",
+			teachers: []string{"王教授", "李教授", "陳教授"},
+			max:      -1,
+			expected: "王教授、李教授、陳教授",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FormatTeachers(tt.teachers, tt.max)
+			if result != tt.expected {
+				t.Errorf("FormatTeachers(%v, %d) = %q, want %q",
+					tt.teachers, tt.max, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFormatTimes(t *testing.T) {
+	tests := []struct {
+		name     string
+		times    []string
+		max      int
+		expected string
+	}{
+		{
+			name:     "Empty list",
+			times:    []string{},
+			max:      4,
+			expected: "",
+		},
+		{
+			name:     "Single time slot",
+			times:    []string{"週一1-2"},
+			max:      4,
+			expected: "週一1-2",
+		},
+		{
+			name:     "Under limit",
+			times:    []string{"週一1-2", "週二3-4", "週三5-6"},
+			max:      4,
+			expected: "週一1-2、週二3-4、週三5-6",
+		},
+		{
+			name:     "Exactly at limit",
+			times:    []string{"週一1-2", "週二3-4", "週三5-6", "週四7-8"},
+			max:      4,
+			expected: "週一1-2、週二3-4、週三5-6、週四7-8",
+		},
+		{
+			name:     "Over limit - truncate",
+			times:    []string{"週一1-2", "週二3-4", "週三5-6", "週四7-8", "週五1-2", "週五3-4"},
+			max:      4,
+			expected: "週一1-2、週二3-4、週三5-6、週四7-8 等 2 節",
+		},
+		{
+			name:     "Over limit by 1",
+			times:    []string{"週一1-2", "週二3-4", "週三5-6", "週四7-8", "週五1-2"},
+			max:      4,
+			expected: "週一1-2、週二3-4、週三5-6、週四7-8 等 1 節",
+		},
+		{
+			name:     "Max 0 - no limit",
+			times:    []string{"週一1-2", "週二3-4", "週三5-6", "週四7-8", "週五1-2"},
+			max:      0,
+			expected: "週一1-2、週二3-4、週三5-6、週四7-8、週五1-2",
+		},
+		{
+			name:     "Negative max - no limit",
+			times:    []string{"週一1-2", "週二3-4"},
+			max:      -1,
+			expected: "週一1-2、週二3-4",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FormatTimes(tt.times, tt.max)
+			if result != tt.expected {
+				t.Errorf("FormatTimes(%v, %d) = %q, want %q",
+					tt.times, tt.max, result, tt.expected)
+			}
+		})
+	}
+}
+
 // Helper function to check if a string contains a substring
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
@@ -578,4 +714,147 @@ func indexOf(s, substr string) int {
 		}
 	}
 	return -1
+}
+
+// TestExtractCourseCode tests the course code extraction from UID strings
+func TestExtractCourseCode(t *testing.T) {
+	tests := []struct {
+		name     string
+		uid      string
+		expected string
+	}{
+		{
+			name:     "Valid UID with U code",
+			uid:      "11312U0001",
+			expected: "U0001",
+		},
+		{
+			name:     "Valid UID with M code",
+			uid:      "1131M0002",
+			expected: "M0002",
+		},
+		{
+			name:     "Valid UID with N code",
+			uid:      "11321N1234",
+			expected: "N1234",
+		},
+		{
+			name:     "Valid UID with P code",
+			uid:      "11312P9999",
+			expected: "P9999",
+		},
+		{
+			name:     "Lowercase code - returns uppercase",
+			uid:      "11312u0001",
+			expected: "U0001",
+		},
+		{
+			name:     "Mixed case code",
+			uid:      "11312m0002",
+			expected: "M0002",
+		},
+		{
+			name:     "Short year (2 digits)",
+			uid:      "121U0001",
+			expected: "U0001",
+		},
+		{
+			name:     "Empty string",
+			uid:      "",
+			expected: "",
+		},
+		{
+			name:     "No valid code pattern",
+			uid:      "11312X0001",
+			expected: "",
+		},
+		{
+			name:     "Incomplete code pattern",
+			uid:      "11312U001",
+			expected: "",
+		},
+		{
+			name:     "Only numbers",
+			uid:      "1131200001",
+			expected: "",
+		},
+		{
+			name:     "Code without year prefix",
+			uid:      "U0001",
+			expected: "U0001",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ExtractCourseCode(tt.uid)
+			if result != tt.expected {
+				t.Errorf("ExtractCourseCode(%q) = %q, want %q",
+					tt.uid, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestFormatSemester tests the semester formatting function
+func TestFormatSemester(t *testing.T) {
+	tests := []struct {
+		name     string
+		year     int
+		term     int
+		expected string
+	}{
+		{
+			name:     "First semester (上學期)",
+			year:     113,
+			term:     1,
+			expected: "113 學年度 上學期",
+		},
+		{
+			name:     "Second semester (下學期)",
+			year:     113,
+			term:     2,
+			expected: "113 學年度 下學期",
+		},
+		{
+			name:     "Older year - first semester",
+			year:     100,
+			term:     1,
+			expected: "100 學年度 上學期",
+		},
+		{
+			name:     "Older year - second semester",
+			year:     100,
+			term:     2,
+			expected: "100 學年度 下學期",
+		},
+		{
+			name:     "Invalid term value (defaults to 上學期)",
+			year:     113,
+			term:     0,
+			expected: "113 學年度 上學期",
+		},
+		{
+			name:     "Invalid term value 3 (defaults to 上學期)",
+			year:     113,
+			term:     3,
+			expected: "113 學年度 上學期",
+		},
+		{
+			name:     "Negative term (defaults to 上學期)",
+			year:     113,
+			term:     -1,
+			expected: "113 學年度 上學期",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FormatSemester(tt.year, tt.term)
+			if result != tt.expected {
+				t.Errorf("FormatSemester(%d, %d) = %q, want %q",
+					tt.year, tt.term, result, tt.expected)
+			}
+		})
+	}
 }

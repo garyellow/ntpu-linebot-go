@@ -184,18 +184,22 @@ func TruncateRunes(text string, maxRunes int) string {
 	return string(runes[:maxRunes-3]) + "..."
 }
 
-// NewHeroBox creates a standardized Hero box with NTPU green background
+// NewHeroBox creates a standardized Hero box with LINE green background
 // Provides consistent styling across all modules:
-// - Background: #1DB446 (NTPU green)
+// - Background: ColorHeroBg (LINE Green #06C755)
 // - Padding: 20px all, 16px bottom (for visual balance)
 // - Title: Bold, XL size, white color, full wrap for complete display
-// - Subtitle: XS size, white color, md margin top
+// - Subtitle: XS size, white color, md margin top (omitted if empty)
 func NewHeroBox(title, subtitle string) *FlexBox {
-	box := NewFlexBox("vertical",
-		NewFlexText(title).WithWeight("bold").WithSize("xl").WithColor("#ffffff").WithWrap(true).WithLineSpacing("6px").FlexText,
-		NewFlexText(subtitle).WithSize("xs").WithColor("#ffffff").WithMargin("md").WithWrap(true).FlexText,
-	)
-	box.BackgroundColor = "#1DB446"
+	contents := []messaging_api.FlexComponentInterface{
+		NewFlexText(title).WithWeight("bold").WithSize("xl").WithColor(ColorHeroText).WithWrap(true).WithLineSpacing("6px").FlexText,
+	}
+	// Only add subtitle if not empty (LINE API rejects empty text)
+	if subtitle != "" {
+		contents = append(contents, NewFlexText(subtitle).WithSize("xs").WithColor(ColorHeroText).WithMargin("md").WithWrap(true).FlexText)
+	}
+	box := NewFlexBox("vertical", contents...)
+	box.BackgroundColor = ColorHeroBg
 	box.PaddingAll = "20px"
 	box.PaddingBottom = "16px"
 	return box
@@ -206,20 +210,20 @@ func NewHeroBox(title, subtitle string) *FlexBox {
 // Max 3 lines for carousel to balance visibility
 func NewCompactHeroBox(title string) *FlexBox {
 	box := NewFlexBox("vertical",
-		NewFlexText(title).WithWeight("bold").WithSize("md").WithColor("#ffffff").WithWrap(true).WithMaxLines(3).WithLineSpacing("4px").FlexText,
+		NewFlexText(title).WithWeight("bold").WithSize("md").WithColor(ColorHeroText).WithWrap(true).WithMaxLines(3).WithLineSpacing("4px").FlexText,
 	)
-	box.BackgroundColor = "#1DB446"
+	box.BackgroundColor = ColorHeroBg
 	box.PaddingAll = "15px"
 	return box
 }
 
 // NewHeaderBadge creates a consistent header badge for Flex Messages
-// Format: [emoji] [label] with NTPU green color
+// Format: [emoji] [label] with LINE green color
 func NewHeaderBadge(emoji, label string) *FlexBox {
 	return NewFlexBox("vertical",
 		NewFlexBox("baseline",
 			NewFlexText(emoji).WithSize("lg").FlexText,
-			NewFlexText(label).WithWeight("bold").WithColor("#1DB446").WithSize("sm").WithMargin("sm").FlexText,
+			NewFlexText(label).WithWeight("bold").WithColor(ColorPrimary).WithSize("sm").WithMargin("sm").FlexText,
 		).FlexBox,
 	)
 }
@@ -237,7 +241,7 @@ func DefaultInfoRowStyle() InfoRowStyle {
 	return InfoRowStyle{
 		ValueSize:   "sm",
 		ValueWeight: "regular",
-		ValueColor:  "#333333",
+		ValueColor:  ColorText,
 		Wrap:        true,
 	}
 }
@@ -247,7 +251,7 @@ func BoldInfoRowStyle() InfoRowStyle {
 	return InfoRowStyle{
 		ValueSize:   "md",
 		ValueWeight: "bold",
-		ValueColor:  "#333333",
+		ValueColor:  ColorText,
 		Wrap:        false,
 	}
 }
@@ -278,7 +282,7 @@ func NewInfoRow(emoji, label, value string, style InfoRowStyle) *FlexBox {
 	return NewFlexBox("vertical",
 		NewFlexBox("horizontal",
 			NewFlexText(emoji).WithSize("sm").WithFlex(0).FlexText,
-			NewFlexText(label).WithColor("#888888").WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
+			NewFlexText(label).WithColor(ColorLabel).WithSize("xs").WithFlex(0).WithMargin("sm").FlexText,
 		).WithSpacing("sm").FlexBox,
 		valueText.FlexText,
 	)

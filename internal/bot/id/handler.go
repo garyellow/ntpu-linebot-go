@@ -585,7 +585,7 @@ func (h *Handler) formatStudentResponse(student *storage.Student, fromCache bool
 	if fromCache {
 		contents = append(contents,
 			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-			lineutil.NewFlexText("📌 資料來自快取").WithSize("xs").WithColor("#aaaaaa").WithMargin("md").FlexText,
+			lineutil.NewFlexText("📌 資料來自快取").WithSize("xs").WithColor(lineutil.ColorGray400).WithMargin("md").FlexText,
 		)
 	}
 

@@ -32,7 +32,7 @@
             "action": {
                 "label": "GitHub連結",
                 "type": "uri",
-                "uri": "https://github.com/garyellow/ntpu-linebot"
+                "uri": "https://github.com/garyellow/ntpu-linebot-go"
             }
         },
         {
@@ -43,9 +43,9 @@
                 "height": 405
             },
             "action": {
-                "label": "安妮亞",
+                "label": "北大官網",
                 "type": "uri",
-                "uri": "https://www.youtube.com/watch?v=ud6ih1e8UJ8"
+                "uri": "https://www.ntpu.edu.tw"
             }
         }
     ]

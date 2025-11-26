@@ -67,6 +67,11 @@ var (
 	// User input format: just the course_no part with term prefix, e.g., 1U0001, 2M0002
 	// So regex matches: 3-4 digits (year+term) + U/M/N/P + 4 digits
 	uidRegex = regexp.MustCompile(`(?i)\d{3,4}[umnp]\d{4}`)
+	// Historical course query format: "課程 {year} {keyword}" or "課 {year} {keyword}"
+	// e.g., "課程 110 微積分", "課 108 程式設計"
+	// Year is in ROC format (e.g., 110 = AD 2021)
+	// This pattern is checked BEFORE the regular courseRegex to handle historical queries
+	historicalCourseRegex = regexp.MustCompile(`(?i)^(課程?|course|class)\s+(\d{2,3})\s+(.+)$`)
 )
 
 // buildRegex creates a regex pattern from keywords
@@ -129,6 +134,17 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	// Check for course UID first (highest priority)
 	if match := uidRegex.FindString(text); match != "" {
 		return h.handleCourseUIDQuery(ctx, match)
+	}
+
+	// Check for historical course query pattern BEFORE regular course search
+	// Format: "課程 {year} {keyword}" e.g., "課程 110 微積分"
+	if matches := historicalCourseRegex.FindStringSubmatch(text); len(matches) == 4 {
+		yearStr := matches[2]
+		keyword := strings.TrimSpace(matches[3])
+		year := 0
+		if _, err := fmt.Sscanf(yearStr, "%d", &year); err == nil && keyword != "" {
+			return h.handleHistoricalCourseSearch(ctx, year, keyword)
+		}
 	}
 
 	// Check for course title search - extract term after keyword
@@ -371,6 +387,101 @@ func (h *Handler) handleCourseTitleSearch(ctx context.Context, title string) []m
 	return []messaging_api.MessageInterface{msg}
 }
 
+// handleHistoricalCourseSearch handles historical course queries using "課程 {year} {keyword}" syntax
+// Uses separate historical_courses table with 7-day TTL for on-demand caching
+// This function is called for courses older than the regular warmup range (2 years)
+func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, keyword string) []messaging_api.MessageInterface {
+	log := h.logger.WithModule(moduleName)
+	startTime := time.Now()
+	sender := lineutil.GetSender(senderName, h.stickerManager)
+
+	// Validate year range (ROC year: 89 = AD 2000 to current year)
+	currentYear := time.Now().Year() - 1911
+	if year < 89 || year > currentYear {
+		msg := lineutil.NewTextMessageWithConsistentSender(
+			fmt.Sprintf("❌ 無效的學年度：%d\n\n💡 請輸入 89-%d 之間的學年度\n範例：課程 110 微積分", year, currentYear),
+			sender,
+		)
+		return []messaging_api.MessageInterface{msg}
+	}
+
+	log.Infof("Handling historical course search: year=%d, keyword=%s", year, keyword)
+
+	// Check if this is a recent year (within warmup range) - use regular course search
+	if year >= currentYear-1 {
+		log.Infof("Year %d is within warmup range, redirecting to regular course search", year)
+		return h.handleCourseTitleSearch(ctx, keyword)
+	}
+
+	// Search in historical_courses cache first
+	courses, err := h.db.SearchHistoricalCoursesByYearAndTitle(year, keyword)
+	if err != nil {
+		log.WithError(err).Error("Failed to search historical courses in cache")
+		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
+		msg := lineutil.ErrorMessageWithDetailAndSender("搜尋歷史課程時發生問題", sender)
+		return []messaging_api.MessageInterface{msg}
+	}
+
+	if len(courses) > 0 {
+		h.metrics.RecordCacheHit(moduleName)
+		log.Infof("Found %d historical courses in cache for year=%d, keyword=%s", len(courses), year, keyword)
+		return h.formatCourseListResponse(courses)
+	}
+
+	// Cache miss - scrape from historical course system
+	log.Infof("Cache miss for historical course: year=%d, keyword=%s, scraping...", year, keyword)
+	h.metrics.RecordCacheMiss(moduleName)
+
+	// Scrape both semesters for the specified year
+	var foundCourses []*storage.Course
+scrapeLoop:
+	for term := 1; term <= 2; term++ {
+		select {
+		case <-ctx.Done():
+			break scrapeLoop
+		default:
+		}
+
+		scrapedCourses, err := ntpu.ScrapeCourses(ctx, h.scraper, year, term, keyword)
+		if err != nil {
+			log.WithError(err).WithField("year", year).WithField("term", term).
+				Debug("Failed to scrape historical courses for year/term")
+			continue
+		}
+
+		// Save courses to historical_courses table
+		for _, course := range scrapedCourses {
+			if err := h.db.SaveHistoricalCourse(course); err != nil {
+				log.WithError(err).Warn("Failed to save historical course to cache")
+			}
+		}
+
+		foundCourses = append(foundCourses, scrapedCourses...)
+	}
+
+	if len(foundCourses) > 0 {
+		h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
+		// Convert []*storage.Course to []storage.Course
+		courses := make([]storage.Course, len(foundCourses))
+		for i, c := range foundCourses {
+			courses[i] = *c
+		}
+		return h.formatCourseListResponse(courses)
+	}
+
+	// No results found
+	h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
+	msg := lineutil.NewTextMessageWithConsistentSender(
+		fmt.Sprintf("🔍 查無 %d 學年度包含「%s」的課程\n\n💡 請確認：\n• 學年度和課程名稱是否正確\n• 該課程是否在該學年度開設", year, keyword),
+		sender,
+	)
+	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+		{Action: lineutil.NewMessageAction("📚 查詢近期課程", "課程 "+keyword)},
+		{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
+	})
+	return []messaging_api.MessageInterface{msg}
+}
+
 // handleTeacherSearch handles teacher search queries with a 2-tier search strategy:
 //
 // Search Strategy:
@@ -503,28 +614,34 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 	// Header: Course badge (using standardized component)
 	header := lineutil.NewHeaderBadge("📚", "課程資訊")
 
-	// Hero: Course title and code (using standardized component)
-	// Full title display with wrap enabled in NewHeroBox
-	hero := lineutil.NewHeroBox(course.Title, course.UID)
+	// Hero: Course title with course code in format `{課程名稱} ({課程代碼})`
+	// Extract course code (e.g., "U0001" from "1132U0001")
+	courseCode := lineutil.ExtractCourseCode(course.UID)
+	heroTitle := course.Title
+	if courseCode != "" {
+		heroTitle = fmt.Sprintf("%s (%s)", course.Title, courseCode)
+	}
+	hero := lineutil.NewHeroBox(heroTitle, "")
 
 	// Build body contents with improved vertical layout to prevent truncation
 	contents := []messaging_api.FlexComponentInterface{}
+
+	// 學期 info - first row
+	semesterText := lineutil.FormatSemester(course.Year, course.Term)
+	contents = append(contents,
+		lineutil.NewInfoRowWithMargin("📅", "開課學期", semesterText, lineutil.DefaultInfoRowStyle(), "md"),
+	)
 
 	// 教師 info - use vertical layout, full display with wrap
 	if len(course.Teachers) > 0 {
 		teacherNames := strings.Join(course.Teachers, "、")
 		contents = append(contents,
+			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
 			lineutil.NewInfoRowWithMargin("👨‍🏫", "授課教師", teacherNames, lineutil.DefaultInfoRowStyle(), "lg"),
 		)
 	}
 
-	// 學期 info
-	contents = append(contents,
-		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-		lineutil.NewInfoRowWithMargin("📅", "開課學期", fmt.Sprintf("%d 學年度 第 %d 學期", course.Year, course.Term), lineutil.DefaultInfoRowStyle(), "md"),
-	)
-
-	// 時間 info - full display with wrap
+	// 時間 info - full display with wrap (第三列)
 	if len(course.Times) > 0 {
 		timeStr := strings.Join(course.Times, "、")
 		contents = append(contents,
@@ -633,34 +750,46 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 	// Create bubbles for carousel (LINE API limit: max 10 bubbles per Flex Carousel)
 	var bubbles []messaging_api.FlexBubble
 	for _, course := range courses {
-		// Hero: Course title with color background (using standardized compact component)
-		// NewCompactHeroBox allows 3 lines with wrap for better visibility
-		hero := lineutil.NewCompactHeroBox(course.Title)
+		// Hero: Course title with course code in format `{課程名稱} ({課程代碼})`
+		// Extract course code (e.g., "U0001" from "1132U0001")
+		courseCode := lineutil.ExtractCourseCode(course.UID)
+		heroTitle := course.Title
+		if courseCode != "" {
+			heroTitle = fmt.Sprintf("%s (%s)", course.Title, courseCode)
+		}
+		hero := lineutil.NewCompactHeroBox(heroTitle)
 
 		// Build body contents with improved layout
+		// 第一列：學期資訊
+		semesterText := lineutil.FormatSemester(course.Year, course.Term)
 		contents := []messaging_api.FlexComponentInterface{
-			lineutil.NewFlexText(course.UID).WithSize("xs").WithColor("#999999").WithMargin("md").FlexText,
+			lineutil.NewFlexBox("horizontal",
+				lineutil.NewFlexText("📅 開課學期：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
+				lineutil.NewFlexText(semesterText).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).FlexText,
+			).WithMargin("md").WithSpacing("sm").FlexBox,
 			lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 		}
 
+		// 第二列：授課教師
 		if len(course.Teachers) > 0 {
-			// Full teacher display with wrap (max 2 lines for carousel balance)
-			carouselTeachers := strings.Join(course.Teachers, "、")
+			// Display teachers with truncation if too many (max 5, then "等 N 人")
+			carouselTeachers := lineutil.FormatTeachers(course.Teachers, 5)
 			contents = append(contents,
 				lineutil.NewFlexBox("horizontal",
-					lineutil.NewFlexText("👨‍🏫").WithSize("xs").WithFlex(0).FlexText,
-					lineutil.NewFlexText(carouselTeachers).WithColor("#666666").WithSize("xs").WithFlex(1).WithMargin("sm").WithWrap(true).WithMaxLines(2).FlexText,
+					lineutil.NewFlexText("👨‍🏫 授課教師：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
+					lineutil.NewFlexText(carouselTeachers).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).WithWrap(true).FlexText,
 				).WithMargin("md").WithSpacing("sm").FlexBox,
 			)
 		}
+		// 第三列：上課時間
 		if len(course.Times) > 0 {
-			// Full time display with wrap (max 2 lines for carousel balance)
-			carouselTimes := strings.Join(course.Times, "、")
+			// Display times with truncation if too many (max 4, then "等 N 節")
+			carouselTimes := lineutil.FormatTimes(course.Times, 4)
 			contents = append(contents,
 				lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 				lineutil.NewFlexBox("horizontal",
-					lineutil.NewFlexText("⏰").WithSize("xs").WithFlex(0).FlexText,
-					lineutil.NewFlexText(carouselTimes).WithColor("#666666").WithSize("xs").WithFlex(1).WithMargin("sm").WithWrap(true).WithMaxLines(2).FlexText,
+					lineutil.NewFlexText("⏰ 上課時間：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
+					lineutil.NewFlexText(carouselTimes).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).WithWrap(true).FlexText,
 				).WithMargin("sm").WithSpacing("sm").FlexBox,
 			)
 		}

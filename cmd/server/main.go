@@ -393,6 +393,18 @@ func performCacheCleanup(db *storage.DB, ttl time.Duration, log *logger.Logger) 
 		}).Debug("Courses cleanup complete")
 	}
 
+	// Cleanup historical courses (uses same TTL as regular courses)
+	if deleted, err := db.DeleteExpiredHistoricalCourses(ttl); err != nil {
+		log.WithError(err).Error("Failed to cleanup expired historical courses")
+	} else {
+		totalDeleted += deleted
+		count, _ := db.CountHistoricalCourses()
+		log.WithFields(map[string]interface{}{
+			"deleted":   deleted,
+			"remaining": count,
+		}).Debug("Historical courses cleanup complete")
+	}
+
 	// Cleanup stickers
 	if deleted, err := db.CleanupExpiredStickers(); err != nil {
 		log.WithError(err).Error("Failed to cleanup expired stickers")

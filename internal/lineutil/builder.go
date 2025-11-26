@@ -3,6 +3,7 @@ package lineutil
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
@@ -458,4 +459,73 @@ func FormatDisplayName(nameCN, nameEN string) string {
 
 	// Return combined name with space
 	return nameCN + " " + nameEN
+}
+
+// ExtractCourseCode extracts the course code from a UID string.
+// UID format: {year}{term}{code} where:
+//   - year: 2-3 digits (e.g., 113, 12)
+//   - term: 1 digit (1=上學期, 2=下學期)
+//   - code: U/M/N/P + 4 digits (e.g., U0001, M0002)
+//
+// Returns the code part (e.g., "U0001" from "11312U0001")
+// Returns empty string if pattern not found.
+
+var courseCodeRegex = regexp.MustCompile(`(?i)([umnp]\d{4})`)
+
+func ExtractCourseCode(uid string) string {
+	matches := courseCodeRegex.FindStringSubmatch(uid)
+	if len(matches) >= 2 {
+		return strings.ToUpper(matches[1])
+	}
+	return ""
+}
+
+// FormatSemester formats year and term into a readable semester string.
+// Parameters:
+//   - year: Academic year in ROC calendar (e.g., 113)
+//   - term: 1 for 上學期, 2 for 下學期
+//
+// Returns: Formatted string like "113 學年度 上學期"
+func FormatSemester(year, term int) string {
+	termStr := "上學期"
+	if term == 2 {
+		termStr = "下學期"
+	}
+	return fmt.Sprintf("%d 學年度 %s", year, termStr)
+}
+
+// FormatTeachers formats teacher names with optional truncation.
+// If more than max teachers, shows first max names + "等 N 人".
+// Parameters:
+//   - teachers: List of teacher names
+//   - max: Maximum teachers to show before truncation (0 = no limit)
+//
+// Returns: Formatted string like "王教授、李教授 等 3 人"
+func FormatTeachers(teachers []string, max int) string {
+	if len(teachers) == 0 {
+		return ""
+	}
+	if max <= 0 || len(teachers) <= max {
+		return strings.Join(teachers, "、")
+	}
+	remaining := len(teachers) - max
+	return strings.Join(teachers[:max], "、") + fmt.Sprintf(" 等 %d 人", remaining)
+}
+
+// FormatTimes formats time slots with optional truncation.
+// If more than max time slots, shows first max slots + "等 N 節".
+// Parameters:
+//   - times: List of time slot strings (e.g., "週一1-2", "週三3-4")
+//   - max: Maximum time slots to show before truncation (0 = no limit)
+//
+// Returns: Formatted string like "週一1-2、週三3-4 等 2 節"
+func FormatTimes(times []string, max int) string {
+	if len(times) == 0 {
+		return ""
+	}
+	if max <= 0 || len(times) <= max {
+		return strings.Join(times, "、")
+	}
+	remaining := len(times) - max
+	return strings.Join(times[:max], "、") + fmt.Sprintf(" 等 %d 節", remaining)
 }

@@ -37,6 +37,11 @@ func InitSchema(db *sql.DB) error {
 		return err
 	}
 
+	// Create historical_courses table for on-demand historical course queries
+	if err := createHistoricalCoursesTable(db); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -136,6 +141,38 @@ func createStickersTable(db *sql.DB) error {
 
 	if _, err := db.Exec(query); err != nil {
 		return fmt.Errorf("failed to create stickers table: %w", err)
+	}
+
+	return nil
+}
+
+// createHistoricalCoursesTable creates table for historical course queries
+// This table stores courses from years older than the regular warmup range (2 years)
+// Uses 7-day hard TTL for cache management, same structure as regular courses table
+func createHistoricalCoursesTable(db *sql.DB) error {
+	query := `
+	CREATE TABLE IF NOT EXISTS historical_courses (
+		uid TEXT PRIMARY KEY,
+		year INTEGER NOT NULL,
+		term INTEGER NOT NULL,
+		no TEXT,
+		title TEXT NOT NULL,
+		teachers TEXT,
+		teacher_urls TEXT,
+		times TEXT,
+		locations TEXT,
+		detail_url TEXT,
+		note TEXT,
+		cached_at INTEGER NOT NULL
+	);
+	CREATE INDEX IF NOT EXISTS idx_historical_courses_title ON historical_courses(title);
+	CREATE INDEX IF NOT EXISTS idx_historical_courses_year_term ON historical_courses(year, term);
+	CREATE INDEX IF NOT EXISTS idx_historical_courses_teachers ON historical_courses(teachers);
+	CREATE INDEX IF NOT EXISTS idx_historical_courses_cached_at ON historical_courses(cached_at);
+	`
+
+	if _, err := db.Exec(query); err != nil {
+		return fmt.Errorf("failed to create historical_courses table: %w", err)
 	}
 
 	return nil

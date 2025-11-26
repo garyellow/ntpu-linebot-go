@@ -199,6 +199,16 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 		}
 	}
 
+	// Handle "members" postback for viewing organization members
+	// Format: "contact:members${splitChar}{orgName}"
+	if strings.HasPrefix(data, "members") {
+		parts := strings.Split(data, splitChar)
+		if len(parts) >= 2 {
+			orgName := parts[1]
+			return h.handleMembersQuery(ctx, orgName)
+		}
+	}
+
 	return []messaging_api.MessageInterface{}
 }
 
@@ -206,13 +216,13 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 	// Helper to create a row with icon and optional color
 	createRow := func(icon, label, value, color string) messaging_api.FlexComponentInterface {
-		valColor := "#666666"
+		valColor := lineutil.ColorSubtext
 		if color != "" {
 			valColor = color
 		}
 		labelWithIcon := icon + " " + label
 		return lineutil.NewFlexBox("baseline",
-			lineutil.NewFlexText(labelWithIcon).WithColor("#888888").WithSize("sm").WithFlex(3).FlexText,
+			lineutil.NewFlexText(labelWithIcon).WithColor(lineutil.ColorLabel).WithSize("sm").WithFlex(3).FlexText,
 			lineutil.NewFlexText(value).WithWrap(true).WithColor(valColor).WithSize("sm").WithWeight("bold").WithFlex(4).WithAlign("end").FlexText,
 		).FlexBox
 	}
@@ -221,43 +231,43 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 	header := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexBox("baseline",
 			lineutil.NewFlexText("🚨").WithSize("lg").FlexText,
-			lineutil.NewFlexText("緊急聯絡電話").WithWeight("bold").WithColor("#ff3333").WithSize("sm").WithMargin("sm").FlexText,
+			lineutil.NewFlexText("緊急聯絡電話").WithWeight("bold").WithColor(lineutil.ColorDanger).WithSize("sm").WithMargin("sm").FlexText,
 		).FlexBox,
 	)
 
 	// Sanxia Campus Box
 	sanxiaBox := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexText("📍 三峽校區").WithWeight("bold").WithSize("md").WithColor("#1DB446").WithMargin("lg").FlexText,
+		lineutil.NewFlexText("📍 三峽校區").WithWeight("bold").WithSize("md").WithColor(lineutil.ColorPrimary).WithMargin("lg").FlexText,
 		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 		createRow("📞", "總機", sanxiaNormalPhone, ""),
 		createRow("🏢", "24H行政", sanxia24HPhone, ""),
-		createRow("🚨", "24H校安", sanxiaEmergencyPhone, "#ff3333"), // Highlight emergency
+		createRow("🚨", "24H校安", sanxiaEmergencyPhone, lineutil.ColorDanger), // Highlight emergency
 		createRow("🚪", "大門哨所", sanxiaGatePhone, ""),
 		createRow("🏠", "宿舍夜間", sanxiaDormPhone, ""),
 	).WithSpacing("sm").WithMargin("sm").FlexBox
 
 	// Taipei Campus Box
 	taipeiBox := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexText("📍 台北校區").WithWeight("bold").WithSize("md").WithColor("#1DB446").WithMargin("lg").FlexText,
+		lineutil.NewFlexText("📍 台北校區").WithWeight("bold").WithSize("md").WithColor(lineutil.ColorPrimary).WithMargin("lg").FlexText,
 		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 		createRow("📞", "總機", taipeiNormalPhone, ""),
-		createRow("🚨", "24H校安", taipeiEmergencyPhone, "#ff3333"),
+		createRow("🚨", "24H校安", taipeiEmergencyPhone, lineutil.ColorDanger),
 	).WithSpacing("sm").WithMargin("sm").FlexBox
 
 	// External Emergency Box
 	externalBox := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexText("🚨 校外緊急").WithWeight("bold").WithSize("md").WithColor("#ff3333").WithMargin("lg").FlexText,
+		lineutil.NewFlexText("🚨 校外緊急").WithWeight("bold").WithSize("md").WithColor(lineutil.ColorDanger).WithMargin("lg").FlexText,
 		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
-		createRow("👮", "警察局", "110", "#ff3333"),
-		createRow("🚒", "消防/救護", "119", "#ff3333"),
+		createRow("👮", "警察局", "110", lineutil.ColorDanger),
+		createRow("🚒", "消防/救護", "119", lineutil.ColorDanger),
 		createRow("🏢", "北大派出所", policeStation, ""),
 		createRow("🏥", "恩主公醫院", homHospital, ""),
 	).WithSpacing("sm").WithMargin("sm").FlexBox
 
 	// Footer: Quick Action Buttons
 	footer := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexButton(lineutil.NewURIAction("🚨 撥打三峽校安", "tel:"+sanxiaEmergencyPhone)).WithStyle("primary").WithColor("#ff3333").WithHeight("sm").FlexButton,
-		lineutil.NewFlexButton(lineutil.NewURIAction("🚨 撥打台北校安", "tel:"+taipeiEmergencyPhone)).WithStyle("primary").WithColor("#ff3333").WithHeight("sm").FlexButton,
+		lineutil.NewFlexButton(lineutil.NewURIAction("🚨 撥打三峽校安", "tel:"+sanxiaEmergencyPhone)).WithStyle("primary").WithColor(lineutil.ColorDanger).WithHeight("sm").FlexButton,
+		lineutil.NewFlexButton(lineutil.NewURIAction("🚨 撥打台北校安", "tel:"+taipeiEmergencyPhone)).WithStyle("primary").WithColor(lineutil.ColorDanger).WithHeight("sm").FlexButton,
 		lineutil.NewFlexButton(lineutil.NewURIAction("ℹ️ 查看更多", "https://new.ntpu.edu.tw/safety")).WithStyle("secondary").WithHeight("sm").FlexButton,
 	).WithSpacing("sm")
 
@@ -417,6 +427,87 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	return h.formatContactResults(contacts)
 }
 
+// handleMembersQuery handles queries for organization members
+// Uses cache first, falls back to scraping if not found
+// Returns all individuals belonging to the specified organization
+func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []messaging_api.MessageInterface {
+	log := h.logger.WithModule(moduleName)
+	startTime := time.Now()
+	sender := lineutil.GetSender(senderName, h.stickerManager)
+
+	log.Infof("Handling members query for organization: %s", orgName)
+
+	// Step 1: Search cache for members of this organization
+	members, err := h.db.GetContactsByOrganization(orgName)
+	if err != nil {
+		log.WithError(err).Error("Failed to query organization members from cache")
+		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
+		msg := lineutil.ErrorMessageWithDetailAndSender("查詢成員時發生問題", sender)
+		return []messaging_api.MessageInterface{msg}
+	}
+
+	// Filter to only individuals (exclude the organization itself)
+	var individuals []storage.Contact
+	for _, c := range members {
+		if c.Type == "individual" {
+			individuals = append(individuals, c)
+		}
+	}
+
+	if len(individuals) > 0 {
+		h.metrics.RecordCacheHit(moduleName)
+		log.Infof("Found %d members in cache for organization: %s", len(individuals), orgName)
+		return h.formatContactResults(individuals)
+	}
+
+	// Step 2: Cache miss - try scraping
+	h.metrics.RecordCacheMiss(moduleName)
+	log.Infof("Cache miss for organization members: %s, scraping...", orgName)
+
+	scrapedContacts, err := ntpu.ScrapeContacts(ctx, h.scraper, orgName)
+	if err != nil {
+		log.WithError(err).Errorf("Failed to scrape members for: %s", orgName)
+		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
+		msg := lineutil.NewTextMessageWithConsistentSender(
+			fmt.Sprintf("🔍 無法取得「%s」的成員資料\n\n💡 可能原因：\n• 網路問題\n• 該單位尚無成員資料", orgName),
+			sender,
+		)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			{Action: lineutil.NewMessageAction("🔄 重試", "聯絡 "+orgName)},
+			{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
+		})
+		return []messaging_api.MessageInterface{msg}
+	}
+
+	// Save to cache and filter individuals
+	individuals = make([]storage.Contact, 0)
+	for _, c := range scrapedContacts {
+		if err := h.db.SaveContact(c); err != nil {
+			log.WithError(err).Warnf("Failed to save contact to cache: %s", c.Name)
+		}
+		// Check if this contact belongs to the target organization and is an individual
+		if c.Type == "individual" && (c.Organization == orgName || c.Superior == orgName) {
+			individuals = append(individuals, *c)
+		}
+	}
+
+	if len(individuals) == 0 {
+		h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
+		msg := lineutil.NewTextMessageWithConsistentSender(
+			fmt.Sprintf("🔍 查無「%s」的成員資料\n\n💡 該單位可能尚未建立成員資訊", orgName),
+			sender,
+		)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			{Action: lineutil.NewMessageAction("🔍 重新搜尋", "聯絡")},
+			{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
+		})
+		return []messaging_api.MessageInterface{msg}
+	}
+
+	h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
+	return h.formatContactResults(individuals)
+}
+
 // formatContactResults formats contact results as LINE messages
 func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_api.MessageInterface {
 	if len(contacts) == 0 {
@@ -425,6 +516,20 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 			lineutil.NewTextMessageWithConsistentSender("🔍 查無聯絡資料", sender),
 		}
 	}
+
+	// Sort contacts: organizations before individuals, then alphabetically by name
+	// This ensures units/departments appear before individual staff members
+	sort.SliceStable(contacts, func(i, j int) bool {
+		// Organization comes before individual
+		if contacts[i].Type == "organization" && contacts[j].Type != "organization" {
+			return true
+		}
+		if contacts[i].Type != "organization" && contacts[j].Type == "organization" {
+			return false
+		}
+		// Same type: sort by name
+		return contacts[i].Name < contacts[j].Name
+	})
 
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	var messages []messaging_api.MessageInterface
@@ -449,13 +554,15 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 			// Otherwise show "ChineseName EnglishName"
 			displayName := lineutil.FormatDisplayName(c.Name, c.NameEn)
 
-			// Determine subtitle
-			subText := c.Type
+			// Determine subtitle - show friendly text, fallback to empty if no meaningful info
+			var subText string
 			if c.Type == "organization" {
 				subText = "單位"
 			} else if c.Title != "" {
 				subText = c.Title
 			}
+			// If c.Type is "individual" with no title, subText remains empty
+			// NewHeroBox will handle empty subtitle gracefully
 
 			// Header: Contact badge (using standardized component)
 			header := lineutil.NewHeaderBadge("📞", "聯絡資訊")
@@ -556,6 +663,16 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 			if c.Website != "" {
 				row3Buttons = append(row3Buttons,
 					lineutil.NewFlexButton(lineutil.NewURIAction("🌐 開啟網站", c.Website)).WithStyle("secondary").WithHeight("sm"))
+			}
+
+			// Row 3 (continued): View Members button for organizations
+			// Allows querying all members belonging to this organization
+			if c.Type == "organization" {
+				displayText := fmt.Sprintf("查詢「%s」的成員", lineutil.TruncateRunes(c.Name, 20))
+				row3Buttons = append(row3Buttons,
+					lineutil.NewFlexButton(
+						lineutil.NewPostbackActionWithDisplayText("👥 查看成員", displayText, fmt.Sprintf("contact:members%s%s", splitChar, c.Name)),
+					).WithStyle("secondary").WithHeight("sm"))
 			}
 
 			// Assemble Bubble

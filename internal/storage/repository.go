@@ -402,7 +402,7 @@ func (db *DB) GetContactsByOrganization(org string) ([]Contact, error) {
 	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
 
 	// Add TTL filter to prevent returning stale data
-	query := `SELECT uid, name, name_en, title, organization, extension, phone, email, cached_at FROM contacts WHERE organization = ? AND cached_at > ?`
+	query := `SELECT uid, type, name, name_en, title, organization, superior, extension, phone, email, cached_at FROM contacts WHERE organization = ? AND cached_at > ?`
 
 	rows, err := db.conn.Query(query, org, ttlTimestamp)
 	if err != nil {
@@ -413,15 +413,16 @@ func (db *DB) GetContactsByOrganization(org string) ([]Contact, error) {
 	var contacts []Contact
 	for rows.Next() {
 		var contact Contact
-		var nameEn, title, org, extension, phone, email sql.NullString
+		var nameEn, title, org, superior, extension, phone, email sql.NullString
 
-		if err := rows.Scan(&contact.UID, &contact.Name, &nameEn, &title, &org, &extension, &phone, &email, &contact.CachedAt); err != nil {
+		if err := rows.Scan(&contact.UID, &contact.Type, &contact.Name, &nameEn, &title, &org, &superior, &extension, &phone, &email, &contact.CachedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan contact row: %w", err)
 		}
 
 		contact.NameEn = nameEn.String
 		contact.Title = title.String
 		contact.Organization = org.String
+		contact.Superior = superior.String
 		contact.Extension = extension.String
 		contact.Phone = phone.String
 		contact.Email = email.String
@@ -1053,4 +1054,227 @@ func (db *DB) GetStickerStats() (map[string]int, error) {
 	}
 
 	return stats, nil
+}
+
+// HistoricalCourseRepository provides CRUD operations for historical_courses table
+// This table stores courses older than 2 years with on-demand caching and 7-day TTL
+
+// SaveHistoricalCourse inserts or updates a historical course record
+func (db *DB) SaveHistoricalCourse(course *Course) error {
+	teachersJSON, err := json.Marshal(course.Teachers)
+	if err != nil {
+		return fmt.Errorf("failed to marshal teachers: %w", err)
+	}
+
+	teacherURLsJSON, err := json.Marshal(course.TeacherURLs)
+	if err != nil {
+		return fmt.Errorf("failed to marshal teacher URLs: %w", err)
+	}
+
+	timesJSON, err := json.Marshal(course.Times)
+	if err != nil {
+		return fmt.Errorf("failed to marshal times: %w", err)
+	}
+
+	locationsJSON, err := json.Marshal(course.Locations)
+	if err != nil {
+		return fmt.Errorf("failed to marshal locations: %w", err)
+	}
+
+	query := `
+		INSERT INTO historical_courses (uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(uid) DO UPDATE SET
+			year = excluded.year,
+			term = excluded.term,
+			no = excluded.no,
+			title = excluded.title,
+			teachers = excluded.teachers,
+			teacher_urls = excluded.teacher_urls,
+			times = excluded.times,
+			locations = excluded.locations,
+			detail_url = excluded.detail_url,
+			note = excluded.note,
+			cached_at = excluded.cached_at
+	`
+	_, err = db.conn.Exec(query,
+		course.UID,
+		course.Year,
+		course.Term,
+		course.No,
+		course.Title,
+		string(teachersJSON),
+		string(teacherURLsJSON),
+		string(timesJSON),
+		string(locationsJSON),
+		nullString(course.DetailURL),
+		nullString(course.Note),
+		time.Now().Unix(),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to save historical course: %w", err)
+	}
+	return nil
+}
+
+// SaveHistoricalCoursesBatch inserts or updates multiple historical course records in a single transaction
+func (db *DB) SaveHistoricalCoursesBatch(courses []*Course) error {
+	if len(courses) == 0 {
+		return nil
+	}
+
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO historical_courses (uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(uid) DO UPDATE SET
+			year = excluded.year,
+			term = excluded.term,
+			no = excluded.no,
+			title = excluded.title,
+			teachers = excluded.teachers,
+			teacher_urls = excluded.teacher_urls,
+			times = excluded.times,
+			locations = excluded.locations,
+			detail_url = excluded.detail_url,
+			note = excluded.note,
+			cached_at = excluded.cached_at
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer func() { _ = stmt.Close() }()
+
+	cachedAt := time.Now().Unix()
+	for _, course := range courses {
+		teachersJSON, err := json.Marshal(course.Teachers)
+		if err != nil {
+			return fmt.Errorf("failed to marshal teachers for course %s: %w", course.UID, err)
+		}
+
+		teacherURLsJSON, err := json.Marshal(course.TeacherURLs)
+		if err != nil {
+			return fmt.Errorf("failed to marshal teacher URLs for course %s: %w", course.UID, err)
+		}
+
+		timesJSON, err := json.Marshal(course.Times)
+		if err != nil {
+			return fmt.Errorf("failed to marshal times for course %s: %w", course.UID, err)
+		}
+
+		locationsJSON, err := json.Marshal(course.Locations)
+		if err != nil {
+			return fmt.Errorf("failed to marshal locations for course %s: %w", course.UID, err)
+		}
+
+		_, err = stmt.Exec(
+			course.UID,
+			course.Year,
+			course.Term,
+			course.No,
+			course.Title,
+			string(teachersJSON),
+			string(teacherURLsJSON),
+			string(timesJSON),
+			string(locationsJSON),
+			nullString(course.DetailURL),
+			nullString(course.Note),
+			cachedAt,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to execute statement for historical course %s: %w", course.UID, err)
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+// SearchHistoricalCoursesByYearAndTitle searches historical courses by year and partial title match
+// Only returns non-expired cache entries based on configured TTL
+func (db *DB) SearchHistoricalCoursesByYearAndTitle(year int, title string) ([]Course, error) {
+	// Validate input
+	if len(title) > 100 {
+		return nil, fmt.Errorf("search term too long")
+	}
+
+	// Sanitize search term
+	sanitized := sanitizeSearchTerm(title)
+
+	// Calculate TTL cutoff timestamp
+	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
+
+	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at
+		FROM historical_courses WHERE year = ? AND title LIKE ? ESCAPE '\' AND cached_at > ?
+		ORDER BY term DESC LIMIT 500`
+
+	rows, err := db.conn.Query(query, year, "%"+sanitized+"%", ttlTimestamp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search historical courses: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	return scanCourses(rows)
+}
+
+// SearchHistoricalCoursesByYear searches historical courses by year only
+// Returns all courses for the specified year (both semesters)
+// Only returns non-expired cache entries based on configured TTL
+func (db *DB) SearchHistoricalCoursesByYear(year int) ([]Course, error) {
+	// Calculate TTL cutoff timestamp
+	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
+
+	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at
+		FROM historical_courses WHERE year = ? AND cached_at > ?
+		ORDER BY term DESC, title LIMIT 500`
+
+	rows, err := db.conn.Query(query, year, ttlTimestamp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get historical courses by year: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	return scanCourses(rows)
+}
+
+// DeleteExpiredHistoricalCourses removes historical courses older than the specified TTL
+// Returns the number of deleted entries
+func (db *DB) DeleteExpiredHistoricalCourses(ttl time.Duration) (int64, error) {
+	query := `DELETE FROM historical_courses WHERE cached_at < ?`
+	expiryTime := time.Now().Add(-ttl).Unix()
+
+	result, err := db.conn.Exec(query, expiryTime)
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete expired historical courses: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get rows affected for historical courses: %w", err)
+	}
+	return rowsAffected, nil
+}
+
+// CountHistoricalCourses returns the total number of historical courses
+func (db *DB) CountHistoricalCourses() (int, error) {
+	query := `SELECT COUNT(*) FROM historical_courses`
+
+	var count int
+	err := db.conn.QueryRow(query).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count historical courses: %w", err)
+	}
+	return count, nil
 }
