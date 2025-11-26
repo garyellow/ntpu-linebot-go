@@ -212,11 +212,11 @@ func resetCache(db *storage.DB) error {
 
 // warmupIDModule warms student ID cache
 func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, workers int, m *metrics.Metrics) error {
-	// Match Python version: range(min(112, current_year), 100, -1)
+	// Warmup range: 101-112 (LMS 2.0 已無 113+ 資料)
 	currentYear := time.Now().Year() - 1911
 	fromYear := min(112, currentYear)
 
-	// Department codes from Python's DEPARTMENT_CODE.values()
+	// All department codes
 	departments := []string{
 		"71", "712", "714", "716", "72", "73", "742", "744",
 		"75", "76", "77", "78", "79", "80", "81", "82", "83", "84", "85", "86", "87",
@@ -378,8 +378,7 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 
 // warmupCourseModule warms course cache
 // Uses ScrapeCoursesByYear to fetch all courses for a year in one batch (no qTerm parameter)
-// This matches Python's get_simple_courses_by_year behavior: 4 requests per year (U/M/N/P)
-// More efficient than per-semester scraping: 8 requests total vs 16 requests
+// Makes 4 HTTP requests per year (U/M/N/P education codes)
 // Only warms up 2 years (current + previous) for regular course queries
 // Historical courses (older than 2 years) use separate historical_courses table with on-demand scraping
 func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
@@ -399,7 +398,6 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 		Info("Course warmup: fetching recent courses by year (no term filter)")
 
 	// Scrape all courses for each year (both semesters in one request batch)
-	// This matches Python's get_simple_courses_by_year which doesn't use qTerm
 	for _, year := range years {
 		select {
 		case <-ctx.Done():

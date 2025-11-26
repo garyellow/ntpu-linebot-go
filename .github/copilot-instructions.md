@@ -173,7 +173,3 @@ Multi-stage build (alpine builder + distroless runtime), init-data for permissio
 - **LINE utilities**: `internal/lineutil/builder.go` (use instead of raw SDK)
 - **Singleflight wrapper**: `internal/scraper/singleflight.go`
 - **Sticker manager**: `internal/sticker/sticker.go` (avatar URLs for messages)
-
-## Migration Notes
-
-Migrated from Python: asyncio→goroutines, dict cache→SQLite, Flask→Gin, centralized config.

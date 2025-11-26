@@ -31,7 +31,7 @@ func TestNormalizeWhitespace(t *testing.T) {
 	}
 }
 
-// TestRemovePunctuation tests punctuation removal (matching Python regex)
+// TestRemovePunctuation tests punctuation removal
 func TestRemovePunctuation(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -65,7 +65,7 @@ func TestRemovePunctuation(t *testing.T) {
 		{"Only spaces", "   ", "   "},
 		{"Only punctuation", "!@#$%", ""},
 
-		// Real user queries (matching Python behavior)
+		// Real user queries
 		{"Student ID with keyword", "學號 412345678", "學號 412345678"},
 		{"Course with punctuation", "課程：微積分", "課程微積分"},
 		{"Contact with comma", "聯絡,資工系", "聯絡資工系"},

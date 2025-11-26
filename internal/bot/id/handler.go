@@ -384,7 +384,7 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	// Create confirmation message with flow explanation + Python-style meme buttons
+	// Create confirmation message with flow explanation + meme buttons
 	confirmText := fmt.Sprintf("📅 %d 學年度學生查詢\n\n📋 查詢流程：\n1️⃣ 選擇學院群\n2️⃣ 選擇學院\n3️⃣ 選擇科系\n\n確定要查詢嗎？", year)
 	confirmMsg := lineutil.NewConfirmTemplate(
 		"確認學年度",
@@ -559,7 +559,7 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 }
 
 // formatStudentResponse formats a student record as a LINE message
-// Uses Flex Message for modern, card-based UI (improved from Python simple text version)
+// Uses Flex Message for modern, card-based UI
 func (h *Handler) formatStudentResponse(student *storage.Student, fromCache bool) []messaging_api.MessageInterface {
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 

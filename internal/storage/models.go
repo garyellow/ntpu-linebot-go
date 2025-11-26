@@ -35,7 +35,6 @@ type Contact struct {
 }
 
 // Course represents a course record
-// Matches Python version with all fields from Course class
 type Course struct {
 	UID         string   `json:"uid"`
 	Year        int      `json:"year"`

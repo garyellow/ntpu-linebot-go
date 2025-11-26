@@ -379,7 +379,6 @@ func determineDepartment(studentID string) string {
 	}
 
 	if ok {
-		// Python logic: if department[0:2] == DEPARTMENT_CODE["法律"]
 		// All 71x departments (712/714/716) return unified "法律系"
 		if strings.HasPrefix(deptCode, "71") {
 			return "法律系"

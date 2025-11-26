@@ -263,7 +263,7 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 		}, nil
 	}
 
-	// Sanitize input: normalize whitespace, remove punctuation (matching Python version)
+	// Sanitize input: normalize whitespace, remove punctuation
 	text = strings.TrimSpace(text)
 	text = normalizeWhitespace(text)
 	text = removePunctuation(text)
@@ -303,8 +303,6 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 	}
 
 	// No handler matched - return help message
-	// Note: Unlike Python version, we don't check for data source availability here
-	// since the database and failover mechanisms handle that automatically
 	return h.getHelpMessage(), nil
 }
 
@@ -399,7 +397,7 @@ func (h *Handler) handleStickerMessage(event webhook.MessageEvent) []messaging_a
 func (h *Handler) handleFollowEvent(event webhook.FollowEvent) ([]messaging_api.MessageInterface, error) {
 	h.logger.Info("New user followed the bot")
 
-	// Send welcome message (matching Python version style)
+	// Send welcome message
 	sender := lineutil.GetSender("初階魔法師", h.stickerManager)
 	messages := []messaging_api.MessageInterface{
 		lineutil.NewTextMessageWithConsistentSender("泥好~~我是北大查詢小工具🔍", sender),
@@ -450,8 +448,8 @@ func normalizeWhitespace(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// removePunctuation removes punctuation characters (matching Python regex pattern)
-// Pattern: [][!\"#$%&'()*+,./:;<=>?@\\\\^_`{|}~-] + CJK punctuation
+// removePunctuation removes punctuation characters
+// Pattern: ASCII punctuation + CJK punctuation (full-width)
 func removePunctuation(s string) string {
 	var result strings.Builder
 	for _, r := range s {
@@ -525,7 +523,7 @@ func (h *Handler) getHelpMessage() []messaging_api.MessageInterface {
 	return []messaging_api.MessageInterface{msg}
 }
 
-// getDetailedInstructionMessages returns detailed instruction messages (matches Python version)
+// getDetailedInstructionMessages returns detailed instruction messages
 func (h *Handler) getDetailedInstructionMessages() []messaging_api.MessageInterface {
 	senderName := "小幫手"
 
