@@ -31,39 +31,15 @@ var classroomRegex = regexp.MustCompile(`(?:教室|上課地點)[:：為](.*?)(?
 
 // ScrapeCoursesByYear scrapes ALL courses for a given year (both semesters)
 // More efficient for warmup: 4 requests per year vs 8 requests (4 per semester × 2)
-// Supports automatic URL failover across multiple SEA endpoints
+// This is a convenience wrapper around ScrapeCourses with term=0 and empty title
 func ScrapeCoursesByYear(ctx context.Context, client *scraper.Client, year int) ([]*storage.Course, error) {
-	courses := make([]*storage.Course, 0)
-
-	// Get working base URL with failover support
-	courseBaseURL, err := getWorkingSEABaseURL(ctx, client)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get working SEA URL: %w", err)
-	}
-
-	// Query without qTerm to get ALL courses for the year (both semesters)
-	baseParams := fmt.Sprintf("?qYear=%d&seq1=A&seq2=M", year)
-	for _, eduCode := range AllEduCodes {
-		queryURL := fmt.Sprintf("%s%s%s&courseno=%s", courseBaseURL, courseQueryByKeywordPath, baseParams, eduCode)
-
-		doc, err := client.GetDocument(ctx, queryURL)
-		if err != nil {
-			// Clear cached URL on error to trigger re-detection
-			clearSEACache(client)
-			return nil, fmt.Errorf("failed to fetch courses for year %d code %s: %w", year, eduCode, err)
-		}
-
-		// Parse courses - term will be extracted from the page data
-		pageCourses := parseCoursesPageByYear(doc, courseBaseURL, year)
-		courses = append(courses, pageCourses...)
-	}
-
-	return courses, nil
+	return ScrapeCourses(ctx, client, year, 0, "")
 }
 
 // ScrapeCourses scrapes courses by year, term, and optional filters
 // For title search: uses POST to {baseURL}/pls/dev_stud/course_query_all.queryByAllConditions with 'cour' parameter
 // For general query: uses GET to {baseURL}/pls/dev_stud/course_query_all.queryByKeyword with 'courseno' parameter
+// When term=0, queries both semesters at once (more efficient for historical searches)
 // Supports automatic URL failover across multiple SEA endpoints
 func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, title string) ([]*storage.Course, error) {
 	courses := make([]*storage.Course, 0)
@@ -85,8 +61,15 @@ func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, 
 		}
 
 		// Build POST form data with URL-encoded Big5 title
-		formData := fmt.Sprintf("qYear=%d&qTerm=%d&cour=%s&seq1=A&seq2=M",
-			year, term, url.QueryEscape(big5Title))
+		// When term=0, omit qTerm to query both semesters at once
+		var formData string
+		if term == 0 {
+			formData = fmt.Sprintf("qYear=%d&cour=%s&seq1=A&seq2=M",
+				year, url.QueryEscape(big5Title))
+		} else {
+			formData = fmt.Sprintf("qYear=%d&qTerm=%d&cour=%s&seq1=A&seq2=M",
+				year, term, url.QueryEscape(big5Title))
+		}
 
 		doc, err := client.PostFormDocumentRaw(ctx, queryURL, formData)
 		if err != nil {
@@ -94,11 +77,19 @@ func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, 
 			clearSEACache(client)
 			return nil, fmt.Errorf("failed to fetch courses: %w", err)
 		}
+
 		return parseCoursesPage(doc, courseBaseURL, year, term), nil
 	}
 
 	// Otherwise, use GET to queryByKeyword and iterate through all education codes
-	baseParams := fmt.Sprintf("?qYear=%d&qTerm=%d&seq1=A&seq2=M", year, term)
+	// When term=0, omit qTerm to query both semesters
+	var baseParams string
+	if term == 0 {
+		baseParams = fmt.Sprintf("?qYear=%d&seq1=A&seq2=M", year)
+	} else {
+		baseParams = fmt.Sprintf("?qYear=%d&qTerm=%d&seq1=A&seq2=M", year, term)
+	}
+
 	for _, eduCode := range AllEduCodes {
 		queryURL := fmt.Sprintf("%s%s%s&courseno=%s", courseBaseURL, courseQueryByKeywordPath, baseParams, eduCode)
 
@@ -165,82 +156,8 @@ func ScrapeCourseByUID(ctx context.Context, client *scraper.Client, uid string) 
 	return courses[0], nil
 }
 
-// parseCoursesPageByYear extracts course information from a search result page
-// Unlike parseCoursesPage, this extracts term from each row (field 2) instead of using a fixed value
-// Used by ScrapeCoursesByYear when qTerm is not specified in the query
-func parseCoursesPageByYear(doc *goquery.Document, courseBaseURL string, year int) []*storage.Course {
-	courses := make([]*storage.Course, 0)
-	cachedAt := time.Now().Unix()
-
-	// Find course table
-	table := doc.Find("table")
-	if table.Length() == 0 {
-		return courses
-	}
-
-	// Parse each course row in tbody
-	table.Find("tbody tr").Each(func(i int, tr *goquery.Selection) {
-		tds := tr.Find("td")
-		if tds.Length() < 14 {
-			return
-		}
-
-		// Extract term from field 2 (column index 2)
-		termStr := strings.TrimSpace(tds.Eq(2).Text())
-		term, err := strconv.Atoi(termStr)
-		if err != nil || term == 0 {
-			// Invalid term value, default to first semester
-			term = 1
-		}
-
-		// Extract course number (field 3)
-		no := strings.TrimSpace(tds.Eq(3).Text())
-
-		// Extract title, detail URL, note, location (field 7)
-		title, detailURL, note, location := parseTitleField(tds.Eq(7))
-
-		// Extract teachers and teacher URLs (field 8)
-		teachers, teacherURLs := parseTeacherField(tds.Eq(8), courseBaseURL)
-
-		// Extract times and locations (field 13)
-		times, locations := parseTimeLocationField(tds.Eq(13))
-
-		// Add location from title field if present
-		if location != "" {
-			locations = append(locations, location)
-		}
-
-		// Generate UID
-		uid := fmt.Sprintf("%d%d%s", year, term, no)
-
-		// Build full detail URL
-		fullDetailURL := ""
-		if detailURL != "" {
-			fullDetailURL = courseBaseURL + "/pls/dev_stud/course_query.queryGuide" + detailURL
-		}
-
-		course := &storage.Course{
-			UID:         uid,
-			Year:        year,
-			Term:        term,
-			No:          no,
-			Title:       title,
-			Teachers:    teachers,
-			TeacherURLs: teacherURLs,
-			Times:       times,
-			Locations:   locations,
-			DetailURL:   fullDetailURL,
-			Note:        note,
-			CachedAt:    cachedAt,
-		}
-
-		courses = append(courses, course)
-	})
-
-	return courses
-}
-
 // parseCoursesPage extracts course information from a search result page
+// When term=0, extracts term from each row (field 2); otherwise uses the provided term value
 func parseCoursesPage(doc *goquery.Document, courseBaseURL string, year, term int) []*storage.Course {
 	courses := make([]*storage.Course, 0)
 	cachedAt := time.Now().Unix()
@@ -258,6 +175,17 @@ func parseCoursesPage(doc *goquery.Document, courseBaseURL string, year, term in
 			return
 		}
 
+		// Determine term: extract from row if term=0, otherwise use provided value
+		rowTerm := term
+		if term == 0 {
+			termStr := strings.TrimSpace(tds.Eq(2).Text())
+			if parsed, err := strconv.Atoi(termStr); err == nil && parsed > 0 {
+				rowTerm = parsed
+			} else {
+				rowTerm = 1 // Default to first semester
+			}
+		}
+
 		// Extract course number (field 3)
 		no := strings.TrimSpace(tds.Eq(3).Text())
 
@@ -276,7 +204,7 @@ func parseCoursesPage(doc *goquery.Document, courseBaseURL string, year, term in
 		}
 
 		// Generate UID
-		uid := fmt.Sprintf("%d%d%s", year, term, no)
+		uid := fmt.Sprintf("%d%d%s", year, rowTerm, no)
 
 		// Build full detail URL
 		fullDetailURL := ""
@@ -287,7 +215,7 @@ func parseCoursesPage(doc *goquery.Document, courseBaseURL string, year, term in
 		course := &storage.Course{
 			UID:         uid,
 			Year:        year,
-			Term:        term,
+			Term:        rowTerm,
 			No:          no,
 			Title:       title,
 			Teachers:    teachers,

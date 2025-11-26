@@ -350,3 +350,55 @@ func NewButtonFooter(rows ...[]*FlexButton) *FlexBox {
 
 	return NewFlexBox("vertical", contents...).WithSpacing("sm")
 }
+
+// ================================================
+// Body Content Builders (for consistent info display)
+// ================================================
+
+// BodyContentBuilder helps build Flex Message body contents with automatic separators
+type BodyContentBuilder struct {
+	contents []messaging_api.FlexComponentInterface
+}
+
+// NewBodyContentBuilder creates a new body content builder
+func NewBodyContentBuilder() *BodyContentBuilder {
+	return &BodyContentBuilder{
+		contents: make([]messaging_api.FlexComponentInterface, 0),
+	}
+}
+
+// AddInfoRow adds an info row with automatic separator (except for first item)
+func (b *BodyContentBuilder) AddInfoRow(emoji, label, value string, style InfoRowStyle) *BodyContentBuilder {
+	if len(b.contents) > 0 {
+		b.contents = append(b.contents, NewFlexSeparator().WithMargin("md").FlexSeparator)
+	}
+	b.contents = append(b.contents, NewInfoRowWithMargin(emoji, label, value, style, "md"))
+	return b
+}
+
+// AddInfoRowIf adds an info row only if value is not empty
+func (b *BodyContentBuilder) AddInfoRowIf(emoji, label, value string, style InfoRowStyle) *BodyContentBuilder {
+	if value != "" {
+		return b.AddInfoRow(emoji, label, value, style)
+	}
+	return b
+}
+
+// AddComponent adds a raw component with automatic separator
+func (b *BodyContentBuilder) AddComponent(component messaging_api.FlexComponentInterface) *BodyContentBuilder {
+	if len(b.contents) > 0 {
+		b.contents = append(b.contents, NewFlexSeparator().WithMargin("md").FlexSeparator)
+	}
+	b.contents = append(b.contents, component)
+	return b
+}
+
+// Build returns the FlexBox with all contents
+func (b *BodyContentBuilder) Build() *FlexBox {
+	return NewFlexBox("vertical", b.contents...).WithSpacing("sm")
+}
+
+// Contents returns the raw contents slice (for manual FlexBox creation)
+func (b *BodyContentBuilder) Contents() []messaging_api.FlexComponentInterface {
+	return b.contents
+}

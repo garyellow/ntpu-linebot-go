@@ -528,3 +528,47 @@ func FormatTimes(times []string, max int) string {
 	remaining := len(times) - max
 	return strings.Join(times[:max], "、") + fmt.Sprintf(" 等 %d 節", remaining)
 }
+
+// ================================================
+// Common QuickReply Actions (pre-defined for reuse)
+// ================================================
+
+// QuickReplyHelpAction returns a "使用說明" quick reply item
+func QuickReplyHelpAction() QuickReplyItem {
+	return QuickReplyItem{Action: NewMessageAction("📖 使用說明", "使用說明")}
+}
+
+// QuickReplyCourseAction returns a "課程" quick reply item
+func QuickReplyCourseAction() QuickReplyItem {
+	return QuickReplyItem{Action: NewMessageAction("📚 課程", "課程")}
+}
+
+// QuickReplyTeacherAction returns a "教師" quick reply item
+func QuickReplyTeacherAction() QuickReplyItem {
+	return QuickReplyItem{Action: NewMessageAction("👨‍🏫 教師", "教師")}
+}
+
+// QuickReplyStudentAction returns a "學號" quick reply item
+func QuickReplyStudentAction() QuickReplyItem {
+	return QuickReplyItem{Action: NewMessageAction("🎓 學號", "學號")}
+}
+
+// QuickReplyYearAction returns a "學年" quick reply item
+func QuickReplyYearAction() QuickReplyItem {
+	return QuickReplyItem{Action: NewMessageAction("📅 學年", "學年")}
+}
+
+// QuickReplyContactAction returns a "聯絡" quick reply item
+func QuickReplyContactAction() QuickReplyItem {
+	return QuickReplyItem{Action: NewMessageAction("📞 聯絡", "聯絡")}
+}
+
+// QuickReplyEmergencyAction returns a "緊急" quick reply item
+func QuickReplyEmergencyAction() QuickReplyItem {
+	return QuickReplyItem{Action: NewMessageAction("🚨 緊急", "緊急")}
+}
+
+// QuickReplyDeptCodeAction returns a "所有系代碼" quick reply item
+func QuickReplyDeptCodeAction() QuickReplyItem {
+	return QuickReplyItem{Action: NewMessageAction("📋 所有系代碼", "所有系代碼")}
+}

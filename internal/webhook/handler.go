@@ -535,6 +535,7 @@ func (h *Handler) getDetailedInstructionMessages() []messaging_api.MessageInterf
 		"輸入「系代碼 {系代碼}」查詢系名\n" +
 		"輸入「學年 {入學年份}」後選科系查學生名單\n\n" +
 		"輸入「課程 {課程名}」尋找課程\n" +
+		"輸入「課程 {學年} {課程名}」查詢歷史課程\n" +
 		"輸入「教師 {教師名}」尋找教師開的課\n\n" +
 		"輸入「聯繫 {單位/姓名}」尋找聯繫方式\n\n" +
 		"PS 符號{}中的部分要換成實際值\n" +
@@ -552,6 +553,7 @@ func (h *Handler) getDetailedInstructionMessages() []messaging_api.MessageInterf
 		"系代碼：`系代碼 85`\n" +
 		fmt.Sprintf("入學年：`學年 %d` or `學年 %d`\n\n", rocYear, lastYear) +
 		"課程：`課程 程式設計`\n" +
+		"歷史課程：`課程 110 微積分`\n" +
 		"教師：`教師 李小美`\n\n" +
 		"聯繫：`聯繫 資工系`\n\n" +
 		"PS 符號``中的部分是實際要輸入的"

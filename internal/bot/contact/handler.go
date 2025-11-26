@@ -3,11 +3,11 @@ package contact
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
@@ -64,24 +64,8 @@ var (
 		"touch", "contact", "connect",
 	}
 
-	contactRegex = buildRegex(validContactKeywords)
+	contactRegex = bot.BuildKeywordRegex(validContactKeywords)
 )
-
-// buildRegex creates a regex pattern from keywords
-// Sorts keywords by length (longest first) to ensure correct regex alternation matching
-func buildRegex(keywords []string) *regexp.Regexp {
-	// Create a copy to avoid modifying the original slice
-	sortedKeywords := make([]string, len(keywords))
-	copy(sortedKeywords, keywords)
-
-	// Sort by length in descending order (longest first)
-	sort.Slice(sortedKeywords, func(i, j int) bool {
-		return len(sortedKeywords[i]) > len(sortedKeywords[j])
-	})
-
-	pattern := "(?i)" + strings.Join(sortedKeywords, "|")
-	return regexp.MustCompile(pattern)
-}
 
 // NewHandler creates a new contact handler
 func NewHandler(db *storage.DB, scraper *scraper.Client, metrics *metrics.Metrics, logger *logger.Logger, stickerManager *sticker.Manager) *Handler {
@@ -125,18 +109,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 
 	// Handle contact search - extract search term after keyword
 	if match := contactRegex.FindString(text); match != "" {
-		// Determine if keyword is at the beginning or end
-		var searchTerm string
-		if strings.HasPrefix(text, match) {
-			// Keyword at beginning: "聯絡 資工系" -> extract after
-			searchTerm = strings.TrimSpace(strings.TrimPrefix(text, match))
-		} else if strings.HasSuffix(text, match) {
-			// Keyword at end: "資工系聯絡" -> extract before
-			searchTerm = strings.TrimSpace(strings.TrimSuffix(text, match))
-		} else {
-			// Keyword in middle: remove it and use the rest
-			searchTerm = strings.TrimSpace(strings.Replace(text, match, "", 1))
-		}
+		searchTerm := bot.ExtractSearchTerm(text, match)
 
 		if searchTerm == "" {
 			// If no search term provided, give helpful message
@@ -610,53 +583,26 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 			// Hero: Name with colored background (using standardized component)
 			hero := lineutil.NewHeroBox(displayName, subText)
 
-			// Body: Details - avoid duplicating phone/extension info
-			var bodyContents []messaging_api.FlexComponentInterface
+			// Body: Details using BodyContentBuilder for cleaner code
+			body := lineutil.NewBodyContentBuilder()
 
-			// Organization / Superior - use vertical layout
+			// Organization / Superior - first row (no separator)
 			if c.Type == "organization" && c.Superior != "" {
-				bodyContents = append(bodyContents,
-					lineutil.NewInfoRowWithMargin("🏢", "上級單位", c.Superior, lineutil.DefaultInfoRowStyle(), "lg"))
+				body.AddInfoRow("🏢", "上級單位", c.Superior, lineutil.DefaultInfoRowStyle())
 			} else if c.Organization != "" {
-				bodyContents = append(bodyContents,
-					lineutil.NewInfoRowWithMargin("🏢", "所屬單位", c.Organization, lineutil.DefaultInfoRowStyle(), "lg"))
+				body.AddInfoRow("🏢", "所屬單位", c.Organization, lineutil.DefaultInfoRowStyle())
 			}
 
-			// Contact Info - Display full phone (main+extension) OR just extension
-			// This prevents duplicate display of extension in both body and footer
+			// Contact Info - Display full phone OR just extension
 			if c.Phone != "" {
-				// Show full phone number (e.g., "0286741111,12345")
-				if len(bodyContents) > 0 {
-					bodyContents = append(bodyContents, lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator)
-				}
-				bodyContents = append(bodyContents,
-					lineutil.NewInfoRowWithMargin("📞", "聯絡電話", c.Phone, lineutil.BoldInfoRowStyle(), "md"))
+				body.AddInfoRow("📞", "聯絡電話", c.Phone, lineutil.BoldInfoRowStyle())
 			} else if c.Extension != "" {
-				// Only extension available (no full phone)
-				if len(bodyContents) > 0 {
-					bodyContents = append(bodyContents, lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator)
-				}
-				bodyContents = append(bodyContents,
-					lineutil.NewInfoRowWithMargin("☎️", "分機號碼", c.Extension, lineutil.BoldInfoRowStyle(), "md"))
+				body.AddInfoRow("☎️", "分機號碼", c.Extension, lineutil.BoldInfoRowStyle())
 			}
 
-			// Contact Info - Location
-			if c.Location != "" {
-				if len(bodyContents) > 0 {
-					bodyContents = append(bodyContents, lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator)
-				}
-				bodyContents = append(bodyContents,
-					lineutil.NewInfoRowWithMargin("📍", "辦公位置", c.Location, lineutil.DefaultInfoRowStyle(), "md"))
-			}
-
-			// Contact Info - Email
-			if c.Email != "" {
-				if len(bodyContents) > 0 {
-					bodyContents = append(bodyContents, lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator)
-				}
-				bodyContents = append(bodyContents,
-					lineutil.NewInfoRowWithMargin("✉️", "電子郵件", c.Email, lineutil.DefaultInfoRowStyle(), "md"))
-			}
+			// Contact Info - Location and Email
+			body.AddInfoRowIf("📍", "辦公位置", c.Location, lineutil.DefaultInfoRowStyle())
+			body.AddInfoRowIf("✉️", "電子郵件", c.Email, lineutil.DefaultInfoRowStyle())
 
 			// Footer: Multi-row button layout for optimal UX
 			// Row 1: Phone actions (call, copy)
@@ -719,8 +665,8 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 			bubble := lineutil.NewFlexBubble(
 				header,
 				hero.FlexBox,
-				lineutil.NewFlexBox("vertical", bodyContents...).WithSpacing("sm"), // Body
-				nil, // Footer (handled below)
+				body.Build(), // Body
+				nil,          // Footer (handled below)
 			)
 
 			// Build footer with multi-row button layout

@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
+	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
@@ -57,8 +57,8 @@ var (
 		"teacher", "professor", "prof", "dr", "doctor",
 	}
 
-	courseRegex  = buildRegex(validCourseKeywords)
-	teacherRegex = buildRegex(validTeacherKeywords)
+	courseRegex  = bot.BuildKeywordRegex(validCourseKeywords)
+	teacherRegex = bot.BuildKeywordRegex(validTeacherKeywords)
 	// UID format: {year}{term}{no} where:
 	// - year: 2-3 digits (e.g., 113, 12)
 	// - term: 1 digit (1=上學期, 2=下學期)
@@ -73,23 +73,6 @@ var (
 	// This pattern is checked BEFORE the regular courseRegex to handle historical queries
 	historicalCourseRegex = regexp.MustCompile(`(?i)^(課程?|course|class)\s+(\d{2,3})\s+(.+)$`)
 )
-
-// buildRegex creates a regex pattern from keywords
-// Sorts keywords by length (longest first) to ensure correct regex alternation matching
-// e.g., "課程" should match before "課" to prevent partial matches
-func buildRegex(keywords []string) *regexp.Regexp {
-	// Create a copy to avoid modifying the original slice
-	sortedKeywords := make([]string, len(keywords))
-	copy(sortedKeywords, keywords)
-
-	// Sort by length in descending order (longest first)
-	sort.Slice(sortedKeywords, func(i, j int) bool {
-		return len(sortedKeywords[i]) > len(sortedKeywords[j])
-	})
-
-	pattern := "(?i)" + strings.Join(sortedKeywords, "|")
-	return regexp.MustCompile(pattern)
-}
 
 // NewHandler creates a new course handler
 func NewHandler(db *storage.DB, scraper *scraper.Client, metrics *metrics.Metrics, logger *logger.Logger, stickerManager *sticker.Manager) *Handler {
@@ -151,19 +134,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	// Support both "keyword term" and "term keyword" patterns
 	if courseRegex.MatchString(text) {
 		match := courseRegex.FindString(text)
-
-		// Determine if keyword is at the beginning or end
-		var searchTerm string
-		if strings.HasPrefix(text, match) {
-			// Keyword at beginning: "課程 微積分" -> extract after
-			searchTerm = strings.TrimSpace(strings.TrimPrefix(text, match))
-		} else if strings.HasSuffix(text, match) {
-			// Keyword at end: "微積分課" -> extract before
-			searchTerm = strings.TrimSpace(strings.TrimSuffix(text, match))
-		} else {
-			// Keyword in middle: remove it and use the rest
-			searchTerm = strings.TrimSpace(strings.Replace(text, match, "", 1))
-		}
+		searchTerm := bot.ExtractSearchTerm(text, match)
 
 		if searchTerm == "" {
 			// If no search term provided, give helpful message
@@ -182,19 +153,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	// Support both "keyword term" and "term keyword" patterns
 	if teacherRegex.MatchString(text) {
 		match := teacherRegex.FindString(text)
-
-		// Determine if keyword is at the beginning or end
-		var searchTerm string
-		if strings.HasPrefix(text, match) {
-			// Keyword at beginning: "老師 王小明" -> extract after
-			searchTerm = strings.TrimSpace(strings.TrimPrefix(text, match))
-		} else if strings.HasSuffix(text, match) {
-			// Keyword at end: "王小明老師" -> extract before
-			searchTerm = strings.TrimSpace(strings.TrimSuffix(text, match))
-		} else {
-			// Keyword in middle: remove it and use the rest
-			searchTerm = strings.TrimSpace(strings.Replace(text, match, "", 1))
-		}
+		searchTerm := bot.ExtractSearchTerm(text, match)
 
 		if searchTerm == "" {
 			// If no search term provided, give helpful message
@@ -432,38 +391,36 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	log.Infof("Cache miss for historical course: year=%d, keyword=%s, scraping...", year, keyword)
 	h.metrics.RecordCacheMiss(moduleName)
 
-	// Scrape both semesters for the specified year
-	var foundCourses []*storage.Course
-scrapeLoop:
-	for term := 1; term <= 2; term++ {
-		select {
-		case <-ctx.Done():
-			break scrapeLoop
-		default:
-		}
+	// Use term=0 to query both semesters at once (more efficient)
+	scrapedCourses, err := ntpu.ScrapeCourses(ctx, h.scraper, year, 0, keyword)
+	if err != nil {
+		log.WithError(err).WithField("year", year).
+			Warn("Failed to scrape historical courses")
+		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
+		msg := lineutil.NewTextMessageWithConsistentSender(
+			fmt.Sprintf("🔍 查無 %d 學年度包含「%s」的課程\n\n💡 請確認：\n• 學年度和課程名稱是否正確\n• 該課程是否在該學年度開設", year, keyword),
+			sender,
+		)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			{Action: lineutil.NewMessageAction("📚 查詢近期課程", "課程 "+keyword)},
+			{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
+		})
+		return []messaging_api.MessageInterface{msg}
+	}
+	log.Infof("Scraped %d historical courses for year=%d", len(scrapedCourses), year)
 
-		scrapedCourses, err := ntpu.ScrapeCourses(ctx, h.scraper, year, term, keyword)
-		if err != nil {
-			log.WithError(err).WithField("year", year).WithField("term", term).
-				Debug("Failed to scrape historical courses for year/term")
-			continue
+	// Save courses to historical_courses table
+	for _, course := range scrapedCourses {
+		if err := h.db.SaveHistoricalCourse(course); err != nil {
+			log.WithError(err).Warn("Failed to save historical course to cache")
 		}
-
-		// Save courses to historical_courses table
-		for _, course := range scrapedCourses {
-			if err := h.db.SaveHistoricalCourse(course); err != nil {
-				log.WithError(err).Warn("Failed to save historical course to cache")
-			}
-		}
-
-		foundCourses = append(foundCourses, scrapedCourses...)
 	}
 
-	if len(foundCourses) > 0 {
+	if len(scrapedCourses) > 0 {
 		h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
 		// Convert []*storage.Course to []storage.Course
-		courses := make([]storage.Course, len(foundCourses))
-		for i, c := range foundCourses {
+		courses := make([]storage.Course, len(scrapedCourses))
+		for i, c := range scrapedCourses {
 			courses[i] = *c
 		}
 		return h.formatCourseListResponse(courses)
@@ -623,51 +580,37 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 	}
 	hero := lineutil.NewHeroBox(heroTitle, "")
 
-	// Build body contents with improved vertical layout to prevent truncation
-	contents := []messaging_api.FlexComponentInterface{}
+	// Build body contents using BodyContentBuilder for cleaner code
+	body := lineutil.NewBodyContentBuilder()
 
 	// 學期 info - first row
 	semesterText := lineutil.FormatSemester(course.Year, course.Term)
-	contents = append(contents,
-		lineutil.NewInfoRowWithMargin("📅", "開課學期", semesterText, lineutil.DefaultInfoRowStyle(), "md"),
-	)
+	body.AddInfoRow("📅", "開課學期", semesterText, lineutil.DefaultInfoRowStyle())
 
-	// 教師 info - use vertical layout, full display with wrap
+	// 教師 info
 	if len(course.Teachers) > 0 {
 		teacherNames := strings.Join(course.Teachers, "、")
-		contents = append(contents,
-			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-			lineutil.NewInfoRowWithMargin("👨‍🏫", "授課教師", teacherNames, lineutil.DefaultInfoRowStyle(), "lg"),
-		)
+		body.AddInfoRow("👨‍🏫", "授課教師", teacherNames, lineutil.DefaultInfoRowStyle())
 	}
 
-	// 時間 info - full display with wrap (第三列)
+	// 時間 info
 	if len(course.Times) > 0 {
 		timeStr := strings.Join(course.Times, "、")
-		contents = append(contents,
-			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-			lineutil.NewInfoRowWithMargin("⏰", "上課時間", timeStr, lineutil.DefaultInfoRowStyle(), "md"),
-		)
+		body.AddInfoRow("⏰", "上課時間", timeStr, lineutil.DefaultInfoRowStyle())
 	}
 
-	// 地點 info - full display with wrap
+	// 地點 info
 	if len(course.Locations) > 0 {
 		locationStr := strings.Join(course.Locations, "、")
-		contents = append(contents,
-			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-			lineutil.NewInfoRowWithMargin("📍", "上課地點", locationStr, lineutil.DefaultInfoRowStyle(), "md"),
-		)
+		body.AddInfoRow("📍", "上課地點", locationStr, lineutil.DefaultInfoRowStyle())
 	}
 
-	// 備註 info - full display with wrap for complete information
+	// 備註 info
 	if course.Note != "" {
 		noteStyle := lineutil.DefaultInfoRowStyle()
 		noteStyle.ValueSize = "xs"
 		noteStyle.ValueColor = "#666666"
-		contents = append(contents,
-			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-			lineutil.NewInfoRowWithMargin("📝", "備註", course.Note, noteStyle, "md"),
-		)
+		body.AddInfoRow("📝", "備註", course.Note, noteStyle)
 	}
 
 	// Build footer actions
@@ -705,7 +648,7 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 	bubble := lineutil.NewFlexBubble(
 		header,
 		hero.FlexBox,
-		lineutil.NewFlexBox("vertical", contents...).WithSpacing("sm"),
+		body.Build(),
 		lineutil.NewFlexBox("vertical", footerContents...).WithSpacing("sm"),
 	)
 
