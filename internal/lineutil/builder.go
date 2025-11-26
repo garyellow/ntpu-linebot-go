@@ -41,9 +41,9 @@ func NewImageMessage(originalContentURL, previewImageURL string) messaging_api.M
 // The text parameter is the message content.
 // LINE API limits: max 5000 characters per text message
 func NewTextMessage(text string) *messaging_api.TextMessage {
-	// Validate and truncate if necessary
+	// Validate and truncate if necessary (LINE API limit: 5000 chars)
 	if len(text) > 5000 {
-		text = TruncateText(text, 4997) + "..."
+		text = TruncateRunes(text, 4997) + "..."
 	}
 
 	return &messaging_api.TextMessage{
@@ -63,7 +63,7 @@ func NewCarouselTemplate(altText string, columns []CarouselColumn) messaging_api
 
 	// Validate altText length (max 400 characters)
 	if len(altText) > 400 {
-		altText = TruncateText(altText, 397) + "..."
+		altText = TruncateRunes(altText, 397) + "..."
 	}
 
 	templateColumns := make([]messaging_api.CarouselColumn, len(columns))
@@ -119,17 +119,17 @@ func NewButtonsTemplateWithImage(altText, title, text, thumbnailImageURL string,
 		maxTextLen = 60
 	}
 	if len(text) > maxTextLen {
-		text = TruncateText(text, maxTextLen-3) + "..."
+		text = TruncateRunes(text, maxTextLen-3) + "..."
 	}
 
 	// Validate title length (max 40 characters)
 	if len(title) > 40 {
-		title = TruncateText(title, 37) + "..."
+		title = TruncateRunes(title, 37) + "..."
 	}
 
 	// Validate altText length (max 400 characters)
 	if len(altText) > 400 {
-		altText = TruncateText(altText, 397) + "..."
+		altText = TruncateRunes(altText, 397) + "..."
 	}
 
 	template := &messaging_api.ButtonsTemplate{
@@ -239,22 +239,6 @@ func NewClipboardAction(label, clipboardText string) Action {
 	}
 }
 
-// TruncateText truncates text to a maximum length and adds "..." if truncated.
-// The text parameter is the original text, and maxLen is the maximum allowed length.
-// Uses rune slicing to properly handle multi-byte UTF-8 characters (e.g., Chinese).
-func TruncateText(text string, maxLen int) string {
-	runes := []rune(text)
-	if len(runes) <= maxLen {
-		return text
-	}
-
-	if maxLen <= 3 {
-		return string(runes[:maxLen])
-	}
-
-	return string(runes[:maxLen-3]) + "..."
-}
-
 // ContainsAllRunes checks if string s contains all runes from string chars.
 // Example: ContainsAllRunes("資訊工程學系", "資工系") returns true
 // because all characters in "資工系" exist in "資訊工程學系".
@@ -284,56 +268,6 @@ func ContainsAllRunes(s, chars string) bool {
 		}
 	}
 	return true
-}
-
-// SplitMessages splits a slice of messages into batches of a specified size.
-// The messages parameter contains all messages to split, and maxCount is the batch size.
-// LINE API has a limit of 5 messages per request, so the default should be 5.
-func SplitMessages(messages []messaging_api.MessageInterface, maxCount int) [][]messaging_api.MessageInterface {
-	if maxCount <= 0 {
-		maxCount = 5 // Default LINE API limit
-	}
-
-	if len(messages) == 0 {
-		return [][]messaging_api.MessageInterface{}
-	}
-
-	var batches [][]messaging_api.MessageInterface
-
-	for i := 0; i < len(messages); i += maxCount {
-		end := i + maxCount
-		if end > len(messages) {
-			end = len(messages)
-		}
-		batches = append(batches, messages[i:end])
-	}
-
-	return batches
-}
-
-// FormatList creates a formatted list message from a slice of items.
-// The title is the list header, items are the list entries.
-func FormatList(title string, items []string) string {
-	if len(items) == 0 {
-		return title + "\n\n(無項目)"
-	}
-
-	var builder strings.Builder
-	builder.WriteString(title)
-	builder.WriteString("\n\n")
-
-	for i, item := range items {
-		builder.WriteString(fmt.Sprintf("%d. %s\n", i+1, item))
-	}
-
-	return builder.String()
-}
-
-// AddQuickReply adds a quick reply to a text message.
-// This is a convenience function for adding quick replies to text messages.
-func AddQuickReply(message *messaging_api.TextMessage, items []QuickReplyItem) *messaging_api.TextMessage {
-	message.QuickReply = NewQuickReply(items)
-	return message
 }
 
 // NewFlexMessage creates a flex message with the given alt text and flex container.
@@ -422,21 +356,6 @@ func BuildTelURI(mainPhone, extension string) string {
 	return "tel:" + phone
 }
 
-// BuildFullPhone creates a full phone number string combining main phone and extension.
-// Format: "0286741111,12345" (main phone + comma + extension first 5 digits)
-//
-// Parameters:
-//   - mainPhone: The main phone number (e.g., "0286741111")
-//   - extension: The extension number (e.g., "12345")
-//
-// Returns: Full phone string for display/clipboard, or empty string if extension < 5 digits
-func BuildFullPhone(mainPhone, extension string) string {
-	if len(extension) < 5 {
-		return ""
-	}
-	return mainPhone + "," + extension[:5]
-}
-
 // FormatDisplayName formats Chinese and English names for display.
 // Rules:
 //   - If English name is empty or same as Chinese name: return Chinese name only
@@ -477,6 +396,31 @@ func ExtractCourseCode(uid string) string {
 		return strings.ToUpper(matches[1])
 	}
 	return ""
+}
+
+// FormatCourseTitle formats a course title with optional course code.
+// If courseCode is empty, returns just the title.
+// Otherwise returns "title (code)" format.
+//
+// Example:
+//
+//	FormatCourseTitle("程式設計", "U0001") -> "程式設計 (U0001)"
+//	FormatCourseTitle("程式設計", "") -> "程式設計"
+func FormatCourseTitle(title, courseCode string) string {
+	if courseCode == "" {
+		return title
+	}
+	return fmt.Sprintf("%s (%s)", title, courseCode)
+}
+
+// FormatCourseTitleWithUID formats a course title with course code extracted from UID.
+// This is a convenience function that combines ExtractCourseCode and FormatCourseTitle.
+//
+// Example:
+//
+//	FormatCourseTitleWithUID("程式設計", "1132U0001") -> "程式設計 (U0001)"
+func FormatCourseTitleWithUID(title, uid string) string {
+	return FormatCourseTitle(title, ExtractCourseCode(uid))
 }
 
 // FormatSemester formats year and term into a readable semester string.
@@ -527,4 +471,99 @@ func FormatTimes(times []string, max int) string {
 	}
 	remaining := len(times) - max
 	return strings.Join(times[:max], "、") + fmt.Sprintf(" 等 %d 節", remaining)
+}
+
+// ================================================
+// Common QuickReply Actions (pre-defined for reuse)
+// ================================================
+
+// QuickReplyHelpAction returns a "使用說明" quick reply item
+func QuickReplyHelpAction() QuickReplyItem {
+	return QuickReplyItem{Action: NewMessageAction("📖 使用說明", "使用說明")}
+}
+
+// QuickReplyCourseAction returns a "課程" quick reply item
+func QuickReplyCourseAction() QuickReplyItem {
+	return QuickReplyItem{Action: NewMessageAction("📚 課程", "課程")}
+}
+
+// QuickReplyTeacherAction returns a "教師" quick reply item
+func QuickReplyTeacherAction() QuickReplyItem {
+	return QuickReplyItem{Action: NewMessageAction("👨‍🏫 教師", "教師")}
+}
+
+// QuickReplyStudentAction returns a "學號" quick reply item
+func QuickReplyStudentAction() QuickReplyItem {
+	return QuickReplyItem{Action: NewMessageAction("🎓 學號", "學號")}
+}
+
+// QuickReplyYearAction returns a "學年" quick reply item
+func QuickReplyYearAction() QuickReplyItem {
+	return QuickReplyItem{Action: NewMessageAction("📅 學年", "學年")}
+}
+
+// QuickReplyContactAction returns a "聯絡" quick reply item
+func QuickReplyContactAction() QuickReplyItem {
+	return QuickReplyItem{Action: NewMessageAction("📞 聯絡", "聯絡")}
+}
+
+// QuickReplyEmergencyAction returns a "緊急" quick reply item
+func QuickReplyEmergencyAction() QuickReplyItem {
+	return QuickReplyItem{Action: NewMessageAction("🚨 緊急", "緊急")}
+}
+
+// QuickReplyDeptCodeAction returns a "所有系代碼" quick reply item
+func QuickReplyDeptCodeAction() QuickReplyItem {
+	return QuickReplyItem{Action: NewMessageAction("📋 所有系代碼", "所有系代碼")}
+}
+
+// QuickReplyRetryAction creates a retry quick reply item with custom text
+func QuickReplyRetryAction(retryText string) QuickReplyItem {
+	return QuickReplyItem{Action: NewMessageAction("🔄 重試", retryText)}
+}
+
+// ================================================
+// Message Helper Functions
+// ================================================
+
+// NewTextMessageWithQuickReply creates a text message with quick reply items.
+// This is a convenience function for the common pattern of creating a text message
+// and attaching quick replies.
+func NewTextMessageWithQuickReply(text string, sender *messaging_api.Sender, items ...QuickReplyItem) *messaging_api.TextMessage {
+	msg := NewTextMessageWithConsistentSender(text, sender)
+	if len(items) > 0 {
+		msg.QuickReply = NewQuickReply(items)
+	}
+	return msg
+}
+
+// NewFlexMessageWithQuickReply creates a flex message with quick reply items and sender.
+// This is a convenience function for the common pattern of creating a flex message
+// with sender and quick replies.
+func NewFlexMessageWithQuickReply(altText string, contents messaging_api.FlexContainerInterface, sender *messaging_api.Sender, items ...QuickReplyItem) *messaging_api.FlexMessage {
+	msg := NewFlexMessage(altText, contents)
+	msg.Sender = sender
+	if len(items) > 0 {
+		msg.QuickReply = NewQuickReply(items)
+	}
+	return msg
+}
+
+// AddQuickReplyToMessages attaches quick reply items to the last message in a slice.
+// If the slice is empty or the last message doesn't support quick replies, it's a no-op.
+// This is useful for adding quick replies to the final message of multi-message responses.
+func AddQuickReplyToMessages(messages []messaging_api.MessageInterface, items ...QuickReplyItem) {
+	if len(messages) == 0 || len(items) == 0 {
+		return
+	}
+	lastMsg := messages[len(messages)-1]
+	qr := NewQuickReply(items)
+	switch m := lastMsg.(type) {
+	case *messaging_api.TextMessage:
+		m.QuickReply = qr
+	case *messaging_api.FlexMessage:
+		m.QuickReply = qr
+	case *messaging_api.TemplateMessage:
+		m.QuickReply = qr
+	}
 }

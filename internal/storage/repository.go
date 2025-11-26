@@ -110,10 +110,8 @@ func (db *DB) SearchStudentsByName(name string) ([]Student, error) {
 	// Sanitize search term to prevent SQL LIKE special character issues
 	sanitized := sanitizeSearchTerm(name)
 
-	// Calculate TTL cutoff timestamp
-	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
-
 	// Add TTL filter to prevent returning stale data
+	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT id, name, department, year, cached_at FROM students WHERE name LIKE ? ESCAPE '\' AND cached_at > ? ORDER BY year DESC, id DESC LIMIT 500`
 
 	rows, err := db.conn.Query(query, "%"+sanitized+"%", ttlTimestamp)
@@ -137,10 +135,8 @@ func (db *DB) SearchStudentsByName(name string) ([]Student, error) {
 // GetStudentsByYearDept retrieves students by year and department
 // Only returns non-expired cache entries based on configured TTL
 func (db *DB) GetStudentsByYearDept(year int, dept string) ([]Student, error) {
-	// Calculate TTL cutoff timestamp
-	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
-
 	// Add TTL filter to prevent returning stale data
+	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT id, name, department, year, cached_at FROM students WHERE year = ? AND department = ? AND cached_at > ?`
 
 	rows, err := db.conn.Query(query, year, dept, ttlTimestamp)
@@ -363,11 +359,9 @@ func (db *DB) SearchContactsByName(name string) ([]Contact, error) {
 	// Sanitize search term to prevent SQL LIKE special character issues
 	sanitized := sanitizeSearchTerm(name)
 
-	// Calculate TTL cutoff timestamp
-	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
-
 	// Add TTL filter to prevent returning stale data
 	// Search in name and title fields
+	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT uid, type, name, name_en, title, organization, superior, extension, phone, email, website, location, cached_at
 		FROM contacts
 		WHERE (name LIKE ? ESCAPE '\' OR title LIKE ? ESCAPE '\') AND cached_at > ?
@@ -408,10 +402,8 @@ func (db *DB) SearchContactsByName(name string) ([]Contact, error) {
 // GetContactsByOrganization retrieves contacts by organization
 // Only returns non-expired cache entries based on configured TTL
 func (db *DB) GetContactsByOrganization(org string) ([]Contact, error) {
-	// Calculate TTL cutoff timestamp
-	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
-
 	// Add TTL filter to prevent returning stale data
+	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT uid, type, name, name_en, title, organization, superior, extension, phone, email, cached_at FROM contacts WHERE organization = ? AND cached_at > ?`
 
 	rows, err := db.conn.Query(query, org, ttlTimestamp)
@@ -447,8 +439,7 @@ func (db *DB) GetContactsByOrganization(org string) ([]Contact, error) {
 // Used for fuzzy character-set matching when SQL LIKE doesn't find results
 // Only returns non-expired cache entries based on configured TTL
 func (db *DB) GetAllContacts() ([]Contact, error) {
-	// Calculate TTL cutoff timestamp
-	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
+	ttlTimestamp := db.getTTLTimestamp()
 
 	query := `SELECT uid, type, name, name_en, title, organization, extension, phone, email, website, location, superior, cached_at
 		FROM contacts WHERE cached_at > ? ORDER BY type, name LIMIT 1000`
@@ -738,10 +729,8 @@ func (db *DB) SearchCoursesByTitle(title string) ([]Course, error) {
 	// Sanitize search term to prevent SQL LIKE special character issues
 	sanitized := sanitizeSearchTerm(title)
 
-	// Calculate TTL cutoff timestamp
-	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
-
 	// Add TTL filter to prevent returning stale data
+	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at FROM courses WHERE title LIKE ? ESCAPE '\' AND cached_at > ? ORDER BY year DESC, term DESC LIMIT 500`
 
 	rows, err := db.conn.Query(query, "%"+sanitized+"%", ttlTimestamp)
@@ -764,10 +753,8 @@ func (db *DB) SearchCoursesByTeacher(teacher string) ([]Course, error) {
 	// Sanitize search term to prevent SQL LIKE special character issues
 	sanitized := sanitizeSearchTerm(teacher)
 
-	// Calculate TTL cutoff timestamp
-	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
-
 	// Add TTL filter to prevent returning stale data
+	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at FROM courses WHERE teachers LIKE ? ESCAPE '\' AND cached_at > ? ORDER BY year DESC, term DESC LIMIT 500`
 
 	rows, err := db.conn.Query(query, "%"+sanitized+"%", ttlTimestamp)
@@ -782,10 +769,8 @@ func (db *DB) SearchCoursesByTeacher(teacher string) ([]Course, error) {
 // GetCoursesByYearTerm retrieves courses by year and term
 // Only returns non-expired cache entries based on configured TTL
 func (db *DB) GetCoursesByYearTerm(year, term int) ([]Course, error) {
-	// Calculate TTL cutoff timestamp
-	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
-
 	// Add TTL filter to prevent returning stale data
+	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at FROM courses WHERE year = ? AND term = ? AND cached_at > ?`
 
 	rows, err := db.conn.Query(query, year, term, ttlTimestamp)
@@ -801,8 +786,7 @@ func (db *DB) GetCoursesByYearTerm(year, term int) ([]Course, error) {
 // Used for fuzzy character-set matching when SQL LIKE doesn't find results
 // Only returns non-expired cache entries based on configured TTL
 func (db *DB) GetCoursesByRecentSemesters() ([]Course, error) {
-	// Calculate TTL cutoff timestamp
-	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
+	ttlTimestamp := db.getTTLTimestamp()
 
 	// Get up to 2000 most recent courses ordered by semester (year, term)
 	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at
@@ -1223,9 +1207,7 @@ func (db *DB) SearchHistoricalCoursesByYearAndTitle(year int, title string) ([]C
 	// Sanitize search term
 	sanitized := sanitizeSearchTerm(title)
 
-	// Calculate TTL cutoff timestamp
-	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
-
+	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at
 		FROM historical_courses WHERE year = ? AND title LIKE ? ESCAPE '\' AND cached_at > ?
 		ORDER BY term DESC LIMIT 500`
@@ -1243,8 +1225,7 @@ func (db *DB) SearchHistoricalCoursesByYearAndTitle(year int, title string) ([]C
 // Returns all courses for the specified year (both semesters)
 // Only returns non-expired cache entries based on configured TTL
 func (db *DB) SearchHistoricalCoursesByYear(year int) ([]Course, error) {
-	// Calculate TTL cutoff timestamp
-	ttlTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
+	ttlTimestamp := db.getTTLTimestamp()
 
 	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at
 		FROM historical_courses WHERE year = ? AND cached_at > ?

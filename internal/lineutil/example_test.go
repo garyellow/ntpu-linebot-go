@@ -92,31 +92,12 @@ func ExampleNewQuickReply() {
 	// Output: *messaging_api.QuickReply
 }
 
-// ExampleTruncateText demonstrates text truncation.
-func ExampleTruncateText() {
+// ExampleTruncateRunes demonstrates text truncation.
+func ExampleTruncateRunes() {
 	text := "This is a very long text that needs to be truncated"
-	truncated := lineutil.TruncateText(text, 20)
+	truncated := lineutil.TruncateRunes(text, 20)
 	fmt.Println(truncated)
 	// Output: This is a very lo...
-}
-
-// ExampleSplitMessages demonstrates splitting messages into batches.
-func ExampleSplitMessages() {
-	sender := &messaging_api.Sender{Name: "魔法師", IconUrl: "https://example.com/avatar.png"}
-	messages := []messaging_api.MessageInterface{
-		lineutil.NewTextMessageWithConsistentSender("Message 1", sender),
-		lineutil.NewTextMessageWithConsistentSender("Message 2", sender),
-		lineutil.NewTextMessageWithConsistentSender("Message 3", sender),
-		lineutil.NewTextMessageWithConsistentSender("Message 4", sender),
-		lineutil.NewTextMessageWithConsistentSender("Message 5", sender),
-		lineutil.NewTextMessageWithConsistentSender("Message 6", sender),
-		lineutil.NewTextMessageWithConsistentSender("Message 7", sender),
-	}
-
-	batches := lineutil.SplitMessages(messages, 5)
-	fmt.Printf("Total batches: %d, First batch size: %d, Second batch size: %d",
-		len(batches), len(batches[0]), len(batches[1]))
-	// Output: Total batches: 2, First batch size: 5, Second batch size: 2
 }
 
 // ExampleErrorMessageWithSender demonstrates creating error messages.
@@ -126,16 +107,4 @@ func ExampleErrorMessageWithSender() {
 	msg := lineutil.ErrorMessageWithSender(err, sender)
 	fmt.Printf("%T", msg)
 	// Output: *messaging_api.TextMessage
-}
-
-// ExampleFormatList demonstrates formatting a list.
-func ExampleFormatList() {
-	items := []string{"課程A", "課程B", "課程C"}
-	formatted := lineutil.FormatList("可選課程", items)
-	fmt.Println(formatted)
-	// Output: 可選課程
-	//
-	// 1. 課程A
-	// 2. 課程B
-	// 3. 課程C
 }

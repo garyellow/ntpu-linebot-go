@@ -79,7 +79,7 @@ func TestTruncateText(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := TruncateText(tt.text, tt.maxLen)
+			result := TruncateRunes(tt.text, tt.maxLen)
 			if result != tt.expected {
 				t.Errorf("Expected %q, got %q", tt.expected, result)
 			}
@@ -134,34 +134,6 @@ func TestContainsAllRunes(t *testing.T) {
 			result := ContainsAllRunes(tt.s, tt.chars)
 			if result != tt.expected {
 				t.Errorf("ContainsAllRunes(%q, %q) = %v, expected %v", tt.s, tt.chars, result, tt.expected)
-			}
-		})
-	}
-}
-
-// TestSplitMessages tests critical LINE API constraint (5 messages max per reply)
-func TestSplitMessages(t *testing.T) {
-	tests := []struct {
-		name            string
-		messageCount    int
-		maxCount        int
-		expectedBatches int
-	}{
-		{"Within limit", 5, 5, 1},
-		{"Exceeds limit - must split", 7, 5, 2},
-		{"Empty - edge case", 0, 5, 0},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			messages := make([]messaging_api.MessageInterface, tt.messageCount)
-			sender := &messaging_api.Sender{Name: "測試", IconUrl: "https://example.com/avatar.png"}
-			for i := 0; i < tt.messageCount; i++ {
-				messages[i] = NewTextMessageWithConsistentSender("Test", sender)
-			}
-			batches := SplitMessages(messages, tt.maxCount)
-			if len(batches) != tt.expectedBatches {
-				t.Errorf("Expected %d batches, got %d", tt.expectedBatches, len(batches))
 			}
 		})
 	}
@@ -458,56 +430,6 @@ func TestBuildTelURI(t *testing.T) {
 			result := BuildTelURI(tt.mainPhone, tt.extension)
 			if result != tt.expected {
 				t.Errorf("BuildTelURI(%q, %q) = %q, want %q",
-					tt.mainPhone, tt.extension, result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestBuildFullPhone(t *testing.T) {
-	tests := []struct {
-		name      string
-		mainPhone string
-		extension string
-		expected  string
-	}{
-		{
-			name:      "Phone with 5-digit extension",
-			mainPhone: "0286741111",
-			extension: "67114",
-			expected:  "0286741111,67114",
-		},
-		{
-			name:      "Phone with 6-digit extension - truncate to 5",
-			mainPhone: "0286741111",
-			extension: "671145",
-			expected:  "0286741111,67114",
-		},
-		{
-			name:      "Phone without extension - returns empty",
-			mainPhone: "0286741111",
-			extension: "",
-			expected:  "",
-		},
-		{
-			name:      "Phone with short extension (4 digits) - returns empty",
-			mainPhone: "0286741111",
-			extension: "1234",
-			expected:  "",
-		},
-		{
-			name:      "Both empty - returns empty",
-			mainPhone: "",
-			extension: "",
-			expected:  "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := BuildFullPhone(tt.mainPhone, tt.extension)
-			if result != tt.expected {
-				t.Errorf("BuildFullPhone(%q, %q) = %q, want %q",
 					tt.mainPhone, tt.extension, result, tt.expected)
 			}
 		})

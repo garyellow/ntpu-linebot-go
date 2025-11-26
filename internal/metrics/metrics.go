@@ -14,6 +14,7 @@ type Metrics struct {
 	// Cache metrics
 	CacheHitsTotal   *prometheus.CounterVec
 	CacheMissesTotal *prometheus.CounterVec
+	CacheSize        *prometheus.GaugeVec // Track cache entry count by module
 
 	// Webhook metrics
 	WebhookDurationSeconds *prometheus.HistogramVec
@@ -49,7 +50,7 @@ func New(registry *prometheus.Registry) *Metrics {
 			prometheus.HistogramOpts{
 				Name:    "ntpu_scraper_duration_seconds",
 				Help:    "Scraper request duration in seconds by module",
-				Buckets: []float64{0.5, 1, 2, 5, 10, 20, 30, 60, 120}, // Single request timeout is 120s
+				Buckets: []float64{1, 2, 5, 10, 15, 30, 60, 90, 120}, // Optimized for 120s timeout
 			},
 			[]string{"module"}, // module: id, contact, course
 		),
@@ -71,12 +72,20 @@ func New(registry *prometheus.Registry) *Metrics {
 			[]string{"module"},
 		),
 
+		CacheSize: promauto.With(registry).NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "ntpu_cache_entries",
+				Help: "Current number of entries in cache by module",
+			},
+			[]string{"module"}, // module: students, contacts, courses, stickers
+		),
+
 		// Webhook metrics
 		WebhookDurationSeconds: promauto.With(registry).NewHistogramVec(
 			prometheus.HistogramOpts{
 				Name:    "ntpu_webhook_duration_seconds",
 				Help:    "Webhook processing duration in seconds by event type",
-				Buckets: []float64{0.01, 0.05, 0.1, 0.5, 1, 2, 5}, // Faster buckets for webhook
+				Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 25}, // Extended for webhook timeout (25s)
 			},
 			[]string{"event_type"}, // event_type: message, postback, follow
 		),
@@ -182,4 +191,9 @@ func (m *Metrics) RecordWarmupTask(module, status string) {
 // RecordWarmupDuration records total warmup duration
 func (m *Metrics) RecordWarmupDuration(duration float64) {
 	m.WarmupDuration.Observe(duration)
+}
+
+// SetCacheSize sets the current cache size for a module
+func (m *Metrics) SetCacheSize(module string, size int) {
+	m.CacheSize.WithLabelValues(module).Set(float64(size))
 }

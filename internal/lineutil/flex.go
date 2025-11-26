@@ -1,6 +1,8 @@
 package lineutil
 
 import (
+	"fmt"
+
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
@@ -26,6 +28,64 @@ func NewFlexBubble(header *FlexBox, hero messaging_api.FlexComponentInterface, b
 		bubble.Footer = footer.FlexBox
 	}
 	return &FlexBubble{bubble}
+}
+
+// MaxBubblesPerCarousel is the LINE API limit for Flex Carousel
+const MaxBubblesPerCarousel = 10
+
+// NewFlexCarousel creates a Flex Carousel from a slice of bubbles.
+// LINE API limits carousels to 10 bubbles maximum.
+// For larger sets, use BuildCarouselMessages which automatically splits into multiple messages.
+func NewFlexCarousel(bubbles []messaging_api.FlexBubble) *messaging_api.FlexCarousel {
+	return &messaging_api.FlexCarousel{
+		Contents: bubbles,
+	}
+}
+
+// BuildCarouselMessages creates Flex Messages from bubbles, automatically splitting into
+// multiple carousels (10 bubbles max per carousel) and applying consistent sender.
+//
+// Parameters:
+//   - altText: Alt text for the Flex Messages (will append page numbers for multi-page)
+//   - bubbles: Slice of FlexBubbles to include
+//   - sender: Sender to apply to all messages (can be nil)
+//
+// Returns: Slice of messaging_api.MessageInterface ready for reply
+//
+// Example:
+//
+//	bubbles := []messaging_api.FlexBubble{...}
+//	sender := lineutil.GetSender("課程魔法師", stickerManager)
+//	messages := lineutil.BuildCarouselMessages("課程列表", bubbles, sender)
+func BuildCarouselMessages(altText string, bubbles []messaging_api.FlexBubble, sender *messaging_api.Sender) []messaging_api.MessageInterface {
+	if len(bubbles) == 0 {
+		return nil
+	}
+
+	var messages []messaging_api.MessageInterface
+
+	for i := 0; i < len(bubbles); i += MaxBubblesPerCarousel {
+		end := i + MaxBubblesPerCarousel
+		if end > len(bubbles) {
+			end = len(bubbles)
+		}
+
+		carousel := NewFlexCarousel(bubbles[i:end])
+
+		// Add page indicator for multi-page results
+		msgAltText := altText
+		if len(bubbles) > MaxBubblesPerCarousel && i > 0 {
+			msgAltText = fmt.Sprintf("%s (%d-%d)", altText, i+1, end)
+		}
+
+		msg := NewFlexMessage(msgAltText, carousel)
+		if sender != nil {
+			msg.Sender = sender
+		}
+		messages = append(messages, msg)
+	}
+
+	return messages
 }
 
 // FlexBox wrapper
@@ -349,4 +409,56 @@ func NewButtonFooter(rows ...[]*FlexButton) *FlexBox {
 	}
 
 	return NewFlexBox("vertical", contents...).WithSpacing("sm")
+}
+
+// ================================================
+// Body Content Builders (for consistent info display)
+// ================================================
+
+// BodyContentBuilder helps build Flex Message body contents with automatic separators
+type BodyContentBuilder struct {
+	contents []messaging_api.FlexComponentInterface
+}
+
+// NewBodyContentBuilder creates a new body content builder
+func NewBodyContentBuilder() *BodyContentBuilder {
+	return &BodyContentBuilder{
+		contents: make([]messaging_api.FlexComponentInterface, 0),
+	}
+}
+
+// AddInfoRow adds an info row with automatic separator (except for first item)
+func (b *BodyContentBuilder) AddInfoRow(emoji, label, value string, style InfoRowStyle) *BodyContentBuilder {
+	if len(b.contents) > 0 {
+		b.contents = append(b.contents, NewFlexSeparator().WithMargin("md").FlexSeparator)
+	}
+	b.contents = append(b.contents, NewInfoRowWithMargin(emoji, label, value, style, "md"))
+	return b
+}
+
+// AddInfoRowIf adds an info row only if value is not empty
+func (b *BodyContentBuilder) AddInfoRowIf(emoji, label, value string, style InfoRowStyle) *BodyContentBuilder {
+	if value != "" {
+		return b.AddInfoRow(emoji, label, value, style)
+	}
+	return b
+}
+
+// AddComponent adds a raw component with automatic separator
+func (b *BodyContentBuilder) AddComponent(component messaging_api.FlexComponentInterface) *BodyContentBuilder {
+	if len(b.contents) > 0 {
+		b.contents = append(b.contents, NewFlexSeparator().WithMargin("md").FlexSeparator)
+	}
+	b.contents = append(b.contents, component)
+	return b
+}
+
+// Build returns the FlexBox with all contents
+func (b *BodyContentBuilder) Build() *FlexBox {
+	return NewFlexBox("vertical", b.contents...).WithSpacing("sm")
+}
+
+// Contents returns the raw contents slice (for manual FlexBox creation)
+func (b *BodyContentBuilder) Contents() []messaging_api.FlexComponentInterface {
+	return b.contents
 }

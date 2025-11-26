@@ -3,11 +3,11 @@ package id
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
@@ -29,7 +29,6 @@ type Handler struct {
 
 const (
 	moduleName           = "id"
-	splitChar            = "$"
 	senderName           = "學號魔法師"
 	MaxStudentsPerSearch = 500 // Maximum students to return in name search results
 )
@@ -53,18 +52,12 @@ var (
 		"year", // English keyword
 	}
 
-	studentRegex    = buildRegex(validStudentKeywords)
-	departmentRegex = buildRegex(validDepartmentKeywords)
-	deptCodeRegex   = buildRegex(validDepartmentCodeKeywords)
-	yearRegex       = buildRegex(validYearKeywords)
+	studentRegex    = bot.BuildKeywordRegex(validStudentKeywords)
+	departmentRegex = bot.BuildKeywordRegex(validDepartmentKeywords)
+	deptCodeRegex   = bot.BuildKeywordRegex(validDepartmentCodeKeywords)
+	yearRegex       = bot.BuildKeywordRegex(validYearKeywords)
 	allDeptCodeText = "所有系代碼"
 )
-
-// buildRegex creates a regex pattern from keywords
-func buildRegex(keywords []string) *regexp.Regexp {
-	pattern := "(?i)" + strings.Join(keywords, "|")
-	return regexp.MustCompile(pattern)
-}
 
 // NewHandler creates a new ID handler
 func NewHandler(db *storage.DB, scraper *scraper.Client, metrics *metrics.Metrics, logger *logger.Logger, stickerManager *sticker.Manager) *Handler {
@@ -129,8 +122,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 
 	// Handle department name query - extract term after keyword
 	if match := departmentRegex.FindString(text); match != "" {
-		// Extract what comes after the keyword
-		searchTerm := strings.TrimSpace(strings.Replace(text, match, "", 1))
+		searchTerm := bot.ExtractSearchTerm(text, match)
 		if searchTerm != "" {
 			return h.handleDepartmentNameQuery(searchTerm)
 		}
@@ -138,8 +130,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 
 	// Handle department code query - extract term after keyword
 	if match := deptCodeRegex.FindString(text); match != "" {
-		// Extract what comes after the keyword
-		searchTerm := strings.TrimSpace(strings.Replace(text, match, "", 1))
+		searchTerm := bot.ExtractSearchTerm(text, match)
 		if searchTerm != "" {
 			return h.handleDepartmentCodeQuery(searchTerm)
 		}
@@ -147,8 +138,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 
 	// Handle year query - extract year after keyword
 	if match := yearRegex.FindString(text); match != "" {
-		// Extract what comes after the keyword
-		searchTerm := strings.TrimSpace(strings.Replace(text, match, "", 1))
+		searchTerm := bot.ExtractSearchTerm(text, match)
 		if searchTerm != "" {
 			return h.handleYearQuery(searchTerm)
 		}
@@ -168,15 +158,15 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 
 	// Handle student ID or name query
 	if loc := studentRegex.FindStringIndex(text); loc != nil {
-		// Extract the search term after the keyword
-		searchTerm := strings.TrimSpace(text[loc[1]:])
+		match := studentRegex.FindString(text)
+		searchTerm := bot.ExtractSearchTerm(text, match)
 		if searchTerm == "" {
 			// If no search term provided, give helpful message
 			sender := lineutil.GetSender(senderName, h.stickerManager)
 			msg := lineutil.NewTextMessageWithConsistentSender("🔢 請在關鍵字後輸入查詢內容\n\n例如：\n• 學號 小明\n• 學號 412345678\n\n💡 也可直接輸入 8-9 位學號", sender)
 			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("📅 按學年查詢", "學年")},
-				{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
+				lineutil.QuickReplyYearAction(),
+				lineutil.QuickReplyHelpAction(),
 			})
 			return []messaging_api.MessageInterface{msg}
 		}
@@ -206,8 +196,8 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 	}
 
 	// Handle year search postback
-	if strings.Contains(data, splitChar) {
-		parts := strings.Split(data, splitChar)
+	if strings.Contains(data, bot.PostbackSplitChar) {
+		parts := strings.Split(data, bot.PostbackSplitChar)
 		if len(parts) != 2 {
 			return []messaging_api.MessageInterface{}
 		}
@@ -268,8 +258,8 @@ func (h *Handler) handleAllDepartmentCodes() []messaging_api.MessageInterface {
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	msg := lineutil.NewTextMessageWithConsistentSender(builder.String(), sender)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		{Action: lineutil.NewMessageAction("查詢學號", "學號")},
-		{Action: lineutil.NewMessageAction("按學年查詢", "學年")},
+		lineutil.QuickReplyStudentAction(),
+		lineutil.QuickReplyYearAction(),
 	})
 	return []messaging_api.MessageInterface{msg}
 }
@@ -284,7 +274,7 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("%s系的系代碼是：%s", deptName, code), sender)
 		// Add quick reply for all department codes
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction(allDeptCodeText, allDeptCodeText)},
+			lineutil.QuickReplyDeptCodeAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
@@ -293,15 +283,15 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 	if code, ok := ntpu.FullDepartmentCodes[deptName]; ok {
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("%s的系代碼是：%s", deptName, code), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction(allDeptCodeText, allDeptCodeText)},
+			lineutil.QuickReplyDeptCodeAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
 
 	msg := lineutil.NewTextMessageWithConsistentSender("🔍 找不到該系所\n\n請輸入正確的系名，例如：資工、法律、企管", sender)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		{Action: lineutil.NewMessageAction("📋 "+allDeptCodeText, allDeptCodeText)},
-		{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
+		lineutil.QuickReplyDeptCodeAction(),
+		lineutil.QuickReplyHelpAction(),
 	})
 	return []messaging_api.MessageInterface{msg}
 }
@@ -314,15 +304,15 @@ func (h *Handler) handleDepartmentCodeQuery(code string) []messaging_api.Message
 	if name, ok := ntpu.DepartmentNames[code]; ok {
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("系代碼 %s 是：%s系", code, name), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction(allDeptCodeText, allDeptCodeText)},
+			lineutil.QuickReplyDeptCodeAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
 
 	msg := lineutil.NewTextMessageWithConsistentSender("🔍 找不到該系代碼\n\n請輸入正確的系代碼，例如：85（資工系）", sender)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		{Action: lineutil.NewMessageAction("📋 "+allDeptCodeText, allDeptCodeText)},
-		{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
+		lineutil.QuickReplyDeptCodeAction(),
+		lineutil.QuickReplyHelpAction(),
 	})
 	return []messaging_api.MessageInterface{msg}
 }
@@ -337,7 +327,7 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 		msg := lineutil.NewTextMessageWithConsistentSender("📅 無效的年份格式\n\n請輸入 2-4 位數字\n例如：112 或 2023", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			{Action: lineutil.NewMessageAction("📅 查詢 112 學年度", "學年 112")},
-			{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
+			lineutil.QuickReplyHelpAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
@@ -350,7 +340,7 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 		msg := lineutil.NewTextMessageWithConsistentSender("🔮 哎呀～你是未來人嗎？", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", currentYear), fmt.Sprintf("學年 %d", currentYear))},
-			{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
+			lineutil.QuickReplyHelpAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
@@ -389,7 +379,7 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 	confirmMsg := lineutil.NewConfirmTemplate(
 		"確認學年度",
 		confirmText,
-		lineutil.NewPostbackActionWithDisplayText("哪次不是", "哪次不是", fmt.Sprintf("id:搜尋全系%s%d", splitChar, year)),
+		lineutil.NewPostbackActionWithDisplayText("哪次不是", "哪次不是", fmt.Sprintf("id:搜尋全系%s%d", bot.PostbackSplitChar, year)),
 		lineutil.NewPostbackActionWithDisplayText("我在想想", "再啦乾ಠ_ಠ", "id:兇"),
 	)
 	return []messaging_api.MessageInterface{
@@ -403,8 +393,8 @@ func (h *Handler) handleYearSearchConfirm(yearStr string) []messaging_api.Messag
 
 	// Create college group selection template with clear guidance
 	actions := []messaging_api.ActionInterface{
-		lineutil.NewPostbackActionWithDisplayText("文法商", fmt.Sprintf("搜尋 %s 學年度文法商學院群", yearStr), fmt.Sprintf("id:文法商%s%s", splitChar, yearStr)),
-		lineutil.NewPostbackActionWithDisplayText("公社電資", fmt.Sprintf("搜尋 %s 學年度公社電資學院群", yearStr), fmt.Sprintf("id:公社電資%s%s", splitChar, yearStr)),
+		lineutil.NewPostbackActionWithDisplayText("文法商", fmt.Sprintf("搜尋 %s 學年度文法商學院群", yearStr), fmt.Sprintf("id:文法商%s%s", bot.PostbackSplitChar, yearStr)),
+		lineutil.NewPostbackActionWithDisplayText("公社電資", fmt.Sprintf("搜尋 %s 學年度公社電資學院群", yearStr), fmt.Sprintf("id:公社電資%s%s", bot.PostbackSplitChar, yearStr)),
 	}
 
 	msg := lineutil.NewButtonsTemplateWithImage(
@@ -424,21 +414,16 @@ func (h *Handler) handleYearSearchConfirm(yearStr string) []messaging_api.Messag
 func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(moduleName)
 	startTime := time.Now()
+	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	// Check cache first
 	student, err := h.db.GetStudentByID(studentID)
 	if err != nil {
 		log.WithError(err).Error("Failed to query cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		sender := lineutil.GetSender(senderName, h.stickerManager)
-		msg := lineutil.ErrorMessageWithDetailAndSender("查詢學號時發生問題", sender)
-		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
-			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("重試", "學號 "+studentID)},
-				{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
-			})
+		return []messaging_api.MessageInterface{
+			lineutil.ErrorMessageWithQuickReply("查詢學號時發生問題", sender, "學號 "+studentID),
 		}
-		return []messaging_api.MessageInterface{msg}
 	}
 
 	if student != nil {
@@ -452,17 +437,14 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	h.metrics.RecordCacheMiss(moduleName)
 	log.Infof("Cache miss for student ID: %s, scraping...", studentID)
 
-	// Get consistent sender for all messages in this reply
-	sender := lineutil.GetSender(senderName, h.stickerManager)
-
 	student, err = ntpu.ScrapeStudentByID(ctx, h.scraper, studentID)
 	if err != nil {
 		log.WithError(err).Errorf("Failed to scrape student ID: %s", studentID)
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🔍 學號 %s 不存在喔\n\n請確認學號是否正確", studentID), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("🔢 查詢其他學號", "學號")},
-			{Action: lineutil.NewMessageAction("🏛️ 查詢系所代碼", allDeptCodeText)},
+			lineutil.QuickReplyStudentAction(),
+			lineutil.QuickReplyDeptCodeAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
@@ -479,22 +461,15 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 // handleStudentNameQuery handles student name queries
 func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(moduleName)
-
-	// Get consistent sender for all messages in this reply
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	// Search in cache
 	students, err := h.db.SearchStudentsByName(name)
 	if err != nil {
 		log.WithError(err).Error("Failed to search students by name")
-		msg := lineutil.ErrorMessageWithDetailAndSender("搜尋姓名時發生問題", sender)
-		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
-			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("重新搜尋", "學號")},
-				{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
-			})
+		return []messaging_api.MessageInterface{
+			lineutil.ErrorMessageWithQuickReply("搜尋姓名時發生問題", sender, "學號 "+name),
 		}
-		return []messaging_api.MessageInterface{msg}
 	}
 
 	if len(students) == 0 {
@@ -546,14 +521,10 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	}
 
 	// Add Quick Reply to the last message
-	if len(messages) > 0 {
-		if lastMsg, ok := messages[len(messages)-1].(*messaging_api.TextMessage); ok {
-			lastMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("🔄 重新搜尋", "學號")},
-				{Action: lineutil.NewMessageAction("🏛️ 查詢系所代碼", allDeptCodeText)},
-			})
-		}
-	}
+	lineutil.AddQuickReplyToMessages(messages,
+		lineutil.QuickReplyStudentAction(),
+		lineutil.QuickReplyDeptCodeAction(),
+	)
 
 	return messages
 }
@@ -569,24 +540,14 @@ func (h *Handler) formatStudentResponse(student *storage.Student, fromCache bool
 	// Hero: Name with NTPU green background (using standardized component)
 	hero := lineutil.NewHeroBox(student.Name, "國立臺北大學")
 
-	// Body: Student details with improved vertical layout to prevent truncation
-	// Each info row uses vertical stacking: icon+label on top, value below
-	contents := []messaging_api.FlexComponentInterface{
-		// 學號 row
-		lineutil.NewInfoRowWithMargin("🆔", "學號", student.ID, lineutil.BoldInfoRowStyle(), "md"),
-		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-		// 系所 row
-		lineutil.NewInfoRowWithMargin("🏫", "系所", student.Department, lineutil.BoldInfoRowStyle(), "md"),
-		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-		// 學年度 row
-		lineutil.NewInfoRowWithMargin("📅", "入學學年", fmt.Sprintf("%d 學年度", student.Year), lineutil.BoldInfoRowStyle(), "md"),
-	}
+	// Body: Student details using BodyContentBuilder for cleaner code
+	body := lineutil.NewBodyContentBuilder()
+	body.AddInfoRow("🆔", "學號", student.ID, lineutil.BoldInfoRowStyle())
+	body.AddInfoRow("🏫", "系所", student.Department, lineutil.BoldInfoRowStyle())
+	body.AddInfoRow("📅", "入學學年", fmt.Sprintf("%d 學年度", student.Year), lineutil.BoldInfoRowStyle())
 
 	if fromCache {
-		contents = append(contents,
-			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-			lineutil.NewFlexText("📌 資料來自快取").WithSize("xs").WithColor(lineutil.ColorGray400).WithMargin("md").FlexText,
-		)
+		body.AddComponent(lineutil.NewFlexText("📌 資料來自快取").WithSize("xs").WithColor(lineutil.ColorGray400).WithMargin("md").FlexText)
 	}
 
 	// Footer: Action buttons
@@ -602,7 +563,7 @@ func (h *Handler) formatStudentResponse(student *storage.Student, fromCache bool
 	bubble := lineutil.NewFlexBubble(
 		header,
 		hero.FlexBox,
-		lineutil.NewFlexBox("vertical", contents...).WithSpacing("sm"),
+		body.Build(),
 		footer,
 	)
 
@@ -612,9 +573,9 @@ func (h *Handler) formatStudentResponse(student *storage.Student, fromCache bool
 
 	// Add Quick Reply for next actions
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		{Action: lineutil.NewMessageAction("📚 查看所有系代碼", "所有系代碼")},
-		{Action: lineutil.NewMessageAction("📅 按學年查詢", "學年")},
-		{Action: lineutil.NewMessageAction("📌 使用說明", "使用說明")},
+		lineutil.QuickReplyDeptCodeAction(),
+		lineutil.QuickReplyYearAction(),
+		lineutil.QuickReplyHelpAction(),
 	})
 
 	return []messaging_api.MessageInterface{msg}
@@ -661,16 +622,16 @@ func (h *Handler) handleCollegeGroupSelection(group, year string) []messaging_ap
 	if group == "文法商" {
 		collegeList = "📖 人文：中文、應外、歷史\n⚖️ 法律：法學、司法、財法\n💼 商學：企管、金融、會計、統計、休運"
 		actions = []messaging_api.ActionInterface{
-			lineutil.NewPostbackActionWithDisplayText("📖 人文學院", fmt.Sprintf("搜尋 %s 學年度人文學院", year), fmt.Sprintf("id:人文學院%s%s", splitChar, year)),
-			lineutil.NewPostbackActionWithDisplayText("⚖️ 法律學院", fmt.Sprintf("搜尋 %s 學年度法律學院", year), fmt.Sprintf("id:法律學院%s%s", splitChar, year)),
-			lineutil.NewPostbackActionWithDisplayText("💼 商學院", fmt.Sprintf("搜尋 %s 學年度商學院", year), fmt.Sprintf("id:商學院%s%s", splitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("📖 人文學院", fmt.Sprintf("搜尋 %s 學年度人文學院", year), fmt.Sprintf("id:人文學院%s%s", bot.PostbackSplitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("⚖️ 法律學院", fmt.Sprintf("搜尋 %s 學年度法律學院", year), fmt.Sprintf("id:法律學院%s%s", bot.PostbackSplitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("💼 商學院", fmt.Sprintf("搜尋 %s 學年度商學院", year), fmt.Sprintf("id:商學院%s%s", bot.PostbackSplitChar, year)),
 		}
 	} else { // 公社電資
 		collegeList = "🏛️ 公共事務：公行、不動、財政\n👥 社科：經濟、社學、社工\n💻 電資：電機、資工、通訊"
 		actions = []messaging_api.ActionInterface{
-			lineutil.NewPostbackActionWithDisplayText("🏛️ 公共事務學院", fmt.Sprintf("搜尋 %s 學年度公共事務學院", year), fmt.Sprintf("id:公共事務學院%s%s", splitChar, year)),
-			lineutil.NewPostbackActionWithDisplayText("👥 社會科學學院", fmt.Sprintf("搜尋 %s 學年度社會科學學院", year), fmt.Sprintf("id:社會科學學院%s%s", splitChar, year)),
-			lineutil.NewPostbackActionWithDisplayText("💻 電機資訊學院", fmt.Sprintf("搜尋 %s 學年度電機資訊學院", year), fmt.Sprintf("id:電機資訊學院%s%s", splitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("🏛️ 公共事務學院", fmt.Sprintf("搜尋 %s 學年度公共事務學院", year), fmt.Sprintf("id:公共事務學院%s%s", bot.PostbackSplitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("👥 社會科學學院", fmt.Sprintf("搜尋 %s 學年度社會科學學院", year), fmt.Sprintf("id:社會科學學院%s%s", bot.PostbackSplitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("💻 電機資訊學院", fmt.Sprintf("搜尋 %s 學年度電機資訊學院", year), fmt.Sprintf("id:電機資訊學院%s%s", bot.PostbackSplitChar, year)),
 		}
 	}
 
@@ -771,7 +732,7 @@ func (h *Handler) buildDepartmentSelectionTemplate(year, imageURL string, depart
 		actions = append(actions, lineutil.NewPostbackActionWithDisplayText(
 			label,
 			displayText,
-			fmt.Sprintf("id:%s%s%s", deptCode, splitChar, year),
+			fmt.Sprintf("id:%s%s%s", deptCode, bot.PostbackSplitChar, year),
 		))
 	}
 
@@ -843,7 +804,7 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 	// determineDepartment returns "法律系" for all 71x codes, and "XX系" for others
 	// So we should query using "法律系", "資工系", "社學系", "社工系", etc.
 	var queryDeptName string
-	if strings.HasPrefix(deptCode, "71") {
+	if ntpu.IsLawDepartment(deptCode) {
 		// All law school departments (712/714/716) are stored as "法律系"
 		queryDeptName = "法律系"
 	} else {
@@ -892,13 +853,13 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 
 	if len(students) == 0 {
 		departmentType := "系"
-		if strings.HasPrefix(deptCode, "71") {
+		if ntpu.IsLawDepartment(deptCode) {
 			departmentType = "組"
 		}
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🤔 %d 學年度%s%s好像沒有人耶", year, deptName, departmentType), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			{Action: lineutil.NewMessageAction("🔄 重新選擇", fmt.Sprintf("學年 %d", year))},
-			{Action: lineutil.NewMessageAction("🔢 查詢學號", "學號")},
+			lineutil.QuickReplyStudentAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
@@ -907,7 +868,7 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 	var builder strings.Builder
 	departmentType := "系"
 	displayName := deptName
-	if strings.HasPrefix(deptCode, "71") {
+	if ntpu.IsLawDepartment(deptCode) {
 		departmentType = "組"
 		// For law, use "法律系XX組" format
 		displayName = "法律系" + deptName
@@ -924,8 +885,8 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 	// Note: sender was already created at the start of handleDepartmentSelection, reuse it
 	msg := lineutil.NewTextMessageWithConsistentSender(builder.String(), sender)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		{Action: lineutil.NewMessageAction("📅 查詢其他學年", "學年")},
-		{Action: lineutil.NewMessageAction("🏛️ 查詢系所代碼", allDeptCodeText)},
+		lineutil.QuickReplyYearAction(),
+		lineutil.QuickReplyDeptCodeAction(),
 	})
 	return []messaging_api.MessageInterface{msg}
 }

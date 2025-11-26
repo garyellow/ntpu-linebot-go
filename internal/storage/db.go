@@ -142,6 +142,12 @@ func (db *DB) GetCacheTTL() time.Duration {
 	return db.cacheTTL
 }
 
+// getTTLTimestamp returns the Unix timestamp for TTL cutoff (entries older than this are expired)
+// This is a helper method to avoid repeating the same calculation across repository methods
+func (db *DB) getTTLTimestamp() int64 {
+	return time.Now().Unix() - int64(db.cacheTTL.Seconds())
+}
+
 // CountExpiringStudents counts students that will expire within the given duration
 // Used by warmup scheduler to determine if proactive refresh is needed
 func (db *DB) CountExpiringStudents(softTTL time.Duration) (int, error) {

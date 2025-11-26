@@ -3,11 +3,11 @@ package contact
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
@@ -29,7 +29,6 @@ type Handler struct {
 
 const (
 	moduleName = "contact"
-	splitChar  = "$"
 	senderName = "聯繫魔法師"
 
 	// Emergency phone numbers (without hyphens for clipboard copy)
@@ -64,24 +63,8 @@ var (
 		"touch", "contact", "connect",
 	}
 
-	contactRegex = buildRegex(validContactKeywords)
+	contactRegex = bot.BuildKeywordRegex(validContactKeywords)
 )
-
-// buildRegex creates a regex pattern from keywords
-// Sorts keywords by length (longest first) to ensure correct regex alternation matching
-func buildRegex(keywords []string) *regexp.Regexp {
-	// Create a copy to avoid modifying the original slice
-	sortedKeywords := make([]string, len(keywords))
-	copy(sortedKeywords, keywords)
-
-	// Sort by length in descending order (longest first)
-	sort.Slice(sortedKeywords, func(i, j int) bool {
-		return len(sortedKeywords[i]) > len(sortedKeywords[j])
-	})
-
-	pattern := "(?i)" + strings.Join(sortedKeywords, "|")
-	return regexp.MustCompile(pattern)
-}
 
 // NewHandler creates a new contact handler
 func NewHandler(db *storage.DB, scraper *scraper.Client, metrics *metrics.Metrics, logger *logger.Logger, stickerManager *sticker.Manager) *Handler {
@@ -125,18 +108,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 
 	// Handle contact search - extract search term after keyword
 	if match := contactRegex.FindString(text); match != "" {
-		// Determine if keyword is at the beginning or end
-		var searchTerm string
-		if strings.HasPrefix(text, match) {
-			// Keyword at beginning: "聯絡 資工系" -> extract after
-			searchTerm = strings.TrimSpace(strings.TrimPrefix(text, match))
-		} else if strings.HasSuffix(text, match) {
-			// Keyword at end: "資工系聯絡" -> extract before
-			searchTerm = strings.TrimSpace(strings.TrimSuffix(text, match))
-		} else {
-			// Keyword in middle: remove it and use the rest
-			searchTerm = strings.TrimSpace(strings.Replace(text, match, "", 1))
-		}
+		searchTerm := bot.ExtractSearchTerm(text, match)
 
 		if searchTerm == "" {
 			// If no search term provided, give helpful message
@@ -183,7 +155,7 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 
 	// Handle "查看更多" postback (with or without prefix)
 	if strings.HasPrefix(data, "查看更多") {
-		parts := strings.Split(data, splitChar)
+		parts := strings.Split(data, bot.PostbackSplitChar)
 		if len(parts) >= 2 {
 			name := parts[1]
 			return h.handleContactSearch(ctx, name)
@@ -192,7 +164,7 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 
 	// Handle "查看資訊" postback (with or without prefix)
 	if strings.HasPrefix(data, "查看資訊") {
-		parts := strings.Split(data, splitChar)
+		parts := strings.Split(data, bot.PostbackSplitChar)
 		if len(parts) >= 2 {
 			name := parts[1]
 			return h.handleContactSearch(ctx, name)
@@ -200,9 +172,9 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 	}
 
 	// Handle "members" postback for viewing organization members
-	// Format: "contact:members${splitChar}{orgName}"
+	// Format: "contact:members${bot.PostbackSplitChar}{orgName}"
 	if strings.HasPrefix(data, "members") {
-		parts := strings.Split(data, splitChar)
+		parts := strings.Split(data, bot.PostbackSplitChar)
 		if len(parts) >= 2 {
 			orgName := parts[1]
 			return h.handleMembersQuery(ctx, orgName)
@@ -323,14 +295,9 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	if err != nil {
 		log.WithError(err).Error("Failed to search contacts in cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		msg := lineutil.ErrorMessageWithDetailAndSender("查詢聯絡資訊時發生問題", sender)
-		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
-			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("重試", "聯絡 "+searchTerm)},
-				{Action: lineutil.NewMessageAction("緊急電話", "緊急")},
-			})
+		return []messaging_api.MessageInterface{
+			lineutil.ErrorMessageWithQuickReply("查詢聯絡資訊時發生問題", sender, "聯絡 "+searchTerm),
 		}
-		return []messaging_api.MessageInterface{msg}
 	}
 	contacts = sqlContacts
 
@@ -573,15 +540,14 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	var messages []messaging_api.MessageInterface
-	chunkSize := 10 // LINE API limit: max 10 bubbles per Flex Carousel
 
-	for i := 0; i < len(contacts); i += chunkSize {
+	for i := 0; i < len(contacts); i += lineutil.MaxBubblesPerCarousel {
 		// Limit to 5 messages (LINE reply limit)
 		if len(messages) >= 5 {
 			break
 		}
 
-		end := i + chunkSize
+		end := i + lineutil.MaxBubblesPerCarousel
 		if end > len(contacts) {
 			end = len(contacts)
 		}
@@ -610,53 +576,26 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 			// Hero: Name with colored background (using standardized component)
 			hero := lineutil.NewHeroBox(displayName, subText)
 
-			// Body: Details - avoid duplicating phone/extension info
-			var bodyContents []messaging_api.FlexComponentInterface
+			// Body: Details using BodyContentBuilder for cleaner code
+			body := lineutil.NewBodyContentBuilder()
 
-			// Organization / Superior - use vertical layout
+			// Organization / Superior - first row (no separator)
 			if c.Type == "organization" && c.Superior != "" {
-				bodyContents = append(bodyContents,
-					lineutil.NewInfoRowWithMargin("🏢", "上級單位", c.Superior, lineutil.DefaultInfoRowStyle(), "lg"))
+				body.AddInfoRow("🏢", "上級單位", c.Superior, lineutil.DefaultInfoRowStyle())
 			} else if c.Organization != "" {
-				bodyContents = append(bodyContents,
-					lineutil.NewInfoRowWithMargin("🏢", "所屬單位", c.Organization, lineutil.DefaultInfoRowStyle(), "lg"))
+				body.AddInfoRow("🏢", "所屬單位", c.Organization, lineutil.DefaultInfoRowStyle())
 			}
 
-			// Contact Info - Display full phone (main+extension) OR just extension
-			// This prevents duplicate display of extension in both body and footer
+			// Contact Info - Display full phone OR just extension
 			if c.Phone != "" {
-				// Show full phone number (e.g., "0286741111,12345")
-				if len(bodyContents) > 0 {
-					bodyContents = append(bodyContents, lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator)
-				}
-				bodyContents = append(bodyContents,
-					lineutil.NewInfoRowWithMargin("📞", "聯絡電話", c.Phone, lineutil.BoldInfoRowStyle(), "md"))
+				body.AddInfoRow("📞", "聯絡電話", c.Phone, lineutil.BoldInfoRowStyle())
 			} else if c.Extension != "" {
-				// Only extension available (no full phone)
-				if len(bodyContents) > 0 {
-					bodyContents = append(bodyContents, lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator)
-				}
-				bodyContents = append(bodyContents,
-					lineutil.NewInfoRowWithMargin("☎️", "分機號碼", c.Extension, lineutil.BoldInfoRowStyle(), "md"))
+				body.AddInfoRow("☎️", "分機號碼", c.Extension, lineutil.BoldInfoRowStyle())
 			}
 
-			// Contact Info - Location
-			if c.Location != "" {
-				if len(bodyContents) > 0 {
-					bodyContents = append(bodyContents, lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator)
-				}
-				bodyContents = append(bodyContents,
-					lineutil.NewInfoRowWithMargin("📍", "辦公位置", c.Location, lineutil.DefaultInfoRowStyle(), "md"))
-			}
-
-			// Contact Info - Email
-			if c.Email != "" {
-				if len(bodyContents) > 0 {
-					bodyContents = append(bodyContents, lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator)
-				}
-				bodyContents = append(bodyContents,
-					lineutil.NewInfoRowWithMargin("✉️", "電子郵件", c.Email, lineutil.DefaultInfoRowStyle(), "md"))
-			}
+			// Contact Info - Location and Email
+			body.AddInfoRowIf("📍", "辦公位置", c.Location, lineutil.DefaultInfoRowStyle())
+			body.AddInfoRowIf("✉️", "電子郵件", c.Email, lineutil.DefaultInfoRowStyle())
 
 			// Footer: Multi-row button layout for optimal UX
 			// Row 1: Phone actions (call, copy)
@@ -711,7 +650,7 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 				displayText := fmt.Sprintf("查詢「%s」的成員", lineutil.TruncateRunes(c.Name, 20))
 				row3Buttons = append(row3Buttons,
 					lineutil.NewFlexButton(
-						lineutil.NewPostbackActionWithDisplayText("👥 查看成員", displayText, fmt.Sprintf("contact:members%s%s", splitChar, c.Name)),
+						lineutil.NewPostbackActionWithDisplayText("👥 查看成員", displayText, fmt.Sprintf("contact:members%s%s", bot.PostbackSplitChar, c.Name)),
 					).WithStyle("secondary").WithHeight("sm"))
 			}
 
@@ -719,8 +658,8 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 			bubble := lineutil.NewFlexBubble(
 				header,
 				hero.FlexBox,
-				lineutil.NewFlexBox("vertical", bodyContents...).WithSpacing("sm"), // Body
-				nil, // Footer (handled below)
+				body.Build(), // Body
+				nil,          // Footer (handled below)
 			)
 
 			// Build footer with multi-row button layout
@@ -731,9 +670,7 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 			bubbles = append(bubbles, *bubble.FlexBubble)
 		}
 
-		carousel := &messaging_api.FlexCarousel{
-			Contents: bubbles,
-		}
+		carousel := lineutil.NewFlexCarousel(bubbles)
 
 		altText := "聯絡資訊搜尋結果"
 		if i > 0 {
@@ -746,15 +683,10 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 	}
 
 	// Add Quick Reply to the last message
-	if len(messages) > 0 {
-		lastMsg := messages[len(messages)-1]
-		if flexMsg, ok := lastMsg.(*messaging_api.FlexMessage); ok {
-			flexMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("緊急電話", "緊急")},
-				{Action: lineutil.NewMessageAction("查詢其他", "聯絡")},
-			})
-		}
-	}
+	lineutil.AddQuickReplyToMessages(messages,
+		lineutil.QuickReplyEmergencyAction(),
+		lineutil.QuickReplyContactAction(),
+	)
 
 	return messages
 }

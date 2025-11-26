@@ -79,7 +79,9 @@ groups:
           summary: "High scraper latency for {{ $labels.module }}"
           description: "Scraper P95 latency for {{ $labels.module }} is {{ $value }}s (threshold: 10s)"
 
-      # Cache low hit rate (70% threshold, 10 min duration)
+      # Cache low hit rate (60% threshold, 15 min duration)
+      # Note: Historical course queries always miss cache (on-demand scraping),
+      # so threshold is lowered to account for this expected behavior
       - alert: CacheLowHitRate
         expr: |
           (
@@ -90,14 +92,14 @@ groups:
               +
               sum(rate(ntpu_cache_misses_total[15m])) by (module)
             )
-          ) < 0.7
-        for: 10m
+          ) < 0.6
+        for: 15m
         labels:
           severity: info
           component: cache
         annotations:
           summary: "Low cache hit rate for {{ $labels.module }}"
-          description: "Cache hit rate for {{ $labels.module }} is {{ $value | humanizePercentage }} (threshold: 70%)"
+          description: "Cache hit rate for {{ $labels.module }} is {{ $value | humanizePercentage }} (threshold: 60%)"
 
       # High goroutine count
       - alert: HighGoroutineCount

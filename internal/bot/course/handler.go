@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
+	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
@@ -29,7 +29,6 @@ type Handler struct {
 
 const (
 	moduleName           = "course"
-	splitChar            = "$"
 	senderName           = "課程魔法師"
 	MaxCoursesPerSearch  = 50 // Maximum courses to return in search results
 	MaxTitleDisplayChars = 60 // Maximum characters for course title display before truncation
@@ -57,8 +56,8 @@ var (
 		"teacher", "professor", "prof", "dr", "doctor",
 	}
 
-	courseRegex  = buildRegex(validCourseKeywords)
-	teacherRegex = buildRegex(validTeacherKeywords)
+	courseRegex  = bot.BuildKeywordRegex(validCourseKeywords)
+	teacherRegex = bot.BuildKeywordRegex(validTeacherKeywords)
 	// UID format: {year}{term}{no} where:
 	// - year: 2-3 digits (e.g., 113, 12)
 	// - term: 1 digit (1=上學期, 2=下學期)
@@ -73,23 +72,6 @@ var (
 	// This pattern is checked BEFORE the regular courseRegex to handle historical queries
 	historicalCourseRegex = regexp.MustCompile(`(?i)^(課程?|course|class)\s+(\d{2,3})\s+(.+)$`)
 )
-
-// buildRegex creates a regex pattern from keywords
-// Sorts keywords by length (longest first) to ensure correct regex alternation matching
-// e.g., "課程" should match before "課" to prevent partial matches
-func buildRegex(keywords []string) *regexp.Regexp {
-	// Create a copy to avoid modifying the original slice
-	sortedKeywords := make([]string, len(keywords))
-	copy(sortedKeywords, keywords)
-
-	// Sort by length in descending order (longest first)
-	sort.Slice(sortedKeywords, func(i, j int) bool {
-		return len(sortedKeywords[i]) > len(sortedKeywords[j])
-	})
-
-	pattern := "(?i)" + strings.Join(sortedKeywords, "|")
-	return regexp.MustCompile(pattern)
-}
 
 // NewHandler creates a new course handler
 func NewHandler(db *storage.DB, scraper *scraper.Client, metrics *metrics.Metrics, logger *logger.Logger, stickerManager *sticker.Manager) *Handler {
@@ -151,19 +133,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	// Support both "keyword term" and "term keyword" patterns
 	if courseRegex.MatchString(text) {
 		match := courseRegex.FindString(text)
-
-		// Determine if keyword is at the beginning or end
-		var searchTerm string
-		if strings.HasPrefix(text, match) {
-			// Keyword at beginning: "課程 微積分" -> extract after
-			searchTerm = strings.TrimSpace(strings.TrimPrefix(text, match))
-		} else if strings.HasSuffix(text, match) {
-			// Keyword at end: "微積分課" -> extract before
-			searchTerm = strings.TrimSpace(strings.TrimSuffix(text, match))
-		} else {
-			// Keyword in middle: remove it and use the rest
-			searchTerm = strings.TrimSpace(strings.Replace(text, match, "", 1))
-		}
+		searchTerm := bot.ExtractSearchTerm(text, match)
 
 		if searchTerm == "" {
 			// If no search term provided, give helpful message
@@ -182,19 +152,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	// Support both "keyword term" and "term keyword" patterns
 	if teacherRegex.MatchString(text) {
 		match := teacherRegex.FindString(text)
-
-		// Determine if keyword is at the beginning or end
-		var searchTerm string
-		if strings.HasPrefix(text, match) {
-			// Keyword at beginning: "老師 王小明" -> extract after
-			searchTerm = strings.TrimSpace(strings.TrimPrefix(text, match))
-		} else if strings.HasSuffix(text, match) {
-			// Keyword at end: "王小明老師" -> extract before
-			searchTerm = strings.TrimSpace(strings.TrimSuffix(text, match))
-		} else {
-			// Keyword in middle: remove it and use the rest
-			searchTerm = strings.TrimSpace(strings.Replace(text, match, "", 1))
-		}
+		searchTerm := bot.ExtractSearchTerm(text, match)
 
 		if searchTerm == "" {
 			// If no search term provided, give helpful message
@@ -219,7 +177,7 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 
 	// Handle "授課課程" postback FIRST (before UID check, since teacher name might contain numbers)
 	if strings.HasPrefix(data, "授課課程") {
-		parts := strings.Split(data, splitChar)
+		parts := strings.Split(data, bot.PostbackSplitChar)
 		if len(parts) >= 2 {
 			teacherName := parts[1]
 			log.Infof("Handling teacher courses postback for: %s", teacherName)
@@ -249,14 +207,9 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 	if err != nil {
 		log.WithError(err).Error("Failed to query cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		msg := lineutil.ErrorMessageWithDetailAndSender("查詢課程時發生問題", sender)
-		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
-			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("重試", uid)},
-				{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
-			})
+		return []messaging_api.MessageInterface{
+			lineutil.ErrorMessageWithQuickReply("查詢課程時發生問題", sender, uid),
 		}
-		return []messaging_api.MessageInterface{msg}
 	}
 
 	if course != nil {
@@ -318,14 +271,9 @@ func (h *Handler) handleCourseTitleSearch(ctx context.Context, title string) []m
 	if err != nil {
 		log.WithError(err).Error("Failed to search courses in cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		msg := lineutil.ErrorMessageWithDetailAndSender("搜尋課程時發生問題", sender)
-		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
-			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("重試", "課程 "+title)},
-				{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
-			})
+		return []messaging_api.MessageInterface{
+			lineutil.ErrorMessageWithQuickReply("搜尋課程時發生問題", sender, "課程 "+title),
 		}
-		return []messaging_api.MessageInterface{msg}
 	}
 
 	if len(courses) > 0 {
@@ -432,38 +380,36 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	log.Infof("Cache miss for historical course: year=%d, keyword=%s, scraping...", year, keyword)
 	h.metrics.RecordCacheMiss(moduleName)
 
-	// Scrape both semesters for the specified year
-	var foundCourses []*storage.Course
-scrapeLoop:
-	for term := 1; term <= 2; term++ {
-		select {
-		case <-ctx.Done():
-			break scrapeLoop
-		default:
-		}
+	// Use term=0 to query both semesters at once (more efficient)
+	scrapedCourses, err := ntpu.ScrapeCourses(ctx, h.scraper, year, 0, keyword)
+	if err != nil {
+		log.WithError(err).WithField("year", year).
+			Warn("Failed to scrape historical courses")
+		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
+		msg := lineutil.NewTextMessageWithConsistentSender(
+			fmt.Sprintf("🔍 查無 %d 學年度包含「%s」的課程\n\n💡 請確認：\n• 學年度和課程名稱是否正確\n• 該課程是否在該學年度開設", year, keyword),
+			sender,
+		)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			{Action: lineutil.NewMessageAction("📚 查詢近期課程", "課程 "+keyword)},
+			{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
+		})
+		return []messaging_api.MessageInterface{msg}
+	}
+	log.Infof("Scraped %d historical courses for year=%d", len(scrapedCourses), year)
 
-		scrapedCourses, err := ntpu.ScrapeCourses(ctx, h.scraper, year, term, keyword)
-		if err != nil {
-			log.WithError(err).WithField("year", year).WithField("term", term).
-				Debug("Failed to scrape historical courses for year/term")
-			continue
+	// Save courses to historical_courses table
+	for _, course := range scrapedCourses {
+		if err := h.db.SaveHistoricalCourse(course); err != nil {
+			log.WithError(err).Warn("Failed to save historical course to cache")
 		}
-
-		// Save courses to historical_courses table
-		for _, course := range scrapedCourses {
-			if err := h.db.SaveHistoricalCourse(course); err != nil {
-				log.WithError(err).Warn("Failed to save historical course to cache")
-			}
-		}
-
-		foundCourses = append(foundCourses, scrapedCourses...)
 	}
 
-	if len(foundCourses) > 0 {
+	if len(scrapedCourses) > 0 {
 		h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
 		// Convert []*storage.Course to []storage.Course
-		courses := make([]storage.Course, len(foundCourses))
-		for i, c := range foundCourses {
+		courses := make([]storage.Course, len(scrapedCourses))
+		for i, c := range scrapedCourses {
 			courses[i] = *c
 		}
 		return h.formatCourseListResponse(courses)
@@ -512,14 +458,9 @@ func (h *Handler) handleTeacherSearch(ctx context.Context, teacherName string) [
 	if err != nil {
 		log.WithError(err).Error("Failed to search courses by teacher")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		msg := lineutil.ErrorMessageWithDetailAndSender("搜尋教師課程時發生問題", sender)
-		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
-			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("重試", "老師 "+teacherName)},
-				{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
-			})
+		return []messaging_api.MessageInterface{
+			lineutil.ErrorMessageWithQuickReply("搜尋教師課程時發生問題", sender, "老師 "+teacherName),
 		}
-		return []messaging_api.MessageInterface{msg}
 	}
 
 	// If SQL LIKE didn't find results, try fuzzy character-set matching
@@ -615,59 +556,40 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 	header := lineutil.NewHeaderBadge("📚", "課程資訊")
 
 	// Hero: Course title with course code in format `{課程名稱} ({課程代碼})`
-	// Extract course code (e.g., "U0001" from "1132U0001")
-	courseCode := lineutil.ExtractCourseCode(course.UID)
-	heroTitle := course.Title
-	if courseCode != "" {
-		heroTitle = fmt.Sprintf("%s (%s)", course.Title, courseCode)
-	}
+	heroTitle := lineutil.FormatCourseTitleWithUID(course.Title, course.UID)
 	hero := lineutil.NewHeroBox(heroTitle, "")
 
-	// Build body contents with improved vertical layout to prevent truncation
-	contents := []messaging_api.FlexComponentInterface{}
+	// Build body contents using BodyContentBuilder for cleaner code
+	body := lineutil.NewBodyContentBuilder()
 
 	// 學期 info - first row
 	semesterText := lineutil.FormatSemester(course.Year, course.Term)
-	contents = append(contents,
-		lineutil.NewInfoRowWithMargin("📅", "開課學期", semesterText, lineutil.DefaultInfoRowStyle(), "md"),
-	)
+	body.AddInfoRow("📅", "開課學期", semesterText, lineutil.DefaultInfoRowStyle())
 
-	// 教師 info - use vertical layout, full display with wrap
+	// 教師 info
 	if len(course.Teachers) > 0 {
 		teacherNames := strings.Join(course.Teachers, "、")
-		contents = append(contents,
-			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-			lineutil.NewInfoRowWithMargin("👨‍🏫", "授課教師", teacherNames, lineutil.DefaultInfoRowStyle(), "lg"),
-		)
+		body.AddInfoRow("👨‍🏫", "授課教師", teacherNames, lineutil.DefaultInfoRowStyle())
 	}
 
-	// 時間 info - full display with wrap (第三列)
+	// 時間 info
 	if len(course.Times) > 0 {
 		timeStr := strings.Join(course.Times, "、")
-		contents = append(contents,
-			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-			lineutil.NewInfoRowWithMargin("⏰", "上課時間", timeStr, lineutil.DefaultInfoRowStyle(), "md"),
-		)
+		body.AddInfoRow("⏰", "上課時間", timeStr, lineutil.DefaultInfoRowStyle())
 	}
 
-	// 地點 info - full display with wrap
+	// 地點 info
 	if len(course.Locations) > 0 {
 		locationStr := strings.Join(course.Locations, "、")
-		contents = append(contents,
-			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-			lineutil.NewInfoRowWithMargin("📍", "上課地點", locationStr, lineutil.DefaultInfoRowStyle(), "md"),
-		)
+		body.AddInfoRow("📍", "上課地點", locationStr, lineutil.DefaultInfoRowStyle())
 	}
 
-	// 備註 info - full display with wrap for complete information
+	// 備註 info
 	if course.Note != "" {
 		noteStyle := lineutil.DefaultInfoRowStyle()
 		noteStyle.ValueSize = "xs"
 		noteStyle.ValueColor = "#666666"
-		contents = append(contents,
-			lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-			lineutil.NewInfoRowWithMargin("📝", "備註", course.Note, noteStyle, "md"),
-		)
+		body.AddInfoRow("📝", "備註", course.Note, noteStyle)
 	}
 
 	// Build footer actions
@@ -697,7 +619,7 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 			lineutil.NewPostbackActionWithDisplayText(
 				"👤 教師課程",
 				displayText,
-				fmt.Sprintf("course:授課課程%s%s", splitChar, teacherName),
+				fmt.Sprintf("course:授課課程%s%s", bot.PostbackSplitChar, teacherName),
 			),
 		).WithStyle("secondary").WithHeight("sm").FlexButton)
 	}
@@ -705,7 +627,7 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 	bubble := lineutil.NewFlexBubble(
 		header,
 		hero.FlexBox,
-		lineutil.NewFlexBox("vertical", contents...).WithSpacing("sm"),
+		body.Build(),
 		lineutil.NewFlexBox("vertical", footerContents...).WithSpacing("sm"),
 	)
 
@@ -736,27 +658,18 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	var messages []messaging_api.MessageInterface
 
-	// Limit to 50 courses - add warning if truncated
+	// Limit to 50 courses - track if truncated for warning message
 	originalCount := len(courses)
-	if len(courses) > MaxCoursesPerSearch {
+	truncated := len(courses) > MaxCoursesPerSearch
+	if truncated {
 		courses = courses[:MaxCoursesPerSearch]
-		warningMsg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("⚠️ 搜尋結果超過 %d 門課程，僅顯示前 %d 門。\n\n建議使用更精確的搜尋條件以縮小範圍。", originalCount, MaxCoursesPerSearch),
-			sender,
-		)
-		messages = append(messages, warningMsg)
 	}
 
 	// Create bubbles for carousel (LINE API limit: max 10 bubbles per Flex Carousel)
 	var bubbles []messaging_api.FlexBubble
 	for _, course := range courses {
 		// Hero: Course title with course code in format `{課程名稱} ({課程代碼})`
-		// Extract course code (e.g., "U0001" from "1132U0001")
-		courseCode := lineutil.ExtractCourseCode(course.UID)
-		heroTitle := course.Title
-		if courseCode != "" {
-			heroTitle = fmt.Sprintf("%s (%s)", course.Title, courseCode)
-		}
+		heroTitle := lineutil.FormatCourseTitleWithUID(course.Title, course.UID)
 		hero := lineutil.NewCompactHeroBox(heroTitle)
 
 		// Build body contents with improved layout
@@ -811,32 +724,23 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 		bubbles = append(bubbles, *bubble.FlexBubble)
 	}
 
-	// Split bubbles into carousels (LINE API limit: max 10 bubbles per Flex Carousel)
-	for i := 0; i < len(bubbles); i += 10 {
-		end := i + 10
-		if end > len(bubbles) {
-			end = len(bubbles)
-		}
+	// Build carousel messages with automatic splitting (max 10 bubbles per carousel)
+	messages = lineutil.BuildCarouselMessages("課程列表", bubbles, sender)
 
-		carouselBubbles := bubbles[i:end]
-		carousel := &messaging_api.FlexCarousel{
-			Contents: carouselBubbles,
-		}
-
-		flexMsg := lineutil.NewFlexMessage("課程列表", carousel)
-		flexMsg.Sender = sender
-		messages = append(messages, flexMsg)
+	// Prepend warning message if results were truncated
+	if truncated {
+		warningMsg := lineutil.NewTextMessageWithConsistentSender(
+			fmt.Sprintf("⚠️ 搜尋結果超過 %d 門課程，僅顯示前 %d 門。\n\n建議使用更精確的搜尋條件以縮小範圍。", originalCount, MaxCoursesPerSearch),
+			sender,
+		)
+		messages = append([]messaging_api.MessageInterface{warningMsg}, messages...)
 	}
 
 	// Add Quick Reply to the last message
-	if len(messages) > 0 {
-		if flexMsg, ok := messages[len(messages)-1].(*messaging_api.FlexMessage); ok {
-			flexMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("重新查詢", "課程")},
-				{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
-			})
-		}
-	}
+	lineutil.AddQuickReplyToMessages(messages,
+		lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("重新查詢", "課程")},
+		lineutil.QuickReplyHelpAction(),
+	)
 
 	return messages
 }

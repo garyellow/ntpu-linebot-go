@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 	"golang.org/x/text/encoding/traditionalchinese"
@@ -24,19 +23,16 @@ const (
 	sanxiaNormalPhone = "0286741111"
 )
 
-// getWorkingSEABaseURL gets the working SEA base URL using URLCache abstraction.
-// Returns cached URL if available (fast path), otherwise triggers failover detection.
-// Auto-recovery: caller should call clearSEACache() on scrape errors.
-func getWorkingSEABaseURL(ctx context.Context, client *scraper.Client) (string, error) {
-	cache := scraper.NewURLCache(client, "sea")
-	return cache.Get(ctx)
+// seaCache is a package-level helper for SEA URL caching.
+// Returns the cached working URL or detects a new one.
+func seaCache(ctx context.Context, client *scraper.Client) (string, error) {
+	return scraper.NewURLCache(client, "sea").Get(ctx)
 }
 
 // clearSEACache invalidates the SEA URL cache to trigger re-detection on next request.
 // Call this when a scrape operation fails to enable automatic failover.
 func clearSEACache(client *scraper.Client) {
-	cache := scraper.NewURLCache(client, "sea")
-	cache.Clear()
+	scraper.NewURLCache(client, "sea").Clear()
 }
 
 // ScrapeContacts scrapes contacts by search term
@@ -45,7 +41,7 @@ func clearSEACache(client *scraper.Client) {
 // Supports automatic URL failover across multiple SEA endpoints with cache invalidation
 func ScrapeContacts(ctx context.Context, client *scraper.Client, searchTerm string) ([]*storage.Contact, error) {
 	// Get working base URL with failover support
-	contactBaseURL, err := getWorkingSEABaseURL(ctx, client)
+	contactBaseURL, err := seaCache(ctx, client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get working SEA URL: %w", err)
 	}
@@ -154,7 +150,8 @@ func parseContactsPage(doc *goquery.Document) []*storage.Contact {
 				extension := strings.TrimSpace(tds.Eq(2).Find("span").First().Text())
 
 				// Build full phone number if extension >= 5 digits
-				phone := lineutil.BuildFullPhone(sanxiaNormalPhone, strings.TrimSpace(extension))
+				extension = strings.TrimSpace(extension)
+				phone := buildFullPhone(sanxiaNormalPhone, extension)
 
 				// Extract email (may contain @ as image)
 				email := ""
@@ -197,7 +194,7 @@ func generateUID(parts ...string) string {
 // ScrapeAdministrativeContacts scrapes all administrative contacts
 // Supports automatic URL failover across multiple SEA endpoints
 func ScrapeAdministrativeContacts(ctx context.Context, client *scraper.Client) ([]*storage.Contact, error) {
-	contactBaseURL, err := getWorkingSEABaseURL(ctx, client)
+	contactBaseURL, err := seaCache(ctx, client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get working SEA URL: %w", err)
 	}
@@ -214,7 +211,7 @@ func ScrapeAdministrativeContacts(ctx context.Context, client *scraper.Client) (
 // ScrapeAcademicContacts scrapes all academic contacts
 // Supports automatic URL failover across multiple SEA endpoints
 func ScrapeAcademicContacts(ctx context.Context, client *scraper.Client) ([]*storage.Contact, error) {
-	contactBaseURL, err := getWorkingSEABaseURL(ctx, client)
+	contactBaseURL, err := seaCache(ctx, client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get working SEA URL: %w", err)
 	}
@@ -259,4 +256,14 @@ func scrapeContactPages(ctx context.Context, client *scraper.Client, contactBase
 	})
 
 	return allContacts, nil
+}
+
+// buildFullPhone creates a full phone number string combining main phone and extension.
+// Format: "0286741111,12345" (main phone + comma + extension first 5 digits)
+// Returns empty string if extension < 5 digits.
+func buildFullPhone(mainPhone, extension string) string {
+	if len(extension) < 5 {
+		return ""
+	}
+	return mainPhone + "," + extension[:5]
 }
