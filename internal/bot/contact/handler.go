@@ -29,7 +29,6 @@ type Handler struct {
 
 const (
 	moduleName = "contact"
-	splitChar  = "$"
 	senderName = "聯繫魔法師"
 
 	// Emergency phone numbers (without hyphens for clipboard copy)
@@ -156,7 +155,7 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 
 	// Handle "查看更多" postback (with or without prefix)
 	if strings.HasPrefix(data, "查看更多") {
-		parts := strings.Split(data, splitChar)
+		parts := strings.Split(data, bot.PostbackSplitChar)
 		if len(parts) >= 2 {
 			name := parts[1]
 			return h.handleContactSearch(ctx, name)
@@ -165,7 +164,7 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 
 	// Handle "查看資訊" postback (with or without prefix)
 	if strings.HasPrefix(data, "查看資訊") {
-		parts := strings.Split(data, splitChar)
+		parts := strings.Split(data, bot.PostbackSplitChar)
 		if len(parts) >= 2 {
 			name := parts[1]
 			return h.handleContactSearch(ctx, name)
@@ -173,9 +172,9 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 	}
 
 	// Handle "members" postback for viewing organization members
-	// Format: "contact:members${splitChar}{orgName}"
+	// Format: "contact:members${bot.PostbackSplitChar}{orgName}"
 	if strings.HasPrefix(data, "members") {
-		parts := strings.Split(data, splitChar)
+		parts := strings.Split(data, bot.PostbackSplitChar)
 		if len(parts) >= 2 {
 			orgName := parts[1]
 			return h.handleMembersQuery(ctx, orgName)
@@ -296,14 +295,9 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	if err != nil {
 		log.WithError(err).Error("Failed to search contacts in cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		msg := lineutil.ErrorMessageWithDetailAndSender("查詢聯絡資訊時發生問題", sender)
-		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
-			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("重試", "聯絡 "+searchTerm)},
-				{Action: lineutil.NewMessageAction("緊急電話", "緊急")},
-			})
+		return []messaging_api.MessageInterface{
+			lineutil.ErrorMessageWithQuickReply("查詢聯絡資訊時發生問題", sender, "聯絡 "+searchTerm),
 		}
-		return []messaging_api.MessageInterface{msg}
 	}
 	contacts = sqlContacts
 
@@ -546,15 +540,14 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	var messages []messaging_api.MessageInterface
-	chunkSize := 10 // LINE API limit: max 10 bubbles per Flex Carousel
 
-	for i := 0; i < len(contacts); i += chunkSize {
+	for i := 0; i < len(contacts); i += lineutil.MaxBubblesPerCarousel {
 		// Limit to 5 messages (LINE reply limit)
 		if len(messages) >= 5 {
 			break
 		}
 
-		end := i + chunkSize
+		end := i + lineutil.MaxBubblesPerCarousel
 		if end > len(contacts) {
 			end = len(contacts)
 		}
@@ -657,7 +650,7 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 				displayText := fmt.Sprintf("查詢「%s」的成員", lineutil.TruncateRunes(c.Name, 20))
 				row3Buttons = append(row3Buttons,
 					lineutil.NewFlexButton(
-						lineutil.NewPostbackActionWithDisplayText("👥 查看成員", displayText, fmt.Sprintf("contact:members%s%s", splitChar, c.Name)),
+						lineutil.NewPostbackActionWithDisplayText("👥 查看成員", displayText, fmt.Sprintf("contact:members%s%s", bot.PostbackSplitChar, c.Name)),
 					).WithStyle("secondary").WithHeight("sm"))
 			}
 
@@ -677,9 +670,7 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 			bubbles = append(bubbles, *bubble.FlexBubble)
 		}
 
-		carousel := &messaging_api.FlexCarousel{
-			Contents: bubbles,
-		}
+		carousel := lineutil.NewFlexCarousel(bubbles)
 
 		altText := "聯絡資訊搜尋結果"
 		if i > 0 {
@@ -692,15 +683,10 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 	}
 
 	// Add Quick Reply to the last message
-	if len(messages) > 0 {
-		lastMsg := messages[len(messages)-1]
-		if flexMsg, ok := lastMsg.(*messaging_api.FlexMessage); ok {
-			flexMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("緊急電話", "緊急")},
-				{Action: lineutil.NewMessageAction("查詢其他", "聯絡")},
-			})
-		}
-	}
+	lineutil.AddQuickReplyToMessages(messages,
+		lineutil.QuickReplyEmergencyAction(),
+		lineutil.QuickReplyContactAction(),
+	)
 
 	return messages
 }

@@ -2,6 +2,8 @@ package lineutil
 
 import (
 	"testing"
+
+	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
 // TestTruncateRunes tests UTF-8 safe rune truncation
@@ -567,5 +569,106 @@ func TestButtonRowFlexDistribution(t *testing.T) {
 	// Check that we have 3 wrapped buttons
 	if len(row.Contents) != 3 {
 		t.Errorf("Expected 3 contents, got %d", len(row.Contents))
+	}
+}
+
+// TestNewFlexCarousel tests carousel creation
+func TestNewFlexCarousel(t *testing.T) {
+	// Create test bubbles
+	bubbles := make([]messaging_api.FlexBubble, 3)
+	for i := range bubbles {
+		bubbles[i] = messaging_api.FlexBubble{}
+	}
+
+	carousel := NewFlexCarousel(bubbles)
+
+	if len(carousel.Contents) != 3 {
+		t.Errorf("Expected 3 bubbles, got %d", len(carousel.Contents))
+	}
+}
+
+// TestBuildCarouselMessages tests automatic splitting of bubbles into multiple messages
+func TestBuildCarouselMessages(t *testing.T) {
+	// Helper to create test bubbles
+	createBubbles := func(count int) []messaging_api.FlexBubble {
+		bubbles := make([]messaging_api.FlexBubble, count)
+		for i := range bubbles {
+			bubbles[i] = messaging_api.FlexBubble{}
+		}
+		return bubbles
+	}
+
+	tests := []struct {
+		name             string
+		bubbleCount      int
+		expectedMessages int
+	}{
+		{
+			name:             "Empty bubbles",
+			bubbleCount:      0,
+			expectedMessages: 0,
+		},
+		{
+			name:             "Under limit (5 bubbles)",
+			bubbleCount:      5,
+			expectedMessages: 1,
+		},
+		{
+			name:             "Exactly at limit (10 bubbles)",
+			bubbleCount:      10,
+			expectedMessages: 1,
+		},
+		{
+			name:             "Over limit (15 bubbles)",
+			bubbleCount:      15,
+			expectedMessages: 2,
+		},
+		{
+			name:             "Multiple carousels (25 bubbles)",
+			bubbleCount:      25,
+			expectedMessages: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bubbles := createBubbles(tt.bubbleCount)
+			messages := BuildCarouselMessages("測試", bubbles, nil)
+
+			if len(messages) != tt.expectedMessages {
+				t.Errorf("Expected %d messages, got %d", tt.expectedMessages, len(messages))
+			}
+		})
+	}
+}
+
+// TestBuildCarouselMessagesWithSender tests that sender is applied correctly
+func TestBuildCarouselMessagesWithSender(t *testing.T) {
+	bubbles := make([]messaging_api.FlexBubble, 5)
+	for i := range bubbles {
+		bubbles[i] = messaging_api.FlexBubble{}
+	}
+
+	sender := &messaging_api.Sender{
+		Name:    "測試機器人",
+		IconUrl: "https://example.com/icon.png",
+	}
+
+	messages := BuildCarouselMessages("測試", bubbles, sender)
+
+	if len(messages) != 1 {
+		t.Fatalf("Expected 1 message, got %d", len(messages))
+	}
+
+	// Check sender is applied
+	flexMsg, ok := messages[0].(*messaging_api.FlexMessage)
+	if !ok {
+		t.Fatal("Expected FlexMessage type")
+	}
+	if flexMsg.Sender == nil {
+		t.Error("Expected sender to be set")
+	}
+	if flexMsg.Sender.Name != "測試機器人" {
+		t.Errorf("Expected sender name '測試機器人', got %s", flexMsg.Sender.Name)
 	}
 }

@@ -79,9 +79,9 @@ NTPU LineBot 是一個為國立臺北大學設計的 LINE 聊天機器人，提�
 │  │  • Max retries: 3 (configurable)                          │ │
 │  └───────────────────────────────────────────────────────────┘ │
 │  ┌───────────────────────────────────────────────────────────┐ │
-│  │  Singleflight (Deduplication)                             │ │
-│  │  • 10 users query same ID → only 1 scrape                │ │
-│  │  • Others wait for result                                 │ │
+│  │  URL Cache & Failover                                     │ │
+│  │  • Automatic failover between URLs                       │ │
+│  │  • 3 mirrors per service (IP + domain)                   │ │
 │  └───────────────────────────────────────────────────────────┘ │
 │  ┌───────────────────────────────────────────────────────────┐ │
 │  │  HTTP Client                                              │ │
@@ -127,9 +127,7 @@ User Query → Bot Module → Repository Layer
                     │                   │
                 Cache Hit           Cache Miss
                     │                   │
-                Return Data         Singleflight
-                    │                   ↓
-                    │              Rate Limiter
+                Return Data         Rate Limiter
                     │                   ↓
                     │              HTTP Scrape
                     │                   ↓
@@ -158,31 +156,7 @@ User Query → Bot Module → Repository Layer
 - 易於切換資料來源（SQLite → PostgreSQL）
 - 業務邏輯不依賴資料庫細節
 
-### 2. Singleflight Pattern（單次執行模式）
-
-**目的**: 避免重複的昂貴操作（爬蟲請求）
-
-**實現**:
-```go
-// internal/scraper/singleflight.go
-type CacheWrapper struct {
-    group singleflight.Group
-}
-
-func (c *CacheWrapper) DoScrape(key string, fn func() (interface{}, error)) (interface{}, error) {
-    v, err, shared := c.group.Do(key, fn)
-    if shared {
-        // This request was deduplicated
-    }
-    return v, err
-}
-```
-
-**場景**: 10 個使用者同時查詢學號 `410123456`
-- 傳統做法：10 次 HTTP 請求 → 可能被封鎖
-- Singleflight：1 次 HTTP 請求 → 其他 9 個等待結果
-
-### 3. Rate Limiting（限流）
+### 2. Rate Limiting（限流）
 
 **兩層限流機制**:
 
@@ -196,7 +170,7 @@ func (c *CacheWrapper) DoScrape(key string, fn func() (interface{}, error)) (int
    - Per-User: 10 rps
    - 防止濫用
 
-### 4. Strategy Pattern（策略模式）
+### 3. Strategy Pattern（策略模式）
 
 **Bot Module 選擇**:
 ```go

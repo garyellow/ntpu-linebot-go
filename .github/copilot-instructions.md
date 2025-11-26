@@ -11,7 +11,7 @@ LINE Webhook → Gin Handler (25s timeout) → Bot Module Dispatcher
                 ↓ (keyword matching via CanHandle())
       Storage Repository (cache-first)
                 ↓ (7-day TTL check)
-      Scraper Client (rate-limited, singleflight)
+      Scraper Client (rate-limited)
                 ↓ (exponential backoff, failover URLs)
           NTPU Websites (lms/sea)
 ```
@@ -19,7 +19,6 @@ LINE Webhook → Gin Handler (25s timeout) → Bot Module Dispatcher
 **Critical Flow Details:**
 - **Context timeout**: All bot operations inherit 25s deadline from webhook (`internal/webhook/handler.go:214`)
 - **Message batching**: LINE allows max 5 messages per reply; webhook auto-truncates to 4 + warning (`handler.go:159`)
-- **Singleflight deduplication**: 10 concurrent queries for same data → 1 scrape execution (`internal/scraper/singleflight.go`)
 
 ## Bot Module Registration Pattern
 
@@ -49,7 +48,7 @@ LINE Webhook → Gin Handler (25s timeout) → Bot Module Dispatcher
 - **Soft TTL (5 days)**: Data considered stale, triggers proactive warmup
 - **Hard TTL (7 days)**: Data absolutely expired, must be deleted
 - TTL enforced at SQL level: `WHERE cached_at > ?`
-- Singleflight wrapper prevents cache stampede
+
 
 **Background Jobs** (`cmd/server/main.go`):
 - **Proactive Warmup**: Daily 3:00 AM, refreshes data past Soft TTL
@@ -171,5 +170,5 @@ Multi-stage build (alpine builder + distroless runtime), init-data for permissio
 - **Bot module interface**: `internal/bot/handler.go`
 - **DB schema**: `internal/storage/schema.go`
 - **LINE utilities**: `internal/lineutil/builder.go` (use instead of raw SDK)
-- **Singleflight wrapper**: `internal/scraper/singleflight.go`
+
 - **Sticker manager**: `internal/sticker/sticker.go` (avatar URLs for messages)

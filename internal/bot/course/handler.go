@@ -29,7 +29,6 @@ type Handler struct {
 
 const (
 	moduleName           = "course"
-	splitChar            = "$"
 	senderName           = "課程魔法師"
 	MaxCoursesPerSearch  = 50 // Maximum courses to return in search results
 	MaxTitleDisplayChars = 60 // Maximum characters for course title display before truncation
@@ -178,7 +177,7 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 
 	// Handle "授課課程" postback FIRST (before UID check, since teacher name might contain numbers)
 	if strings.HasPrefix(data, "授課課程") {
-		parts := strings.Split(data, splitChar)
+		parts := strings.Split(data, bot.PostbackSplitChar)
 		if len(parts) >= 2 {
 			teacherName := parts[1]
 			log.Infof("Handling teacher courses postback for: %s", teacherName)
@@ -208,14 +207,9 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 	if err != nil {
 		log.WithError(err).Error("Failed to query cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		msg := lineutil.ErrorMessageWithDetailAndSender("查詢課程時發生問題", sender)
-		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
-			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("重試", uid)},
-				{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
-			})
+		return []messaging_api.MessageInterface{
+			lineutil.ErrorMessageWithQuickReply("查詢課程時發生問題", sender, uid),
 		}
-		return []messaging_api.MessageInterface{msg}
 	}
 
 	if course != nil {
@@ -277,14 +271,9 @@ func (h *Handler) handleCourseTitleSearch(ctx context.Context, title string) []m
 	if err != nil {
 		log.WithError(err).Error("Failed to search courses in cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		msg := lineutil.ErrorMessageWithDetailAndSender("搜尋課程時發生問題", sender)
-		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
-			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("重試", "課程 "+title)},
-				{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
-			})
+		return []messaging_api.MessageInterface{
+			lineutil.ErrorMessageWithQuickReply("搜尋課程時發生問題", sender, "課程 "+title),
 		}
-		return []messaging_api.MessageInterface{msg}
 	}
 
 	if len(courses) > 0 {
@@ -469,14 +458,9 @@ func (h *Handler) handleTeacherSearch(ctx context.Context, teacherName string) [
 	if err != nil {
 		log.WithError(err).Error("Failed to search courses by teacher")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		msg := lineutil.ErrorMessageWithDetailAndSender("搜尋教師課程時發生問題", sender)
-		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
-			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("重試", "老師 "+teacherName)},
-				{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
-			})
+		return []messaging_api.MessageInterface{
+			lineutil.ErrorMessageWithQuickReply("搜尋教師課程時發生問題", sender, "老師 "+teacherName),
 		}
-		return []messaging_api.MessageInterface{msg}
 	}
 
 	// If SQL LIKE didn't find results, try fuzzy character-set matching
@@ -572,12 +556,7 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 	header := lineutil.NewHeaderBadge("📚", "課程資訊")
 
 	// Hero: Course title with course code in format `{課程名稱} ({課程代碼})`
-	// Extract course code (e.g., "U0001" from "1132U0001")
-	courseCode := lineutil.ExtractCourseCode(course.UID)
-	heroTitle := course.Title
-	if courseCode != "" {
-		heroTitle = fmt.Sprintf("%s (%s)", course.Title, courseCode)
-	}
+	heroTitle := lineutil.FormatCourseTitleWithUID(course.Title, course.UID)
 	hero := lineutil.NewHeroBox(heroTitle, "")
 
 	// Build body contents using BodyContentBuilder for cleaner code
@@ -640,7 +619,7 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 			lineutil.NewPostbackActionWithDisplayText(
 				"👤 教師課程",
 				displayText,
-				fmt.Sprintf("course:授課課程%s%s", splitChar, teacherName),
+				fmt.Sprintf("course:授課課程%s%s", bot.PostbackSplitChar, teacherName),
 			),
 		).WithStyle("secondary").WithHeight("sm").FlexButton)
 	}
@@ -694,12 +673,7 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 	var bubbles []messaging_api.FlexBubble
 	for _, course := range courses {
 		// Hero: Course title with course code in format `{課程名稱} ({課程代碼})`
-		// Extract course code (e.g., "U0001" from "1132U0001")
-		courseCode := lineutil.ExtractCourseCode(course.UID)
-		heroTitle := course.Title
-		if courseCode != "" {
-			heroTitle = fmt.Sprintf("%s (%s)", course.Title, courseCode)
-		}
+		heroTitle := lineutil.FormatCourseTitleWithUID(course.Title, course.UID)
 		hero := lineutil.NewCompactHeroBox(heroTitle)
 
 		// Build body contents with improved layout
@@ -754,32 +728,14 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 		bubbles = append(bubbles, *bubble.FlexBubble)
 	}
 
-	// Split bubbles into carousels (LINE API limit: max 10 bubbles per Flex Carousel)
-	for i := 0; i < len(bubbles); i += 10 {
-		end := i + 10
-		if end > len(bubbles) {
-			end = len(bubbles)
-		}
-
-		carouselBubbles := bubbles[i:end]
-		carousel := &messaging_api.FlexCarousel{
-			Contents: carouselBubbles,
-		}
-
-		flexMsg := lineutil.NewFlexMessage("課程列表", carousel)
-		flexMsg.Sender = sender
-		messages = append(messages, flexMsg)
-	}
+	// Build carousel messages with automatic splitting (max 10 bubbles per carousel)
+	messages = lineutil.BuildCarouselMessages("課程列表", bubbles, sender)
 
 	// Add Quick Reply to the last message
-	if len(messages) > 0 {
-		if flexMsg, ok := messages[len(messages)-1].(*messaging_api.FlexMessage); ok {
-			flexMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("重新查詢", "課程")},
-				{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
-			})
-		}
-	}
+	lineutil.AddQuickReplyToMessages(messages,
+		lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("重新查詢", "課程")},
+		lineutil.QuickReplyHelpAction(),
+	)
 
 	return messages
 }

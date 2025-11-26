@@ -25,10 +25,6 @@ var AllEduCodes = []string{"U", "M", "N", "P"}
 // Classroom regex patterns
 var classroomRegex = regexp.MustCompile(`(?:教室|上課地點)[:：為](.*?)(?:$|[ .，。；【])`)
 
-// getWorkingSEABaseURL gets the working SEA base URL (shared with contact_scraper).
-// See contact_scraper.go for implementation details.
-// clearSEACache is also defined in contact_scraper.go
-
 // ScrapeCoursesByYear scrapes ALL courses for a given year (both semesters)
 // More efficient for warmup: 4 requests per year vs 8 requests (4 per semester × 2)
 // This is a convenience wrapper around ScrapeCourses with term=0 and empty title
@@ -45,7 +41,7 @@ func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, 
 	courses := make([]*storage.Course, 0)
 
 	// Get working base URL with failover support
-	courseBaseURL, err := getWorkingSEABaseURL(ctx, client)
+	courseBaseURL, err := seaCache(ctx, client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get working SEA URL: %w", err)
 	}
@@ -116,7 +112,7 @@ func ScrapeCourseByUID(ctx context.Context, client *scraper.Client, uid string) 
 	}
 
 	// Get working base URL with failover support
-	courseBaseURL, err := getWorkingSEABaseURL(ctx, client)
+	courseBaseURL, err := seaCache(ctx, client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get working SEA URL: %w", err)
 	}

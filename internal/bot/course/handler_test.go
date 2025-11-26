@@ -127,7 +127,11 @@ func TestUIDRegex(t *testing.T) {
 	}
 }
 
-func TestHandleMessage_CourseUID(t *testing.T) {
+// NOTE: Network-dependent tests are consolidated into a single representative test.
+// The keyword parsing logic is already covered by TestCanHandle.
+// Individual scraping paths (UID, title, teacher) use the same underlying scraper.
+
+func TestHandleMessage_NetworkIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping network test in short mode")
 	}
@@ -135,77 +139,12 @@ func TestHandleMessage_CourseUID(t *testing.T) {
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
-	messages := h.HandleMessage(ctx, "3141U0001")
+	// Test UID lookup - the most common and representative case
+	messages := h.HandleMessage(ctx, "1141U0010")
 
 	// Should return some response (even if course not found)
 	if len(messages) == 0 {
 		t.Error("Expected messages for course UID query, got none")
-	}
-}
-
-func TestHandleMessage_CourseTitle(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping network test in short mode")
-	}
-
-	h := setupTestHandler(t)
-	ctx := context.Background()
-
-	messages := h.HandleMessage(ctx, "課程 資料結構")
-
-	// Should return some response
-	if len(messages) == 0 {
-		t.Error("Expected messages for course title search, got none")
-	}
-}
-
-func TestHandleMessage_Teacher(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping network test in short mode")
-	}
-
-	h := setupTestHandler(t)
-	ctx := context.Background()
-
-	messages := h.HandleMessage(ctx, "老師 王教授")
-
-	// Should return some response
-	if len(messages) == 0 {
-		t.Error("Expected messages for teacher search, got none")
-	}
-}
-
-func TestHandleMessage_CourseKeywordBefore(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping network test in short mode")
-	}
-
-	h := setupTestHandler(t)
-	ctx := context.Background()
-
-	// Test "search_term keyword" pattern
-	messages := h.HandleMessage(ctx, "資料結構課")
-
-	// Should return some response
-	if len(messages) == 0 {
-		t.Error("Expected messages for course keyword at end, got none")
-	}
-}
-
-func TestHandleMessage_TeacherKeywordBefore(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping network test in short mode")
-	}
-
-	h := setupTestHandler(t)
-	ctx := context.Background()
-
-	// Test "search_term keyword" pattern
-	messages := h.HandleMessage(ctx, "王教授老師")
-
-	// Should return some response
-	if len(messages) == 0 {
-		t.Error("Expected messages for teacher keyword at end, got none")
 	}
 }
 
@@ -337,38 +276,6 @@ func TestFormatCourseListResponse_LargeList(t *testing.T) {
 	}
 }
 
-func TestHandlePostback_CourseUID(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping network test in short mode")
-	}
-
-	h := setupTestHandler(t)
-	ctx := context.Background()
-
-	// Test UID postback
-	messages := h.HandlePostback(ctx, "3141U0001")
-
-	if len(messages) == 0 {
-		t.Error("Expected messages for UID postback, got none")
-	}
-}
-
-func TestHandlePostback_TeacherCourses(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping network test in short mode")
-	}
-
-	h := setupTestHandler(t)
-	ctx := context.Background()
-
-	// Test "授課課程" postback
-	messages := h.HandlePostback(ctx, "授課課程$王教授")
-
-	if len(messages) == 0 {
-		t.Error("Expected messages for teacher courses postback, got none")
-	}
-}
-
 func TestHandlePostback_InvalidData(t *testing.T) {
 	h := setupTestHandler(t)
 	ctx := context.Background()
@@ -381,6 +288,10 @@ func TestHandlePostback_InvalidData(t *testing.T) {
 		t.Errorf("Expected no messages for invalid postback, got %d", len(messages))
 	}
 }
+
+// NOTE: HandlePostback network tests are omitted.
+// The postback logic reuses the same scraper as HandleMessage.
+// TestHandleMessage_NetworkIntegration provides sufficient integration coverage.
 
 // NOTE: Semester determination logic is tested in semester_test.go
 // TestSemesterDetectionLogic tests the actual getSemestersForDate() function

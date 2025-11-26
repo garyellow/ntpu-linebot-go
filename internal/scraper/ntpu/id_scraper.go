@@ -123,24 +123,26 @@ func reverseMap(m map[string]string) map[string]string {
 	return result
 }
 
+// IsLawDepartment returns true if the department code belongs to Law School (71x).
+// Used to determine if "組" should be used instead of "系" in display text.
+func IsLawDepartment(deptCode string) bool {
+	return strings.HasPrefix(deptCode, "71")
+}
+
 const (
 	studentSearchPath = "/portfolio/search.php"
 )
 
-// getWorkingBaseURL gets the working LMS base URL using URLCache abstraction.
-// Returns cached URL if available (fast path), otherwise triggers failover detection.
-// Auto-recovery: caller should call clearLMSCache() on scrape errors.
-func getWorkingBaseURL(ctx context.Context, client *scraper.Client) (string, error) {
-	cache := scraper.NewURLCache(client, "lms")
-	return cache.Get(ctx)
+// lmsCache is a package-level helper for LMS URL caching.
+// Returns the cached working URL or detects a new one.
+func lmsCache(ctx context.Context, client *scraper.Client) (string, error) {
+	return scraper.NewURLCache(client, "lms").Get(ctx)
 }
 
 // clearLMSCache invalidates the LMS URL cache to trigger re-detection on next request.
 // Call this when a scrape operation fails to enable automatic failover.
-// Currently unused but kept for future URL failover error handling.
-func clearLMSCache(client *scraper.Client) { // nolint:unused
-	cache := scraper.NewURLCache(client, "lms")
-	cache.Clear()
+func clearLMSCache(client *scraper.Client) {
+	scraper.NewURLCache(client, "lms").Clear()
 }
 
 // ScrapeStudentsByYear scrapes students by year and department code
@@ -151,7 +153,7 @@ func ScrapeStudentsByYear(ctx context.Context, client *scraper.Client, year int,
 	students := make([]*storage.Student, 0)
 
 	// Get working base URL with failover support
-	baseURL, err := getWorkingBaseURL(ctx, client)
+	baseURL, err := lmsCache(ctx, client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get working LMS URL: %w", err)
 	}
@@ -241,7 +243,7 @@ func parseStudentPage(doc *goquery.Document, year int, deptCode string) []*stora
 // Supports automatic URL failover across multiple LMS endpoints
 func ScrapeStudentByID(ctx context.Context, client *scraper.Client, studentID string) (*storage.Student, error) {
 	// Get working base URL with failover support
-	baseURL, err := getWorkingBaseURL(ctx, client)
+	baseURL, err := lmsCache(ctx, client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get working LMS URL: %w", err)
 	}
@@ -380,7 +382,7 @@ func determineDepartment(studentID string) string {
 
 	if ok {
 		// All 71x departments (712/714/716) return unified "法律系"
-		if strings.HasPrefix(deptCode, "71") {
+		if IsLawDepartment(deptCode) {
 			return "法律系"
 		}
 		// 742/744 have specific names in DepartmentNames (社學/社工)

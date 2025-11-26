@@ -6,6 +6,11 @@ import (
 	"strings"
 )
 
+// PostbackSplitChar is the delimiter used to separate fields in postback data.
+// This ensures consistency across all bot modules when constructing postback strings.
+// Example: "action$data1$data2" where "$" is the split character.
+const PostbackSplitChar = "$"
+
 // BuildKeywordRegex creates a regex pattern from keywords.
 // Keywords are sorted by length (longest first) to ensure correct alternation matching.
 // For example, "課程" should match before "課" to prevent partial matches.

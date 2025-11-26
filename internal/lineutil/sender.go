@@ -27,9 +27,9 @@ func GetSender(name string, stickerManager *sticker.Manager) *messaging_api.Send
 // The text parameter is the message content.
 // LINE API limits: max 5000 characters per text message
 func NewTextMessageWithConsistentSender(text string, sender *messaging_api.Sender) *messaging_api.TextMessage {
-	// Validate and truncate if necessary
+	// Validate and truncate if necessary (LINE API limit: 5000 chars)
 	if len(text) > 5000 {
-		text = TruncateText(text, 4997) + "..."
+		text = TruncateRunes(text, 4997) + "..."
 	}
 
 	return &messaging_api.TextMessage{
@@ -38,12 +38,59 @@ func NewTextMessageWithConsistentSender(text string, sender *messaging_api.Sende
 	}
 }
 
+// ================================================
+// Common Error Message Helpers
+// ================================================
+
+const (
+	// Generic error message template
+	errorMessageTemplate = "❌ 系統暫時無法處理您的請求\n\n請稍後再試，或聯絡管理員協助。\n\n如問題持續發生，請提供查詢內容以便我們協助處理。"
+	// Error message with detail template (prefix + detail + suffix)
+	errorDetailPrefix = "❌ "
+	errorDetailSuffix = "\n\n請稍後再試，或聯絡管理員協助。"
+)
+
 // ErrorMessageWithSender creates a user-friendly error message with a pre-created sender.
 func ErrorMessageWithSender(err error, sender *messaging_api.Sender) messaging_api.MessageInterface {
-	return NewTextMessageWithConsistentSender("❌ 系統暫時無法處理您的請求\n\n請稍後再試，或聯絡管理員協助。\n\n如問題持續發生，請提供查詢內容以便我們協助處理。", sender)
+	return NewTextMessageWithConsistentSender(errorMessageTemplate, sender)
 }
 
 // ErrorMessageWithDetailAndSender creates an error message with additional context.
 func ErrorMessageWithDetailAndSender(userMessage string, sender *messaging_api.Sender) messaging_api.MessageInterface {
-	return NewTextMessageWithConsistentSender("❌ "+userMessage+"\n\n請稍後再試，或聯絡管理員協助。", sender)
+	return NewTextMessageWithConsistentSender(errorDetailPrefix+userMessage+errorDetailSuffix, sender)
+}
+
+// ErrorMessageWithQuickReply creates an error message with retry and help quick replies.
+// This is a convenience function for the common pattern of showing an error with retry option.
+func ErrorMessageWithQuickReply(userMessage string, sender *messaging_api.Sender, retryText string) *messaging_api.TextMessage {
+	msg := NewTextMessageWithConsistentSender(errorDetailPrefix+userMessage+errorDetailSuffix, sender)
+	msg.QuickReply = NewQuickReply([]QuickReplyItem{
+		QuickReplyRetryAction(retryText),
+		QuickReplyHelpAction(),
+	})
+	return msg
+}
+
+// NotFoundMessage creates a standardized "not found" message with search suggestions.
+// Parameters:
+//   - searchTerm: The term that was searched for
+//   - itemType: What was being searched (e.g., "課程", "聯絡資料", "學生")
+//   - suggestions: Optional suggestion lines (will be formatted as bullet points)
+//   - sender: The sender to use for the message
+func NotFoundMessage(searchTerm, itemType string, suggestions []string, sender *messaging_api.Sender) *messaging_api.TextMessage {
+	var text string
+	if searchTerm != "" {
+		text = "🔍 查無包含「" + searchTerm + "」的" + itemType
+	} else {
+		text = "🔍 查無" + itemType
+	}
+
+	if len(suggestions) > 0 {
+		text += "\n\n💡 建議："
+		for _, s := range suggestions {
+			text += "\n• " + s
+		}
+	}
+
+	return NewTextMessageWithConsistentSender(text, sender)
 }

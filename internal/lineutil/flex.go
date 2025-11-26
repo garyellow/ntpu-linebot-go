@@ -1,6 +1,8 @@
 package lineutil
 
 import (
+	"fmt"
+
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
@@ -26,6 +28,64 @@ func NewFlexBubble(header *FlexBox, hero messaging_api.FlexComponentInterface, b
 		bubble.Footer = footer.FlexBox
 	}
 	return &FlexBubble{bubble}
+}
+
+// MaxBubblesPerCarousel is the LINE API limit for Flex Carousel
+const MaxBubblesPerCarousel = 10
+
+// NewFlexCarousel creates a Flex Carousel from a slice of bubbles.
+// LINE API limits carousels to 10 bubbles maximum.
+// For larger sets, use BuildCarouselMessages which automatically splits into multiple messages.
+func NewFlexCarousel(bubbles []messaging_api.FlexBubble) *messaging_api.FlexCarousel {
+	return &messaging_api.FlexCarousel{
+		Contents: bubbles,
+	}
+}
+
+// BuildCarouselMessages creates Flex Messages from bubbles, automatically splitting into
+// multiple carousels (10 bubbles max per carousel) and applying consistent sender.
+//
+// Parameters:
+//   - altText: Alt text for the Flex Messages (will append page numbers for multi-page)
+//   - bubbles: Slice of FlexBubbles to include
+//   - sender: Sender to apply to all messages (can be nil)
+//
+// Returns: Slice of messaging_api.MessageInterface ready for reply
+//
+// Example:
+//
+//	bubbles := []messaging_api.FlexBubble{...}
+//	sender := lineutil.GetSender("課程魔法師", stickerManager)
+//	messages := lineutil.BuildCarouselMessages("課程列表", bubbles, sender)
+func BuildCarouselMessages(altText string, bubbles []messaging_api.FlexBubble, sender *messaging_api.Sender) []messaging_api.MessageInterface {
+	if len(bubbles) == 0 {
+		return nil
+	}
+
+	var messages []messaging_api.MessageInterface
+
+	for i := 0; i < len(bubbles); i += MaxBubblesPerCarousel {
+		end := i + MaxBubblesPerCarousel
+		if end > len(bubbles) {
+			end = len(bubbles)
+		}
+
+		carousel := NewFlexCarousel(bubbles[i:end])
+
+		// Add page indicator for multi-page results
+		msgAltText := altText
+		if len(bubbles) > MaxBubblesPerCarousel && i > 0 {
+			msgAltText = fmt.Sprintf("%s (%d-%d)", altText, i+1, end)
+		}
+
+		msg := NewFlexMessage(msgAltText, carousel)
+		if sender != nil {
+			msg.Sender = sender
+		}
+		messages = append(messages, msg)
+	}
+
+	return messages
 }
 
 // FlexBox wrapper

@@ -27,9 +27,6 @@ Prometheus 指標收集。
 - **ntpu_rate_limiter_wait_duration_seconds** - Rate limiter 等待時間直方圖 (labels: limiter_type)
 - **ntpu_rate_limiter_dropped_total** - Rate limiter 丟棄的請求數 (labels: limiter_type)
 
-### Singleflight Metrics
-- **ntpu_singleflight_dedup_total** - Singleflight 去重請求數 (labels: module)
-
 ### Warmup Metrics
 - **ntpu_warmup_tasks_total** - Warmup 任務總數 (labels: module, status)
 - **ntpu_warmup_duration_seconds** - Warmup 總耗時直方圖
@@ -63,9 +60,6 @@ m.RecordCourseIntegrityIssue("missing_no")
 // Rate limiter metrics
 m.RecordRateLimiterWait("scraper", 0.5)
 m.RecordRateLimiterDrop("user")
-
-// Singleflight metrics
-m.RecordSingleflightDedup("id")
 
 // Warmup metrics
 m.RecordWarmupTask("id", "success")

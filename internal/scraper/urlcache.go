@@ -3,6 +3,7 @@ package scraper
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 )
 
@@ -24,13 +25,44 @@ type URLCache struct {
 	cache  atomic.Value // stores string
 }
 
-// NewURLCache creates a new URL cache for a specific domain.
+// Global cache registry to ensure URL caches are shared across all usages
+// Key: "client_ptr_domain" format to support multiple clients
+var (
+	urlCacheRegistry = make(map[string]*URLCache)
+	urlCacheMutex    sync.RWMutex
+)
+
+// NewURLCache returns a shared URL cache for a specific domain.
+// If a cache for this client+domain combination already exists, it returns the existing one.
+// This ensures URL detection results are shared across all scrapers.
 // Domain must be registered in Client.baseURLs (e.g., "lms", "sea").
 func NewURLCache(client *Client, domain string) *URLCache {
-	return &URLCache{
+	// Create a unique key based on client pointer and domain
+	key := fmt.Sprintf("%p_%s", client, domain)
+
+	// Fast path: try read lock first
+	urlCacheMutex.RLock()
+	if cache, exists := urlCacheRegistry[key]; exists {
+		urlCacheMutex.RUnlock()
+		return cache
+	}
+	urlCacheMutex.RUnlock()
+
+	// Slow path: acquire write lock and create new cache
+	urlCacheMutex.Lock()
+	defer urlCacheMutex.Unlock()
+
+	// Double-check after acquiring write lock
+	if cache, exists := urlCacheRegistry[key]; exists {
+		return cache
+	}
+
+	cache := &URLCache{
 		client: client,
 		domain: domain,
 	}
+	urlCacheRegistry[key] = cache
+	return cache
 }
 
 // Get returns the cached working URL or detects a new one if cache is empty.

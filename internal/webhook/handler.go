@@ -514,11 +514,11 @@ func (h *Handler) getHelpMessage() []messaging_api.MessageInterface {
 	sender := lineutil.GetSender("幫助魔法師", h.stickerManager)
 	msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
-		{Action: lineutil.NewMessageAction("📚 課程", "課程")},
-		{Action: lineutil.NewMessageAction("🎓 學號", "學號")},
-		{Action: lineutil.NewMessageAction("📞 聯絡", "聯絡")},
-		{Action: lineutil.NewMessageAction("🚨 緊急", "緊急")},
+		lineutil.QuickReplyHelpAction(),
+		lineutil.QuickReplyCourseAction(),
+		lineutil.QuickReplyStudentAction(),
+		lineutil.QuickReplyContactAction(),
+		lineutil.QuickReplyEmergencyAction(),
 	})
 	return []messaging_api.MessageInterface{msg}
 }

@@ -6,7 +6,7 @@
 
 - **Client**: HTTP 客戶端，支援多 URL Failover、User-Agent 輪替、指數退避重試
 - **Rate Limiter**: Token bucket 限流（預設 3 workers，15 秒補充週期）
-- **Singleflight**: 去重複請求（多人同時查詢只執行一次爬蟲）
+- **URL Cache**: URL 快取，自動選擇可用的 failover URL
 
 ## 資料來源
 
