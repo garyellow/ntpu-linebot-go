@@ -110,20 +110,6 @@ groups:
           summary: "High number of goroutines"
           description: "Goroutine count is {{ $value }} (threshold: 1000), possible goroutine leak"
 
-      # High rate limiter wait time
-      - alert: HighRateLimiterWait
-        expr: |
-          histogram_quantile(0.95,
-            sum(rate(ntpu_rate_limiter_wait_duration_seconds_bucket[5m])) by (le, limiter_type)
-          ) > 2
-        for: 5m
-        labels:
-          severity: warning
-          component: rate_limiter
-        annotations:
-          summary: "High rate limiter wait time for {{ $labels.limiter_type }}"
-          description: "P95 rate limiter wait time for {{ $labels.limiter_type }} is {{ $value }}s (threshold: 2s)"
-
       # High rate limiter drop rate
       - alert: HighRateLimiterDropRate
         expr: |

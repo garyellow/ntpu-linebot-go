@@ -26,11 +26,7 @@ type Metrics struct {
 	CourseDataIntegrity *prometheus.CounterVec
 
 	// Rate limiter metrics
-	RateLimiterWaitDuration *prometheus.HistogramVec
-	RateLimiterDropped      *prometheus.CounterVec
-
-	// Singleflight metrics
-	SingleflightDedupTotal *prometheus.CounterVec
+	RateLimiterDropped *prometheus.CounterVec
 
 	// Warmup metrics
 	WarmupTasksTotal *prometheus.CounterVec
@@ -53,7 +49,7 @@ func New(registry *prometheus.Registry) *Metrics {
 			prometheus.HistogramOpts{
 				Name:    "ntpu_scraper_duration_seconds",
 				Help:    "Scraper request duration in seconds by module",
-				Buckets: []float64{0.5, 1, 2, 5, 10, 20, 30, 60}, // Matches 60s timeout + backoff
+				Buckets: []float64{0.5, 1, 2, 5, 10, 20, 30, 60, 120}, // Single request timeout is 120s
 			},
 			[]string{"module"}, // module: id, contact, course
 		),
@@ -112,30 +108,12 @@ func New(registry *prometheus.Registry) *Metrics {
 		),
 
 		// Rate limiter metrics
-		RateLimiterWaitDuration: promauto.With(registry).NewHistogramVec(
-			prometheus.HistogramOpts{
-				Name:    "ntpu_rate_limiter_wait_duration_seconds",
-				Help:    "Time spent waiting for rate limiter token by limiter type",
-				Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 2, 5}, // 1ms to 5s
-			},
-			[]string{"limiter_type"}, // limiter_type: scraper, user, global
-		),
-
 		RateLimiterDropped: promauto.With(registry).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "ntpu_rate_limiter_dropped_total",
 				Help: "Total number of requests dropped by rate limiter",
 			},
 			[]string{"limiter_type"}, // limiter_type: user, global
-		),
-
-		// Singleflight metrics
-		SingleflightDedupTotal: promauto.With(registry).NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "ntpu_singleflight_dedup_total",
-				Help: "Total number of deduplicated requests (requests that waited instead of executing)",
-			},
-			[]string{"module"}, // module: id, contact, course
 		),
 
 		// Warmup metrics
@@ -191,19 +169,9 @@ func (m *Metrics) RecordCourseIntegrityIssue(issueType string) {
 	m.CourseDataIntegrity.WithLabelValues(issueType).Inc()
 }
 
-// RecordRateLimiterWait records time spent waiting for rate limiter
-func (m *Metrics) RecordRateLimiterWait(limiterType string, duration float64) {
-	m.RateLimiterWaitDuration.WithLabelValues(limiterType).Observe(duration)
-}
-
 // RecordRateLimiterDrop records a request dropped by rate limiter
 func (m *Metrics) RecordRateLimiterDrop(limiterType string) {
 	m.RateLimiterDropped.WithLabelValues(limiterType).Inc()
-}
-
-// RecordSingleflightDedup records a deduplicated request
-func (m *Metrics) RecordSingleflightDedup(module string) {
-	m.SingleflightDedupTotal.WithLabelValues(module).Inc()
 }
 
 // RecordWarmupTask records a warmup task completion

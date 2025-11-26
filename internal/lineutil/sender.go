@@ -13,9 +13,6 @@ import (
 //	sender := lineutil.GetSender("學號魔法師", stickerManager)
 //	msg1 := &messaging_api.TextMessage{Text: "訊息1", Sender: sender}
 //	msg2 := &messaging_api.TextMessage{Text: "訊息2", Sender: sender}
-//
-// This matches the Python version's behavior where get_sender() is called once
-// at the beginning of a handler and reused for all messages in that reply.
 func GetSender(name string, stickerManager *sticker.Manager) *messaging_api.Sender {
 	iconURL := stickerManager.GetRandomSticker()
 	return &messaging_api.Sender{

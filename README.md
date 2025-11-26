@@ -1,4 +1,4 @@
-# NTPU LineBot (Go)
+# NTPU LineBot
 
 [![CI](https://github.com/garyellow/ntpu-linebot-go/actions/workflows/ci.yml/badge.svg)](https://github.com/garyellow/ntpu-linebot-go/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/garyellow/ntpu-linebot-go)](https://goreportcard.com/report/github.com/garyellow/ntpu-linebot-go)
@@ -6,8 +6,6 @@
 [![Go 1.25+](https://img.shields.io/badge/go-1.25+-blue.svg)](https://go.dev/dl/)
 
 國立臺北大學 LINE 聊天機器人，提供學號查詢、通訊錄查詢、課程查詢等功能。
-
-> **從 Python 遷移**: 本專案從 [ntpu-linebot-python](https://github.com/garyellow/ntpu-linebot-python) 重寫而來，選擇 Go 以獲得更好的並發處理、更低的資源消耗與完整的類型安全。詳見 [遷移說明](docs/migration.md)。
 
 ## 📋 目錄
 
@@ -29,7 +27,7 @@
 ### 技術特色
 - 🚀 **高效能**: Goroutine 並發處理，Worker Pool 限流保護
 - 💾 **智能快取**: SQLite WAL 模式，7 天 TTL，Cache-First 策略
-- 🛡️ **反爬蟲**: User-Agent 輪替、Singleflight 去重、指數退避重試
+- 🛡️ **反爬蟲**: User-Agent 輪替、Token Bucket 限流、指數退避重試
 - 📊 **可觀測性**: Prometheus + Grafana 監控儀表板，結構化日誌
 - 🔒 **安全性**: Webhook 簽章驗證、Rate Limiting、SQL Injection 防護
 
@@ -238,7 +236,6 @@ LOG_LEVEL=debug go run ./cmd/server
 ## 📚 文件
 
 - 📐 [架構設計](docs/architecture.md) - 系統設計與實作細節
-- 🔄 [Python 遷移說明](docs/migration.md) - 為何從 Python 遷移到 Go
 - 📊 [監控設定](deployments/README.md) - Prometheus/Grafana 配置
 - 🔧 [配置說明](internal/config/README.md) - 環境變數完整清單
 

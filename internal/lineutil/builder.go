@@ -256,7 +256,6 @@ func TruncateText(text string, maxLen int) string {
 }
 
 // ContainsAllRunes checks if string s contains all runes from string chars.
-// Implements Python's set(chars).issubset(s) logic for fuzzy matching.
 // Example: ContainsAllRunes("資訊工程學系", "資工系") returns true
 // because all characters in "資工系" exist in "資訊工程學系".
 // This is case-insensitive for ASCII characters.

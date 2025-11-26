@@ -30,7 +30,6 @@ var classroomRegex = regexp.MustCompile(`(?:教室|上課地點)[:：為](.*?)(?
 // clearSEACache is also defined in contact_scraper.go
 
 // ScrapeCoursesByYear scrapes ALL courses for a given year (both semesters)
-// This matches Python's get_simple_courses_by_year which doesn't use qTerm parameter
 // More efficient for warmup: 4 requests per year vs 8 requests (4 per semester × 2)
 // Supports automatic URL failover across multiple SEA endpoints
 func ScrapeCoursesByYear(ctx context.Context, client *scraper.Client, year int) ([]*storage.Course, error) {
@@ -43,7 +42,6 @@ func ScrapeCoursesByYear(ctx context.Context, client *scraper.Client, year int) 
 	}
 
 	// Query without qTerm to get ALL courses for the year (both semesters)
-	// This matches Python's behavior: params = {"qYear": str(year), "seq1": "A", "seq2": "M"}
 	baseParams := fmt.Sprintf("?qYear=%d&seq1=A&seq2=M", year)
 	for _, eduCode := range AllEduCodes {
 		queryURL := fmt.Sprintf("%s%s%s&courseno=%s", courseBaseURL, courseQueryByKeywordPath, baseParams, eduCode)

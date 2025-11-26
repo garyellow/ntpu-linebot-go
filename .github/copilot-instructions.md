@@ -37,6 +37,8 @@ LINE Webhook → Gin Handler (25s timeout) → Bot Module Dispatcher
 **Course Module**: Smart semester detection (`semester.go`), UID regex (`(?i)\d{3,4}[umnp]\d{4}`), max 50 results, Flex Message carousels
 
 **Contact Module**: Emergency phones (hardcoded), multilingual keywords, organization/individual contacts, Flex Message cards
+- **Search fields**: name, title (職稱)
+- **Sorting**: Organizations by hierarchy (top-level first), individuals by match count → name → title → organization
 
 **All modules**: Prefer text wrapping over truncation for complete info display, use `TruncateRunes()` only for LINE API limits (altText, displayText), consistent Sender pattern, cache-first strategy
 
@@ -61,7 +63,7 @@ LINE Webhook → Gin Handler (25s timeout) → Bot Module Dispatcher
 
 ## Rate Limiting
 
-**Scraper** (`internal/scraper/ratelimiter.go`): Token bucket (3 workers), 5-10s random delays, 60s timeout, max 5 retries with exponential backoff
+**Scraper** (`internal/scraper/ratelimiter.go`): Token bucket (3 workers), 5-10s random delays, 120s timeout, max 3 retries with exponential backoff
 
 **Webhook**: Per-user (10 req/s, burst 2), global (80 rps), silently drops excess requests
 
@@ -171,7 +173,3 @@ Multi-stage build (alpine builder + distroless runtime), init-data for permissio
 - **LINE utilities**: `internal/lineutil/builder.go` (use instead of raw SDK)
 - **Singleflight wrapper**: `internal/scraper/singleflight.go`
 - **Sticker manager**: `internal/sticker/sticker.go` (avatar URLs for messages)
-
-## Migration Notes
-
-Migrated from Python: asyncio→goroutines, dict cache→SQLite, Flask→Gin, centralized config.

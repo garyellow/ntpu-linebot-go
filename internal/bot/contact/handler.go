@@ -341,7 +341,9 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 		if err == nil && len(allContacts) > 0 {
 			for _, c := range allContacts {
 				// Fuzzy character-set matching: check if all runes in searchTerm exist in target
+				// Search in: name, title, organization, superior
 				if lineutil.ContainsAllRunes(c.Name, searchTerm) ||
+					lineutil.ContainsAllRunes(c.Title, searchTerm) ||
 					lineutil.ContainsAllRunes(c.Organization, searchTerm) ||
 					lineutil.ContainsAllRunes(c.Superior, searchTerm) {
 					contacts = append(contacts, c)
@@ -354,7 +356,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	if len(contacts) > 0 {
 		h.metrics.RecordCacheHit(moduleName)
 		log.Infof("Cache hit for contact search: %s (found %d)", searchTerm, len(contacts))
-		return h.formatContactResults(contacts)
+		return h.formatContactResultsWithSearch(contacts, searchTerm)
 	}
 
 	// Cache miss - scrape from website
@@ -424,7 +426,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	}
 
 	h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
-	return h.formatContactResults(contacts)
+	return h.formatContactResultsWithSearch(contacts, searchTerm)
 }
 
 // handleMembersQuery handles queries for organization members
@@ -510,6 +512,11 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 
 // formatContactResults formats contact results as LINE messages
 func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_api.MessageInterface {
+	return h.formatContactResultsWithSearch(contacts, "")
+}
+
+// formatContactResultsWithSearch formats contact results as LINE messages with search term for sorting
+func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, searchTerm string) []messaging_api.MessageInterface {
 	if len(contacts) == 0 {
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		return []messaging_api.MessageInterface{
@@ -517,8 +524,9 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 		}
 	}
 
-	// Sort contacts: organizations before individuals, then alphabetically by name
-	// This ensures units/departments appear before individual staff members
+	// Sort contacts based on type:
+	// - Organizations: by hierarchy level (top-level units first, i.e., units without superior field come first)
+	// - Individuals: by match count (descending), then name, title, organization
 	sort.SliceStable(contacts, func(i, j int) bool {
 		// Organization comes before individual
 		if contacts[i].Type == "organization" && contacts[j].Type != "organization" {
@@ -527,8 +535,40 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 		if contacts[i].Type != "organization" && contacts[j].Type == "organization" {
 			return false
 		}
-		// Same type: sort by name
-		return contacts[i].Name < contacts[j].Name
+
+		// Both are organizations: sort by hierarchy level (superior units first)
+		// Units without superior come first (top-level), then units with superior
+		if contacts[i].Type == "organization" && contacts[j].Type == "organization" {
+			// Unit without superior (top-level) comes before unit with superior
+			iHasSuperior := contacts[i].Superior != ""
+			jHasSuperior := contacts[j].Superior != ""
+			if !iHasSuperior && jHasSuperior {
+				return true
+			}
+			if iHasSuperior && !jHasSuperior {
+				return false
+			}
+			// Same level: sort by name
+			return contacts[i].Name < contacts[j].Name
+		}
+
+		// Both are individuals: sort by match count, then name, title, organization
+		if searchTerm != "" {
+			iMatchCount := countMatchRunes(contacts[i], searchTerm)
+			jMatchCount := countMatchRunes(contacts[j], searchTerm)
+			if iMatchCount != jMatchCount {
+				return iMatchCount > jMatchCount // Higher match count first
+			}
+		}
+
+		// Same match count or no search term: sort by name, then title, then organization
+		if contacts[i].Name != contacts[j].Name {
+			return contacts[i].Name < contacts[j].Name
+		}
+		if contacts[i].Title != contacts[j].Title {
+			return contacts[i].Title < contacts[j].Title
+		}
+		return contacts[i].Organization < contacts[j].Organization
 	})
 
 	sender := lineutil.GetSender(senderName, h.stickerManager)
@@ -804,4 +844,32 @@ func (h *Handler) buildSearchVariants(searchTerm string) []string {
 		}
 	}
 	return uniqueVariants
+}
+
+// countMatchRunes counts how many runes from searchTerm appear in the contact's fields.
+// Used for sorting individuals by relevance - higher match count = more relevant.
+// Fields checked: name, title, organization, superior
+func countMatchRunes(c storage.Contact, searchTerm string) int {
+	if searchTerm == "" {
+		return 0
+	}
+
+	count := 0
+	searchLower := strings.ToLower(searchTerm)
+
+	// Build a combined string of all searchable fields
+	combined := strings.ToLower(c.Name + c.Title + c.Organization + c.Superior)
+	combinedRunes := make(map[rune]struct{})
+	for _, r := range combined {
+		combinedRunes[r] = struct{}{}
+	}
+
+	// Count how many search runes exist in combined fields
+	for _, r := range searchLower {
+		if _, exists := combinedRunes[r]; exists {
+			count++
+		}
+	}
+
+	return count
 }

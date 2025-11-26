@@ -24,6 +24,8 @@
 - `WARMUP_TIMEOUT=30m` - 預熱超時
 - `WARMUP_MODULES=sticker,id,contact,course` - 預熱模組列表（逗號分隔，空字串跳過，**並行執行無順序限制**）
 - `SHUTDOWN_TIMEOUT=30s` - 優雅關閉超時
+- `USER_RATE_LIMIT_TOKENS=10` - 每個使用者的 Rate Limiter Token 數量
+- `USER_RATE_LIMIT_REFILL_RATE=0.333...` - 每秒補充的 Token 數（預設 1/3，即每 3 秒補充 1 個 Token）
 
 ## 使用方式
 

@@ -44,10 +44,14 @@ type Handler struct {
 	userLimiter    *UserRateLimiter // Per-user rate limiter
 	stickerManager *sticker.Manager // Sticker manager for avatar URLs
 	webhookTimeout time.Duration    // Timeout for bot processing
+
+	// Rate limit configuration
+	userRateLimitTokens     float64
+	userRateLimitRefillRate float64
 }
 
 // NewHandler creates a new webhook handler
-func NewHandler(channelSecret, channelToken string, db *storage.DB, scraperClient *scraper.Client, m *metrics.Metrics, log *logger.Logger, stickerManager *sticker.Manager, webhookTimeout time.Duration) (*Handler, error) {
+func NewHandler(channelSecret, channelToken string, db *storage.DB, scraperClient *scraper.Client, m *metrics.Metrics, log *logger.Logger, stickerManager *sticker.Manager, webhookTimeout time.Duration, userRateLimitTokens, userRateLimitRefillRate float64) (*Handler, error) {
 	// Create messaging API client
 	client, err := messaging_api.NewMessagingApiAPI(channelToken)
 	if err != nil {
@@ -64,21 +68,23 @@ func NewHandler(channelSecret, channelToken string, db *storage.DB, scraperClien
 	// Global: 100 requests per second (we use 80 to be safe)
 	globalRateLimiter := NewRateLimiter(80.0, 80.0)
 
-	// Per-user: 10 requests per second per user
-	userRateLimiter := NewUserRateLimiter(5 * time.Minute)
+	// Per-user rate limiter with metrics support
+	userRateLimiter := NewUserRateLimiter(5*time.Minute, m)
 
 	return &Handler{
-		channelSecret:  channelSecret,
-		client:         client,
-		metrics:        m,
-		logger:         log,
-		idHandler:      idHandler,
-		contactHandler: contactHandler,
-		courseHandler:  courseHandler,
-		rateLimiter:    globalRateLimiter,
-		userLimiter:    userRateLimiter,
-		stickerManager: stickerManager,
-		webhookTimeout: webhookTimeout,
+		channelSecret:           channelSecret,
+		client:                  client,
+		metrics:                 m,
+		logger:                  log,
+		idHandler:               idHandler,
+		contactHandler:          contactHandler,
+		courseHandler:           courseHandler,
+		rateLimiter:             globalRateLimiter,
+		userLimiter:             userRateLimiter,
+		stickerManager:          stickerManager,
+		webhookTimeout:          webhookTimeout,
+		userRateLimitTokens:     userRateLimitTokens,
+		userRateLimitRefillRate: userRateLimitRefillRate,
 	}, nil
 }
 
@@ -181,7 +187,7 @@ func (h *Handler) Handle(c *gin.Context) {
 
 			// Check rate limit before sending
 			chatID := h.getChatID(event)
-			if chatID != "" && !h.userLimiter.Allow(chatID, 10.0, 2.0) {
+			if chatID != "" && !h.userLimiter.Allow(chatID, h.userRateLimitTokens, h.userRateLimitRefillRate) {
 				h.logger.WithField("chat_id", chatID[:8]+"...").Warn("User rate limit exceeded")
 				h.metrics.RecordWebhook(eventType, "rate_limited", time.Since(eventStart).Seconds())
 				h.metrics.RecordHTTPError("rate_limit_user", "webhook")
@@ -192,6 +198,7 @@ func (h *Handler) Handle(c *gin.Context) {
 			if !h.rateLimiter.Allow() {
 				h.logger.Warn("Global rate limit exceeded, waiting...")
 				h.metrics.RecordHTTPError("rate_limit_global", "webhook")
+				h.metrics.RecordRateLimiterDrop("global")
 				h.rateLimiter.WaitForToken()
 			}
 
@@ -256,7 +263,7 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 		}, nil
 	}
 
-	// Sanitize input: normalize whitespace, remove punctuation (matching Python version)
+	// Sanitize input: normalize whitespace, remove punctuation
 	text = strings.TrimSpace(text)
 	text = normalizeWhitespace(text)
 	text = removePunctuation(text)
@@ -296,8 +303,6 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 	}
 
 	// No handler matched - return help message
-	// Note: Unlike Python version, we don't check for data source availability here
-	// since the database and failover mechanisms handle that automatically
 	return h.getHelpMessage(), nil
 }
 
@@ -392,7 +397,7 @@ func (h *Handler) handleStickerMessage(event webhook.MessageEvent) []messaging_a
 func (h *Handler) handleFollowEvent(event webhook.FollowEvent) ([]messaging_api.MessageInterface, error) {
 	h.logger.Info("New user followed the bot")
 
-	// Send welcome message (matching Python version style)
+	// Send welcome message
 	sender := lineutil.GetSender("初階魔法師", h.stickerManager)
 	messages := []messaging_api.MessageInterface{
 		lineutil.NewTextMessageWithConsistentSender("泥好~~我是北大查詢小工具🔍", sender),
@@ -443,8 +448,8 @@ func normalizeWhitespace(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// removePunctuation removes punctuation characters (matching Python regex pattern)
-// Pattern: [][!\"#$%&'()*+,./:;<=>?@\\\\^_`{|}~-] + CJK punctuation
+// removePunctuation removes punctuation characters
+// Pattern: ASCII punctuation + CJK punctuation (full-width)
 func removePunctuation(s string) string {
 	var result strings.Builder
 	for _, r := range s {
@@ -518,7 +523,7 @@ func (h *Handler) getHelpMessage() []messaging_api.MessageInterface {
 	return []messaging_api.MessageInterface{msg}
 }
 
-// getDetailedInstructionMessages returns detailed instruction messages (matches Python version)
+// getDetailedInstructionMessages returns detailed instruction messages
 func (h *Handler) getDetailedInstructionMessages() []messaging_api.MessageInterface {
 	senderName := "小幫手"
 
