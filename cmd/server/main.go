@@ -160,6 +160,14 @@ func main() {
 		proactiveWarmup(ctx, db, scraperClient, stickerManager, log, cfg)
 	}()
 
+	// Cache size metrics updater goroutine (every 5 minutes)
+	// Updates Prometheus gauge metrics with current cache entry counts
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		updateCacheSizeMetrics(ctx, db, stickerManager, m)
+	}()
+
 	// Start server in goroutine
 	go func() {
 		log.WithField("port", cfg.Port).Info("Server starting")
@@ -558,4 +566,40 @@ func performProactiveWarmup(ctx context.Context, db *storage.DB, client *scraper
 			"contacts_refreshed": stats.Contacts.Load(),
 		}).Info("Proactive warmup completed successfully")
 	}
+}
+
+// updateCacheSizeMetrics periodically updates cache size gauge metrics
+func updateCacheSizeMetrics(ctx context.Context, db *storage.DB, stickerManager *sticker.Manager, m *metrics.Metrics) {
+	// Update metrics every 5 minutes
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	// Run initial update immediately
+	performCacheSizeUpdate(db, stickerManager, m)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			performCacheSizeUpdate(db, stickerManager, m)
+		}
+	}
+}
+
+// performCacheSizeUpdate updates cache size metrics
+func performCacheSizeUpdate(db *storage.DB, stickerManager *sticker.Manager, m *metrics.Metrics) {
+	if studentCount, err := db.CountStudents(); err == nil {
+		m.SetCacheSize("students", studentCount)
+	}
+	if contactCount, err := db.CountContacts(); err == nil {
+		m.SetCacheSize("contacts", contactCount)
+	}
+	if courseCount, err := db.CountCourses(); err == nil {
+		m.SetCacheSize("courses", courseCount)
+	}
+	if historicalCount, err := db.CountHistoricalCourses(); err == nil {
+		m.SetCacheSize("historical_courses", historicalCount)
+	}
+	m.SetCacheSize("stickers", stickerManager.Count())
 }

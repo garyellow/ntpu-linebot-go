@@ -27,6 +27,9 @@ func TestNew(t *testing.T) {
 	if m.CacheMissesTotal == nil {
 		t.Error("CacheMissesTotal is nil")
 	}
+	if m.CacheSize == nil {
+		t.Error("CacheSize is nil")
+	}
 	if m.WebhookDurationSeconds == nil {
 		t.Error("WebhookDurationSeconds is nil")
 	}
@@ -135,6 +138,17 @@ func TestRecordWarmupDuration(t *testing.T) {
 	// Should not panic
 	m.RecordWarmupDuration(60.0)
 	m.RecordWarmupDuration(300.0)
+}
+
+func TestSetCacheSize(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	// Should not panic
+	m.SetCacheSize("students", 1000)
+	m.SetCacheSize("contacts", 500)
+	m.SetCacheSize("courses", 2000)
+	m.SetCacheSize("stickers", 50)
 }
 
 func TestMetrics_WithDefaultRegistry(t *testing.T) {
