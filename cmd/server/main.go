@@ -165,7 +165,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		updateCacheSizeMetrics(ctx, db, stickerManager, m)
+		updateCacheSizeMetrics(ctx, db, stickerManager, m, log)
 	}()
 
 	// Start server in goroutine
@@ -569,37 +569,45 @@ func performProactiveWarmup(ctx context.Context, db *storage.DB, client *scraper
 }
 
 // updateCacheSizeMetrics periodically updates cache size gauge metrics
-func updateCacheSizeMetrics(ctx context.Context, db *storage.DB, stickerManager *sticker.Manager, m *metrics.Metrics) {
+func updateCacheSizeMetrics(ctx context.Context, db *storage.DB, stickerManager *sticker.Manager, m *metrics.Metrics, log *logger.Logger) {
 	// Update metrics every 5 minutes
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
 	// Run initial update immediately
-	performCacheSizeUpdate(db, stickerManager, m)
+	performCacheSizeUpdate(db, stickerManager, m, log)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			performCacheSizeUpdate(db, stickerManager, m)
+			performCacheSizeUpdate(db, stickerManager, m, log)
 		}
 	}
 }
 
 // performCacheSizeUpdate updates cache size metrics
-func performCacheSizeUpdate(db *storage.DB, stickerManager *sticker.Manager, m *metrics.Metrics) {
+func performCacheSizeUpdate(db *storage.DB, stickerManager *sticker.Manager, m *metrics.Metrics, log *logger.Logger) {
 	if studentCount, err := db.CountStudents(); err == nil {
 		m.SetCacheSize("students", studentCount)
+	} else {
+		log.WithError(err).Debug("Failed to count students for metrics")
 	}
 	if contactCount, err := db.CountContacts(); err == nil {
 		m.SetCacheSize("contacts", contactCount)
+	} else {
+		log.WithError(err).Debug("Failed to count contacts for metrics")
 	}
 	if courseCount, err := db.CountCourses(); err == nil {
 		m.SetCacheSize("courses", courseCount)
+	} else {
+		log.WithError(err).Debug("Failed to count courses for metrics")
 	}
 	if historicalCount, err := db.CountHistoricalCourses(); err == nil {
 		m.SetCacheSize("historical_courses", historicalCount)
+	} else {
+		log.WithError(err).Debug("Failed to count historical courses for metrics")
 	}
 	m.SetCacheSize("stickers", stickerManager.Count())
 }

@@ -60,14 +60,19 @@ func ErrorMessageWithDetailAndSender(userMessage string, sender *messaging_api.S
 	return NewTextMessageWithConsistentSender(errorDetailPrefix+userMessage+errorDetailSuffix, sender)
 }
 
-// ErrorMessageWithQuickReply creates an error message with retry and help quick replies.
-// This is a convenience function for the common pattern of showing an error with retry option.
-func ErrorMessageWithQuickReply(userMessage string, sender *messaging_api.Sender, retryText string) *messaging_api.TextMessage {
+// ErrorMessageWithQuickReply creates an error message with quick reply actions.
+// By default, it shows retry and help quick replies, but you can provide custom quick reply items.
+// If no quickReplies are provided, it falls back to retry/help pattern.
+func ErrorMessageWithQuickReply(userMessage string, sender *messaging_api.Sender, retryText string, quickReplies ...QuickReplyItem) *messaging_api.TextMessage {
 	msg := NewTextMessageWithConsistentSender(errorDetailPrefix+userMessage+errorDetailSuffix, sender)
-	msg.QuickReply = NewQuickReply([]QuickReplyItem{
-		QuickReplyRetryAction(retryText),
-		QuickReplyHelpAction(),
-	})
+	if len(quickReplies) > 0 {
+		msg.QuickReply = NewQuickReply(quickReplies)
+	} else {
+		msg.QuickReply = NewQuickReply([]QuickReplyItem{
+			QuickReplyRetryAction(retryText),
+			QuickReplyHelpAction(),
+		})
+	}
 	return msg
 }
 

@@ -110,3 +110,12 @@ func (c *URLCache) GetCached() string {
 	}
 	return ""
 }
+
+// ClearURLCacheRegistry clears all entries from the global URL cache registry.
+// This is intended for testing purposes to ensure test isolation.
+// In production, Client instances should be long-lived singletons.
+func ClearURLCacheRegistry() {
+	urlCacheMutex.Lock()
+	defer urlCacheMutex.Unlock()
+	urlCacheRegistry = make(map[string]*URLCache)
+}

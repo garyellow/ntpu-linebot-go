@@ -22,8 +22,8 @@ const PostbackSplitChar = "$"
 //	match := regex.FindString("課程 微積分") // Returns "課程"
 func BuildKeywordRegex(keywords []string) *regexp.Regexp {
 	if len(keywords) == 0 {
-		// Return a regex that never matches - use impossible pattern
-		return regexp.MustCompile(`\A\z.`) // Matches nothing (start, end, then any char - impossible)
+		// Return a regex that never matches - use standard "never match" pattern
+		return regexp.MustCompile(`(?!.*)`) // Negative lookahead that always fails
 	}
 
 	// Create a copy to avoid modifying the original slice
