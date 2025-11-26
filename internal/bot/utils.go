@@ -15,6 +15,8 @@ const PostbackSplitChar = "$"
 // Keywords are sorted by length (longest first) to ensure correct alternation matching.
 // For example, "課程" should match before "課" to prevent partial matches.
 //
+// Panics if keywords is empty, as this indicates a programming error.
+//
 // Usage:
 //
 //	keywords := []string{"課", "課程", "課名"}
@@ -22,8 +24,7 @@ const PostbackSplitChar = "$"
 //	match := regex.FindString("課程 微積分") // Returns "課程"
 func BuildKeywordRegex(keywords []string) *regexp.Regexp {
 	if len(keywords) == 0 {
-		// Return a regex that never matches - use standard "never match" pattern
-		return regexp.MustCompile(`(?!.*)`) // Negative lookahead that always fails
+		panic("BuildKeywordRegex: keywords cannot be empty")
 	}
 
 	// Create a copy to avoid modifying the original slice

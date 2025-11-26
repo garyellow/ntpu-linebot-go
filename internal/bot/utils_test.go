@@ -12,12 +12,6 @@ func TestBuildKeywordRegex(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "Empty keywords",
-			keywords: []string{},
-			input:    "課程 微積分",
-			expected: "",
-		},
-		{
 			name:     "Single keyword",
 			keywords: []string{"課程"},
 			input:    "課程 微積分",
@@ -59,6 +53,15 @@ func TestBuildKeywordRegex(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuildKeywordRegex_EmptyKeywordsPanics(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("BuildKeywordRegex([]string{}) should panic, but did not")
+		}
+	}()
+	BuildKeywordRegex([]string{})
 }
 
 func TestExtractSearchTerm(t *testing.T) {
