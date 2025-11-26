@@ -565,6 +565,142 @@ func TestNewTextMessageWithConsistentSender(t *testing.T) {
 	}
 }
 
+func TestFormatTeachers(t *testing.T) {
+	tests := []struct {
+		name     string
+		teachers []string
+		max      int
+		expected string
+	}{
+		{
+			name:     "Empty list",
+			teachers: []string{},
+			max:      5,
+			expected: "",
+		},
+		{
+			name:     "Single teacher",
+			teachers: []string{"王教授"},
+			max:      5,
+			expected: "王教授",
+		},
+		{
+			name:     "Under limit",
+			teachers: []string{"王教授", "李教授", "陳教授"},
+			max:      5,
+			expected: "王教授、李教授、陳教授",
+		},
+		{
+			name:     "Exactly at limit",
+			teachers: []string{"王教授", "李教授", "陳教授", "林教授", "張教授"},
+			max:      5,
+			expected: "王教授、李教授、陳教授、林教授、張教授",
+		},
+		{
+			name:     "Over limit - truncate",
+			teachers: []string{"王教授", "李教授", "陳教授", "林教授", "張教授", "劉教授", "黃教授"},
+			max:      5,
+			expected: "王教授、李教授、陳教授、林教授、張教授 等 2 人",
+		},
+		{
+			name:     "Over limit by 1",
+			teachers: []string{"王教授", "李教授", "陳教授", "林教授", "張教授", "劉教授"},
+			max:      5,
+			expected: "王教授、李教授、陳教授、林教授、張教授 等 1 人",
+		},
+		{
+			name:     "Max 0 - no limit",
+			teachers: []string{"王教授", "李教授", "陳教授", "林教授", "張教授", "劉教授"},
+			max:      0,
+			expected: "王教授、李教授、陳教授、林教授、張教授、劉教授",
+		},
+		{
+			name:     "Negative max - no limit",
+			teachers: []string{"王教授", "李教授", "陳教授"},
+			max:      -1,
+			expected: "王教授、李教授、陳教授",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FormatTeachers(tt.teachers, tt.max)
+			if result != tt.expected {
+				t.Errorf("FormatTeachers(%v, %d) = %q, want %q",
+					tt.teachers, tt.max, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFormatTimes(t *testing.T) {
+	tests := []struct {
+		name     string
+		times    []string
+		max      int
+		expected string
+	}{
+		{
+			name:     "Empty list",
+			times:    []string{},
+			max:      4,
+			expected: "",
+		},
+		{
+			name:     "Single time slot",
+			times:    []string{"週一1-2"},
+			max:      4,
+			expected: "週一1-2",
+		},
+		{
+			name:     "Under limit",
+			times:    []string{"週一1-2", "週二3-4", "週三5-6"},
+			max:      4,
+			expected: "週一1-2、週二3-4、週三5-6",
+		},
+		{
+			name:     "Exactly at limit",
+			times:    []string{"週一1-2", "週二3-4", "週三5-6", "週四7-8"},
+			max:      4,
+			expected: "週一1-2、週二3-4、週三5-6、週四7-8",
+		},
+		{
+			name:     "Over limit - truncate",
+			times:    []string{"週一1-2", "週二3-4", "週三5-6", "週四7-8", "週五1-2", "週五3-4"},
+			max:      4,
+			expected: "週一1-2、週二3-4、週三5-6、週四7-8 等 2 節",
+		},
+		{
+			name:     "Over limit by 1",
+			times:    []string{"週一1-2", "週二3-4", "週三5-6", "週四7-8", "週五1-2"},
+			max:      4,
+			expected: "週一1-2、週二3-4、週三5-6、週四7-8 等 1 節",
+		},
+		{
+			name:     "Max 0 - no limit",
+			times:    []string{"週一1-2", "週二3-4", "週三5-6", "週四7-8", "週五1-2"},
+			max:      0,
+			expected: "週一1-2、週二3-4、週三5-6、週四7-8、週五1-2",
+		},
+		{
+			name:     "Negative max - no limit",
+			times:    []string{"週一1-2", "週二3-4"},
+			max:      -1,
+			expected: "週一1-2、週二3-4",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FormatTimes(tt.times, tt.max)
+			if result != tt.expected {
+				t.Errorf("FormatTimes(%v, %d) = %q, want %q",
+					tt.times, tt.max, result, tt.expected)
+			}
+		})
+	}
+}
+
 // Helper function to check if a string contains a substring
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||

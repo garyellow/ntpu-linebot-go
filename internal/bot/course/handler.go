@@ -772,24 +772,24 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 
 		// 第二列：授課教師
 		if len(course.Teachers) > 0 {
-			// Full teacher display with wrap (max 2 lines for carousel balance)
-			carouselTeachers := strings.Join(course.Teachers, "、")
+			// Display teachers with truncation if too many (max 5, then "等 N 人")
+			carouselTeachers := lineutil.FormatTeachers(course.Teachers, 5)
 			contents = append(contents,
 				lineutil.NewFlexBox("horizontal",
 					lineutil.NewFlexText("👨‍🏫 授課教師：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
-					lineutil.NewFlexText(carouselTeachers).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).WithWrap(true).WithMaxLines(2).FlexText,
+					lineutil.NewFlexText(carouselTeachers).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).WithWrap(true).FlexText,
 				).WithMargin("md").WithSpacing("sm").FlexBox,
 			)
 		}
 		// 第三列：上課時間
 		if len(course.Times) > 0 {
-			// Full time display with wrap (max 2 lines for carousel balance)
-			carouselTimes := strings.Join(course.Times, "、")
+			// Display times with truncation if too many (max 4, then "等 N 節")
+			carouselTimes := lineutil.FormatTimes(course.Times, 4)
 			contents = append(contents,
 				lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 				lineutil.NewFlexBox("horizontal",
 					lineutil.NewFlexText("⏰ 上課時間：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
-					lineutil.NewFlexText(carouselTimes).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).WithWrap(true).WithMaxLines(2).FlexText,
+					lineutil.NewFlexText(carouselTimes).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).WithWrap(true).FlexText,
 				).WithMargin("sm").WithSpacing("sm").FlexBox,
 			)
 		}
