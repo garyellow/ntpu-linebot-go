@@ -1,3 +1,4 @@
+// Package main provides a health check binary for container orchestration.
 package main
 
 import (

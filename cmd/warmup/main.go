@@ -1,3 +1,4 @@
+// Package main provides a standalone cache warmup utility.
 package main
 
 import (

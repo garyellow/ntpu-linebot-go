@@ -1,3 +1,5 @@
+// Package webhook provides LINE webhook handling and message dispatching
+// to appropriate bot modules based on message content and postback data.
 package webhook
 
 import (

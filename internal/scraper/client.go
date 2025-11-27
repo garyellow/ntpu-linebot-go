@@ -1,3 +1,6 @@
+// Package scraper provides HTTP client utilities for web scraping.
+// It includes retry logic, rate limiting, URL failover, and encoding conversion
+// for scraping NTPU websites.
 package scraper
 
 import (

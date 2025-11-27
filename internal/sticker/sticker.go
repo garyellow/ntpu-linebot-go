@@ -1,3 +1,5 @@
+// Package sticker provides avatar sticker management for LINE bot messages.
+// It handles scraping, caching, and weighted random selection of sticker URLs.
 package sticker
 
 import (
@@ -40,7 +42,7 @@ func NewManager(db *storage.DB, client *scraper.Client, log *logger.Logger) *Man
 // LoadStickers loads stickers from database first, then fetches from web if expired/missing
 func (m *Manager) LoadStickers(ctx context.Context) error {
 	// Step 1: Try loading from database
-	dbStickers, err := m.db.GetAllStickers()
+	dbStickers, err := m.db.GetAllStickers(ctx)
 	if err != nil {
 		m.logger.WithError(err).Warn("Failed to load stickers from database, will fetch from web")
 	} else if len(dbStickers) > 0 {
@@ -125,7 +127,7 @@ func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
 				SuccessCount: 1,
 				FailureCount: 0,
 			}
-			if err := m.db.SaveSticker(sticker); err != nil {
+			if err := m.db.SaveSticker(ctx, sticker); err != nil {
 				m.logger.WithError(err).WithField("url", stickerURL).Warn("Failed to save sticker")
 			}
 		}
@@ -146,7 +148,7 @@ func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
 				SuccessCount: 0,
 				FailureCount: 0,
 			}
-			if err := m.db.SaveSticker(sticker); err != nil {
+			if err := m.db.SaveSticker(ctx, sticker); err != nil {
 				m.logger.WithError(err).WithField("url", stickerURL).Warn("Failed to save fallback sticker")
 			}
 		}
@@ -316,11 +318,14 @@ func (m *Manager) RefreshStickers(ctx context.Context) error {
 
 // CleanupExpiredStickers removes expired stickers from database
 // Returns the number of deleted entries
-func (m *Manager) CleanupExpiredStickers() (int64, error) {
-	return m.db.CleanupExpiredStickers()
+func (m *Manager) CleanupExpiredStickers(ctx context.Context) (int64, error) {
+	return m.db.CleanupExpiredStickers(ctx)
 }
 
 // GetRandomSticker returns a random sticker URL (guaranteed to never be empty)
+// Uses a background goroutine for non-blocking counter updates.
+//
+//nolint:contextcheck // Internal goroutine intentionally uses context.Background() for fire-and-forget operation
 func (m *Manager) GetRandomSticker() string {
 	m.mu.RLock()
 	stickers := m.stickers
@@ -356,13 +361,11 @@ func (m *Manager) GetRandomSticker() string {
 	// Errors are intentionally ignored: sticker selection count is non-critical
 	// and logging would spam logs on every message
 	go func(url string) {
+		//nolint:contextcheck // Intentionally using context.Background() for non-blocking fire-and-forget operation
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		// Context used only for timeout control, not passed to UpdateStickerSuccess
-		// since the function doesn't accept context yet
-		_ = ctx // Placeholder until UpdateStickerSuccess accepts context
-		_ = m.db.UpdateStickerSuccess(url)
+		_ = m.db.UpdateStickerSuccess(ctx, url)
 	}(selectedURL)
 
 	return selectedURL
@@ -383,6 +386,6 @@ func (m *Manager) Count() int {
 }
 
 // GetStats returns sticker statistics from database
-func (m *Manager) GetStats() (map[string]int, error) {
-	return m.db.GetStickerStats()
+func (m *Manager) GetStats(ctx context.Context) (map[string]int, error) {
+	return m.db.GetStickerStats(ctx)
 }

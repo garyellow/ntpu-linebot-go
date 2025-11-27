@@ -1,3 +1,5 @@
+// Package warmup provides background cache warming functionality for
+// proactively fetching and caching student, course, contact, and sticker data.
 package warmup
 
 import (
@@ -53,7 +55,7 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 	// Reset cache if requested
 	if opts.Reset {
 		log.Warn("Resetting cache data...")
-		if err := resetCache(db); err != nil {
+		if err := resetCache(ctx, db); err != nil {
 			return nil, fmt.Errorf("failed to reset cache: %w", err)
 		}
 		log.Info("Cache reset complete")
@@ -135,7 +137,9 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 // RunInBackground executes cache warming asynchronously
 // Returns immediately without blocking. Logs progress to the provided logger.
 // Creates an independent context with timeout to prevent goroutine leaks on server shutdown.
-func RunInBackground(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, opts Options) {
+//
+//nolint:contextcheck // Intentionally using context.Background() for independent background operation
+func RunInBackground(_ context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, opts Options) {
 	// Create independent context with timeout for warmup
 	// This prevents the goroutine from leaking if server context is canceled
 	warmupCtx, cancel := context.WithTimeout(context.Background(), opts.Timeout)
@@ -176,7 +180,7 @@ func ParseModules(modules string) []string {
 }
 
 // resetCache deletes all cached data
-func resetCache(db *storage.DB) error {
+func resetCache(ctx context.Context, db *storage.DB) error {
 	validTables := map[string]bool{
 		"students": true,
 		"contacts": true,
@@ -190,12 +194,12 @@ func resetCache(db *storage.DB) error {
 			return fmt.Errorf("invalid table name: %s", table)
 		}
 		query := fmt.Sprintf("DELETE FROM %s", table)
-		if _, err := db.Exec(query); err != nil {
+		if _, err := db.ExecContext(ctx, query); err != nil {
 			return fmt.Errorf("failed to delete from %s: %w", table, err)
 		}
 	}
 	// Run VACUUM to reclaim space
-	if _, err := db.Exec("VACUUM"); err != nil {
+	if _, err := db.ExecContext(ctx, "VACUUM"); err != nil {
 		return fmt.Errorf("failed to vacuum: %w", err)
 	}
 	return nil
@@ -243,7 +247,7 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 			}
 
 			// Save to database
-			if err := db.SaveStudentsBatch(students); err != nil {
+			if err := db.SaveStudentsBatch(ctx, students); err != nil {
 				log.WithError(err).
 					WithField("year", year).
 					WithField("dept", dept).
@@ -297,7 +301,7 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 		errs = append(errs, fmt.Errorf("administrative contacts: %w", err))
 	} else {
 		// Save using batch operation to reduce lock contention
-		if err := db.SaveContactsBatch(adminContacts); err != nil {
+		if err := db.SaveContactsBatch(ctx, adminContacts); err != nil {
 			log.WithError(err).Warn("Failed to save administrative contacts batch")
 			errs = append(errs, fmt.Errorf("save administrative contacts: %w", err))
 		} else {
@@ -313,7 +317,7 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 		errs = append(errs, fmt.Errorf("academic contacts: %w", err))
 	} else {
 		// Save using batch operation to reduce lock contention
-		if err := db.SaveContactsBatch(academicContacts); err != nil {
+		if err := db.SaveContactsBatch(ctx, academicContacts); err != nil {
 			log.WithError(err).Warn("Failed to save academic contacts batch")
 			errs = append(errs, fmt.Errorf("save academic contacts: %w", err))
 		} else {
@@ -391,7 +395,7 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 		}
 
 		// Save using batch operation to reduce lock contention
-		if err := db.SaveCoursesBatch(courses); err != nil {
+		if err := db.SaveCoursesBatch(ctx, courses); err != nil {
 			log.WithError(err).
 				WithField("year", year).
 				WithField("count", len(courses)).

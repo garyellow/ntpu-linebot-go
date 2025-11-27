@@ -1,3 +1,4 @@
+// Package main provides the LINE bot server entry point.
 package main
 
 import (
@@ -284,9 +285,9 @@ func setupRoutes(router *gin.Engine, webhookHandler *webhook.Handler, db *storag
 		}
 
 		// Check cache data availability
-		studentCount, _ := db.CountStudents()
-		contactCount, _ := db.CountContacts()
-		courseCount, _ := db.CountCourses()
+		studentCount, _ := db.CountStudents(c.Request.Context())
+		contactCount, _ := db.CountContacts(c.Request.Context())
+		courseCount, _ := db.CountCourses(c.Request.Context())
 		stickerCount := stickerManager.Count()
 
 		c.JSON(http.StatusOK, gin.H{
@@ -384,25 +385,25 @@ func cleanupExpiredCache(ctx context.Context, db *storage.DB, ttl time.Duration,
 		case <-ctx.Done():
 			return
 		case <-initialDelay.C:
-			performCacheCleanup(db, ttl, log)
+			performCacheCleanup(ctx, db, ttl, log)
 		case <-ticker.C:
-			performCacheCleanup(db, ttl, log)
+			performCacheCleanup(ctx, db, ttl, log)
 		}
 	}
 }
 
 // performCacheCleanup executes cache cleanup operation
-func performCacheCleanup(db *storage.DB, ttl time.Duration, log *logger.Logger) {
+func performCacheCleanup(ctx context.Context, db *storage.DB, ttl time.Duration, log *logger.Logger) {
 	log.Info("Starting cache cleanup...")
 
 	var totalDeleted int64
 
 	// Cleanup students
-	if deleted, err := db.DeleteExpiredStudents(ttl); err != nil {
+	if deleted, err := db.DeleteExpiredStudents(ctx, ttl); err != nil {
 		log.WithError(err).Error("Failed to cleanup expired students")
 	} else {
 		totalDeleted += deleted
-		count, _ := db.CountStudents()
+		count, _ := db.CountStudents(ctx)
 		log.WithFields(map[string]interface{}{
 			"deleted":   deleted,
 			"remaining": count,
@@ -410,11 +411,11 @@ func performCacheCleanup(db *storage.DB, ttl time.Duration, log *logger.Logger) 
 	}
 
 	// Cleanup contacts
-	if deleted, err := db.DeleteExpiredContacts(ttl); err != nil {
+	if deleted, err := db.DeleteExpiredContacts(ctx, ttl); err != nil {
 		log.WithError(err).Error("Failed to cleanup expired contacts")
 	} else {
 		totalDeleted += deleted
-		count, _ := db.CountContacts()
+		count, _ := db.CountContacts(ctx)
 		log.WithFields(map[string]interface{}{
 			"deleted":   deleted,
 			"remaining": count,
@@ -422,11 +423,11 @@ func performCacheCleanup(db *storage.DB, ttl time.Duration, log *logger.Logger) 
 	}
 
 	// Cleanup courses
-	if deleted, err := db.DeleteExpiredCourses(ttl); err != nil {
+	if deleted, err := db.DeleteExpiredCourses(ctx, ttl); err != nil {
 		log.WithError(err).Error("Failed to cleanup expired courses")
 	} else {
 		totalDeleted += deleted
-		count, _ := db.CountCourses()
+		count, _ := db.CountCourses(ctx)
 		log.WithFields(map[string]interface{}{
 			"deleted":   deleted,
 			"remaining": count,
@@ -434,11 +435,11 @@ func performCacheCleanup(db *storage.DB, ttl time.Duration, log *logger.Logger) 
 	}
 
 	// Cleanup historical courses (uses same TTL as regular courses)
-	if deleted, err := db.DeleteExpiredHistoricalCourses(ttl); err != nil {
+	if deleted, err := db.DeleteExpiredHistoricalCourses(ctx, ttl); err != nil {
 		log.WithError(err).Error("Failed to cleanup expired historical courses")
 	} else {
 		totalDeleted += deleted
-		count, _ := db.CountHistoricalCourses()
+		count, _ := db.CountHistoricalCourses(ctx)
 		log.WithFields(map[string]interface{}{
 			"deleted":   deleted,
 			"remaining": count,
@@ -446,11 +447,11 @@ func performCacheCleanup(db *storage.DB, ttl time.Duration, log *logger.Logger) 
 	}
 
 	// Cleanup stickers
-	if deleted, err := db.CleanupExpiredStickers(); err != nil {
+	if deleted, err := db.CleanupExpiredStickers(ctx); err != nil {
 		log.WithError(err).Error("Failed to cleanup expired stickers")
 	} else {
 		totalDeleted += deleted
-		count, _ := db.CountStickers()
+		count, _ := db.CountStickers(ctx)
 		log.WithFields(map[string]interface{}{
 			"deleted":   deleted,
 			"remaining": count,
@@ -500,7 +501,7 @@ func performStickerRefresh(ctx context.Context, stickerManager *sticker.Manager,
 		log.WithError(err).Error("Failed to refresh stickers")
 	} else {
 		count := stickerManager.Count()
-		stats, _ := stickerManager.GetStats()
+		stats, _ := stickerManager.GetStats(refreshCtx)
 		log.WithField("count", count).
 			WithField("stats", stats).
 			Info("Sticker refresh complete")
@@ -540,9 +541,9 @@ func performProactiveWarmup(ctx context.Context, db *storage.DB, client *scraper
 	log.Info("Starting proactive cache warmup check...")
 
 	// Check how much data is approaching expiration (past Soft TTL but not Hard TTL)
-	expiringStudents, _ := db.CountExpiringStudents(cfg.SoftTTL)
-	expiringCourses, _ := db.CountExpiringCourses(cfg.SoftTTL)
-	expiringContacts, _ := db.CountExpiringContacts(cfg.SoftTTL)
+	expiringStudents, _ := db.CountExpiringStudents(ctx, cfg.SoftTTL)
+	expiringCourses, _ := db.CountExpiringCourses(ctx, cfg.SoftTTL)
+	expiringContacts, _ := db.CountExpiringContacts(ctx, cfg.SoftTTL)
 
 	totalExpiring := expiringStudents + expiringCourses + expiringContacts
 
@@ -604,36 +605,36 @@ func updateCacheSizeMetrics(ctx context.Context, db *storage.DB, stickerManager 
 	defer ticker.Stop()
 
 	// Run initial update immediately
-	performCacheSizeUpdate(db, stickerManager, m, log)
+	performCacheSizeUpdate(ctx, db, stickerManager, m, log)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			performCacheSizeUpdate(db, stickerManager, m, log)
+			performCacheSizeUpdate(ctx, db, stickerManager, m, log)
 		}
 	}
 }
 
 // performCacheSizeUpdate updates cache size metrics
-func performCacheSizeUpdate(db *storage.DB, stickerManager *sticker.Manager, m *metrics.Metrics, log *logger.Logger) {
-	if studentCount, err := db.CountStudents(); err == nil {
+func performCacheSizeUpdate(ctx context.Context, db *storage.DB, stickerManager *sticker.Manager, m *metrics.Metrics, log *logger.Logger) {
+	if studentCount, err := db.CountStudents(ctx); err == nil {
 		m.SetCacheSize("students", studentCount)
 	} else {
 		log.WithError(err).Debug("Failed to count students for metrics")
 	}
-	if contactCount, err := db.CountContacts(); err == nil {
+	if contactCount, err := db.CountContacts(ctx); err == nil {
 		m.SetCacheSize("contacts", contactCount)
 	} else {
 		log.WithError(err).Debug("Failed to count contacts for metrics")
 	}
-	if courseCount, err := db.CountCourses(); err == nil {
+	if courseCount, err := db.CountCourses(ctx); err == nil {
 		m.SetCacheSize("courses", courseCount)
 	} else {
 		log.WithError(err).Debug("Failed to count courses for metrics")
 	}
-	if historicalCount, err := db.CountHistoricalCourses(); err == nil {
+	if historicalCount, err := db.CountHistoricalCourses(ctx); err == nil {
 		m.SetCacheSize("historical_courses", historicalCount)
 	} else {
 		log.WithError(err).Debug("Failed to count historical courses for metrics")

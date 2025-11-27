@@ -1,3 +1,5 @@
+// Package ntpu provides scrapers for NTPU websites including student ID,
+// course catalog, and contact directory information.
 package ntpu
 
 import (

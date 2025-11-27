@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -17,6 +18,7 @@ func setupTestDB(t *testing.T) *DB {
 func TestSaveAndGetCourses(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	student := &Student{
 		ID:         "41247001",
@@ -26,13 +28,13 @@ func TestSaveAndGetCourses(t *testing.T) {
 	}
 
 	// Test save
-	err := db.SaveStudent(student)
+	err := db.SaveStudent(ctx, student)
 	if err != nil {
 		t.Fatalf("SaveStudent failed: %v", err)
 	}
 
 	// Test get
-	retrieved, err := db.GetStudentByID(student.ID)
+	retrieved, err := db.GetStudentByID(ctx, student.ID)
 	if err != nil {
 		t.Fatalf("GetStudentByID failed: %v", err)
 	}
@@ -58,6 +60,7 @@ func TestSaveAndGetCourses(t *testing.T) {
 func TestSearchStudentsByName(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	students := []*Student{
 		{ID: "41247001", Name: "王小明", Department: "資工系", Year: 112},
@@ -66,13 +69,13 @@ func TestSearchStudentsByName(t *testing.T) {
 	}
 
 	for _, s := range students {
-		if err := db.SaveStudent(s); err != nil {
+		if err := db.SaveStudent(ctx, s); err != nil {
 			t.Fatalf("SaveStudent failed: %v", err)
 		}
 	}
 
 	// Test partial match (critical for Chinese name search)
-	results, err := db.SearchStudentsByName("小明")
+	results, err := db.SearchStudentsByName(ctx, "小明")
 	if err != nil {
 		t.Fatalf("SearchStudentsByName failed: %v", err)
 	}
@@ -85,6 +88,7 @@ func TestSearchStudentsByName(t *testing.T) {
 func TestSaveStudentsBatch(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	students := []*Student{
 		{ID: "41247001", Name: "王小明", Department: "資工系", Year: 112},
@@ -93,14 +97,14 @@ func TestSaveStudentsBatch(t *testing.T) {
 	}
 
 	// Test batch save
-	err := db.SaveStudentsBatch(students)
+	err := db.SaveStudentsBatch(ctx, students)
 	if err != nil {
 		t.Fatalf("SaveStudentsBatch failed: %v", err)
 	}
 
 	// Verify all students were saved
 	for _, student := range students {
-		retrieved, err := db.GetStudentByID(student.ID)
+		retrieved, err := db.GetStudentByID(ctx, student.ID)
 		if err != nil {
 			t.Fatalf("GetStudentByID failed for %s: %v", student.ID, err)
 		}
@@ -117,6 +121,7 @@ func TestSaveStudentsBatch(t *testing.T) {
 func TestSaveContactsBatch(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	contacts := []*Contact{
 		{UID: "c1", Type: "individual", Name: "陳大華", Organization: "資工系"},
@@ -125,14 +130,14 @@ func TestSaveContactsBatch(t *testing.T) {
 	}
 
 	// Test batch save
-	err := db.SaveContactsBatch(contacts)
+	err := db.SaveContactsBatch(ctx, contacts)
 	if err != nil {
 		t.Fatalf("SaveContactsBatch failed: %v", err)
 	}
 
 	// Verify all contacts were saved
 	for _, contact := range contacts {
-		retrieved, err := db.GetContactByUID(contact.UID)
+		retrieved, err := db.GetContactByUID(ctx, contact.UID)
 		if err != nil {
 			t.Fatalf("GetContactByUID failed for %s: %v", contact.UID, err)
 		}
@@ -149,6 +154,7 @@ func TestSaveContactsBatch(t *testing.T) {
 func TestSaveCoursesBatch(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	courses := []*Course{
 		{
@@ -170,14 +176,14 @@ func TestSaveCoursesBatch(t *testing.T) {
 	}
 
 	// Test batch save
-	err := db.SaveCoursesBatch(courses)
+	err := db.SaveCoursesBatch(ctx, courses)
 	if err != nil {
 		t.Fatalf("SaveCoursesBatch failed: %v", err)
 	}
 
 	// Verify all courses were saved
 	for _, course := range courses {
-		retrieved, err := db.GetCourseByUID(course.UID)
+		retrieved, err := db.GetCourseByUID(ctx, course.UID)
 		if err != nil {
 			t.Fatalf("GetCourseByUID failed for %s: %v", course.UID, err)
 		}
@@ -194,6 +200,7 @@ func TestSaveCoursesBatch(t *testing.T) {
 func TestSearchContactsByName(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	contacts := []*Contact{
 		{UID: "c1", Type: "individual", Name: "陳大華", Organization: "資工系"},
@@ -202,12 +209,12 @@ func TestSearchContactsByName(t *testing.T) {
 	}
 
 	for _, c := range contacts {
-		if err := db.SaveContact(c); err != nil {
+		if err := db.SaveContact(ctx, c); err != nil {
 			t.Fatalf("SaveContact failed: %v", err)
 		}
 	}
 
-	results, err := db.SearchContactsByName("陳")
+	results, err := db.SearchContactsByName(ctx, "陳")
 	if err != nil {
 		t.Fatalf("SearchContactsByName failed: %v", err)
 	}
@@ -221,6 +228,7 @@ func TestSearchContactsByName(t *testing.T) {
 func TestCourseArrayHandling(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	course := &Course{
 		UID:       "3141U0001",
@@ -233,11 +241,11 @@ func TestCourseArrayHandling(t *testing.T) {
 		Locations: []string{"資訊大樓 101", "資訊大樓 203"},
 	}
 
-	if err := db.SaveCourse(course); err != nil {
+	if err := db.SaveCourse(ctx, course); err != nil {
 		t.Fatalf("SaveCourse failed: %v", err)
 	}
 
-	retrieved, err := db.GetCourseByUID(course.UID)
+	retrieved, err := db.GetCourseByUID(ctx, course.UID)
 	if err != nil {
 		t.Fatalf("GetCourseByUID failed: %v", err)
 	}
@@ -257,6 +265,7 @@ func TestCourseArrayHandling(t *testing.T) {
 func TestDeleteExpiredStudents(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	// Insert fresh student
 	fresh := &Student{
@@ -265,7 +274,7 @@ func TestDeleteExpiredStudents(t *testing.T) {
 		Department: "資工系",
 		Year:       113,
 	}
-	if err := db.SaveStudent(fresh); err != nil {
+	if err := db.SaveStudent(ctx, fresh); err != nil {
 		t.Fatalf("SaveStudent failed: %v", err)
 	}
 
@@ -278,13 +287,13 @@ func TestDeleteExpiredStudents(t *testing.T) {
 	}
 	query := `INSERT INTO students (id, name, department, year, cached_at) VALUES (?, ?, ?, ?, ?)`
 	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.writer.Exec(query, old.ID, old.Name, old.Department, old.Year, oldTime)
+	_, err := db.writer.ExecContext(ctx, query, old.ID, old.Name, old.Department, old.Year, oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
 
 	// Count before delete
-	countBefore, err := db.CountStudents()
+	countBefore, err := db.CountStudents(ctx)
 	if err != nil {
 		t.Fatalf("CountStudents failed: %v", err)
 	}
@@ -293,7 +302,7 @@ func TestDeleteExpiredStudents(t *testing.T) {
 	}
 
 	// Delete expired
-	deleted, err := db.DeleteExpiredStudents(7 * 24 * time.Hour)
+	deleted, err := db.DeleteExpiredStudents(ctx, 7*24*time.Hour)
 	if err != nil {
 		t.Fatalf("DeleteExpiredStudents failed: %v", err)
 	}
@@ -302,7 +311,7 @@ func TestDeleteExpiredStudents(t *testing.T) {
 	}
 
 	// Count after delete
-	countAfter, err := db.CountStudents()
+	countAfter, err := db.CountStudents(ctx)
 	if err != nil {
 		t.Fatalf("CountStudents failed: %v", err)
 	}
@@ -311,7 +320,7 @@ func TestDeleteExpiredStudents(t *testing.T) {
 	}
 
 	// Verify fresh student still exists
-	retrieved, err := db.GetStudentByID(fresh.ID)
+	retrieved, err := db.GetStudentByID(ctx, fresh.ID)
 	if err != nil {
 		t.Fatalf("GetStudentByID failed: %v", err)
 	}
@@ -320,7 +329,7 @@ func TestDeleteExpiredStudents(t *testing.T) {
 	}
 
 	// Verify old student is gone
-	retrieved, err = db.GetStudentByID(old.ID)
+	retrieved, err = db.GetStudentByID(ctx, old.ID)
 	if err != nil {
 		t.Fatalf("GetStudentByID failed: %v", err)
 	}
@@ -332,6 +341,7 @@ func TestDeleteExpiredStudents(t *testing.T) {
 func TestDeleteExpiredContacts(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	// Insert fresh contact
 	fresh := &Contact{
@@ -340,7 +350,7 @@ func TestDeleteExpiredContacts(t *testing.T) {
 		Name:         "新聯絡人",
 		Organization: "資工系",
 	}
-	if err := db.SaveContact(fresh); err != nil {
+	if err := db.SaveContact(ctx, fresh); err != nil {
 		t.Fatalf("SaveContact failed: %v", err)
 	}
 
@@ -353,13 +363,13 @@ func TestDeleteExpiredContacts(t *testing.T) {
 	}
 	query := `INSERT INTO contacts (uid, type, name, organization, cached_at) VALUES (?, ?, ?, ?, ?)`
 	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.writer.Exec(query, old.UID, old.Type, old.Name, old.Organization, oldTime)
+	_, err := db.writer.ExecContext(ctx, query, old.UID, old.Type, old.Name, old.Organization, oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
 
 	// Delete expired
-	deleted, err := db.DeleteExpiredContacts(7 * 24 * time.Hour)
+	deleted, err := db.DeleteExpiredContacts(ctx, 7*24*time.Hour)
 	if err != nil {
 		t.Fatalf("DeleteExpiredContacts failed: %v", err)
 	}
@@ -368,7 +378,7 @@ func TestDeleteExpiredContacts(t *testing.T) {
 	}
 
 	// Verify fresh contact still exists
-	retrieved, err := db.GetContactByUID(fresh.UID)
+	retrieved, err := db.GetContactByUID(ctx, fresh.UID)
 	if err != nil {
 		t.Fatalf("GetContactByUID failed: %v", err)
 	}
@@ -377,7 +387,7 @@ func TestDeleteExpiredContacts(t *testing.T) {
 	}
 
 	// Verify old contact is gone
-	retrieved, err = db.GetContactByUID(old.UID)
+	retrieved, err = db.GetContactByUID(ctx, old.UID)
 	if err != nil {
 		t.Fatalf("GetContactByUID failed: %v", err)
 	}
@@ -389,6 +399,7 @@ func TestDeleteExpiredContacts(t *testing.T) {
 func TestDeleteExpiredCourses(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	// Insert fresh course
 	fresh := &Course{
@@ -400,20 +411,20 @@ func TestDeleteExpiredCourses(t *testing.T) {
 		Teachers: []string{"王老師"},
 		Times:    []string{"一1-2"},
 	}
-	if err := db.SaveCourse(fresh); err != nil {
+	if err := db.SaveCourse(ctx, fresh); err != nil {
 		t.Fatalf("SaveCourse failed: %v", err)
 	}
 
 	// Insert old course (manually set cached_at to 8 days ago)
 	query := `INSERT INTO courses (uid, year, term, no, title, teachers, teacher_urls, times, locations, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.writer.Exec(query, "1121A0002", 112, 1, "A0002", "舊課程", `["李老師"]`, `[]`, `["二3-4"]`, `[]`, oldTime)
+	_, err := db.writer.ExecContext(ctx, query, "1121A0002", 112, 1, "A0002", "舊課程", `["李老師"]`, `[]`, `["二3-4"]`, `[]`, oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
 
 	// Delete expired
-	deleted, err := db.DeleteExpiredCourses(7 * 24 * time.Hour)
+	deleted, err := db.DeleteExpiredCourses(ctx, 7*24*time.Hour)
 	if err != nil {
 		t.Fatalf("DeleteExpiredCourses failed: %v", err)
 	}
@@ -422,7 +433,7 @@ func TestDeleteExpiredCourses(t *testing.T) {
 	}
 
 	// Verify fresh course still exists
-	retrieved, err := db.GetCourseByUID(fresh.UID)
+	retrieved, err := db.GetCourseByUID(ctx, fresh.UID)
 	if err != nil {
 		t.Fatalf("GetCourseByUID failed: %v", err)
 	}
@@ -431,7 +442,7 @@ func TestDeleteExpiredCourses(t *testing.T) {
 	}
 
 	// Verify old course is gone
-	retrieved, err = db.GetCourseByUID("1121A0002")
+	retrieved, err = db.GetCourseByUID(ctx, "1121A0002")
 	if err != nil {
 		t.Fatalf("GetCourseByUID failed: %v", err)
 	}
@@ -443,32 +454,33 @@ func TestDeleteExpiredCourses(t *testing.T) {
 func TestCleanupExpiredStickers(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	// Insert fresh sticker
 	fresh := &Sticker{
 		URL:    "https://example.com/fresh.png",
 		Source: "spy_family",
 	}
-	if err := db.SaveSticker(fresh); err != nil {
+	if err := db.SaveSticker(ctx, fresh); err != nil {
 		t.Fatalf("SaveSticker failed: %v", err)
 	}
 
 	// Insert old sticker (manually set cached_at to 8 days ago)
 	query := `INSERT INTO stickers (url, source, cached_at, success_count, failure_count) VALUES (?, ?, ?, ?, ?)`
 	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.writer.Exec(query, "https://example.com/old.png", "spy_family", oldTime, 0, 0)
+	_, err := db.writer.ExecContext(ctx, query, "https://example.com/old.png", "spy_family", oldTime, 0, 0)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
 
 	// Verify we have 2 stickers
-	count, _ := db.CountStickers()
+	count, _ := db.CountStickers(ctx)
 	if count != 2 {
 		t.Fatalf("Expected 2 stickers, got %d", count)
 	}
 
 	// Cleanup expired
-	deleted, err := db.CleanupExpiredStickers()
+	deleted, err := db.CleanupExpiredStickers(ctx)
 	if err != nil {
 		t.Fatalf("CleanupExpiredStickers failed: %v", err)
 	}
@@ -477,7 +489,7 @@ func TestCleanupExpiredStickers(t *testing.T) {
 	}
 
 	// Verify only fresh sticker remains
-	count, _ = db.CountStickers()
+	count, _ = db.CountStickers(ctx)
 	if count != 1 {
 		t.Errorf("Expected 1 sticker remaining, got %d", count)
 	}
@@ -487,6 +499,7 @@ func TestCleanupExpiredStickers(t *testing.T) {
 func TestGetAllContacts(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	// Insert fresh contacts
 	freshContacts := []*Contact{
@@ -495,7 +508,7 @@ func TestGetAllContacts(t *testing.T) {
 		{UID: "c3", Type: "organization", Name: "資訊工程學系", Superior: "電機資訊學院"},
 	}
 	for _, c := range freshContacts {
-		if err := db.SaveContact(c); err != nil {
+		if err := db.SaveContact(ctx, c); err != nil {
 			t.Fatalf("SaveContact failed: %v", err)
 		}
 	}
@@ -503,13 +516,13 @@ func TestGetAllContacts(t *testing.T) {
 	// Insert expired contact (manually set cached_at to 8 days ago)
 	query := `INSERT INTO contacts (uid, type, name, organization, cached_at) VALUES (?, ?, ?, ?, ?)`
 	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.writer.Exec(query, "c_old", "individual", "舊聯絡人", "舊單位", oldTime)
+	_, err := db.writer.ExecContext(ctx, query, "c_old", "individual", "舊聯絡人", "舊單位", oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
 
 	// Get all contacts - should only return non-expired ones
-	contacts, err := db.GetAllContacts()
+	contacts, err := db.GetAllContacts(ctx)
 	if err != nil {
 		t.Fatalf("GetAllContacts failed: %v", err)
 	}
@@ -539,10 +552,11 @@ func TestGetAllContacts(t *testing.T) {
 func TestGetAllContactsLimit(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	// This test verifies the query structure without inserting 1000+ records
 	// Just verify the method works with empty database
-	contacts, err := db.GetAllContacts()
+	contacts, err := db.GetAllContacts(ctx)
 	if err != nil {
 		t.Fatalf("GetAllContacts failed on empty database: %v", err)
 	}
@@ -555,6 +569,7 @@ func TestGetAllContactsLimit(t *testing.T) {
 func TestGetCoursesByRecentSemesters(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	// Insert fresh courses from different semesters
 	freshCourses := []*Course{
@@ -584,7 +599,7 @@ func TestGetCoursesByRecentSemesters(t *testing.T) {
 		},
 	}
 	for _, c := range freshCourses {
-		if err := db.SaveCourse(c); err != nil {
+		if err := db.SaveCourse(ctx, c); err != nil {
 			t.Fatalf("SaveCourse failed: %v", err)
 		}
 	}
@@ -592,13 +607,13 @@ func TestGetCoursesByRecentSemesters(t *testing.T) {
 	// Insert expired course (manually set cached_at to 8 days ago)
 	query := `INSERT INTO courses (uid, year, term, no, title, teachers, teacher_urls, times, locations, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.writer.Exec(query, "1121U9999", 112, 1, "U9999", "舊課程", `["舊教授"]`, `[]`, `[]`, `[]`, oldTime)
+	_, err := db.writer.ExecContext(ctx, query, "1121U9999", 112, 1, "U9999", "舊課程", `["舊教授"]`, `[]`, `[]`, `[]`, oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
 
 	// Get courses by recent semesters - should only return non-expired ones
-	courses, err := db.GetCoursesByRecentSemesters()
+	courses, err := db.GetCoursesByRecentSemesters(ctx)
 	if err != nil {
 		t.Fatalf("GetCoursesByRecentSemesters failed: %v", err)
 	}
@@ -628,10 +643,11 @@ func TestGetCoursesByRecentSemesters(t *testing.T) {
 func TestGetCoursesByRecentSemestersLimit(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	// This test verifies the query structure without inserting 2000+ records
 	// Just verify the method works with empty database
-	courses, err := db.GetCoursesByRecentSemesters()
+	courses, err := db.GetCoursesByRecentSemesters(ctx)
 	if err != nil {
 		t.Fatalf("GetCoursesByRecentSemesters failed on empty database: %v", err)
 	}
@@ -648,6 +664,7 @@ func TestGetCoursesByRecentSemestersLimit(t *testing.T) {
 func TestSaveHistoricalCourse(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	course := &Course{
 		UID:         "1001U0001",
@@ -664,13 +681,13 @@ func TestSaveHistoricalCourse(t *testing.T) {
 	}
 
 	// Test save
-	err := db.SaveHistoricalCourse(course)
+	err := db.SaveHistoricalCourse(ctx, course)
 	if err != nil {
 		t.Fatalf("SaveHistoricalCourse failed: %v", err)
 	}
 
 	// Verify saved by searching
-	courses, err := db.SearchHistoricalCoursesByYear(100)
+	courses, err := db.SearchHistoricalCoursesByYear(ctx, 100)
 	if err != nil {
 		t.Fatalf("SearchHistoricalCoursesByYear failed: %v", err)
 	}
@@ -683,12 +700,12 @@ func TestSaveHistoricalCourse(t *testing.T) {
 
 	// Test upsert (update on conflict)
 	course.Title = "計算機概論（更新）"
-	err = db.SaveHistoricalCourse(course)
+	err = db.SaveHistoricalCourse(ctx, course)
 	if err != nil {
 		t.Fatalf("SaveHistoricalCourse (upsert) failed: %v", err)
 	}
 
-	courses, err = db.SearchHistoricalCoursesByYear(100)
+	courses, err = db.SearchHistoricalCoursesByYear(ctx, 100)
 	if err != nil {
 		t.Fatalf("SearchHistoricalCoursesByYear after upsert failed: %v", err)
 	}
@@ -704,6 +721,7 @@ func TestSaveHistoricalCourse(t *testing.T) {
 func TestSaveHistoricalCoursesBatch(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	courses := []*Course{
 		{
@@ -733,13 +751,13 @@ func TestSaveHistoricalCoursesBatch(t *testing.T) {
 	}
 
 	// Test batch save
-	err := db.SaveHistoricalCoursesBatch(courses)
+	err := db.SaveHistoricalCoursesBatch(ctx, courses)
 	if err != nil {
 		t.Fatalf("SaveHistoricalCoursesBatch failed: %v", err)
 	}
 
 	// Verify all courses saved
-	result, err := db.SearchHistoricalCoursesByYear(100)
+	result, err := db.SearchHistoricalCoursesByYear(ctx, 100)
 	if err != nil {
 		t.Fatalf("SearchHistoricalCoursesByYear failed: %v", err)
 	}
@@ -748,7 +766,7 @@ func TestSaveHistoricalCoursesBatch(t *testing.T) {
 	}
 
 	// Verify count
-	count, err := db.CountHistoricalCourses()
+	count, err := db.CountHistoricalCourses(ctx)
 	if err != nil {
 		t.Fatalf("CountHistoricalCourses failed: %v", err)
 	}
@@ -761,9 +779,10 @@ func TestSaveHistoricalCoursesBatch(t *testing.T) {
 func TestSaveHistoricalCoursesBatchEmpty(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	// Test with empty slice - should return nil without error
-	err := db.SaveHistoricalCoursesBatch([]*Course{})
+	err := db.SaveHistoricalCoursesBatch(ctx, []*Course{})
 	if err != nil {
 		t.Fatalf("SaveHistoricalCoursesBatch with empty slice failed: %v", err)
 	}
@@ -773,6 +792,7 @@ func TestSaveHistoricalCoursesBatchEmpty(t *testing.T) {
 func TestSearchHistoricalCoursesByYearAndTitle(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	courses := []*Course{
 		{UID: "1001U0001", Year: 100, Term: 1, No: "U0001", Title: "計算機概論", Teachers: []string{"王教授"}},
@@ -781,7 +801,7 @@ func TestSearchHistoricalCoursesByYearAndTitle(t *testing.T) {
 		{UID: "1011U0001", Year: 101, Term: 1, No: "U0001", Title: "程式設計", Teachers: []string{"張教授"}},
 	}
 
-	if err := db.SaveHistoricalCoursesBatch(courses); err != nil {
+	if err := db.SaveHistoricalCoursesBatch(ctx, courses); err != nil {
 		t.Fatalf("SaveHistoricalCoursesBatch failed: %v", err)
 	}
 
@@ -819,7 +839,7 @@ func TestSearchHistoricalCoursesByYearAndTitle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := db.SearchHistoricalCoursesByYearAndTitle(tt.year, tt.title)
+			result, err := db.SearchHistoricalCoursesByYearAndTitle(ctx, tt.year, tt.title)
 			if err != nil {
 				t.Fatalf("SearchHistoricalCoursesByYearAndTitle failed: %v", err)
 			}
@@ -834,6 +854,7 @@ func TestSearchHistoricalCoursesByYearAndTitle(t *testing.T) {
 func TestSearchHistoricalCoursesByYearAndTitleTooLong(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	// Create a search term longer than 100 characters
 	longTitle := ""
@@ -841,7 +862,7 @@ func TestSearchHistoricalCoursesByYearAndTitleTooLong(t *testing.T) {
 		longTitle += "測"
 	}
 
-	_, err := db.SearchHistoricalCoursesByYearAndTitle(100, longTitle)
+	_, err := db.SearchHistoricalCoursesByYearAndTitle(ctx, 100, longTitle)
 	if err == nil {
 		t.Error("Expected error for too long search term, got nil")
 	}
@@ -851,6 +872,7 @@ func TestSearchHistoricalCoursesByYearAndTitleTooLong(t *testing.T) {
 func TestSearchHistoricalCoursesByYear(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	courses := []*Course{
 		{UID: "1001U0001", Year: 100, Term: 1, No: "U0001", Title: "計算機概論", Teachers: []string{"王教授"}},
@@ -858,12 +880,12 @@ func TestSearchHistoricalCoursesByYear(t *testing.T) {
 		{UID: "1011U0001", Year: 101, Term: 1, No: "U0001", Title: "資料結構", Teachers: []string{"陳教授"}},
 	}
 
-	if err := db.SaveHistoricalCoursesBatch(courses); err != nil {
+	if err := db.SaveHistoricalCoursesBatch(ctx, courses); err != nil {
 		t.Fatalf("SaveHistoricalCoursesBatch failed: %v", err)
 	}
 
 	// Search for year 100
-	result, err := db.SearchHistoricalCoursesByYear(100)
+	result, err := db.SearchHistoricalCoursesByYear(ctx, 100)
 	if err != nil {
 		t.Fatalf("SearchHistoricalCoursesByYear failed: %v", err)
 	}
@@ -879,7 +901,7 @@ func TestSearchHistoricalCoursesByYear(t *testing.T) {
 	}
 
 	// Search for year with no courses
-	result, err = db.SearchHistoricalCoursesByYear(99)
+	result, err = db.SearchHistoricalCoursesByYear(ctx, 99)
 	if err != nil {
 		t.Fatalf("SearchHistoricalCoursesByYear for empty year failed: %v", err)
 	}
@@ -892,6 +914,7 @@ func TestSearchHistoricalCoursesByYear(t *testing.T) {
 func TestDeleteExpiredHistoricalCourses(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	// Insert fresh course
 	fresh := &Course{
@@ -902,20 +925,20 @@ func TestDeleteExpiredHistoricalCourses(t *testing.T) {
 		Title:    "新課程",
 		Teachers: []string{"新教授"},
 	}
-	if err := db.SaveHistoricalCourse(fresh); err != nil {
+	if err := db.SaveHistoricalCourse(ctx, fresh); err != nil {
 		t.Fatalf("SaveHistoricalCourse failed: %v", err)
 	}
 
 	// Insert expired course (manually set cached_at to 8 days ago)
 	query := `INSERT INTO historical_courses (uid, year, term, no, title, teachers, teacher_urls, times, locations, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.writer.Exec(query, "1001U0002", 100, 1, "U0002", "舊課程", `["舊教授"]`, `[]`, `[]`, `[]`, oldTime)
+	_, err := db.writer.ExecContext(ctx, query, "1001U0002", 100, 1, "U0002", "舊課程", `["舊教授"]`, `[]`, `[]`, `[]`, oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
 
 	// Count before delete
-	countBefore, err := db.CountHistoricalCourses()
+	countBefore, err := db.CountHistoricalCourses(ctx)
 	if err != nil {
 		t.Fatalf("CountHistoricalCourses failed: %v", err)
 	}
@@ -924,7 +947,7 @@ func TestDeleteExpiredHistoricalCourses(t *testing.T) {
 	}
 
 	// Delete expired (7 day TTL)
-	deleted, err := db.DeleteExpiredHistoricalCourses(7 * 24 * time.Hour)
+	deleted, err := db.DeleteExpiredHistoricalCourses(ctx, 7*24*time.Hour)
 	if err != nil {
 		t.Fatalf("DeleteExpiredHistoricalCourses failed: %v", err)
 	}
@@ -933,7 +956,7 @@ func TestDeleteExpiredHistoricalCourses(t *testing.T) {
 	}
 
 	// Count after delete
-	countAfter, err := db.CountHistoricalCourses()
+	countAfter, err := db.CountHistoricalCourses(ctx)
 	if err != nil {
 		t.Fatalf("CountHistoricalCourses failed: %v", err)
 	}
@@ -946,9 +969,10 @@ func TestDeleteExpiredHistoricalCourses(t *testing.T) {
 func TestCountHistoricalCourses(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	// Count empty table
-	count, err := db.CountHistoricalCourses()
+	count, err := db.CountHistoricalCourses(ctx)
 	if err != nil {
 		t.Fatalf("CountHistoricalCourses failed: %v", err)
 	}
@@ -961,11 +985,11 @@ func TestCountHistoricalCourses(t *testing.T) {
 		{UID: "1001U0001", Year: 100, Term: 1, No: "U0001", Title: "課程1", Teachers: []string{}},
 		{UID: "1001U0002", Year: 100, Term: 1, No: "U0002", Title: "課程2", Teachers: []string{}},
 	}
-	if err := db.SaveHistoricalCoursesBatch(courses); err != nil {
+	if err := db.SaveHistoricalCoursesBatch(ctx, courses); err != nil {
 		t.Fatalf("SaveHistoricalCoursesBatch failed: %v", err)
 	}
 
-	count, err = db.CountHistoricalCourses()
+	count, err = db.CountHistoricalCourses(ctx)
 	if err != nil {
 		t.Fatalf("CountHistoricalCourses failed: %v", err)
 	}
@@ -978,6 +1002,7 @@ func TestCountHistoricalCourses(t *testing.T) {
 func TestHistoricalCoursesArrayHandling(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	course := &Course{
 		UID:         "1001U0001",
@@ -991,11 +1016,11 @@ func TestHistoricalCoursesArrayHandling(t *testing.T) {
 		Locations:   []string{"資訊大樓 101", "資訊大樓 203"},
 	}
 
-	if err := db.SaveHistoricalCourse(course); err != nil {
+	if err := db.SaveHistoricalCourse(ctx, course); err != nil {
 		t.Fatalf("SaveHistoricalCourse failed: %v", err)
 	}
 
-	courses, err := db.SearchHistoricalCoursesByYear(100)
+	courses, err := db.SearchHistoricalCoursesByYear(ctx, 100)
 	if err != nil {
 		t.Fatalf("SearchHistoricalCoursesByYear failed: %v", err)
 	}
@@ -1024,6 +1049,7 @@ func TestHistoricalCoursesArrayHandling(t *testing.T) {
 func TestHistoricalCoursesTTLFiltering(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
+	ctx := context.Background()
 
 	// Insert fresh course
 	fresh := &Course{
@@ -1034,20 +1060,20 @@ func TestHistoricalCoursesTTLFiltering(t *testing.T) {
 		Title:    "新課程",
 		Teachers: []string{"新教授"},
 	}
-	if err := db.SaveHistoricalCourse(fresh); err != nil {
+	if err := db.SaveHistoricalCourse(ctx, fresh); err != nil {
 		t.Fatalf("SaveHistoricalCourse failed: %v", err)
 	}
 
 	// Insert expired course (manually set cached_at to 8 days ago)
 	query := `INSERT INTO historical_courses (uid, year, term, no, title, teachers, teacher_urls, times, locations, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.writer.Exec(query, "1001U0002", 100, 1, "U0002", "舊課程", `["舊教授"]`, `[]`, `[]`, `[]`, oldTime)
+	_, err := db.writer.ExecContext(ctx, query, "1001U0002", 100, 1, "U0002", "舊課程", `["舊教授"]`, `[]`, `[]`, `[]`, oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
 
 	// SearchHistoricalCoursesByYear should not return expired course
-	courses, err := db.SearchHistoricalCoursesByYear(100)
+	courses, err := db.SearchHistoricalCoursesByYear(ctx, 100)
 	if err != nil {
 		t.Fatalf("SearchHistoricalCoursesByYear failed: %v", err)
 	}
@@ -1059,7 +1085,7 @@ func TestHistoricalCoursesTTLFiltering(t *testing.T) {
 	}
 
 	// SearchHistoricalCoursesByYearAndTitle should not return expired course
-	courses, err = db.SearchHistoricalCoursesByYearAndTitle(100, "課程")
+	courses, err = db.SearchHistoricalCoursesByYearAndTitle(ctx, 100, "課程")
 	if err != nil {
 		t.Fatalf("SearchHistoricalCoursesByYearAndTitle failed: %v", err)
 	}

@@ -1,6 +1,9 @@
+// Package storage provides SQLite database operations for caching
+// student, course, contact, and sticker data with TTL management.
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -47,7 +50,7 @@ func New(dbPath string, cacheTTL time.Duration) (*DB, error) {
 		dir := filepath.Dir(dbPath)
 		// Only create directory if it's not empty and not current directory
 		if dir != "" && dir != "." {
-			if err := os.MkdirAll(dir, 0o755); err != nil {
+			if err := os.MkdirAll(dir, 0o750); err != nil {
 				return nil, fmt.Errorf("failed to create database directory: %w", err)
 			}
 		}
@@ -84,7 +87,7 @@ func New(dbPath string, cacheTTL time.Duration) (*DB, error) {
 	}
 
 	// Test writer connection
-	if err := writer.Ping(); err != nil {
+	if err := writer.PingContext(context.Background()); err != nil {
 		_ = writer.Close()
 		return nil, fmt.Errorf("failed to ping writer: %w", err)
 	}
@@ -124,7 +127,7 @@ func New(dbPath string, cacheTTL time.Duration) (*DB, error) {
 	}
 
 	// Test reader connection
-	if err := reader.Ping(); err != nil {
+	if err := reader.PingContext(context.Background()); err != nil {
 		_ = writer.Close()
 		_ = reader.Close()
 		return nil, fmt.Errorf("failed to ping reader: %w", err)
@@ -142,26 +145,28 @@ func New(dbPath string, cacheTTL time.Duration) (*DB, error) {
 
 // configureConnection sets up SQLite pragmas for optimal performance
 func configureConnection(conn *sql.DB, readOnly bool) error {
+	ctx := context.Background()
+
 	// Enable WAL mode for better concurrency (readers don't block writer)
-	if _, err := conn.Exec("PRAGMA journal_mode=WAL"); err != nil {
+	if _, err := conn.ExecContext(ctx, "PRAGMA journal_mode=WAL"); err != nil {
 		return fmt.Errorf("failed to enable WAL mode: %w", err)
 	}
 
 	// Set busy timeout to handle concurrent access during warmup
 	busyTimeoutMs := int(timeouts.DatabaseBusyTimeout.Milliseconds())
-	if _, err := conn.Exec(fmt.Sprintf("PRAGMA busy_timeout=%d", busyTimeoutMs)); err != nil {
+	if _, err := conn.ExecContext(ctx, fmt.Sprintf("PRAGMA busy_timeout=%d", busyTimeoutMs)); err != nil {
 		return fmt.Errorf("failed to set busy timeout: %w", err)
 	}
 
 	// Enable foreign keys
-	if _, err := conn.Exec("PRAGMA foreign_keys=ON"); err != nil {
+	if _, err := conn.ExecContext(ctx, "PRAGMA foreign_keys=ON"); err != nil {
 		return fmt.Errorf("failed to enable foreign keys: %w", err)
 	}
 
 	// Set synchronous mode to NORMAL for better write performance
 	// (WAL mode makes this safe - data is still durable)
 	if !readOnly {
-		if _, err := conn.Exec("PRAGMA synchronous=NORMAL"); err != nil {
+		if _, err := conn.ExecContext(ctx, "PRAGMA synchronous=NORMAL"); err != nil {
 			return fmt.Errorf("failed to set synchronous mode: %w", err)
 		}
 	}
@@ -201,6 +206,7 @@ func (db *DB) Reader() *sql.DB {
 }
 
 // Conn returns the writer connection for backward compatibility.
+//
 // Deprecated: Use Writer() for writes or Reader() for reads.
 func (db *DB) Conn() *sql.DB {
 	return db.writer
@@ -213,22 +219,27 @@ func (db *DB) Path() string {
 
 // Begin starts a new write transaction on the writer connection
 func (db *DB) Begin() (*sql.Tx, error) {
-	return db.writer.Begin()
+	return db.writer.BeginTx(context.Background(), nil)
 }
 
 // Exec executes a write query (INSERT, UPDATE, DELETE) on the writer connection
 func (db *DB) Exec(query string, args ...interface{}) (sql.Result, error) {
-	return db.writer.Exec(query, args...)
+	return db.writer.ExecContext(context.Background(), query, args...)
+}
+
+// ExecContext executes a write query with context on the writer connection
+func (db *DB) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	return db.writer.ExecContext(ctx, query, args...)
 }
 
 // Query executes a read query on the reader connection pool
 func (db *DB) Query(query string, args ...interface{}) (*sql.Rows, error) {
-	return db.reader.Query(query, args...)
+	return db.reader.QueryContext(context.Background(), query, args...)
 }
 
 // QueryRow executes a read query that returns at most one row on the reader connection
 func (db *DB) QueryRow(query string, args ...interface{}) *sql.Row {
-	return db.reader.QueryRow(query, args...)
+	return db.reader.QueryRowContext(context.Background(), query, args...)
 }
 
 // SetMetrics sets the metrics recorder for data integrity monitoring
@@ -249,7 +260,7 @@ func (db *DB) getTTLTimestamp() int64 {
 
 // CountExpiringStudents counts students that will expire within the given duration
 // Used by warmup scheduler to determine if proactive refresh is needed
-func (db *DB) CountExpiringStudents(softTTL time.Duration) (int, error) {
+func (db *DB) CountExpiringStudents(ctx context.Context, softTTL time.Duration) (int, error) {
 	// Count entries where: softTTL <= age < hardTTL
 	// These are entries that should be refreshed proactively
 	softTimestamp := time.Now().Unix() - int64(softTTL.Seconds())
@@ -257,7 +268,7 @@ func (db *DB) CountExpiringStudents(softTTL time.Duration) (int, error) {
 
 	query := `SELECT COUNT(*) FROM students WHERE cached_at <= ? AND cached_at > ?`
 	var count int
-	err := db.reader.QueryRow(query, softTimestamp, hardTimestamp).Scan(&count)
+	err := db.reader.QueryRowContext(ctx, query, softTimestamp, hardTimestamp).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count expiring students: %w", err)
 	}
@@ -265,13 +276,13 @@ func (db *DB) CountExpiringStudents(softTTL time.Duration) (int, error) {
 }
 
 // CountExpiringCourses counts courses that will expire within the given duration
-func (db *DB) CountExpiringCourses(softTTL time.Duration) (int, error) {
+func (db *DB) CountExpiringCourses(ctx context.Context, softTTL time.Duration) (int, error) {
 	softTimestamp := time.Now().Unix() - int64(softTTL.Seconds())
 	hardTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
 
 	query := `SELECT COUNT(*) FROM courses WHERE cached_at <= ? AND cached_at > ?`
 	var count int
-	err := db.reader.QueryRow(query, softTimestamp, hardTimestamp).Scan(&count)
+	err := db.reader.QueryRowContext(ctx, query, softTimestamp, hardTimestamp).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count expiring courses: %w", err)
 	}
@@ -279,13 +290,13 @@ func (db *DB) CountExpiringCourses(softTTL time.Duration) (int, error) {
 }
 
 // CountExpiringContacts counts contacts that will expire within the given duration
-func (db *DB) CountExpiringContacts(softTTL time.Duration) (int, error) {
+func (db *DB) CountExpiringContacts(ctx context.Context, softTTL time.Duration) (int, error) {
 	softTimestamp := time.Now().Unix() - int64(softTTL.Seconds())
 	hardTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
 
 	query := `SELECT COUNT(*) FROM contacts WHERE cached_at <= ? AND cached_at > ?`
 	var count int
-	err := db.reader.QueryRow(query, softTimestamp, hardTimestamp).Scan(&count)
+	err := db.reader.QueryRowContext(ctx, query, softTimestamp, hardTimestamp).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count expiring contacts: %w", err)
 	}
@@ -305,6 +316,8 @@ func NewTestDB() (*DB, error) {
 // This is a generic helper that reduces lock contention during warmup.
 // The execFn receives the prepared statement and should execute it for each item.
 //
+// Deprecated: Use ExecBatchContext instead.
+//
 // Example:
 //
 //	err := db.ExecBatch("INSERT INTO t (a,b) VALUES (?,?)", func(stmt *sql.Stmt) error {
@@ -316,7 +329,25 @@ func NewTestDB() (*DB, error) {
 //	    return nil
 //	})
 func (db *DB) ExecBatch(query string, execFn func(stmt *sql.Stmt) error) error {
-	tx, err := db.writer.Begin()
+	return db.ExecBatchContext(context.Background(), query, execFn)
+}
+
+// ExecBatchContext executes a batch of operations within a single transaction with context support.
+// This is a generic helper that reduces lock contention during warmup.
+// The execFn receives the prepared statement and should execute it for each item.
+//
+// Example:
+//
+//	err := db.ExecBatchContext(ctx, "INSERT INTO t (a,b) VALUES (?,?)", func(stmt *sql.Stmt) error {
+//	    for _, item := range items {
+//	        if _, err := stmt.ExecContext(ctx, item.A, item.B); err != nil {
+//	            return err
+//	        }
+//	    }
+//	    return nil
+//	})
+func (db *DB) ExecBatchContext(ctx context.Context, query string, execFn func(stmt *sql.Stmt) error) error {
+	tx, err := db.writer.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -328,7 +359,7 @@ func (db *DB) ExecBatch(query string, execFn func(stmt *sql.Stmt) error) error {
 		}
 	}()
 
-	stmt, err := tx.Prepare(query)
+	stmt, err := tx.PrepareContext(ctx, query)
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
 	}

@@ -19,7 +19,7 @@ const (
 	courseQueryByAllConditionsPath = "/pls/dev_stud/course_query_all.queryByAllConditions"
 )
 
-// Education level codes (U=大學部, M=碩士班, N=碩士在職專班, P=博士班)
+// AllEduCodes contains education level codes (U=大學部, M=碩士班, N=碩士在職專班, P=博士班)
 var AllEduCodes = []string{"U", "M", "N", "P"}
 
 // Classroom regex patterns

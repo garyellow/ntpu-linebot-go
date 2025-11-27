@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -8,7 +9,7 @@ import (
 )
 
 // SaveStudent inserts or updates a student record
-func (db *DB) SaveStudent(student *Student) error {
+func (db *DB) SaveStudent(ctx context.Context, student *Student) error {
 	query := `
 		INSERT INTO students (id, name, department, year, cached_at)
 		VALUES (?, ?, ?, ?, ?)
@@ -18,7 +19,7 @@ func (db *DB) SaveStudent(student *Student) error {
 			year = excluded.year,
 			cached_at = excluded.cached_at
 	`
-	_, err := db.writer.Exec(query, student.ID, student.Name, student.Department, student.Year, time.Now().Unix())
+	_, err := db.writer.ExecContext(ctx, query, student.ID, student.Name, student.Department, student.Year, time.Now().Unix())
 	if err != nil {
 		return fmt.Errorf("failed to save student: %w", err)
 	}
@@ -27,7 +28,7 @@ func (db *DB) SaveStudent(student *Student) error {
 
 // SaveStudentsBatch inserts or updates multiple student records in a single transaction
 // This reduces lock contention during warmup by batching writes
-func (db *DB) SaveStudentsBatch(students []*Student) error {
+func (db *DB) SaveStudentsBatch(ctx context.Context, students []*Student) error {
 	if len(students) == 0 {
 		return nil
 	}
@@ -43,9 +44,9 @@ func (db *DB) SaveStudentsBatch(students []*Student) error {
 	`
 
 	cachedAt := time.Now().Unix()
-	return db.ExecBatch(query, func(stmt *sql.Stmt) error {
+	return db.ExecBatchContext(ctx, query, func(stmt *sql.Stmt) error {
 		for _, student := range students {
-			if _, err := stmt.Exec(student.ID, student.Name, student.Department, student.Year, cachedAt); err != nil {
+			if _, err := stmt.ExecContext(ctx, student.ID, student.Name, student.Department, student.Year, cachedAt); err != nil {
 				return fmt.Errorf("failed to save student %s: %w", student.ID, err)
 			}
 		}
@@ -54,11 +55,11 @@ func (db *DB) SaveStudentsBatch(students []*Student) error {
 }
 
 // GetStudentByID retrieves a student by ID and validates cache freshness (7 days = 168 hours)
-func (db *DB) GetStudentByID(id string) (*Student, error) {
+func (db *DB) GetStudentByID(ctx context.Context, id string) (*Student, error) {
 	query := `SELECT id, name, department, year, cached_at FROM students WHERE id = ?`
 
 	var student Student
-	err := db.reader.QueryRow(query, id).Scan(
+	err := db.reader.QueryRowContext(ctx, query, id).Scan(
 		&student.ID,
 		&student.Name,
 		&student.Department,
@@ -84,7 +85,7 @@ func (db *DB) GetStudentByID(id string) (*Student, error) {
 
 // SearchStudentsByName searches students by partial name match (max 500 results)
 // Only returns non-expired cache entries based on configured TTL
-func (db *DB) SearchStudentsByName(name string) ([]Student, error) {
+func (db *DB) SearchStudentsByName(ctx context.Context, name string) ([]Student, error) {
 	// Validate input to prevent SQL injection (even though we use prepared statements)
 	if len(name) > 100 {
 		return nil, fmt.Errorf("search term too long")
@@ -97,7 +98,7 @@ func (db *DB) SearchStudentsByName(name string) ([]Student, error) {
 	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT id, name, department, year, cached_at FROM students WHERE name LIKE ? ESCAPE '\' AND cached_at > ? ORDER BY year DESC, id DESC LIMIT 500`
 
-	rows, err := db.reader.Query(query, "%"+sanitized+"%", ttlTimestamp)
+	rows, err := db.reader.QueryContext(ctx, query, "%"+sanitized+"%", ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search students by name: %w", err)
 	}
@@ -117,12 +118,12 @@ func (db *DB) SearchStudentsByName(name string) ([]Student, error) {
 
 // GetStudentsByYearDept retrieves students by year and department
 // Only returns non-expired cache entries based on configured TTL
-func (db *DB) GetStudentsByYearDept(year int, dept string) ([]Student, error) {
+func (db *DB) GetStudentsByYearDept(ctx context.Context, year int, dept string) ([]Student, error) {
 	// Add TTL filter to prevent returning stale data
 	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT id, name, department, year, cached_at FROM students WHERE year = ? AND department = ? AND cached_at > ?`
 
-	rows, err := db.reader.Query(query, year, dept, ttlTimestamp)
+	rows, err := db.reader.QueryContext(ctx, query, year, dept, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get students by year and department: %w", err)
 	}
@@ -142,11 +143,11 @@ func (db *DB) GetStudentsByYearDept(year int, dept string) ([]Student, error) {
 
 // DeleteExpiredStudents removes students older than the specified TTL
 // Returns the number of deleted entries
-func (db *DB) DeleteExpiredStudents(ttl time.Duration) (int64, error) {
+func (db *DB) DeleteExpiredStudents(ctx context.Context, ttl time.Duration) (int64, error) {
 	query := `DELETE FROM students WHERE cached_at < ?`
 	expiryTime := time.Now().Add(-ttl).Unix()
 
-	result, err := db.writer.Exec(query, expiryTime)
+	result, err := db.writer.ExecContext(ctx, query, expiryTime)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete expired students: %w", err)
 	}
@@ -159,11 +160,11 @@ func (db *DB) DeleteExpiredStudents(ttl time.Duration) (int64, error) {
 }
 
 // CountStudents returns the total number of students
-func (db *DB) CountStudents() (int, error) {
+func (db *DB) CountStudents(ctx context.Context) (int, error) {
 	query := `SELECT COUNT(*) FROM students`
 
 	var count int
-	err := db.reader.QueryRow(query).Scan(&count)
+	err := db.reader.QueryRowContext(ctx, query).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count students: %w", err)
 	}
@@ -173,7 +174,7 @@ func (db *DB) CountStudents() (int, error) {
 // ContactRepository provides CRUD operations for contacts table
 
 // SaveContact inserts or updates a contact record
-func (db *DB) SaveContact(contact *Contact) error {
+func (db *DB) SaveContact(ctx context.Context, contact *Contact) error {
 	query := `
 		INSERT INTO contacts (uid, type, name, name_en, title, organization, extension, phone, email, website, location, superior, cached_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -191,7 +192,7 @@ func (db *DB) SaveContact(contact *Contact) error {
 			superior = excluded.superior,
 			cached_at = excluded.cached_at
 	`
-	_, err := db.writer.Exec(query,
+	_, err := db.writer.ExecContext(ctx, query,
 		contact.UID,
 		contact.Type,
 		contact.Name,
@@ -214,7 +215,7 @@ func (db *DB) SaveContact(contact *Contact) error {
 
 // SaveContactsBatch inserts or updates multiple contact records in a single transaction
 // This reduces lock contention during warmup by batching writes
-func (db *DB) SaveContactsBatch(contacts []*Contact) error {
+func (db *DB) SaveContactsBatch(ctx context.Context, contacts []*Contact) error {
 	if len(contacts) == 0 {
 		return nil
 	}
@@ -238,9 +239,9 @@ func (db *DB) SaveContactsBatch(contacts []*Contact) error {
 	`
 
 	cachedAt := time.Now().Unix()
-	return db.ExecBatch(query, func(stmt *sql.Stmt) error {
+	return db.ExecBatchContext(ctx, query, func(stmt *sql.Stmt) error {
 		for _, contact := range contacts {
-			_, err := stmt.Exec(
+			_, err := stmt.ExecContext(ctx,
 				contact.UID,
 				contact.Type,
 				contact.Name,
@@ -264,13 +265,13 @@ func (db *DB) SaveContactsBatch(contacts []*Contact) error {
 }
 
 // GetContactByUID retrieves a contact by UID and validates cache freshness
-func (db *DB) GetContactByUID(uid string) (*Contact, error) {
+func (db *DB) GetContactByUID(ctx context.Context, uid string) (*Contact, error) {
 	query := `SELECT uid, type, name, name_en, title, organization, extension, phone, email, website, location, superior, cached_at FROM contacts WHERE uid = ?`
 
 	var contact Contact
 	var nameEn, title, org, extension, phone, email, website, location, superior sql.NullString
 
-	err := db.reader.QueryRow(query, uid).Scan(
+	err := db.reader.QueryRowContext(ctx, query, uid).Scan(
 		&contact.UID,
 		&contact.Type,
 		&contact.Name,
@@ -316,7 +317,7 @@ func (db *DB) GetContactByUID(uid string) (*Contact, error) {
 // SQL searches in: name, title fields only
 // Note: The calling code may perform additional fuzzy matching on more fields (name, title, organization, superior)
 // Only returns non-expired cache entries based on configured TTL
-func (db *DB) SearchContactsByName(name string) ([]Contact, error) {
+func (db *DB) SearchContactsByName(ctx context.Context, name string) ([]Contact, error) {
 	// Validate input
 	if len(name) > 100 {
 		return nil, fmt.Errorf("search term too long")
@@ -334,7 +335,7 @@ func (db *DB) SearchContactsByName(name string) ([]Contact, error) {
 		ORDER BY type, name LIMIT 500`
 
 	likePattern := "%" + sanitized + "%"
-	rows, err := db.reader.Query(query, likePattern, likePattern, ttlTimestamp)
+	rows, err := db.reader.QueryContext(ctx, query, likePattern, likePattern, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search contacts by name: %w", err)
 	}
@@ -367,12 +368,12 @@ func (db *DB) SearchContactsByName(name string) ([]Contact, error) {
 
 // GetContactsByOrganization retrieves contacts by organization
 // Only returns non-expired cache entries based on configured TTL
-func (db *DB) GetContactsByOrganization(org string) ([]Contact, error) {
+func (db *DB) GetContactsByOrganization(ctx context.Context, org string) ([]Contact, error) {
 	// Add TTL filter to prevent returning stale data
 	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT uid, type, name, name_en, title, organization, superior, extension, phone, email, cached_at FROM contacts WHERE organization = ? AND cached_at > ?`
 
-	rows, err := db.reader.Query(query, org, ttlTimestamp)
+	rows, err := db.reader.QueryContext(ctx, query, org, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get contacts by organization: %w", err)
 	}
@@ -404,13 +405,13 @@ func (db *DB) GetContactsByOrganization(org string) ([]Contact, error) {
 // GetAllContacts retrieves all non-expired contacts from cache
 // Used for fuzzy character-set matching when SQL LIKE doesn't find results
 // Only returns non-expired cache entries based on configured TTL
-func (db *DB) GetAllContacts() ([]Contact, error) {
+func (db *DB) GetAllContacts(ctx context.Context) ([]Contact, error) {
 	ttlTimestamp := db.getTTLTimestamp()
 
 	query := `SELECT uid, type, name, name_en, title, organization, extension, phone, email, website, location, superior, cached_at
 		FROM contacts WHERE cached_at > ? ORDER BY type, name LIMIT 1000`
 
-	rows, err := db.reader.Query(query, ttlTimestamp)
+	rows, err := db.reader.QueryContext(ctx, query, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get all contacts: %w", err)
 	}
@@ -443,11 +444,11 @@ func (db *DB) GetAllContacts() ([]Contact, error) {
 
 // DeleteExpiredContacts removes contacts older than the specified TTL
 // Returns the number of deleted entries
-func (db *DB) DeleteExpiredContacts(ttl time.Duration) (int64, error) {
+func (db *DB) DeleteExpiredContacts(ctx context.Context, ttl time.Duration) (int64, error) {
 	query := `DELETE FROM contacts WHERE cached_at < ?`
 	expiryTime := time.Now().Add(-ttl).Unix()
 
-	result, err := db.writer.Exec(query, expiryTime)
+	result, err := db.writer.ExecContext(ctx, query, expiryTime)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete expired contacts: %w", err)
 	}
@@ -460,11 +461,11 @@ func (db *DB) DeleteExpiredContacts(ttl time.Duration) (int64, error) {
 }
 
 // CountContacts returns the total number of contacts
-func (db *DB) CountContacts() (int, error) {
+func (db *DB) CountContacts(ctx context.Context) (int, error) {
 	query := `SELECT COUNT(*) FROM contacts`
 
 	var count int
-	err := db.reader.QueryRow(query).Scan(&count)
+	err := db.reader.QueryRowContext(ctx, query).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count contacts: %w", err)
 	}
@@ -474,7 +475,7 @@ func (db *DB) CountContacts() (int, error) {
 // CourseRepository provides CRUD operations for courses table
 
 // SaveCourse inserts or updates a course record (serializes arrays as JSON)
-func (db *DB) SaveCourse(course *Course) error {
+func (db *DB) SaveCourse(ctx context.Context, course *Course) error {
 	// Check data integrity and record metrics if available
 	if db.metrics != nil {
 		if course.No == "" {
@@ -521,7 +522,7 @@ func (db *DB) SaveCourse(course *Course) error {
 			note = excluded.note,
 			cached_at = excluded.cached_at
 	`
-	_, err = db.writer.Exec(query,
+	_, err = db.writer.ExecContext(ctx, query,
 		course.UID,
 		course.Year,
 		course.Term,
@@ -543,7 +544,7 @@ func (db *DB) SaveCourse(course *Course) error {
 
 // SaveCoursesBatch inserts or updates multiple course records in a single transaction
 // This reduces lock contention during warmup by batching writes
-func (db *DB) SaveCoursesBatch(courses []*Course) error {
+func (db *DB) SaveCoursesBatch(ctx context.Context, courses []*Course) error {
 	if len(courses) == 0 {
 		return nil
 	}
@@ -566,7 +567,7 @@ func (db *DB) SaveCoursesBatch(courses []*Course) error {
 	`
 
 	cachedAt := time.Now().Unix()
-	return db.ExecBatch(query, func(stmt *sql.Stmt) error {
+	return db.ExecBatchContext(ctx, query, func(stmt *sql.Stmt) error {
 		for _, course := range courses {
 			teachersJSON, err := json.Marshal(course.Teachers)
 			if err != nil {
@@ -588,7 +589,7 @@ func (db *DB) SaveCoursesBatch(courses []*Course) error {
 				return fmt.Errorf("failed to marshal locations for course %s: %w", course.UID, err)
 			}
 
-			_, err = stmt.Exec(
+			_, err = stmt.ExecContext(ctx,
 				course.UID,
 				course.Year,
 				course.Term,
@@ -611,14 +612,14 @@ func (db *DB) SaveCoursesBatch(courses []*Course) error {
 }
 
 // GetCourseByUID retrieves a course by UID and validates cache freshness
-func (db *DB) GetCourseByUID(uid string) (*Course, error) {
+func (db *DB) GetCourseByUID(ctx context.Context, uid string) (*Course, error) {
 	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at FROM courses WHERE uid = ?`
 
 	var course Course
 	var teachersJSON, teacherURLsJSON, timesJSON, locationsJSON string
 	var detailURL, note sql.NullString
 
-	err := db.reader.QueryRow(query, uid).Scan(
+	err := db.reader.QueryRowContext(ctx, query, uid).Scan(
 		&course.UID,
 		&course.Year,
 		&course.Term,
@@ -668,7 +669,7 @@ func (db *DB) GetCourseByUID(uid string) (*Course, error) {
 
 // SearchCoursesByTitle searches courses by partial title match (max 500 results)
 // Only returns non-expired cache entries based on configured TTL
-func (db *DB) SearchCoursesByTitle(title string) ([]Course, error) {
+func (db *DB) SearchCoursesByTitle(ctx context.Context, title string) ([]Course, error) {
 	// Validate input
 	if len(title) > 100 {
 		return nil, fmt.Errorf("search term too long")
@@ -681,7 +682,7 @@ func (db *DB) SearchCoursesByTitle(title string) ([]Course, error) {
 	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at FROM courses WHERE title LIKE ? ESCAPE '\' AND cached_at > ? ORDER BY year DESC, term DESC LIMIT 500`
 
-	rows, err := db.reader.Query(query, "%"+sanitized+"%", ttlTimestamp)
+	rows, err := db.reader.QueryContext(ctx, query, "%"+sanitized+"%", ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search courses by title: %w", err)
 	}
@@ -692,7 +693,7 @@ func (db *DB) SearchCoursesByTitle(title string) ([]Course, error) {
 
 // SearchCoursesByTeacher searches courses by teacher name (max 500 results)
 // Only returns non-expired cache entries based on configured TTL
-func (db *DB) SearchCoursesByTeacher(teacher string) ([]Course, error) {
+func (db *DB) SearchCoursesByTeacher(ctx context.Context, teacher string) ([]Course, error) {
 	// Validate input
 	if len(teacher) > 100 {
 		return nil, fmt.Errorf("search term too long")
@@ -705,7 +706,7 @@ func (db *DB) SearchCoursesByTeacher(teacher string) ([]Course, error) {
 	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at FROM courses WHERE teachers LIKE ? ESCAPE '\' AND cached_at > ? ORDER BY year DESC, term DESC LIMIT 500`
 
-	rows, err := db.reader.Query(query, "%"+sanitized+"%", ttlTimestamp)
+	rows, err := db.reader.QueryContext(ctx, query, "%"+sanitized+"%", ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search courses by teacher: %w", err)
 	}
@@ -716,12 +717,12 @@ func (db *DB) SearchCoursesByTeacher(teacher string) ([]Course, error) {
 
 // GetCoursesByYearTerm retrieves courses by year and term
 // Only returns non-expired cache entries based on configured TTL
-func (db *DB) GetCoursesByYearTerm(year, term int) ([]Course, error) {
+func (db *DB) GetCoursesByYearTerm(ctx context.Context, year, term int) ([]Course, error) {
 	// Add TTL filter to prevent returning stale data
 	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at FROM courses WHERE year = ? AND term = ? AND cached_at > ?`
 
-	rows, err := db.reader.Query(query, year, term, ttlTimestamp)
+	rows, err := db.reader.QueryContext(ctx, query, year, term, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get courses by year and term: %w", err)
 	}
@@ -733,14 +734,14 @@ func (db *DB) GetCoursesByYearTerm(year, term int) ([]Course, error) {
 // GetCoursesByRecentSemesters retrieves all courses from recent semesters (current + previous)
 // Used for fuzzy character-set matching when SQL LIKE doesn't find results
 // Only returns non-expired cache entries based on configured TTL
-func (db *DB) GetCoursesByRecentSemesters() ([]Course, error) {
+func (db *DB) GetCoursesByRecentSemesters(ctx context.Context) ([]Course, error) {
 	ttlTimestamp := db.getTTLTimestamp()
 
 	// Get up to 2000 most recent courses ordered by semester (year, term)
 	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at
 		FROM courses WHERE cached_at > ? ORDER BY year DESC, term DESC LIMIT 2000`
 
-	rows, err := db.reader.Query(query, ttlTimestamp)
+	rows, err := db.reader.QueryContext(ctx, query, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get courses by recent semesters: %w", err)
 	}
@@ -751,11 +752,11 @@ func (db *DB) GetCoursesByRecentSemesters() ([]Course, error) {
 
 // DeleteExpiredCourses removes courses older than the specified TTL
 // Returns the number of deleted entries
-func (db *DB) DeleteExpiredCourses(ttl time.Duration) (int64, error) {
+func (db *DB) DeleteExpiredCourses(ctx context.Context, ttl time.Duration) (int64, error) {
 	query := `DELETE FROM courses WHERE cached_at < ?`
 	expiryTime := time.Now().Add(-ttl).Unix()
 
-	result, err := db.writer.Exec(query, expiryTime)
+	result, err := db.writer.ExecContext(ctx, query, expiryTime)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete expired courses: %w", err)
 	}
@@ -768,11 +769,11 @@ func (db *DB) DeleteExpiredCourses(ttl time.Duration) (int64, error) {
 }
 
 // CountCourses returns the total number of courses
-func (db *DB) CountCourses() (int, error) {
+func (db *DB) CountCourses(ctx context.Context) (int, error) {
 	query := `SELECT COUNT(*) FROM courses`
 
 	var count int
-	err := db.reader.QueryRow(query).Scan(&count)
+	err := db.reader.QueryRowContext(ctx, query).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count courses: %w", err)
 	}
@@ -841,7 +842,7 @@ func scanCourses(rows *sql.Rows) ([]Course, error) {
 // StickerRepository provides CRUD operations for stickers table
 
 // SaveSticker inserts or updates a sticker record
-func (db *DB) SaveSticker(sticker *Sticker) error {
+func (db *DB) SaveSticker(ctx context.Context, sticker *Sticker) error {
 	query := `
 		INSERT INTO stickers (url, source, cached_at, success_count, failure_count)
 		VALUES (?, ?, ?, ?, ?)
@@ -851,7 +852,7 @@ func (db *DB) SaveSticker(sticker *Sticker) error {
 			success_count = excluded.success_count,
 			failure_count = excluded.failure_count
 	`
-	_, err := db.writer.Exec(query,
+	_, err := db.writer.ExecContext(ctx, query,
 		sticker.URL,
 		sticker.Source,
 		time.Now().Unix(),
@@ -865,10 +866,10 @@ func (db *DB) SaveSticker(sticker *Sticker) error {
 }
 
 // GetAllStickers retrieves all stickers from database and validates cache freshness
-func (db *DB) GetAllStickers() ([]Sticker, error) {
+func (db *DB) GetAllStickers(ctx context.Context) ([]Sticker, error) {
 	query := `SELECT url, source, cached_at, success_count, failure_count FROM stickers`
 
-	rows, err := db.reader.Query(query)
+	rows, err := db.reader.QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get all stickers: %w", err)
 	}
@@ -894,10 +895,10 @@ func (db *DB) GetAllStickers() ([]Sticker, error) {
 }
 
 // GetStickersBySource retrieves stickers by source type and validates TTL
-func (db *DB) GetStickersBySource(source string) ([]Sticker, error) {
+func (db *DB) GetStickersBySource(ctx context.Context, source string) ([]Sticker, error) {
 	query := `SELECT url, source, cached_at, success_count, failure_count FROM stickers WHERE source = ?`
 
-	rows, err := db.reader.Query(query, source)
+	rows, err := db.reader.QueryContext(ctx, query, source)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get stickers by source: %w", err)
 	}
@@ -923,10 +924,10 @@ func (db *DB) GetStickersBySource(source string) ([]Sticker, error) {
 }
 
 // UpdateStickerSuccess increments the success count for a sticker
-func (db *DB) UpdateStickerSuccess(url string) error {
+func (db *DB) UpdateStickerSuccess(ctx context.Context, url string) error {
 	query := `UPDATE stickers SET success_count = success_count + 1 WHERE url = ?`
 
-	_, err := db.writer.Exec(query, url)
+	_, err := db.writer.ExecContext(ctx, query, url)
 	if err != nil {
 		return fmt.Errorf("failed to update sticker success count: %w", err)
 	}
@@ -934,10 +935,10 @@ func (db *DB) UpdateStickerSuccess(url string) error {
 }
 
 // UpdateStickerFailure increments the failure count for a sticker
-func (db *DB) UpdateStickerFailure(url string) error {
+func (db *DB) UpdateStickerFailure(ctx context.Context, url string) error {
 	query := `UPDATE stickers SET failure_count = failure_count + 1 WHERE url = ?`
 
-	_, err := db.writer.Exec(query, url)
+	_, err := db.writer.ExecContext(ctx, query, url)
 	if err != nil {
 		return fmt.Errorf("failed to update sticker failure count: %w", err)
 	}
@@ -946,12 +947,12 @@ func (db *DB) UpdateStickerFailure(url string) error {
 
 // CleanupExpiredStickers removes stickers older than configured TTL
 // Returns the number of deleted entries
-func (db *DB) CleanupExpiredStickers() (int64, error) {
+func (db *DB) CleanupExpiredStickers(ctx context.Context) (int64, error) {
 	// Use configured cache duration instead of hardcoded value
 	query := `DELETE FROM stickers WHERE cached_at < ?`
 	expiryTime := time.Now().Add(-db.cacheTTL).Unix()
 
-	result, err := db.writer.Exec(query, expiryTime)
+	result, err := db.writer.ExecContext(ctx, query, expiryTime)
 	if err != nil {
 		return 0, fmt.Errorf("failed to cleanup expired stickers: %w", err)
 	}
@@ -964,11 +965,11 @@ func (db *DB) CleanupExpiredStickers() (int64, error) {
 }
 
 // CountStickers returns the total number of stickers
-func (db *DB) CountStickers() (int, error) {
+func (db *DB) CountStickers(ctx context.Context) (int, error) {
 	query := `SELECT COUNT(*) FROM stickers`
 
 	var count int
-	err := db.reader.QueryRow(query).Scan(&count)
+	err := db.reader.QueryRowContext(ctx, query).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count stickers: %w", err)
 	}
@@ -976,10 +977,10 @@ func (db *DB) CountStickers() (int, error) {
 }
 
 // GetStickerStats returns statistics about sticker sources
-func (db *DB) GetStickerStats() (map[string]int, error) {
+func (db *DB) GetStickerStats(ctx context.Context) (map[string]int, error) {
 	query := `SELECT source, COUNT(*) as count FROM stickers GROUP BY source`
 
-	rows, err := db.reader.Query(query)
+	rows, err := db.reader.QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sticker stats: %w", err)
 	}
@@ -1002,7 +1003,7 @@ func (db *DB) GetStickerStats() (map[string]int, error) {
 // This table stores courses older than 2 years with on-demand caching and 7-day TTL
 
 // SaveHistoricalCourse inserts or updates a historical course record
-func (db *DB) SaveHistoricalCourse(course *Course) error {
+func (db *DB) SaveHistoricalCourse(ctx context.Context, course *Course) error {
 	teachersJSON, err := json.Marshal(course.Teachers)
 	if err != nil {
 		return fmt.Errorf("failed to marshal teachers: %w", err)
@@ -1039,7 +1040,7 @@ func (db *DB) SaveHistoricalCourse(course *Course) error {
 			note = excluded.note,
 			cached_at = excluded.cached_at
 	`
-	_, err = db.writer.Exec(query,
+	_, err = db.writer.ExecContext(ctx, query,
 		course.UID,
 		course.Year,
 		course.Term,
@@ -1060,7 +1061,7 @@ func (db *DB) SaveHistoricalCourse(course *Course) error {
 }
 
 // SaveHistoricalCoursesBatch inserts or updates multiple historical course records in a single transaction
-func (db *DB) SaveHistoricalCoursesBatch(courses []*Course) error {
+func (db *DB) SaveHistoricalCoursesBatch(ctx context.Context, courses []*Course) error {
 	if len(courses) == 0 {
 		return nil
 	}
@@ -1083,7 +1084,7 @@ func (db *DB) SaveHistoricalCoursesBatch(courses []*Course) error {
 	`
 
 	cachedAt := time.Now().Unix()
-	return db.ExecBatch(query, func(stmt *sql.Stmt) error {
+	return db.ExecBatchContext(ctx, query, func(stmt *sql.Stmt) error {
 		for _, course := range courses {
 			teachersJSON, err := json.Marshal(course.Teachers)
 			if err != nil {
@@ -1105,7 +1106,7 @@ func (db *DB) SaveHistoricalCoursesBatch(courses []*Course) error {
 				return fmt.Errorf("failed to marshal locations for course %s: %w", course.UID, err)
 			}
 
-			_, err = stmt.Exec(
+			_, err = stmt.ExecContext(ctx,
 				course.UID,
 				course.Year,
 				course.Term,
@@ -1129,7 +1130,7 @@ func (db *DB) SaveHistoricalCoursesBatch(courses []*Course) error {
 
 // SearchHistoricalCoursesByYearAndTitle searches historical courses by year and partial title match
 // Only returns non-expired cache entries based on configured TTL
-func (db *DB) SearchHistoricalCoursesByYearAndTitle(year int, title string) ([]Course, error) {
+func (db *DB) SearchHistoricalCoursesByYearAndTitle(ctx context.Context, year int, title string) ([]Course, error) {
 	// Validate input
 	if len(title) > 100 {
 		return nil, fmt.Errorf("search term too long")
@@ -1143,7 +1144,7 @@ func (db *DB) SearchHistoricalCoursesByYearAndTitle(year int, title string) ([]C
 		FROM historical_courses WHERE year = ? AND title LIKE ? ESCAPE '\' AND cached_at > ?
 		ORDER BY term DESC LIMIT 500`
 
-	rows, err := db.reader.Query(query, year, "%"+sanitized+"%", ttlTimestamp)
+	rows, err := db.reader.QueryContext(ctx, query, year, "%"+sanitized+"%", ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search historical courses: %w", err)
 	}
@@ -1155,14 +1156,14 @@ func (db *DB) SearchHistoricalCoursesByYearAndTitle(year int, title string) ([]C
 // SearchHistoricalCoursesByYear searches historical courses by year only
 // Returns all courses for the specified year (both semesters)
 // Only returns non-expired cache entries based on configured TTL
-func (db *DB) SearchHistoricalCoursesByYear(year int) ([]Course, error) {
+func (db *DB) SearchHistoricalCoursesByYear(ctx context.Context, year int) ([]Course, error) {
 	ttlTimestamp := db.getTTLTimestamp()
 
 	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at
 		FROM historical_courses WHERE year = ? AND cached_at > ?
 		ORDER BY term DESC, title LIMIT 500`
 
-	rows, err := db.reader.Query(query, year, ttlTimestamp)
+	rows, err := db.reader.QueryContext(ctx, query, year, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get historical courses by year: %w", err)
 	}
@@ -1173,11 +1174,11 @@ func (db *DB) SearchHistoricalCoursesByYear(year int) ([]Course, error) {
 
 // DeleteExpiredHistoricalCourses removes historical courses older than the specified TTL
 // Returns the number of deleted entries
-func (db *DB) DeleteExpiredHistoricalCourses(ttl time.Duration) (int64, error) {
+func (db *DB) DeleteExpiredHistoricalCourses(ctx context.Context, ttl time.Duration) (int64, error) {
 	query := `DELETE FROM historical_courses WHERE cached_at < ?`
 	expiryTime := time.Now().Add(-ttl).Unix()
 
-	result, err := db.writer.Exec(query, expiryTime)
+	result, err := db.writer.ExecContext(ctx, query, expiryTime)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete expired historical courses: %w", err)
 	}
@@ -1190,11 +1191,11 @@ func (db *DB) DeleteExpiredHistoricalCourses(ttl time.Duration) (int64, error) {
 }
 
 // CountHistoricalCourses returns the total number of historical courses
-func (db *DB) CountHistoricalCourses() (int, error) {
+func (db *DB) CountHistoricalCourses(ctx context.Context) (int, error) {
 	query := `SELECT COUNT(*) FROM historical_courses`
 
 	var count int
-	err := db.reader.QueryRow(query).Scan(&count)
+	err := db.reader.QueryRowContext(ctx, query).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count historical courses: %w", err)
 	}

@@ -57,6 +57,7 @@ func TestGetRandomStickerWithLoadedStickers(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
+	ctx := context.Background()
 	client := scraper.NewClient(30*time.Second, 2)
 	log := logger.New("info")
 	manager := NewManager(db, client, log)
@@ -69,12 +70,11 @@ func TestGetRandomStickerWithLoadedStickers(t *testing.T) {
 	}
 
 	for _, s := range testStickers {
-		err := db.SaveSticker(&s)
+		err := db.SaveSticker(ctx, &s)
 		require.NoError(t, err)
 	}
 
 	// Load stickers from database
-	ctx := context.Background()
 	err := manager.LoadStickers(ctx)
 	require.NoError(t, err)
 
@@ -95,6 +95,7 @@ func TestLoadStickersFromDatabase(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
+	ctx := context.Background()
 	client := scraper.NewClient(30*time.Second, 2)
 	log := logger.New("info")
 	manager := NewManager(db, client, log)
@@ -106,12 +107,11 @@ func TestLoadStickersFromDatabase(t *testing.T) {
 	}
 
 	for _, s := range testStickers {
-		err := db.SaveSticker(&s)
+		err := db.SaveSticker(ctx, &s)
 		require.NoError(t, err)
 	}
 
 	// Load stickers
-	ctx := context.Background()
 	err := manager.LoadStickers(ctx)
 	require.NoError(t, err)
 
@@ -146,6 +146,7 @@ func TestGetStats(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
+	ctx := context.Background()
 	client := scraper.NewClient(30*time.Second, 2)
 	log := logger.New("info")
 	manager := NewManager(db, client, log)
@@ -160,11 +161,11 @@ func TestGetStats(t *testing.T) {
 	}
 
 	for _, s := range testStickers {
-		err := db.SaveSticker(&s)
+		err := db.SaveSticker(ctx, &s)
 		require.NoError(t, err)
 	}
 
-	stats, err := manager.GetStats()
+	stats, err := manager.GetStats(ctx)
 	require.NoError(t, err)
 
 	assert.Equal(t, 3, stats["spy_family"])

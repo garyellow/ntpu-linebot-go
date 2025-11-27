@@ -1,3 +1,5 @@
+// Package id implements the student ID lookup module for the LINE bot.
+// It handles student searches by name, department, and academic year.
 package id
 
 import (
@@ -27,6 +29,7 @@ type Handler struct {
 	stickerManager *sticker.Manager
 }
 
+// ID handler constants.
 const (
 	moduleName           = "id"
 	senderName           = "學號魔法師"
@@ -417,7 +420,7 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	// Check cache first
-	student, err := h.db.GetStudentByID(studentID)
+	student, err := h.db.GetStudentByID(ctx, studentID)
 	if err != nil {
 		log.WithError(err).Error("Failed to query cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
@@ -450,7 +453,7 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	}
 
 	// Save to cache
-	if err := h.db.SaveStudent(student); err != nil {
+	if err := h.db.SaveStudent(ctx, student); err != nil {
 		log.WithError(err).Warn("Failed to save student to cache")
 	}
 
@@ -464,7 +467,7 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	// Search in cache
-	students, err := h.db.SearchStudentsByName(name)
+	students, err := h.db.SearchStudentsByName(ctx, name)
 	if err != nil {
 		log.WithError(err).Error("Failed to search students by name")
 		return []messaging_api.MessageInterface{
@@ -812,7 +815,7 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 		queryDeptName = deptName + "系"
 	}
 
-	students, err := h.db.GetStudentsByYearDept(year, queryDeptName)
+	students, err := h.db.GetStudentsByYearDept(ctx, year, queryDeptName)
 	if err != nil {
 		log.WithError(err).Error("Failed to search students by year and department")
 		return []messaging_api.MessageInterface{
@@ -839,7 +842,7 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 			h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
 			// Save to cache and convert to value slice
 			for _, s := range scrapedStudents {
-				if err := h.db.SaveStudent(s); err != nil {
+				if err := h.db.SaveStudent(ctx, s); err != nil {
 					log.WithError(err).Warn("Failed to save student to cache")
 				}
 				students = append(students, *s)

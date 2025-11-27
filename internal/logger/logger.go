@@ -1,3 +1,6 @@
+// Package logger provides structured logging utilities for the application.
+// It wraps logrus with JSON formatting and supports context-based logging
+// with request IDs and module names.
 package logger
 
 import (

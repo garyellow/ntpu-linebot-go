@@ -1,3 +1,6 @@
+// Package metrics provides Prometheus metrics for monitoring.
+// It tracks scraper performance, cache hit/miss rates, webhook latency,
+// and data integrity issues.
 package metrics
 
 import (

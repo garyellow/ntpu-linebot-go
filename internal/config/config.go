@@ -1,3 +1,6 @@
+// Package config provides application configuration management.
+// It loads settings from environment variables and provides defaults for
+// server mode, warmup mode, timeouts, and cache settings.
 package config
 
 import (

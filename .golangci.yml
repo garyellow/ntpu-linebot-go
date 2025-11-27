@@ -1,6 +1,5 @@
 # golangci-lint v2 configuration
 # Reference: https://golangci-lint.run/docs/configuration/
-
 version: "2"
 
 run:
@@ -23,28 +22,30 @@ formatters:
       - "examples$"
 
 linters:
-  # Start with no linters, then enable specific ones
+  # Start with no linters, then enable specific ones for precise control
   default: none
   enable:
-    # Default linters
+    # Default linters (must have)
     - errcheck      # Check for unchecked errors
     - govet         # Report suspicious constructs
     - ineffassign   # Detect unused variable assignments
-    - staticcheck   # Static analysis checks (includes gosimple)
+    - staticcheck   # Static analysis checks (includes gosimple, stylecheck)
     - unused        # Find unused code
 
-    # Additional recommended linters
+    # Security and reliability
     - bodyclose     # Check HTTP response body is closed
     - contextcheck  # Check context.Context is passed correctly
+    - gosec         # Security checks
+    - noctx         # Find HTTP requests without context
+
+    # Code quality
+    - copyloopvar   # Check for pointers to loop variables (Go 1.22+)
     - durationcheck # Check for two durations multiplied together
     - errname       # Check error naming conventions
     - errorlint     # Find issues with error wrapping
-    - copyloopvar   # Check for pointers to loop variables (Go 1.22+)
     - gocritic      # Opinionated linter with many checks
-    - gosec         # Security checks
     - misspell      # Find commonly misspelled words
     - nilerr        # Find returning nil after checking error
-    - noctx         # Find HTTP requests without context
     - predeclared   # Find shadowed predeclared identifiers
     - revive        # Fast, configurable linter (golint replacement)
     - unconvert     # Remove unnecessary type conversions
@@ -102,12 +103,10 @@ linters:
         - name: error-strings
         - name: error-naming
         - name: exported
-          disabled: true  # Allow unexported comments
         - name: if-return
         - name: increment-decrement
         - name: var-declaration
         - name: package-comments
-          disabled: true  # Allow packages without comments
         - name: range
         - name: receiver-naming
         - name: time-naming
@@ -123,7 +122,7 @@ linters:
       checks: ["all"]
 
   exclusions:
-    # Exclude generated files by default (v2 default is 'strict')
+    # Exclude generated files by default
     generated: lax
     # Preset exclusions
     presets:
@@ -145,29 +144,17 @@ linters:
       - path: internal/scraper/client\.go
         linters:
           - bodyclose
-      # Warmup: context.Background() is intentionally used for background goroutine
-      - path: internal/warmup/warmup\.go
-        linters:
-          - contextcheck
     paths:
       - "third_party$"
       - "builtin$"
       - "examples$"
 
 issues:
-  # Maximum issues count per linter
+  # Maximum issues count per linter (0 = unlimited)
   max-issues-per-linter: 50
-  # Maximum same issues count
+  # Maximum same issues count (0 = unlimited)
   max-same-issues: 10
 
-severity:
-  # Default severity for issues
-  default: warning
-  # Rules for specific severities
-  rules:
-    - linters:
-        - gosec
-      severity: error
-    - linters:
-        - govet
-      severity: error
+output:
+  # Show statistics per linter
+  show-stats: true

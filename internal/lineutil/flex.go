@@ -88,11 +88,12 @@ func BuildCarouselMessages(altText string, bubbles []messaging_api.FlexBubble, s
 	return messages
 }
 
-// FlexBox wrapper
+// FlexBox wrapper for messaging_api.FlexBox with fluent API.
 type FlexBox struct {
 	*messaging_api.FlexBox
 }
 
+// NewFlexBox creates a new FlexBox with the specified layout and contents.
 func NewFlexBox(layout string, contents ...messaging_api.FlexComponentInterface) *FlexBox {
 	return &FlexBox{&messaging_api.FlexBox{
 		Layout:   messaging_api.FlexBoxLAYOUT(layout),
@@ -100,132 +101,155 @@ func NewFlexBox(layout string, contents ...messaging_api.FlexComponentInterface)
 	}}
 }
 
+// WithSpacing sets the spacing between components.
 func (b *FlexBox) WithSpacing(spacing string) *FlexBox {
 	b.Spacing = spacing
 	return b
 }
 
+// WithMargin sets the margin of the box.
 func (b *FlexBox) WithMargin(margin string) *FlexBox {
 	b.Margin = margin
 	return b
 }
 
+// WithPaddingBottom sets the bottom padding of the box.
 func (b *FlexBox) WithPaddingBottom(padding string) *FlexBox {
 	b.PaddingBottom = padding
 	return b
 }
 
+// WithPaddingAll sets the padding for all sides of the box.
 func (b *FlexBox) WithPaddingAll(padding string) *FlexBox {
 	b.PaddingAll = padding
 	return b
 }
 
+// WithBackgroundColor sets the background color of the box.
 func (b *FlexBox) WithBackgroundColor(color string) *FlexBox {
 	b.BackgroundColor = color
 	return b
 }
 
-// FlexText wrapper
+// FlexText wrapper for messaging_api.FlexText with fluent API.
 type FlexText struct {
 	*messaging_api.FlexText
 }
 
+// NewFlexText creates a new FlexText with the specified text.
 func NewFlexText(text string) *FlexText {
 	return &FlexText{&messaging_api.FlexText{
 		Text: text,
 	}}
 }
 
+// WithWeight sets the font weight (regular/bold).
 func (t *FlexText) WithWeight(weight string) *FlexText {
 	t.Weight = messaging_api.FlexTextWEIGHT(weight)
 	return t
 }
 
+// WithSize sets the font size.
 func (t *FlexText) WithSize(size string) *FlexText {
 	t.Size = size
 	return t
 }
 
+// WithColor sets the text color.
 func (t *FlexText) WithColor(color string) *FlexText {
 	t.Color = color
 	return t
 }
 
+// WithWrap enables or disables text wrapping.
 func (t *FlexText) WithWrap(wrap bool) *FlexText {
 	t.Wrap = wrap
 	return t
 }
 
+// WithFlex sets the flex factor for the text component.
 func (t *FlexText) WithFlex(flex int) *FlexText {
 	t.Flex = int32(flex)
 	return t
 }
 
+// WithAlign sets the text alignment (start/end/center).
 func (t *FlexText) WithAlign(align string) *FlexText {
 	t.Align = messaging_api.FlexTextALIGN(align)
 	return t
 }
 
+// WithMargin sets the margin of the text component.
 func (t *FlexText) WithMargin(margin string) *FlexText {
 	t.Margin = margin
 	return t
 }
 
+// WithMaxLines sets the maximum number of lines to display.
 func (t *FlexText) WithMaxLines(lines int) *FlexText {
 	t.MaxLines = int32(lines)
 	return t
 }
 
+// WithLineSpacing sets the spacing between lines.
 func (t *FlexText) WithLineSpacing(spacing string) *FlexText {
 	t.LineSpacing = spacing
 	return t
 }
 
+// WithAdjustMode sets the text adjust mode (shrink-to-fit).
 func (t *FlexText) WithAdjustMode(mode string) *FlexText {
 	t.AdjustMode = messaging_api.FlexTextADJUST_MODE(mode)
 	return t
 }
 
-// FlexButton wrapper
+// FlexButton wrapper for messaging_api.FlexButton with fluent API.
 type FlexButton struct {
 	*messaging_api.FlexButton
 }
 
+// NewFlexButton creates a new FlexButton with the specified action.
 func NewFlexButton(action messaging_api.ActionInterface) *FlexButton {
 	return &FlexButton{&messaging_api.FlexButton{
 		Action: action,
 	}}
 }
 
+// WithStyle sets the button style (link/primary/secondary).
 func (b *FlexButton) WithStyle(style string) *FlexButton {
 	b.Style = messaging_api.FlexButtonSTYLE(style)
 	return b
 }
 
+// WithColor sets the button color.
 func (b *FlexButton) WithColor(color string) *FlexButton {
 	b.Color = color
 	return b
 }
 
+// WithHeight sets the button height (sm/md).
 func (b *FlexButton) WithHeight(height string) *FlexButton {
 	b.Height = messaging_api.FlexButtonHEIGHT(height)
 	return b
 }
 
+// WithMargin sets the margin of the button.
 func (b *FlexButton) WithMargin(margin string) *FlexButton {
 	b.Margin = margin
 	return b
 }
 
-// FlexSeparator wrapper
+// FlexSeparator wrapper for messaging_api.FlexSeparator with fluent API.
 type FlexSeparator struct {
 	*messaging_api.FlexSeparator
 }
 
+// NewFlexSeparator creates a new FlexSeparator.
 func NewFlexSeparator() *FlexSeparator {
 	return &FlexSeparator{&messaging_api.FlexSeparator{}}
 }
 
+// WithMargin sets the margin of the separator.
 func (s *FlexSeparator) WithMargin(margin string) *FlexSeparator {
 	s.Margin = margin
 	return s

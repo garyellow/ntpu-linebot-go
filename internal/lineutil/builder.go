@@ -387,9 +387,9 @@ func FormatDisplayName(nameCN, nameEN string) string {
 //
 // Returns the code part (e.g., "U0001" from "11312U0001")
 // Returns empty string if pattern not found.
-
 var courseCodeRegex = regexp.MustCompile(`(?i)([umnp]\d{4})`)
 
+// ExtractCourseCode extracts the course code from a course UID.
 func ExtractCourseCode(uid string) string {
 	matches := courseCodeRegex.FindStringSubmatch(uid)
 	if len(matches) >= 2 {
