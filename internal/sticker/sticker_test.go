@@ -28,7 +28,7 @@ func TestNewManager(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	client := scraper.NewClient(30*time.Second, 3, 100*time.Millisecond, 500*time.Millisecond, 2)
+	client := scraper.NewClient(30*time.Second, 2)
 	log := logger.New("info")
 	manager := NewManager(db, client, log)
 
@@ -41,7 +41,7 @@ func TestGetRandomStickerWithFallback(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	client := scraper.NewClient(30*time.Second, 3, 100*time.Millisecond, 500*time.Millisecond, 2)
+	client := scraper.NewClient(30*time.Second, 2)
 	log := logger.New("info")
 	manager := NewManager(db, client, log)
 
@@ -55,7 +55,7 @@ func TestGetRandomStickerWithLoadedStickers(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	client := scraper.NewClient(30*time.Second, 3, 100*time.Millisecond, 500*time.Millisecond, 2)
+	client := scraper.NewClient(30*time.Second, 2)
 	log := logger.New("info")
 	manager := NewManager(db, client, log)
 
@@ -93,7 +93,7 @@ func TestLoadStickersFromDatabase(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	client := scraper.NewClient(30*time.Second, 3, 100*time.Millisecond, 500*time.Millisecond, 2)
+	client := scraper.NewClient(30*time.Second, 2)
 	log := logger.New("info")
 	manager := NewManager(db, client, log)
 
@@ -121,7 +121,7 @@ func TestGenerateFallbackStickers(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	client := scraper.NewClient(30*time.Second, 3, 100*time.Millisecond, 500*time.Millisecond, 2)
+	client := scraper.NewClient(30*time.Second, 2)
 	log := logger.New("info")
 	manager := NewManager(db, client, log)
 
@@ -144,7 +144,7 @@ func TestGetStats(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	client := scraper.NewClient(30*time.Second, 3, 100*time.Millisecond, 500*time.Millisecond, 2)
+	client := scraper.NewClient(30*time.Second, 2)
 	log := logger.New("info")
 	manager := NewManager(db, client, log)
 

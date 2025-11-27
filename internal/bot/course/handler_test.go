@@ -21,7 +21,7 @@ func setupTestHandler(t *testing.T) *Handler {
 	}
 
 	// Create test scraper
-	scraperClient := scraper.NewClient(30000000000, 2, 500000000, 1000000000, 3)
+	scraperClient := scraper.NewClient(30*time.Second, 3)
 
 	// Create test metrics
 	registry := prometheus.NewRegistry()

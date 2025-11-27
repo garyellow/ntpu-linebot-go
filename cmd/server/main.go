@@ -63,9 +63,6 @@ func main() {
 	// Create scraper client
 	scraperClient := scraper.NewClient(
 		cfg.ScraperTimeout,
-		cfg.ScraperWorkers,
-		cfg.ScraperMinDelay,
-		cfg.ScraperMaxDelay,
 		cfg.ScraperMaxRetries,
 	)
 	log.Info("Scraper client created")
@@ -81,7 +78,6 @@ func main() {
 
 	warmup.RunInBackground(warmupCtx, db, scraperClient, stickerManager, log, warmup.Options{
 		Modules: warmup.ParseModules(cfg.WarmupModules),
-		Workers: cfg.ScraperWorkers,
 		Timeout: cfg.WarmupTimeout,
 		Reset:   false, // Never reset in production
 		Metrics: m,     // Pass metrics for monitoring
@@ -552,7 +548,6 @@ func performProactiveWarmup(ctx context.Context, db *storage.DB, client *scraper
 	// Run warmup (non-blocking, logs progress internally)
 	stats, err := warmup.Run(warmupCtx, db, client, stickerMgr, log, warmup.Options{
 		Modules: modules,
-		Workers: cfg.ScraperWorkers,
 		Timeout: cfg.WarmupTimeout,
 		Reset:   false, // Never reset existing data
 	})

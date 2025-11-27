@@ -27,9 +27,6 @@ type Config struct {
 	SoftTTL    time.Duration // Soft TTL: when to proactively refresh data (default: 5 days)
 
 	// Scraper Configuration
-	ScraperWorkers    int
-	ScraperMinDelay   time.Duration
-	ScraperMaxDelay   time.Duration
 	ScraperTimeout    time.Duration
 	ScraperMaxRetries int
 
@@ -84,11 +81,8 @@ func LoadForMode(mode ValidationMode) (*Config, error) {
 		SoftTTL:    getDurationEnv("SOFT_TTL", 120*time.Hour),  // Soft TTL: 5 days (trigger warmup)
 
 		// Scraper Configuration
-		ScraperWorkers:    getIntEnv("SCRAPER_WORKERS", 3),
-		ScraperMinDelay:   getDurationEnv("SCRAPER_MIN_DELAY", 5*time.Second),
-		ScraperMaxDelay:   getDurationEnv("SCRAPER_MAX_DELAY", 10*time.Second),
-		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", 120*time.Second), // Increased for large student data
-		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 3),                // Reduced retries, rely on longer timeout
+		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", 60*time.Second), // HTTP request timeout
+		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 5),               // Retry with exponential backoff
 
 		// Warmup Configuration
 		WarmupTimeout: getDurationEnv("WARMUP_TIMEOUT", 30*time.Minute),
@@ -133,9 +127,6 @@ func (c *Config) ValidateForMode(mode ValidationMode) error {
 	}
 	if c.SQLitePath == "" {
 		return fmt.Errorf("SQLITE_PATH is required")
-	}
-	if c.ScraperWorkers < 1 {
-		return fmt.Errorf("SCRAPER_WORKERS must be at least 1")
 	}
 	if c.ScraperMaxRetries < 0 {
 		return fmt.Errorf("SCRAPER_MAX_RETRIES cannot be negative")

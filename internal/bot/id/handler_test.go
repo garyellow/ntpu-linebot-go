@@ -19,7 +19,7 @@ func setupTestHandler(t *testing.T) *Handler {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
 
-	scraperClient := scraper.NewClient(30*time.Second, 2, 500*time.Millisecond, 1*time.Second, 3)
+	scraperClient := scraper.NewClient(30*time.Second, 3)
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	log := logger.New("info")

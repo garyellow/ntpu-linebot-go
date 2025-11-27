@@ -32,8 +32,8 @@ func TestLoad(t *testing.T) {
 		t.Errorf("Expected default port '10000', got '%s'", cfg.Port)
 	}
 
-	if cfg.ScraperWorkers != 3 {
-		t.Errorf("Expected default workers 3, got %d", cfg.ScraperWorkers)
+	if cfg.ScraperMaxRetries != 5 {
+		t.Errorf("Expected default max retries 5, got %d", cfg.ScraperMaxRetries)
 	}
 }
 
@@ -78,17 +78,6 @@ func TestLoadForMode(t *testing.T) {
 			cleanupEnv: func() {},
 			wantErr:    false,
 		},
-		{
-			name: "warmup mode - custom workers",
-			mode: WarmupMode,
-			setupEnv: func() {
-				_ = os.Setenv("SCRAPER_WORKERS", "5")
-			},
-			cleanupEnv: func() {
-				_ = os.Unsetenv("SCRAPER_WORKERS")
-			},
-			wantErr: false,
-		},
 	}
 
 	for _, tt := range tests {
@@ -111,13 +100,6 @@ func TestLoadForMode(t *testing.T) {
 			if !tt.wantErr && cfg == nil {
 				t.Error("LoadForMode() returned nil config without error")
 			}
-
-			// Validate custom settings when applicable
-			if !tt.wantErr && tt.name == "warmup mode - custom workers" {
-				if cfg.ScraperWorkers != 5 {
-					t.Errorf("Expected workers 5, got %d", cfg.ScraperWorkers)
-				}
-			}
 		})
 	}
 }
@@ -135,7 +117,6 @@ func TestValidate(t *testing.T) {
 				LineChannelSecret: "secret",
 				Port:              "10000",
 				SQLitePath:        "/data/cache.db",
-				ScraperWorkers:    3,
 				ScraperMaxRetries: 3,
 			},
 			wantErr: false,
@@ -146,18 +127,18 @@ func TestValidate(t *testing.T) {
 				LineChannelSecret: "secret",
 				Port:              "10000",
 				SQLitePath:        "/data/cache.db",
-				ScraperWorkers:    3,
+				ScraperMaxRetries: 3,
 			},
 			wantErr: true,
 		},
 		{
-			name: "invalid workers",
+			name: "negative retries",
 			cfg: &Config{
 				LineChannelToken:  "token",
 				LineChannelSecret: "secret",
 				Port:              "10000",
 				SQLitePath:        "/data/cache.db",
-				ScraperWorkers:    0,
+				ScraperMaxRetries: -1,
 			},
 			wantErr: true,
 		},
@@ -188,7 +169,6 @@ func TestValidateForMode(t *testing.T) {
 				LineChannelSecret: "secret",
 				Port:              "10000",
 				SQLitePath:        "/data/cache.db",
-				ScraperWorkers:    3,
 				ScraperMaxRetries: 3,
 			},
 			mode:    ServerMode,
@@ -200,7 +180,7 @@ func TestValidateForMode(t *testing.T) {
 				LineChannelSecret: "secret",
 				Port:              "10000",
 				SQLitePath:        "/data/cache.db",
-				ScraperWorkers:    3,
+				ScraperMaxRetries: 3,
 			},
 			mode:        ServerMode,
 			wantErr:     true,
@@ -210,7 +190,6 @@ func TestValidateForMode(t *testing.T) {
 			name: "warmup mode - missing LINE credentials OK",
 			cfg: &Config{
 				SQLitePath:        "/data/cache.db",
-				ScraperWorkers:    3,
 				ScraperMaxRetries: 3,
 			},
 			mode:    WarmupMode,
@@ -219,7 +198,6 @@ func TestValidateForMode(t *testing.T) {
 		{
 			name: "warmup mode - missing SQLite path",
 			cfg: &Config{
-				ScraperWorkers:    3,
 				ScraperMaxRetries: 3,
 			},
 			mode:        WarmupMode,
@@ -227,15 +205,14 @@ func TestValidateForMode(t *testing.T) {
 			errContains: "SQLITE_PATH",
 		},
 		{
-			name: "warmup mode - invalid workers",
+			name: "warmup mode - negative retries",
 			cfg: &Config{
 				SQLitePath:        "/data/cache.db",
-				ScraperWorkers:    0,
-				ScraperMaxRetries: 3,
+				ScraperMaxRetries: -1,
 			},
 			mode:        WarmupMode,
 			wantErr:     true,
-			errContains: "SCRAPER_WORKERS",
+			errContains: "SCRAPER_MAX_RETRIES",
 		},
 	}
 

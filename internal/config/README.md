@@ -16,11 +16,8 @@
   - Linux/Mac: `/data/cache.db`（預設）
 - `CACHE_TTL=168h` - Hard TTL：快取絕對過期時間（7 天）
 - `SOFT_TTL=120h` - Soft TTL：觸發主動刷新時間（5 天）
-- `SCRAPER_WORKERS=3` - 爬蟲並發數
-- `SCRAPER_MIN_DELAY=5s` - 爬蟲最小延遲
-- `SCRAPER_MAX_DELAY=10s` - 爬蟲最大延遲
-- `SCRAPER_TIMEOUT=120s` - 爬蟲請求超時（已增加以支援大量學生資料）
-- `SCRAPER_MAX_RETRIES=3` - 最大重試次數（已減少，依靠更長的超時）
+- `SCRAPER_TIMEOUT=60s` - 每次 HTTP 請求超時
+- `SCRAPER_MAX_RETRIES=5` - 失敗時最大重試次數（指數退避）
 - `WARMUP_TIMEOUT=30m` - 預熱超時
 - `WARMUP_MODULES=sticker,id,contact,course` - 預熱模組列表（逗號分隔，空字串跳過，**並行執行無順序限制**）
 - `SHUTDOWN_TIMEOUT=30s` - 優雅關閉超時

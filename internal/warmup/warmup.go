@@ -28,7 +28,6 @@ type Stats struct {
 // Options configures cache warming behavior
 type Options struct {
 	Modules []string         // Modules to warm (id, contact, course, sticker)
-	Workers int              // Worker pool size for ID module
 	Timeout time.Duration    // Overall timeout
 	Reset   bool             // Whether to reset cache before warming
 	Metrics *metrics.Metrics // Optional metrics recorder
@@ -85,7 +84,7 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 
 			switch moduleName {
 			case "id":
-				if err := warmupIDModule(ctx, db, client, log, stats, opts.Workers, opts.Metrics); err != nil {
+				if err := warmupIDModule(ctx, db, client, log, stats, opts.Metrics); err != nil {
 					log.WithError(err).Error("ID module warmup failed")
 					errChan <- fmt.Errorf("id module: %w", err)
 				}
@@ -152,7 +151,6 @@ func RunInBackground(ctx context.Context, db *storage.DB, client *scraper.Client
 		defer cancel() // Ensure cleanup
 
 		log.WithField("modules", opts.Modules).
-			WithField("workers", opts.Workers).
 			Info("Starting background cache warming")
 
 		stats, err := Run(warmupCtx, db, client, stickerMgr, log, opts)
@@ -211,7 +209,8 @@ func resetCache(db *storage.DB) error {
 }
 
 // warmupIDModule warms student ID cache
-func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, workers int, m *metrics.Metrics) error {
+// Executes tasks sequentially (one at a time) to avoid overwhelming the server
+func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
 	// Warmup range: 101-112 (LMS 2.0 已無 113+ 資料)
 	currentYear := time.Now().Year() - 1911
 	fromYear := min(112, currentYear)
@@ -223,88 +222,68 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 	}
 
 	totalTasks := (fromYear - 100) * len(departments)
-	log.WithField("tasks", totalTasks).
-		WithField("workers", workers).
-		Info("Starting ID module warmup")
+	log.WithField("tasks", totalTasks).Info("Starting ID module warmup (sequential)")
 
-	// Create task channel
-	type task struct {
-		year int
-		dept string
-	}
-	tasks := make(chan task, totalTasks)
+	var completed int
+	var errorCount int
+
+	// Execute tasks sequentially (one at a time)
 	for year := fromYear; year > 100; year-- {
 		for _, dept := range departments {
-			tasks <- task{year, dept}
+			select {
+			case <-ctx.Done():
+				log.WithField("completed", completed).
+					WithField("errors", errorCount).
+					Warn("ID module warmup cancelled")
+				return fmt.Errorf("cancelled: %w", ctx.Err())
+			default:
+			}
+
+			students, err := ntpu.ScrapeStudentsByYear(ctx, client, year, dept)
+			if err != nil {
+				log.WithError(err).
+					WithField("year", year).
+					WithField("dept", dept).
+					Warn("Failed to scrape students")
+				errorCount++
+				continue
+			}
+
+			// Save to database
+			if err := db.SaveStudentsBatch(students); err != nil {
+				log.WithError(err).
+					WithField("year", year).
+					WithField("dept", dept).
+					WithField("count", len(students)).
+					Warn("Failed to save student batch")
+				errorCount++
+				continue
+			}
+
+			stats.Students.Add(int64(len(students)))
+			completed++
+
+			if completed%10 == 0 || completed == totalTasks {
+				log.WithField("progress", fmt.Sprintf("%d/%d", completed, totalTasks)).
+					WithField("students", stats.Students.Load()).
+					Info("ID module progress")
+			}
 		}
 	}
-	close(tasks)
 
-	// Worker pool
-	var wg sync.WaitGroup
-	var completed atomic.Int64
-	var errorCount atomic.Int64
-
-	for i := 0; i < workers; i++ {
-		wg.Add(1)
-		go func(workerID int) {
-			defer wg.Done()
-
-			for t := range tasks {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-				}
-
-				students, err := ntpu.ScrapeStudentsByYear(ctx, client, t.year, t.dept)
-				if err != nil {
-					log.WithError(err).
-						WithField("year", t.year).
-						WithField("dept", t.dept).
-						Warn("Failed to scrape students")
-					errorCount.Add(1)
-					continue
-				}
-
-				// Save to database using batch operation to reduce lock contention
-				if err := db.SaveStudentsBatch(students); err != nil {
-					log.WithError(err).
-						WithField("year", t.year).
-						WithField("dept", t.dept).
-						WithField("count", len(students)).
-						Warn("Failed to save student batch")
-					errorCount.Add(1)
-					continue
-				}
-
-				stats.Students.Add(int64(len(students)))
-				count := completed.Add(1)
-
-				if count%10 == 0 || count == int64(totalTasks) {
-					log.WithField("progress", fmt.Sprintf("%d/%d", count, totalTasks)).
-						WithField("students", stats.Students.Load()).
-						Info("ID module progress")
-				}
-			}
-		}(i)
-	}
-
-	wg.Wait()
-
-	// Record metrics using batch operations
+	// Record metrics
 	if m != nil {
-		successCount := completed.Load() - errorCount.Load()
+		successCount := completed - errorCount
 		if successCount > 0 {
 			m.WarmupTasksTotal.WithLabelValues("id", "success").Add(float64(successCount))
 		}
-		if errorCount.Load() > 0 {
-			m.WarmupTasksTotal.WithLabelValues("id", "error").Add(float64(errorCount.Load()))
+		if errorCount > 0 {
+			m.WarmupTasksTotal.WithLabelValues("id", "error").Add(float64(errorCount))
 		}
 	}
 
-	if errorCount.Load() > 0 {
-		return fmt.Errorf("completed with %d errors", errorCount.Load())
+	if errorCount > 0 {
+		return fmt.Errorf("completed with %d errors", errorCount)
 	}
 	return nil
 }

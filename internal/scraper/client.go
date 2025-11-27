@@ -17,18 +17,19 @@ import (
 	"golang.org/x/text/transform"
 )
 
-// Client is an HTTP client for web scraping with rate limiting and URL failover
+// Client is an HTTP client for web scraping with retry and URL failover
 type Client struct {
-	httpClient  *http.Client
-	rateLimiter *RateLimiter
-	userAgents  []string
-	maxRetries  int
-	baseURLs    map[string][]string // Base URLs for failover by domain
-	mu          sync.RWMutex
+	httpClient *http.Client
+	userAgents []string
+	maxRetries int
+	baseURLs   map[string][]string // Base URLs for failover by domain
+	mu         sync.RWMutex
 }
 
 // NewClient creates a new scraper client with URL failover support
-func NewClient(timeout time.Duration, workers int, minDelay, maxDelay time.Duration, maxRetries int) *Client {
+// timeout: HTTP request timeout (e.g., 60s)
+// maxRetries: max retry attempts with exponential backoff (e.g., 3)
+func NewClient(timeout time.Duration, maxRetries int) *Client {
 	// Define failover URLs for NTPU services
 	baseURLs := map[string][]string{
 		"lms": {
@@ -52,26 +53,24 @@ func NewClient(timeout time.Duration, workers int, minDelay, maxDelay time.Durat
 				IdleConnTimeout:     90 * time.Second,
 			},
 		},
-		rateLimiter: NewRateLimiter(workers, minDelay, maxDelay),
-		userAgents:  generateUserAgents(),
-		maxRetries:  maxRetries,
-		baseURLs:    baseURLs,
+		userAgents: generateUserAgents(),
+		maxRetries: maxRetries,
+		baseURLs:   baseURLs,
 	}
 }
 
-// Get performs a GET request with rate limiting and retries
-// Caller is responsible for closing the response body
+// SuccessDelay is the fixed delay after each successful request (anti-scraping)
+const SuccessDelay = 2 * time.Second
+
+// Get performs a GET request with retries on failure
+// On success: waits SuccessDelay (2s) before returning (anti-scraping)
+// On failure: retries with exponential backoff (4s initial, 5 retries)
 func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
 	var resp *http.Response
 	var lastErr error
 
-	// Retry with exponential backoff
-	err := RetryWithBackoff(ctx, c.maxRetries, 1*time.Second, 30*time.Second, func() error {
-		// Wait for rate limiter
-		if err := c.rateLimiter.Wait(ctx); err != nil {
-			return err
-		}
-
+	// Retry with exponential backoff on failure (4s initial delay)
+	err := RetryWithBackoff(ctx, c.maxRetries, 4*time.Second, func() error {
 		// Create request
 		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 		if err != nil {
@@ -116,6 +115,9 @@ func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Anti-scraping delay after successful request
+	_ = Sleep(ctx, SuccessDelay)
 
 	return resp, nil
 }
@@ -164,17 +166,14 @@ func (c *Client) PostFormDocument(ctx context.Context, postURL string, formData 
 
 // PostFormDocumentRaw performs a POST request with raw form data string and parses the response as HTML
 // Use this when you need custom encoding (e.g., Big5) instead of standard UTF-8 url.Values encoding
+// On success: waits SuccessDelay (2s) before returning (anti-scraping)
+// On failure: retries with exponential backoff (4s initial, 5 retries)
 func (c *Client) PostFormDocumentRaw(ctx context.Context, postURL string, formDataStr string) (*goquery.Document, error) {
 	var resp *http.Response
 	var lastErr error
 
-	// Retry with exponential backoff
-	err := RetryWithBackoff(ctx, c.maxRetries, 1*time.Second, 30*time.Second, func() error {
-		// Wait for rate limiter
-		if err := c.rateLimiter.Wait(ctx); err != nil {
-			return err
-		}
-
+	// Retry with exponential backoff on failure (4s initial delay)
+	err := RetryWithBackoff(ctx, c.maxRetries, 4*time.Second, func() error {
 		// Create POST request with form data
 		req, err := http.NewRequestWithContext(ctx, "POST", postURL, strings.NewReader(formDataStr))
 		if err != nil {
@@ -219,6 +218,9 @@ func (c *Client) PostFormDocumentRaw(ctx context.Context, postURL string, formDa
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
+
+	// Anti-scraping delay after successful request
+	_ = Sleep(ctx, SuccessDelay)
 
 	// Handle gzip encoding
 	var reader io.Reader
