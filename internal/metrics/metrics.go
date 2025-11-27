@@ -27,7 +27,9 @@ type Metrics struct {
 	CourseDataIntegrity *prometheus.CounterVec
 
 	// Rate limiter metrics
-	RateLimiterDropped *prometheus.CounterVec
+	RateLimiterDropped     *prometheus.CounterVec
+	RateLimiterActiveUsers prometheus.Gauge   // Track active user limiters
+	RateLimiterCleaned     prometheus.Counter // Track cleanup count
 
 	// Warmup metrics
 	WarmupTasksTotal *prometheus.CounterVec
@@ -125,6 +127,20 @@ func New(registry *prometheus.Registry) *Metrics {
 			[]string{"limiter_type"}, // limiter_type: user, global
 		),
 
+		RateLimiterActiveUsers: promauto.With(registry).NewGauge(
+			prometheus.GaugeOpts{
+				Name: "ntpu_rate_limiter_active_users",
+				Help: "Current number of active user rate limiters",
+			},
+		),
+
+		RateLimiterCleaned: promauto.With(registry).NewCounter(
+			prometheus.CounterOpts{
+				Name: "ntpu_rate_limiter_cleaned_total",
+				Help: "Total number of user rate limiters cleaned up",
+			},
+		),
+
 		// Warmup metrics
 		WarmupTasksTotal: promauto.With(registry).NewCounterVec(
 			prometheus.CounterOpts{
@@ -181,6 +197,16 @@ func (m *Metrics) RecordCourseIntegrityIssue(issueType string) {
 // RecordRateLimiterDrop records a request dropped by rate limiter
 func (m *Metrics) RecordRateLimiterDrop(limiterType string) {
 	m.RateLimiterDropped.WithLabelValues(limiterType).Inc()
+}
+
+// SetRateLimiterActiveUsers sets the current number of active user limiters
+func (m *Metrics) SetRateLimiterActiveUsers(count int) {
+	m.RateLimiterActiveUsers.Set(float64(count))
+}
+
+// RecordRateLimiterCleanup records the number of limiters cleaned up
+func (m *Metrics) RecordRateLimiterCleanup(count int) {
+	m.RateLimiterCleaned.Add(float64(count))
 }
 
 // RecordWarmupTask records a warmup task completion

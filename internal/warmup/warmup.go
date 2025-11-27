@@ -2,6 +2,7 @@ package warmup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -344,7 +345,7 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 	// Return error only if both failed
 	// This allows the warmup to succeed with partial data (e.g., only academic or only administrative)
 	if len(errs) == 2 {
-		return fmt.Errorf("both contact sources failed - administrative: %v, academic: %v", errs[0], errs[1])
+		return fmt.Errorf("both contact sources failed: %w", errors.Join(errs[0], errs[1]))
 	}
 
 	// Log partial success details

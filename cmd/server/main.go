@@ -114,6 +114,7 @@ func main() {
 
 	// Add middleware
 	router.Use(gin.Recovery())
+	router.Use(securityHeadersMiddleware())
 	router.Use(loggingMiddleware(log))
 
 	// Setup routes
@@ -301,6 +302,24 @@ func setupRoutes(router *gin.Engine, webhookHandler *webhook.Handler, db *storag
 
 	// Prometheus metrics endpoint
 	router.GET("/metrics", gin.WrapH(promhttp.HandlerFor(registry, promhttp.HandlerOpts{})))
+}
+
+// securityHeadersMiddleware adds security headers to all responses
+// Reference: https://gin-gonic.com/en/docs/examples/security-headers
+func securityHeadersMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Prevent MIME type sniffing
+		c.Header("X-Content-Type-Options", "nosniff")
+		// Prevent clickjacking
+		c.Header("X-Frame-Options", "DENY")
+		// Enable XSS filter in browsers
+		c.Header("X-XSS-Protection", "1; mode=block")
+		// Strict referrer policy
+		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
+		// Restrict permissions
+		c.Header("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+		c.Next()
+	}
 }
 
 // loggingMiddleware logs HTTP requests
