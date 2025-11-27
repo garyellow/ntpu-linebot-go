@@ -438,39 +438,39 @@ func FormatSemester(year, term int) string {
 }
 
 // FormatTeachers formats teacher names with optional truncation.
-// If more than max teachers, shows first max names + "等 N 人".
+// If more than maxCount teachers, shows first maxCount names + "等 N 人".
 // Parameters:
 //   - teachers: List of teacher names
-//   - max: Maximum teachers to show before truncation (0 = no limit)
+//   - maxCount: Maximum teachers to show before truncation (0 = no limit)
 //
 // Returns: Formatted string like "王教授、李教授 等 3 人"
-func FormatTeachers(teachers []string, max int) string {
+func FormatTeachers(teachers []string, maxCount int) string {
 	if len(teachers) == 0 {
 		return ""
 	}
-	if max <= 0 || len(teachers) <= max {
+	if maxCount <= 0 || len(teachers) <= maxCount {
 		return strings.Join(teachers, "、")
 	}
-	remaining := len(teachers) - max
-	return strings.Join(teachers[:max], "、") + fmt.Sprintf(" 等 %d 人", remaining)
+	remaining := len(teachers) - maxCount
+	return strings.Join(teachers[:maxCount], "、") + fmt.Sprintf(" 等 %d 人", remaining)
 }
 
 // FormatTimes formats time slots with optional truncation.
-// If more than max time slots, shows first max slots + "等 N 節".
+// If more than maxCount time slots, shows first maxCount slots + "等 N 節".
 // Parameters:
 //   - times: List of time slot strings (e.g., "週一1-2", "週三3-4")
-//   - max: Maximum time slots to show before truncation (0 = no limit)
+//   - maxCount: Maximum time slots to show before truncation (0 = no limit)
 //
 // Returns: Formatted string like "週一1-2、週三3-4 等 2 節"
-func FormatTimes(times []string, max int) string {
+func FormatTimes(times []string, maxCount int) string {
 	if len(times) == 0 {
 		return ""
 	}
-	if max <= 0 || len(times) <= max {
+	if maxCount <= 0 || len(times) <= maxCount {
 		return strings.Join(times, "、")
 	}
-	remaining := len(times) - max
-	return strings.Join(times[:max], "、") + fmt.Sprintf(" 等 %d 節", remaining)
+	remaining := len(times) - maxCount
+	return strings.Join(times[:maxCount], "、") + fmt.Sprintf(" 等 %d 節", remaining)
 }
 
 // ================================================

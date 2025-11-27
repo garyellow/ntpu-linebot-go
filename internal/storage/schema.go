@@ -38,11 +38,7 @@ func InitSchema(db *sql.DB) error {
 	}
 
 	// Create historical_courses table for on-demand historical course queries
-	if err := createHistoricalCoursesTable(db); err != nil {
-		return err
-	}
-
-	return nil
+	return createHistoricalCoursesTable(db)
 }
 
 func createStudentsTable(db *sql.DB) error {

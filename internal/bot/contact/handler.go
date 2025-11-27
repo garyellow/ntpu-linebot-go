@@ -133,16 +133,15 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 
 		if searchTerm != "" {
 			return h.handleContactSearch(ctx, searchTerm)
-		} else {
-			// No search term - provide guidance
-			sender := lineutil.GetSender(senderName, h.stickerManager)
-			msg := lineutil.NewTextMessageWithConsistentSender("📞 請輸入要查詢的單位或人員\n\n例如：\n• 電話 資工系\n• 分機 圖書館", sender)
-			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
-				{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
-			})
-			return []messaging_api.MessageInterface{msg}
 		}
+		// No search term - provide guidance
+		sender := lineutil.GetSender(senderName, h.stickerManager)
+		msg := lineutil.NewTextMessageWithConsistentSender("📞 請輸入要查詢的單位或人員\n\n例如：\n• 電話 資工系\n• 分機 圖書館", sender)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
+			{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
+		})
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	return []messaging_api.MessageInterface{}

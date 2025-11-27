@@ -2,6 +2,7 @@ package webhook
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -104,7 +105,7 @@ func (h *Handler) Handle(c *gin.Context) {
 	cb, err := webhook.ParseRequest(h.channelSecret, c.Request)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to parse webhook request")
-		if err == webhook.ErrInvalidSignature {
+		if errors.Is(err, webhook.ErrInvalidSignature) {
 			// Invalid signature - potential security threat
 			h.metrics.RecordWebhook("invalid_signature", "error", time.Since(start).Seconds())
 			h.metrics.RecordHTTPError("invalid_signature", "webhook")

@@ -28,11 +28,11 @@ func RetryWithBackoff(ctx context.Context, maxRetries int, initialDelay time.Dur
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		// Try the function
-		if err := fn(); err == nil {
+		err := fn()
+		if err == nil {
 			return nil
-		} else {
-			lastErr = err
 		}
+		lastErr = err
 
 		// Don't delay after the last attempt
 		if attempt == maxRetries {

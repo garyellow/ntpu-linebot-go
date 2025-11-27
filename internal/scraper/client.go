@@ -65,14 +65,15 @@ const SuccessDelay = 2 * time.Second
 // Get performs a GET request with retries on failure
 // On success: waits SuccessDelay (2s) before returning (anti-scraping)
 // On failure: retries with exponential backoff (4s initial, 5 retries)
-func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
+// IMPORTANT: Caller must close the response body on success
+func (c *Client) Get(ctx context.Context, reqURL string) (*http.Response, error) {
 	var resp *http.Response
 	var lastErr error
 
 	// Retry with exponential backoff on failure (4s initial delay)
 	err := RetryWithBackoff(ctx, c.maxRetries, 4*time.Second, func() error {
 		// Create request
-		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		req, err := http.NewRequestWithContext(ctx, "GET", reqURL, http.NoBody)
 		if err != nil {
 			return fmt.Errorf("failed to create request: %w", err)
 		}
@@ -84,9 +85,10 @@ func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
 		req.Header.Set("Accept-Encoding", "gzip, deflate")
 
 		// Perform request
-		resp, err = c.httpClient.Do(req)
-		if err != nil {
-			lastErr = fmt.Errorf("request failed: %w", err)
+		var httpErr error
+		resp, httpErr = c.httpClient.Do(req)
+		if httpErr != nil {
+			lastErr = fmt.Errorf("request failed: %w", httpErr)
 			return lastErr
 		}
 
@@ -97,13 +99,13 @@ func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
 
 			switch resp.StatusCode {
 			case 429: // Rate limited - retry with backoff
-				lastErr = fmt.Errorf("rate limited for %s: status %d", url, resp.StatusCode)
+				lastErr = fmt.Errorf("rate limited for %s: status %d", reqURL, resp.StatusCode)
 			case 503, 502, 504: // Server errors - retry
-				lastErr = fmt.Errorf("server error for %s: status %d", url, resp.StatusCode)
+				lastErr = fmt.Errorf("server error for %s: status %d", reqURL, resp.StatusCode)
 			case 404, 403, 401: // Client errors - don't retry
-				return fmt.Errorf("client error for %s: status %d (not retrying)", url, resp.StatusCode)
+				return fmt.Errorf("client error for %s: status %d (not retrying)", reqURL, resp.StatusCode)
 			default:
-				lastErr = fmt.Errorf("unexpected status for %s: %d", url, resp.StatusCode)
+				lastErr = fmt.Errorf("unexpected status for %s: %d", reqURL, resp.StatusCode)
 			}
 			return lastErr
 		}
@@ -123,40 +125,12 @@ func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
 }
 
 // GetDocument performs a GET request and parses the response as HTML
-func (c *Client) GetDocument(ctx context.Context, url string) (*goquery.Document, error) {
-	resp, err := c.Get(ctx, url)
+func (c *Client) GetDocument(ctx context.Context, reqURL string) (*goquery.Document, error) {
+	resp, err := c.Get(ctx, reqURL)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	// Handle gzip encoding
-	var reader io.Reader
-	if resp.Header.Get("Content-Encoding") == "gzip" {
-		gzipReader, err := gzip.NewReader(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decompress gzip: %w", err)
-		}
-		defer func() { _ = gzipReader.Close() }()
-		reader = gzipReader
-	} else {
-		reader = resp.Body
-	}
-
-	// Check if content is Big5 encoded (common for Taiwan websites)
-	contentType := resp.Header.Get("Content-Type")
-	if strings.Contains(strings.ToUpper(contentType), "BIG5") {
-		// Wrap reader with Big5 to UTF-8 decoder
-		reader = transform.NewReader(reader, traditionalchinese.Big5.NewDecoder())
-	}
-
-	// Parse HTML from reader
-	doc, err := goquery.NewDocumentFromReader(reader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse HTML: %w", err)
-	}
-
-	return doc, nil
+	return c.processResponseToDocument(resp)
 }
 
 // PostFormDocument performs a POST request with form data and parses the response as HTML
@@ -168,7 +142,7 @@ func (c *Client) PostFormDocument(ctx context.Context, postURL string, formData 
 // Use this when you need custom encoding (e.g., Big5) instead of standard UTF-8 url.Values encoding
 // On success: waits SuccessDelay (2s) before returning (anti-scraping)
 // On failure: retries with exponential backoff (4s initial, 5 retries)
-func (c *Client) PostFormDocumentRaw(ctx context.Context, postURL string, formDataStr string) (*goquery.Document, error) {
+func (c *Client) PostFormDocumentRaw(ctx context.Context, postURL, formDataStr string) (*goquery.Document, error) {
 	var resp *http.Response
 	var lastErr error
 
@@ -188,9 +162,10 @@ func (c *Client) PostFormDocumentRaw(ctx context.Context, postURL string, formDa
 		req.Header.Set("Accept-Encoding", "gzip, deflate")
 
 		// Perform request
-		resp, err = c.httpClient.Do(req)
-		if err != nil {
-			lastErr = fmt.Errorf("request failed: %w", err)
+		var httpErr error
+		resp, httpErr = c.httpClient.Do(req)
+		if httpErr != nil {
+			lastErr = fmt.Errorf("request failed: %w", httpErr)
 			return lastErr
 		}
 
@@ -217,22 +192,30 @@ func (c *Client) PostFormDocumentRaw(ctx context.Context, postURL string, formDa
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
 
 	// Anti-scraping delay after successful request
 	_ = Sleep(ctx, SuccessDelay)
 
+	return c.processResponseToDocument(resp)
+}
+
+// processResponseToDocument processes an HTTP response and parses it as HTML document.
+// Handles gzip decompression and Big5 to UTF-8 encoding conversion.
+// The response body is closed after processing.
+func (c *Client) processResponseToDocument(resp *http.Response) (*goquery.Document, error) {
+	defer func() { _ = resp.Body.Close() }()
+
 	// Handle gzip encoding
-	var reader io.Reader
+	var reader io.Reader = resp.Body
+	var gzipReader *gzip.Reader
 	if resp.Header.Get("Content-Encoding") == "gzip" {
-		gzipReader, err := gzip.NewReader(resp.Body)
+		var err error
+		gzipReader, err = gzip.NewReader(resp.Body)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decompress gzip: %w", err)
 		}
 		defer func() { _ = gzipReader.Close() }()
 		reader = gzipReader
-	} else {
-		reader = resp.Body
 	}
 
 	// Check if content is Big5 encoded (common for Taiwan websites)
@@ -273,7 +256,7 @@ func (c *Client) TryFailoverURLs(ctx context.Context, domain string) (string, er
 	// Try each URL
 	for _, baseURL := range urls {
 		// Simple HEAD request to check if URL is accessible
-		req, err := http.NewRequestWithContext(ctx, "HEAD", baseURL, nil)
+		req, err := http.NewRequestWithContext(ctx, "HEAD", baseURL, http.NoBody)
 		if err != nil {
 			continue
 		}

@@ -233,6 +233,7 @@ func scrapeContactPages(ctx context.Context, client *scraper.Client, contactBase
 	}
 
 	allContacts := make([]*storage.Contact, 0)
+	var scrapeErrors []string
 
 	// Find all department links: <div class="card-header">
 	doc.Find("div.card-header").Each(func(i int, s *goquery.Selection) {
@@ -247,6 +248,8 @@ func scrapeContactPages(ctx context.Context, client *scraper.Client, contactBase
 		// Fetch department page
 		deptDoc, err := client.GetDocument(ctx, deptURL)
 		if err != nil {
+			// Record error but continue with other departments
+			scrapeErrors = append(scrapeErrors, fmt.Sprintf("dept %s: %v", href, err))
 			return
 		}
 
@@ -254,6 +257,11 @@ func scrapeContactPages(ctx context.Context, client *scraper.Client, contactBase
 		contacts := parseContactsPage(deptDoc)
 		allContacts = append(allContacts, contacts...)
 	})
+
+	// If all requests failed, return error; otherwise return partial results
+	if len(allContacts) == 0 && len(scrapeErrors) > 0 {
+		return nil, fmt.Errorf("all department requests failed: %v", scrapeErrors)
+	}
 
 	return allContacts, nil
 }

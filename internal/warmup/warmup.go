@@ -34,14 +34,6 @@ type Options struct {
 	Metrics *metrics.Metrics // Optional metrics recorder
 }
 
-// min returns the minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // Run executes cache warming with the given options
 func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, opts Options) (*Stats, error) {
 	stats := &Stats{}
@@ -74,7 +66,7 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 	for _, module := range opts.Modules {
 		select {
 		case <-ctx.Done():
-			return stats, fmt.Errorf("warmup cancelled: %w", ctx.Err())
+			return stats, fmt.Errorf("warmup canceled: %w", ctx.Err())
 		default:
 		}
 
@@ -145,7 +137,7 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 // Creates an independent context with timeout to prevent goroutine leaks on server shutdown.
 func RunInBackground(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, opts Options) {
 	// Create independent context with timeout for warmup
-	// This prevents the goroutine from leaking if server context is cancelled
+	// This prevents the goroutine from leaking if server context is canceled
 	warmupCtx, cancel := context.WithTimeout(context.Background(), opts.Timeout)
 
 	go func() {
@@ -235,8 +227,8 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 			case <-ctx.Done():
 				log.WithField("completed", completed).
 					WithField("errors", errorCount).
-					Warn("ID module warmup cancelled")
-				return fmt.Errorf("cancelled: %w", ctx.Err())
+					Warn("ID module warmup canceled")
+				return fmt.Errorf("canceled: %w", ctx.Err())
 			default:
 			}
 
@@ -381,7 +373,7 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 	for _, year := range years {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("course module cancelled: %w", ctx.Err())
+			return fmt.Errorf("course module canceled: %w", ctx.Err())
 		default:
 		}
 

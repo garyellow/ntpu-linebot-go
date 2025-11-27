@@ -52,6 +52,7 @@ func main() {
 	// Register Go and process collectors
 	registry.MustRegister(collectors.NewGoCollector())
 	registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	registry.MustRegister(collectors.NewBuildInfoCollector())
 
 	// Create metrics
 	m := metrics.New(registry)
@@ -253,7 +254,7 @@ func setupRoutes(router *gin.Engine, webhookHandler *webhook.Handler, db *storag
 		// Only check first URL in failover list (for speed)
 		seaURLs := scraperClient.GetBaseURLs("sea")
 		if len(seaURLs) > 0 {
-			req, _ := http.NewRequestWithContext(checkCtx, "HEAD", seaURLs[0], nil)
+			req, _ := http.NewRequestWithContext(checkCtx, "HEAD", seaURLs[0], http.NoBody)
 			if resp, err := http.DefaultClient.Do(req); err == nil {
 				_ = resp.Body.Close()
 				if resp.StatusCode < 500 {
@@ -264,7 +265,7 @@ func setupRoutes(router *gin.Engine, webhookHandler *webhook.Handler, db *storag
 
 		lmsURLs := scraperClient.GetBaseURLs("lms")
 		if len(lmsURLs) > 0 {
-			req, _ := http.NewRequestWithContext(checkCtx, "HEAD", lmsURLs[0], nil)
+			req, _ := http.NewRequestWithContext(checkCtx, "HEAD", lmsURLs[0], http.NoBody)
 			if resp, err := http.DefaultClient.Do(req); err == nil {
 				_ = resp.Body.Close()
 				if resp.StatusCode < 500 {
@@ -344,12 +345,15 @@ func loggingMiddleware(log *logger.Logger) gin.HandlerFunc {
 
 		if len(c.Errors) > 0 {
 			entry.WithField("errors", c.Errors.String()).Error("Request completed with errors")
-		} else if status >= 500 {
-			entry.Error("Request failed")
-		} else if status >= 400 {
-			entry.Warn("Request completed with client error")
 		} else {
-			entry.Debug("Request completed")
+			switch {
+			case status >= 500:
+				entry.Error("Request failed")
+			case status >= 400:
+				entry.Warn("Request completed with client error")
+			default:
+				entry.Debug("Request completed")
+			}
 		}
 	}
 }

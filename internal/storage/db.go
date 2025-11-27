@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // SQLite driver for database/sql
 )
 
 // DB wraps the SQLite database connection
@@ -31,7 +31,7 @@ func New(dbPath string, cacheTTL time.Duration) (*DB, error) {
 		dir := filepath.Dir(dbPath)
 		// Only create directory if it's not empty and not current directory
 		if dir != "" && dir != "." {
-			if err := os.MkdirAll(dir, 0755); err != nil {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
 				return nil, fmt.Errorf("failed to create database directory: %w", err)
 			}
 		}
