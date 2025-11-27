@@ -5,7 +5,6 @@ package metrics
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
@@ -43,12 +42,9 @@ type Metrics struct {
 }
 
 // New creates a new Metrics instance with all metrics registered
-// It also registers Go runtime and process collectors for observability
+// Note: Go runtime, process, and build info collectors should be registered
+// by the caller before calling this function to avoid duplicate registration
 func New(registry *prometheus.Registry) *Metrics {
-	// Register standard collectors for Go runtime metrics
-	registry.MustRegister(collectors.NewGoCollector())
-	registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
-
 	m := &Metrics{
 		registry: registry,
 		// Scraper metrics
