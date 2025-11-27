@@ -1,6 +1,23 @@
 // Package lineutil provides LINE message building utilities.
 package lineutil
 
+// 4-Point Grid Spacing System
+// All spacing values follow the 4-point grid for consistent visual rhythm.
+// Reference: Material Design spacing guidelines
+const (
+	SpacingNone = "none" // 0px
+	SpacingXS   = "4px"  // Extra small
+	SpacingS    = "8px"  // Small
+	SpacingM    = "12px" // Medium
+	SpacingL    = "16px" // Large
+	SpacingXL   = "20px" // Extra large
+	SpacingXXL  = "24px" // 2X large
+
+	// Line Spacing for multi-line text readability
+	LineSpacingNormal = "6px" // Standard line spacing
+	LineSpacingLarge  = "8px" // Enhanced readability for dense content
+)
+
 // LINE Design System Colors
 // Reference: https://designsystem.line.me/LDSM/foundation/color/line-color-guide-ex-en
 //
@@ -48,7 +65,7 @@ const (
 
 	// Text Colors - For typography hierarchy
 	ColorText    = ColorGray900 // Primary text (body, headings)
-	ColorLabel   = ColorGray500 // Labels, captions (meets 3.0:1 contrast)
+	ColorLabel   = "#666666"    // Labels, captions (5.7:1 contrast ratio, WCAG AA compliant)
 	ColorSubtext = ColorGray600 // Secondary text, descriptions
 
 	// Component Colors - For specific UI components

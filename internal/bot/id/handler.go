@@ -547,7 +547,7 @@ func (h *Handler) formatStudentResponse(student *storage.Student, fromCache bool
 	body.AddInfoRow("📅", "入學學年", fmt.Sprintf("%d 學年度", student.Year), lineutil.BoldInfoRowStyle())
 
 	if fromCache {
-		body.AddComponent(lineutil.NewFlexText("📌 資料來自快取").WithSize("xs").WithColor(lineutil.ColorGray400).WithMargin("md").FlexText)
+		body.AddComponent(lineutil.NewFlexText("📌 資料來自快取").WithSize("xs").WithColor(lineutil.ColorGray400).WithMargin("sm").FlexText)
 	}
 
 	// Footer: Action buttons

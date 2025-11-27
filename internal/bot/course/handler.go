@@ -679,7 +679,7 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 			lineutil.NewFlexBox("horizontal",
 				lineutil.NewFlexText("📅 開課學期：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
 				lineutil.NewFlexText(semesterText).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).FlexText,
-			).WithMargin("md").WithSpacing("sm").FlexBox,
+			).WithMargin("sm").WithSpacing("sm").FlexBox,
 			lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 		}
 
@@ -691,7 +691,7 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 				lineutil.NewFlexBox("horizontal",
 					lineutil.NewFlexText("👨‍🏫 授課教師：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
 					lineutil.NewFlexText(carouselTeachers).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).WithWrap(true).FlexText,
-				).WithMargin("md").WithSpacing("sm").FlexBox,
+				).WithMargin("sm").WithSpacing("sm").FlexBox,
 			)
 		}
 		// 第三列：上課時間

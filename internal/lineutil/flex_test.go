@@ -179,12 +179,12 @@ func TestNewHeroBox(t *testing.T) {
 		if hero.BackgroundColor != ColorHeroBg {
 			t.Errorf("Expected backgroundColor '%s', got %v", ColorHeroBg, hero.BackgroundColor)
 		}
-		// Check padding
-		if hero.PaddingAll != "20px" {
-			t.Errorf("Expected paddingAll '20px', got %v", hero.PaddingAll)
+		// Check padding (4-point grid: 24px all, 20px bottom)
+		if hero.PaddingAll != SpacingXXL {
+			t.Errorf("Expected paddingAll '%s', got %v", SpacingXXL, hero.PaddingAll)
 		}
-		if hero.PaddingBottom != "16px" {
-			t.Errorf("Expected paddingBottom '16px', got %v", hero.PaddingBottom)
+		if hero.PaddingBottom != SpacingXL {
+			t.Errorf("Expected paddingBottom '%s', got %v", SpacingXL, hero.PaddingBottom)
 		}
 		// Check contents
 		if len(hero.Contents) != 2 {
@@ -214,9 +214,9 @@ func TestNewCompactHeroBox(t *testing.T) {
 	if hero.BackgroundColor != ColorHeroBg {
 		t.Errorf("Expected backgroundColor '%s', got %v", ColorHeroBg, hero.BackgroundColor)
 	}
-	// Check compact padding
-	if hero.PaddingAll != "15px" {
-		t.Errorf("Expected paddingAll '15px', got %v", hero.PaddingAll)
+	// Check compact padding (4-point grid: 16px)
+	if hero.PaddingAll != SpacingL {
+		t.Errorf("Expected paddingAll '%s', got %v", SpacingL, hero.PaddingAll)
 	}
 	// Check contents (only title)
 	if len(hero.Contents) != 1 {

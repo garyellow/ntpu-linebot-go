@@ -247,12 +247,12 @@ func TruncateRunes(text string, maxRunes int) string {
 // NewHeroBox creates a standardized Hero box with LINE green background
 // Provides consistent styling across all modules:
 // - Background: ColorHeroBg (LINE Green #06C755)
-// - Padding: 20px all, 16px bottom (for visual balance)
+// - Padding: 24px all, 20px bottom (4-point grid aligned, visual balance)
 // - Title: Bold, XL size, white color, full wrap for complete display
 // - Subtitle: XS size, white color, md margin top (omitted if empty)
 func NewHeroBox(title, subtitle string) *FlexBox {
 	contents := []messaging_api.FlexComponentInterface{
-		NewFlexText(title).WithWeight("bold").WithSize("xl").WithColor(ColorHeroText).WithWrap(true).WithLineSpacing("6px").FlexText,
+		NewFlexText(title).WithWeight("bold").WithSize("xl").WithColor(ColorHeroText).WithWrap(true).WithLineSpacing(LineSpacingLarge).FlexText,
 	}
 	// Only add subtitle if not empty (LINE API rejects empty text)
 	if subtitle != "" {
@@ -260,20 +260,20 @@ func NewHeroBox(title, subtitle string) *FlexBox {
 	}
 	box := NewFlexBox("vertical", contents...)
 	box.BackgroundColor = ColorHeroBg
-	box.PaddingAll = "20px"
-	box.PaddingBottom = "16px"
+	box.PaddingAll = SpacingXXL
+	box.PaddingBottom = SpacingXL
 	return box
 }
 
 // NewCompactHeroBox creates a compact Hero box for carousel/list views
-// Uses smaller padding (15px) to fit more content
+// Uses smaller padding (16px, 4-point grid aligned) to fit more content
 // Max 3 lines for carousel to balance visibility
 func NewCompactHeroBox(title string) *FlexBox {
 	box := NewFlexBox("vertical",
-		NewFlexText(title).WithWeight("bold").WithSize("md").WithColor(ColorHeroText).WithWrap(true).WithMaxLines(3).WithLineSpacing("4px").FlexText,
+		NewFlexText(title).WithWeight("bold").WithSize("md").WithColor(ColorHeroText).WithWrap(true).WithMaxLines(3).WithLineSpacing(LineSpacingNormal).FlexText,
 	)
 	box.BackgroundColor = ColorHeroBg
-	box.PaddingAll = "15px"
+	box.PaddingAll = SpacingL
 	return box
 }
 
@@ -336,7 +336,7 @@ func NewInfoRow(emoji, label, value string, style InfoRowStyle) *FlexBox {
 		valueText = valueText.WithWeight("bold")
 	}
 	if style.Wrap {
-		valueText = valueText.WithWrap(true).WithLineSpacing("4px")
+		valueText = valueText.WithWrap(true).WithLineSpacing(SpacingXS)
 	}
 
 	return NewFlexBox("vertical",
@@ -430,9 +430,9 @@ func NewBodyContentBuilder() *BodyContentBuilder {
 // AddInfoRow adds an info row with automatic separator (except for first item)
 func (b *BodyContentBuilder) AddInfoRow(emoji, label, value string, style InfoRowStyle) *BodyContentBuilder {
 	if len(b.contents) > 0 {
-		b.contents = append(b.contents, NewFlexSeparator().WithMargin("md").FlexSeparator)
+		b.contents = append(b.contents, NewFlexSeparator().WithMargin("sm").FlexSeparator)
 	}
-	b.contents = append(b.contents, NewInfoRowWithMargin(emoji, label, value, style, "md"))
+	b.contents = append(b.contents, NewInfoRowWithMargin(emoji, label, value, style, "sm"))
 	return b
 }
 
@@ -447,7 +447,7 @@ func (b *BodyContentBuilder) AddInfoRowIf(emoji, label, value string, style Info
 // AddComponent adds a raw component with automatic separator
 func (b *BodyContentBuilder) AddComponent(component messaging_api.FlexComponentInterface) *BodyContentBuilder {
 	if len(b.contents) > 0 {
-		b.contents = append(b.contents, NewFlexSeparator().WithMargin("md").FlexSeparator)
+		b.contents = append(b.contents, NewFlexSeparator().WithMargin("sm").FlexSeparator)
 	}
 	b.contents = append(b.contents, component)
 	return b
