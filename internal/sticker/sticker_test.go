@@ -13,8 +13,10 @@ import (
 )
 
 func setupTestDB(t *testing.T) (*storage.DB, func()) {
-	// Use in-memory SQLite database for testing (consistent with other tests)
-	db, err := storage.New(":memory:", 168*time.Hour) // 7 days for tests
+	// Use a unique temporary file for each test to ensure complete isolation
+	// This avoids the shared cache issue with in-memory databases
+	tmpFile := t.TempDir() + "/test.db"
+	db, err := storage.New(tmpFile, 168*time.Hour)
 	require.NoError(t, err)
 
 	cleanup := func() {

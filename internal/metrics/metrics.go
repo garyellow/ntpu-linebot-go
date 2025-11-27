@@ -2,11 +2,14 @@ package metrics
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 // Metrics holds all Prometheus metrics
 type Metrics struct {
+	// registry is the custom Prometheus registry (avoids global state)
+	registry *prometheus.Registry
 	// Scraper metrics
 	ScraperRequestsTotal   *prometheus.CounterVec
 	ScraperDurationSeconds *prometheus.HistogramVec
@@ -37,8 +40,14 @@ type Metrics struct {
 }
 
 // New creates a new Metrics instance with all metrics registered
+// It also registers Go runtime and process collectors for observability
 func New(registry *prometheus.Registry) *Metrics {
+	// Register standard collectors for Go runtime metrics
+	registry.MustRegister(collectors.NewGoCollector())
+	registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+
 	m := &Metrics{
+		registry: registry,
 		// Scraper metrics
 		ScraperRequestsTotal: promauto.With(registry).NewCounterVec(
 			prometheus.CounterOpts{
@@ -222,4 +231,10 @@ func (m *Metrics) RecordWarmupDuration(duration float64) {
 // SetCacheSize sets the current cache size for a module
 func (m *Metrics) SetCacheSize(module string, size int) {
 	m.CacheSize.WithLabelValues(module).Set(float64(size))
+}
+
+// Registry returns the custom Prometheus registry
+// Use this with promhttp.HandlerFor() instead of the default handler
+func (m *Metrics) Registry() *prometheus.Registry {
+	return m.registry
 }

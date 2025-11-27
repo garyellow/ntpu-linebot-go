@@ -32,17 +32,7 @@ func (db *DB) SaveStudentsBatch(students []*Student) error {
 		return nil
 	}
 
-	tx, err := db.writer.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
-		}
-	}()
-
-	stmt, err := tx.Prepare(`
+	query := `
 		INSERT INTO students (id, name, department, year, cached_at)
 		VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
@@ -50,24 +40,17 @@ func (db *DB) SaveStudentsBatch(students []*Student) error {
 			department = excluded.department,
 			year = excluded.year,
 			cached_at = excluded.cached_at
-	`)
-	if err != nil {
-		return fmt.Errorf("failed to prepare statement: %w", err)
-	}
-	defer func() { _ = stmt.Close() }()
+	`
 
 	cachedAt := time.Now().Unix()
-	for _, student := range students {
-		if _, err = stmt.Exec(student.ID, student.Name, student.Department, student.Year, cachedAt); err != nil {
-			return fmt.Errorf("failed to execute statement for student %s: %w", student.ID, err)
+	return db.ExecBatch(query, func(stmt *sql.Stmt) error {
+		for _, student := range students {
+			if _, err := stmt.Exec(student.ID, student.Name, student.Department, student.Year, cachedAt); err != nil {
+				return fmt.Errorf("failed to save student %s: %w", student.ID, err)
+			}
 		}
-	}
-
-	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	return nil
+		return nil
+	})
 }
 
 // GetStudentByID retrieves a student by ID and validates cache freshness (7 days = 168 hours)
@@ -236,17 +219,7 @@ func (db *DB) SaveContactsBatch(contacts []*Contact) error {
 		return nil
 	}
 
-	tx, err := db.writer.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
-		}
-	}()
-
-	stmt, err := tx.Prepare(`
+	query := `
 		INSERT INTO contacts (uid, type, name, name_en, title, organization, extension, phone, email, website, location, superior, cached_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(uid) DO UPDATE SET
@@ -262,39 +235,32 @@ func (db *DB) SaveContactsBatch(contacts []*Contact) error {
 			location = excluded.location,
 			superior = excluded.superior,
 			cached_at = excluded.cached_at
-	`)
-	if err != nil {
-		return fmt.Errorf("failed to prepare statement: %w", err)
-	}
-	defer func() { _ = stmt.Close() }()
+	`
 
 	cachedAt := time.Now().Unix()
-	for _, contact := range contacts {
-		_, err = stmt.Exec(
-			contact.UID,
-			contact.Type,
-			contact.Name,
-			nullString(contact.NameEn),
-			nullString(contact.Title),
-			nullString(contact.Organization),
-			nullString(contact.Extension),
-			nullString(contact.Phone),
-			nullString(contact.Email),
-			nullString(contact.Website),
-			nullString(contact.Location),
-			nullString(contact.Superior),
-			cachedAt,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to execute statement for contact %s: %w", contact.UID, err)
+	return db.ExecBatch(query, func(stmt *sql.Stmt) error {
+		for _, contact := range contacts {
+			_, err := stmt.Exec(
+				contact.UID,
+				contact.Type,
+				contact.Name,
+				nullString(contact.NameEn),
+				nullString(contact.Title),
+				nullString(contact.Organization),
+				nullString(contact.Extension),
+				nullString(contact.Phone),
+				nullString(contact.Email),
+				nullString(contact.Website),
+				nullString(contact.Location),
+				nullString(contact.Superior),
+				cachedAt,
+			)
+			if err != nil {
+				return fmt.Errorf("failed to save contact %s: %w", contact.UID, err)
+			}
 		}
-	}
-
-	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	return nil
+		return nil
+	})
 }
 
 // GetContactByUID retrieves a contact by UID and validates cache freshness
@@ -582,17 +548,7 @@ func (db *DB) SaveCoursesBatch(courses []*Course) error {
 		return nil
 	}
 
-	tx, err := db.writer.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
-		}
-	}()
-
-	stmt, err := tx.Prepare(`
+	query := `
 		INSERT INTO courses (uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(uid) DO UPDATE SET
@@ -607,59 +563,51 @@ func (db *DB) SaveCoursesBatch(courses []*Course) error {
 			detail_url = excluded.detail_url,
 			note = excluded.note,
 			cached_at = excluded.cached_at
-	`)
-	if err != nil {
-		return fmt.Errorf("failed to prepare statement: %w", err)
-	}
-	defer func() { _ = stmt.Close() }()
+	`
 
 	cachedAt := time.Now().Unix()
-	for _, course := range courses {
-		// Serialize JSON fields
-		teachersJSON, err := json.Marshal(course.Teachers)
-		if err != nil {
-			return fmt.Errorf("failed to marshal teachers for course %s: %w", course.UID, err)
+	return db.ExecBatch(query, func(stmt *sql.Stmt) error {
+		for _, course := range courses {
+			teachersJSON, err := json.Marshal(course.Teachers)
+			if err != nil {
+				return fmt.Errorf("failed to marshal teachers for course %s: %w", course.UID, err)
+			}
+
+			teacherURLsJSON, err := json.Marshal(course.TeacherURLs)
+			if err != nil {
+				return fmt.Errorf("failed to marshal teacher URLs for course %s: %w", course.UID, err)
+			}
+
+			timesJSON, err := json.Marshal(course.Times)
+			if err != nil {
+				return fmt.Errorf("failed to marshal times for course %s: %w", course.UID, err)
+			}
+
+			locationsJSON, err := json.Marshal(course.Locations)
+			if err != nil {
+				return fmt.Errorf("failed to marshal locations for course %s: %w", course.UID, err)
+			}
+
+			_, err = stmt.Exec(
+				course.UID,
+				course.Year,
+				course.Term,
+				course.No,
+				course.Title,
+				string(teachersJSON),
+				string(teacherURLsJSON),
+				string(timesJSON),
+				string(locationsJSON),
+				nullString(course.DetailURL),
+				nullString(course.Note),
+				cachedAt,
+			)
+			if err != nil {
+				return fmt.Errorf("failed to save course %s: %w", course.UID, err)
+			}
 		}
-
-		teacherURLsJSON, err := json.Marshal(course.TeacherURLs)
-		if err != nil {
-			return fmt.Errorf("failed to marshal teacher URLs for course %s: %w", course.UID, err)
-		}
-
-		timesJSON, err := json.Marshal(course.Times)
-		if err != nil {
-			return fmt.Errorf("failed to marshal times for course %s: %w", course.UID, err)
-		}
-
-		locationsJSON, err := json.Marshal(course.Locations)
-		if err != nil {
-			return fmt.Errorf("failed to marshal locations for course %s: %w", course.UID, err)
-		}
-
-		_, err = stmt.Exec(
-			course.UID,
-			course.Year,
-			course.Term,
-			course.No,
-			course.Title,
-			string(teachersJSON),
-			string(teacherURLsJSON),
-			string(timesJSON),
-			string(locationsJSON),
-			nullString(course.DetailURL),
-			nullString(course.Note),
-			cachedAt,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to execute statement for course %s: %w", course.UID, err)
-		}
-	}
-
-	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	return nil
+		return nil
+	})
 }
 
 // GetCourseByUID retrieves a course by UID and validates cache freshness
@@ -1117,17 +1065,7 @@ func (db *DB) SaveHistoricalCoursesBatch(courses []*Course) error {
 		return nil
 	}
 
-	tx, err := db.writer.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
-		}
-	}()
-
-	stmt, err := tx.Prepare(`
+	query := `
 		INSERT INTO historical_courses (uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(uid) DO UPDATE SET
@@ -1142,58 +1080,51 @@ func (db *DB) SaveHistoricalCoursesBatch(courses []*Course) error {
 			detail_url = excluded.detail_url,
 			note = excluded.note,
 			cached_at = excluded.cached_at
-	`)
-	if err != nil {
-		return fmt.Errorf("failed to prepare statement: %w", err)
-	}
-	defer func() { _ = stmt.Close() }()
+	`
 
 	cachedAt := time.Now().Unix()
-	for _, course := range courses {
-		teachersJSON, err := json.Marshal(course.Teachers)
-		if err != nil {
-			return fmt.Errorf("failed to marshal teachers for course %s: %w", course.UID, err)
+	return db.ExecBatch(query, func(stmt *sql.Stmt) error {
+		for _, course := range courses {
+			teachersJSON, err := json.Marshal(course.Teachers)
+			if err != nil {
+				return fmt.Errorf("failed to marshal teachers for course %s: %w", course.UID, err)
+			}
+
+			teacherURLsJSON, err := json.Marshal(course.TeacherURLs)
+			if err != nil {
+				return fmt.Errorf("failed to marshal teacher URLs for course %s: %w", course.UID, err)
+			}
+
+			timesJSON, err := json.Marshal(course.Times)
+			if err != nil {
+				return fmt.Errorf("failed to marshal times for course %s: %w", course.UID, err)
+			}
+
+			locationsJSON, err := json.Marshal(course.Locations)
+			if err != nil {
+				return fmt.Errorf("failed to marshal locations for course %s: %w", course.UID, err)
+			}
+
+			_, err = stmt.Exec(
+				course.UID,
+				course.Year,
+				course.Term,
+				course.No,
+				course.Title,
+				string(teachersJSON),
+				string(teacherURLsJSON),
+				string(timesJSON),
+				string(locationsJSON),
+				nullString(course.DetailURL),
+				nullString(course.Note),
+				cachedAt,
+			)
+			if err != nil {
+				return fmt.Errorf("failed to save historical course %s: %w", course.UID, err)
+			}
 		}
-
-		teacherURLsJSON, err := json.Marshal(course.TeacherURLs)
-		if err != nil {
-			return fmt.Errorf("failed to marshal teacher URLs for course %s: %w", course.UID, err)
-		}
-
-		timesJSON, err := json.Marshal(course.Times)
-		if err != nil {
-			return fmt.Errorf("failed to marshal times for course %s: %w", course.UID, err)
-		}
-
-		locationsJSON, err := json.Marshal(course.Locations)
-		if err != nil {
-			return fmt.Errorf("failed to marshal locations for course %s: %w", course.UID, err)
-		}
-
-		_, err = stmt.Exec(
-			course.UID,
-			course.Year,
-			course.Term,
-			course.No,
-			course.Title,
-			string(teachersJSON),
-			string(teacherURLsJSON),
-			string(timesJSON),
-			string(locationsJSON),
-			nullString(course.DetailURL),
-			nullString(course.Note),
-			cachedAt,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to execute statement for historical course %s: %w", course.UID, err)
-		}
-	}
-
-	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	return nil
+		return nil
+	})
 }
 
 // SearchHistoricalCoursesByYearAndTitle searches historical courses by year and partial title match

@@ -298,3 +298,48 @@ func (db *DB) CountExpiringContacts(softTTL time.Duration) (int, error) {
 func NewTestDB() (*DB, error) {
 	return New(":memory:", 168*time.Hour) // 7 days
 }
+
+// ExecBatch executes a batch of operations within a single transaction.
+// This is a generic helper that reduces lock contention during warmup.
+// The execFn receives the prepared statement and should execute it for each item.
+//
+// Example:
+//
+//	err := db.ExecBatch("INSERT INTO t (a,b) VALUES (?,?)", func(stmt *sql.Stmt) error {
+//	    for _, item := range items {
+//	        if _, err := stmt.Exec(item.A, item.B); err != nil {
+//	            return err
+//	        }
+//	    }
+//	    return nil
+//	})
+func (db *DB) ExecBatch(query string, execFn func(stmt *sql.Stmt) error) error {
+	tx, err := db.writer.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	stmt, err := tx.Prepare(query)
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer func() { _ = stmt.Close() }()
+
+	if err := execFn(stmt); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	committed = true
+
+	return nil
+}

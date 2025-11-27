@@ -118,17 +118,38 @@ func (c *Config) Validate() error {
 func (c *Config) ValidateForMode(mode ValidationMode) error {
 	if mode == ServerMode {
 		if c.LineChannelToken == "" {
-			return fmt.Errorf("LINE_CHANNEL_ACCESS_TOKEN is required")
+			return fmt.Errorf("LINE_CHANNEL_ACCESS_TOKEN is required in server mode")
 		}
 		if c.LineChannelSecret == "" {
-			return fmt.Errorf("LINE_CHANNEL_SECRET is required")
+			return fmt.Errorf("LINE_CHANNEL_SECRET is required in server mode")
 		}
 		if c.Port == "" {
-			return fmt.Errorf("PORT is required")
+			return fmt.Errorf("PORT is required in server mode")
+		}
+		if c.WebhookTimeout <= 0 {
+			return fmt.Errorf("WEBHOOK_TIMEOUT must be positive")
+		}
+		if c.UserRateLimitTokens <= 0 {
+			return fmt.Errorf("USER_RATE_LIMIT_TOKENS must be positive")
+		}
+		if c.UserRateLimitRefillRate <= 0 {
+			return fmt.Errorf("USER_RATE_LIMIT_REFILL_RATE must be positive")
 		}
 	}
 	if c.SQLitePath == "" {
 		return fmt.Errorf("SQLITE_PATH is required")
+	}
+	if c.CacheTTL <= 0 {
+		return fmt.Errorf("CACHE_TTL must be positive")
+	}
+	if c.SoftTTL <= 0 {
+		return fmt.Errorf("SOFT_TTL must be positive")
+	}
+	if c.SoftTTL >= c.CacheTTL {
+		return fmt.Errorf("SOFT_TTL must be less than CACHE_TTL")
+	}
+	if c.ScraperTimeout <= 0 {
+		return fmt.Errorf("SCRAPER_TIMEOUT must be positive")
 	}
 	if c.ScraperMaxRetries < 0 {
 		return fmt.Errorf("SCRAPER_MAX_RETRIES cannot be negative")
