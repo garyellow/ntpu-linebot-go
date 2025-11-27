@@ -83,6 +83,20 @@ func New(dbPath string, cacheTTL time.Duration) (*DB, error) {
 		return nil, fmt.Errorf("failed to configure writer: %w", err)
 	}
 
+	// Test writer connection
+	if err := writer.Ping(); err != nil {
+		_ = writer.Close()
+		return nil, fmt.Errorf("failed to ping writer: %w", err)
+	}
+
+	// Initialize schema using writer connection BEFORE opening reader
+	// This is critical for in-memory databases: the reader connection in read-only mode
+	// cannot access the database until schema exists via the writer connection
+	if err := InitSchema(writer); err != nil {
+		_ = writer.Close()
+		return nil, fmt.Errorf("failed to initialize schema: %w", err)
+	}
+
 	// Open reader connection pool (multiple connections for parallel reads)
 	var readerDSN string
 	if isMemory {
@@ -109,12 +123,7 @@ func New(dbPath string, cacheTTL time.Duration) (*DB, error) {
 		return nil, fmt.Errorf("failed to configure reader: %w", err)
 	}
 
-	// Test connections
-	if err := writer.Ping(); err != nil {
-		_ = writer.Close()
-		_ = reader.Close()
-		return nil, fmt.Errorf("failed to ping writer: %w", err)
-	}
+	// Test reader connection
 	if err := reader.Ping(); err != nil {
 		_ = writer.Close()
 		_ = reader.Close()
@@ -126,13 +135,6 @@ func New(dbPath string, cacheTTL time.Duration) (*DB, error) {
 		reader:   reader,
 		path:     dbPath,
 		cacheTTL: cacheTTL,
-	}
-
-	// Initialize schema using writer connection
-	if err := InitSchema(writer); err != nil {
-		_ = writer.Close()
-		_ = reader.Close()
-		return nil, fmt.Errorf("failed to initialize schema: %w", err)
 	}
 
 	return db, nil

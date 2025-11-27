@@ -328,6 +328,8 @@ func securityHeadersMiddleware() gin.HandlerFunc {
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
 		// Restrict permissions
 		c.Header("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+		// Content Security Policy - prevent XSS attacks
+		c.Header("Content-Security-Policy", "default-src 'self'")
 		c.Next()
 	}
 }
