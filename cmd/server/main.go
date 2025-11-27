@@ -16,6 +16,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
+	"github.com/garyellow/ntpu-linebot-go/internal/timeouts"
 	"github.com/garyellow/ntpu-linebot-go/internal/warmup"
 	"github.com/garyellow/ntpu-linebot-go/internal/webhook"
 	"github.com/gin-gonic/gin"
@@ -121,13 +122,14 @@ func main() {
 	// Setup routes
 	setupRoutes(router, webhookHandler, db, registry, scraperClient, stickerManager)
 
-	// Create HTTP server
+	// Create HTTP server with timeouts optimized for LINE webhook handling
+	// See internal/timeouts/timeouts.go for detailed explanations
 	server := &http.Server{
 		Addr:         ":" + cfg.Port,
 		Handler:      router,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		ReadTimeout:  timeouts.WebhookHTTPRead,
+		WriteTimeout: timeouts.WebhookHTTPWrite,
+		IdleTimeout:  timeouts.WebhookHTTPIdle,
 	}
 
 	// Start background goroutines
@@ -235,11 +237,18 @@ func setupRoutes(router *gin.Engine, webhookHandler *webhook.Handler, db *storag
 
 	// Readiness Probe - checks if the application is ready to serve traffic (full dependency check)
 	readyHandler := func(c *gin.Context) {
-		// Check database connection
-		if err := db.Conn().Ping(); err != nil {
+		// Check database connections (both reader and writer)
+		if err := db.Reader().Ping(); err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"status": "not ready",
-				"reason": "database unavailable",
+				"reason": "database reader unavailable",
+			})
+			return
+		}
+		if err := db.Writer().Ping(); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status": "not ready",
+				"reason": "database writer unavailable",
 			})
 			return
 		}
@@ -447,7 +456,7 @@ func performCacheCleanup(db *storage.DB, ttl time.Duration, log *logger.Logger) 
 	}
 
 	// Run SQLite VACUUM to reclaim space (optional, may be slow)
-	if _, err := db.Conn().Exec("VACUUM"); err != nil {
+	if _, err := db.Writer().Exec("VACUUM"); err != nil {
 		log.WithError(err).Warn("Failed to vacuum database")
 	} else {
 		log.Debug("Database vacuumed successfully")

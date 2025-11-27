@@ -18,7 +18,7 @@ func (db *DB) SaveStudent(student *Student) error {
 			year = excluded.year,
 			cached_at = excluded.cached_at
 	`
-	_, err := db.conn.Exec(query, student.ID, student.Name, student.Department, student.Year, time.Now().Unix())
+	_, err := db.writer.Exec(query, student.ID, student.Name, student.Department, student.Year, time.Now().Unix())
 	if err != nil {
 		return fmt.Errorf("failed to save student: %w", err)
 	}
@@ -32,7 +32,7 @@ func (db *DB) SaveStudentsBatch(students []*Student) error {
 		return nil
 	}
 
-	tx, err := db.conn.Begin()
+	tx, err := db.writer.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -75,7 +75,7 @@ func (db *DB) GetStudentByID(id string) (*Student, error) {
 	query := `SELECT id, name, department, year, cached_at FROM students WHERE id = ?`
 
 	var student Student
-	err := db.conn.QueryRow(query, id).Scan(
+	err := db.reader.QueryRow(query, id).Scan(
 		&student.ID,
 		&student.Name,
 		&student.Department,
@@ -114,7 +114,7 @@ func (db *DB) SearchStudentsByName(name string) ([]Student, error) {
 	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT id, name, department, year, cached_at FROM students WHERE name LIKE ? ESCAPE '\' AND cached_at > ? ORDER BY year DESC, id DESC LIMIT 500`
 
-	rows, err := db.conn.Query(query, "%"+sanitized+"%", ttlTimestamp)
+	rows, err := db.reader.Query(query, "%"+sanitized+"%", ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search students by name: %w", err)
 	}
@@ -139,7 +139,7 @@ func (db *DB) GetStudentsByYearDept(year int, dept string) ([]Student, error) {
 	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT id, name, department, year, cached_at FROM students WHERE year = ? AND department = ? AND cached_at > ?`
 
-	rows, err := db.conn.Query(query, year, dept, ttlTimestamp)
+	rows, err := db.reader.Query(query, year, dept, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get students by year and department: %w", err)
 	}
@@ -163,7 +163,7 @@ func (db *DB) DeleteExpiredStudents(ttl time.Duration) (int64, error) {
 	query := `DELETE FROM students WHERE cached_at < ?`
 	expiryTime := time.Now().Add(-ttl).Unix()
 
-	result, err := db.conn.Exec(query, expiryTime)
+	result, err := db.writer.Exec(query, expiryTime)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete expired students: %w", err)
 	}
@@ -180,7 +180,7 @@ func (db *DB) CountStudents() (int, error) {
 	query := `SELECT COUNT(*) FROM students`
 
 	var count int
-	err := db.conn.QueryRow(query).Scan(&count)
+	err := db.reader.QueryRow(query).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count students: %w", err)
 	}
@@ -208,7 +208,7 @@ func (db *DB) SaveContact(contact *Contact) error {
 			superior = excluded.superior,
 			cached_at = excluded.cached_at
 	`
-	_, err := db.conn.Exec(query,
+	_, err := db.writer.Exec(query,
 		contact.UID,
 		contact.Type,
 		contact.Name,
@@ -236,7 +236,7 @@ func (db *DB) SaveContactsBatch(contacts []*Contact) error {
 		return nil
 	}
 
-	tx, err := db.conn.Begin()
+	tx, err := db.writer.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -304,7 +304,7 @@ func (db *DB) GetContactByUID(uid string) (*Contact, error) {
 	var contact Contact
 	var nameEn, title, org, extension, phone, email, website, location, superior sql.NullString
 
-	err := db.conn.QueryRow(query, uid).Scan(
+	err := db.reader.QueryRow(query, uid).Scan(
 		&contact.UID,
 		&contact.Type,
 		&contact.Name,
@@ -368,7 +368,7 @@ func (db *DB) SearchContactsByName(name string) ([]Contact, error) {
 		ORDER BY type, name LIMIT 500`
 
 	likePattern := "%" + sanitized + "%"
-	rows, err := db.conn.Query(query, likePattern, likePattern, ttlTimestamp)
+	rows, err := db.reader.Query(query, likePattern, likePattern, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search contacts by name: %w", err)
 	}
@@ -406,7 +406,7 @@ func (db *DB) GetContactsByOrganization(org string) ([]Contact, error) {
 	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT uid, type, name, name_en, title, organization, superior, extension, phone, email, cached_at FROM contacts WHERE organization = ? AND cached_at > ?`
 
-	rows, err := db.conn.Query(query, org, ttlTimestamp)
+	rows, err := db.reader.Query(query, org, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get contacts by organization: %w", err)
 	}
@@ -444,7 +444,7 @@ func (db *DB) GetAllContacts() ([]Contact, error) {
 	query := `SELECT uid, type, name, name_en, title, organization, extension, phone, email, website, location, superior, cached_at
 		FROM contacts WHERE cached_at > ? ORDER BY type, name LIMIT 1000`
 
-	rows, err := db.conn.Query(query, ttlTimestamp)
+	rows, err := db.reader.Query(query, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get all contacts: %w", err)
 	}
@@ -481,7 +481,7 @@ func (db *DB) DeleteExpiredContacts(ttl time.Duration) (int64, error) {
 	query := `DELETE FROM contacts WHERE cached_at < ?`
 	expiryTime := time.Now().Add(-ttl).Unix()
 
-	result, err := db.conn.Exec(query, expiryTime)
+	result, err := db.writer.Exec(query, expiryTime)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete expired contacts: %w", err)
 	}
@@ -498,7 +498,7 @@ func (db *DB) CountContacts() (int, error) {
 	query := `SELECT COUNT(*) FROM contacts`
 
 	var count int
-	err := db.conn.QueryRow(query).Scan(&count)
+	err := db.reader.QueryRow(query).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count contacts: %w", err)
 	}
@@ -555,7 +555,7 @@ func (db *DB) SaveCourse(course *Course) error {
 			note = excluded.note,
 			cached_at = excluded.cached_at
 	`
-	_, err = db.conn.Exec(query,
+	_, err = db.writer.Exec(query,
 		course.UID,
 		course.Year,
 		course.Term,
@@ -582,7 +582,7 @@ func (db *DB) SaveCoursesBatch(courses []*Course) error {
 		return nil
 	}
 
-	tx, err := db.conn.Begin()
+	tx, err := db.writer.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -670,7 +670,7 @@ func (db *DB) GetCourseByUID(uid string) (*Course, error) {
 	var teachersJSON, teacherURLsJSON, timesJSON, locationsJSON string
 	var detailURL, note sql.NullString
 
-	err := db.conn.QueryRow(query, uid).Scan(
+	err := db.reader.QueryRow(query, uid).Scan(
 		&course.UID,
 		&course.Year,
 		&course.Term,
@@ -733,7 +733,7 @@ func (db *DB) SearchCoursesByTitle(title string) ([]Course, error) {
 	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at FROM courses WHERE title LIKE ? ESCAPE '\' AND cached_at > ? ORDER BY year DESC, term DESC LIMIT 500`
 
-	rows, err := db.conn.Query(query, "%"+sanitized+"%", ttlTimestamp)
+	rows, err := db.reader.Query(query, "%"+sanitized+"%", ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search courses by title: %w", err)
 	}
@@ -757,7 +757,7 @@ func (db *DB) SearchCoursesByTeacher(teacher string) ([]Course, error) {
 	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at FROM courses WHERE teachers LIKE ? ESCAPE '\' AND cached_at > ? ORDER BY year DESC, term DESC LIMIT 500`
 
-	rows, err := db.conn.Query(query, "%"+sanitized+"%", ttlTimestamp)
+	rows, err := db.reader.Query(query, "%"+sanitized+"%", ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search courses by teacher: %w", err)
 	}
@@ -773,7 +773,7 @@ func (db *DB) GetCoursesByYearTerm(year, term int) ([]Course, error) {
 	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at FROM courses WHERE year = ? AND term = ? AND cached_at > ?`
 
-	rows, err := db.conn.Query(query, year, term, ttlTimestamp)
+	rows, err := db.reader.Query(query, year, term, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get courses by year and term: %w", err)
 	}
@@ -792,7 +792,7 @@ func (db *DB) GetCoursesByRecentSemesters() ([]Course, error) {
 	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at
 		FROM courses WHERE cached_at > ? ORDER BY year DESC, term DESC LIMIT 2000`
 
-	rows, err := db.conn.Query(query, ttlTimestamp)
+	rows, err := db.reader.Query(query, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get courses by recent semesters: %w", err)
 	}
@@ -807,7 +807,7 @@ func (db *DB) DeleteExpiredCourses(ttl time.Duration) (int64, error) {
 	query := `DELETE FROM courses WHERE cached_at < ?`
 	expiryTime := time.Now().Add(-ttl).Unix()
 
-	result, err := db.conn.Exec(query, expiryTime)
+	result, err := db.writer.Exec(query, expiryTime)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete expired courses: %w", err)
 	}
@@ -824,7 +824,7 @@ func (db *DB) CountCourses() (int, error) {
 	query := `SELECT COUNT(*) FROM courses`
 
 	var count int
-	err := db.conn.QueryRow(query).Scan(&count)
+	err := db.reader.QueryRow(query).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count courses: %w", err)
 	}
@@ -903,7 +903,7 @@ func (db *DB) SaveSticker(sticker *Sticker) error {
 			success_count = excluded.success_count,
 			failure_count = excluded.failure_count
 	`
-	_, err := db.conn.Exec(query,
+	_, err := db.writer.Exec(query,
 		sticker.URL,
 		sticker.Source,
 		time.Now().Unix(),
@@ -920,7 +920,7 @@ func (db *DB) SaveSticker(sticker *Sticker) error {
 func (db *DB) GetAllStickers() ([]Sticker, error) {
 	query := `SELECT url, source, cached_at, success_count, failure_count FROM stickers`
 
-	rows, err := db.conn.Query(query)
+	rows, err := db.reader.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get all stickers: %w", err)
 	}
@@ -949,7 +949,7 @@ func (db *DB) GetAllStickers() ([]Sticker, error) {
 func (db *DB) GetStickersBySource(source string) ([]Sticker, error) {
 	query := `SELECT url, source, cached_at, success_count, failure_count FROM stickers WHERE source = ?`
 
-	rows, err := db.conn.Query(query, source)
+	rows, err := db.reader.Query(query, source)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get stickers by source: %w", err)
 	}
@@ -978,7 +978,7 @@ func (db *DB) GetStickersBySource(source string) ([]Sticker, error) {
 func (db *DB) UpdateStickerSuccess(url string) error {
 	query := `UPDATE stickers SET success_count = success_count + 1 WHERE url = ?`
 
-	_, err := db.conn.Exec(query, url)
+	_, err := db.writer.Exec(query, url)
 	if err != nil {
 		return fmt.Errorf("failed to update sticker success count: %w", err)
 	}
@@ -989,7 +989,7 @@ func (db *DB) UpdateStickerSuccess(url string) error {
 func (db *DB) UpdateStickerFailure(url string) error {
 	query := `UPDATE stickers SET failure_count = failure_count + 1 WHERE url = ?`
 
-	_, err := db.conn.Exec(query, url)
+	_, err := db.writer.Exec(query, url)
 	if err != nil {
 		return fmt.Errorf("failed to update sticker failure count: %w", err)
 	}
@@ -1003,7 +1003,7 @@ func (db *DB) CleanupExpiredStickers() (int64, error) {
 	query := `DELETE FROM stickers WHERE cached_at < ?`
 	expiryTime := time.Now().Add(-db.cacheTTL).Unix()
 
-	result, err := db.conn.Exec(query, expiryTime)
+	result, err := db.writer.Exec(query, expiryTime)
 	if err != nil {
 		return 0, fmt.Errorf("failed to cleanup expired stickers: %w", err)
 	}
@@ -1020,7 +1020,7 @@ func (db *DB) CountStickers() (int, error) {
 	query := `SELECT COUNT(*) FROM stickers`
 
 	var count int
-	err := db.conn.QueryRow(query).Scan(&count)
+	err := db.reader.QueryRow(query).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count stickers: %w", err)
 	}
@@ -1031,7 +1031,7 @@ func (db *DB) CountStickers() (int, error) {
 func (db *DB) GetStickerStats() (map[string]int, error) {
 	query := `SELECT source, COUNT(*) as count FROM stickers GROUP BY source`
 
-	rows, err := db.conn.Query(query)
+	rows, err := db.reader.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sticker stats: %w", err)
 	}
@@ -1091,7 +1091,7 @@ func (db *DB) SaveHistoricalCourse(course *Course) error {
 			note = excluded.note,
 			cached_at = excluded.cached_at
 	`
-	_, err = db.conn.Exec(query,
+	_, err = db.writer.Exec(query,
 		course.UID,
 		course.Year,
 		course.Term,
@@ -1117,7 +1117,7 @@ func (db *DB) SaveHistoricalCoursesBatch(courses []*Course) error {
 		return nil
 	}
 
-	tx, err := db.conn.Begin()
+	tx, err := db.writer.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -1212,7 +1212,7 @@ func (db *DB) SearchHistoricalCoursesByYearAndTitle(year int, title string) ([]C
 		FROM historical_courses WHERE year = ? AND title LIKE ? ESCAPE '\' AND cached_at > ?
 		ORDER BY term DESC LIMIT 500`
 
-	rows, err := db.conn.Query(query, year, "%"+sanitized+"%", ttlTimestamp)
+	rows, err := db.reader.Query(query, year, "%"+sanitized+"%", ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search historical courses: %w", err)
 	}
@@ -1231,7 +1231,7 @@ func (db *DB) SearchHistoricalCoursesByYear(year int) ([]Course, error) {
 		FROM historical_courses WHERE year = ? AND cached_at > ?
 		ORDER BY term DESC, title LIMIT 500`
 
-	rows, err := db.conn.Query(query, year, ttlTimestamp)
+	rows, err := db.reader.Query(query, year, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get historical courses by year: %w", err)
 	}
@@ -1246,7 +1246,7 @@ func (db *DB) DeleteExpiredHistoricalCourses(ttl time.Duration) (int64, error) {
 	query := `DELETE FROM historical_courses WHERE cached_at < ?`
 	expiryTime := time.Now().Add(-ttl).Unix()
 
-	result, err := db.conn.Exec(query, expiryTime)
+	result, err := db.writer.Exec(query, expiryTime)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete expired historical courses: %w", err)
 	}
@@ -1263,7 +1263,7 @@ func (db *DB) CountHistoricalCourses() (int, error) {
 	query := `SELECT COUNT(*) FROM historical_courses`
 
 	var count int
-	err := db.conn.QueryRow(query).Scan(&count)
+	err := db.reader.QueryRow(query).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count historical courses: %w", err)
 	}

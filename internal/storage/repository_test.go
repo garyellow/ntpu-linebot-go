@@ -278,7 +278,7 @@ func TestDeleteExpiredStudents(t *testing.T) {
 	}
 	query := `INSERT INTO students (id, name, department, year, cached_at) VALUES (?, ?, ?, ?, ?)`
 	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.conn.Exec(query, old.ID, old.Name, old.Department, old.Year, oldTime)
+	_, err := db.writer.Exec(query, old.ID, old.Name, old.Department, old.Year, oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
@@ -353,7 +353,7 @@ func TestDeleteExpiredContacts(t *testing.T) {
 	}
 	query := `INSERT INTO contacts (uid, type, name, organization, cached_at) VALUES (?, ?, ?, ?, ?)`
 	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.conn.Exec(query, old.UID, old.Type, old.Name, old.Organization, oldTime)
+	_, err := db.writer.Exec(query, old.UID, old.Type, old.Name, old.Organization, oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
@@ -407,7 +407,7 @@ func TestDeleteExpiredCourses(t *testing.T) {
 	// Insert old course (manually set cached_at to 8 days ago)
 	query := `INSERT INTO courses (uid, year, term, no, title, teachers, teacher_urls, times, locations, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.conn.Exec(query, "1121A0002", 112, 1, "A0002", "舊課程", `["李老師"]`, `[]`, `["二3-4"]`, `[]`, oldTime)
+	_, err := db.writer.Exec(query, "1121A0002", 112, 1, "A0002", "舊課程", `["李老師"]`, `[]`, `["二3-4"]`, `[]`, oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
@@ -456,7 +456,7 @@ func TestCleanupExpiredStickers(t *testing.T) {
 	// Insert old sticker (manually set cached_at to 8 days ago)
 	query := `INSERT INTO stickers (url, source, cached_at, success_count, failure_count) VALUES (?, ?, ?, ?, ?)`
 	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.conn.Exec(query, "https://example.com/old.png", "spy_family", oldTime, 0, 0)
+	_, err := db.writer.Exec(query, "https://example.com/old.png", "spy_family", oldTime, 0, 0)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
@@ -503,7 +503,7 @@ func TestGetAllContacts(t *testing.T) {
 	// Insert expired contact (manually set cached_at to 8 days ago)
 	query := `INSERT INTO contacts (uid, type, name, organization, cached_at) VALUES (?, ?, ?, ?, ?)`
 	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.conn.Exec(query, "c_old", "individual", "舊聯絡人", "舊單位", oldTime)
+	_, err := db.writer.Exec(query, "c_old", "individual", "舊聯絡人", "舊單位", oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
@@ -592,7 +592,7 @@ func TestGetCoursesByRecentSemesters(t *testing.T) {
 	// Insert expired course (manually set cached_at to 8 days ago)
 	query := `INSERT INTO courses (uid, year, term, no, title, teachers, teacher_urls, times, locations, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.conn.Exec(query, "1121U9999", 112, 1, "U9999", "舊課程", `["舊教授"]`, `[]`, `[]`, `[]`, oldTime)
+	_, err := db.writer.Exec(query, "1121U9999", 112, 1, "U9999", "舊課程", `["舊教授"]`, `[]`, `[]`, `[]`, oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
@@ -909,7 +909,7 @@ func TestDeleteExpiredHistoricalCourses(t *testing.T) {
 	// Insert expired course (manually set cached_at to 8 days ago)
 	query := `INSERT INTO historical_courses (uid, year, term, no, title, teachers, teacher_urls, times, locations, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.conn.Exec(query, "1001U0002", 100, 1, "U0002", "舊課程", `["舊教授"]`, `[]`, `[]`, `[]`, oldTime)
+	_, err := db.writer.Exec(query, "1001U0002", 100, 1, "U0002", "舊課程", `["舊教授"]`, `[]`, `[]`, `[]`, oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
@@ -1041,7 +1041,7 @@ func TestHistoricalCoursesTTLFiltering(t *testing.T) {
 	// Insert expired course (manually set cached_at to 8 days ago)
 	query := `INSERT INTO historical_courses (uid, year, term, no, title, teachers, teacher_urls, times, locations, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.conn.Exec(query, "1001U0002", 100, 1, "U0002", "舊課程", `["舊教授"]`, `[]`, `[]`, `[]`, oldTime)
+	_, err := db.writer.Exec(query, "1001U0002", 100, 1, "U0002", "舊課程", `["舊教授"]`, `[]`, `[]`, `[]`, oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/garyellow/ntpu-linebot-go/internal/timeouts"
 	"github.com/joho/godotenv"
 )
 
@@ -35,7 +36,8 @@ type Config struct {
 	WarmupModules string // Comma-separated list of modules to warmup (default: "id,contact,course,sticker")
 
 	// Webhook Configuration
-	WebhookTimeout time.Duration // Timeout for webhook bot processing (default: 30s)
+	// See internal/timeouts/timeouts.go for detailed explanation of why 25s is used
+	WebhookTimeout time.Duration // Timeout for webhook bot processing
 
 	// Rate Limit Configuration
 	UserRateLimitTokens     float64 // Maximum tokens per user (default: 10)
@@ -81,15 +83,15 @@ func LoadForMode(mode ValidationMode) (*Config, error) {
 		SoftTTL:    getDurationEnv("SOFT_TTL", 120*time.Hour),  // Soft TTL: 5 days (trigger warmup)
 
 		// Scraper Configuration
-		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", 60*time.Second), // HTTP request timeout
-		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 5),               // Retry with exponential backoff
+		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", timeouts.ScraperRequest), // HTTP request timeout
+		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 5),                        // Retry with exponential backoff
 
 		// Warmup Configuration
-		WarmupTimeout: getDurationEnv("WARMUP_TIMEOUT", 30*time.Minute),
+		WarmupTimeout: getDurationEnv("WARMUP_TIMEOUT", timeouts.WarmupDefault),
 		WarmupModules: getEnv("WARMUP_MODULES", "sticker,id,contact,course"),
 
 		// Webhook Configuration
-		WebhookTimeout: getDurationEnv("WEBHOOK_TIMEOUT", 30*time.Second),
+		WebhookTimeout: getDurationEnv("WEBHOOK_TIMEOUT", timeouts.WebhookProcessing),
 
 		// Rate Limit Configuration
 		UserRateLimitTokens:     getFloatEnv("USER_RATE_LIMIT_TOKENS", 10.0),

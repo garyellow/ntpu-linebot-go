@@ -29,7 +29,9 @@ const (
 	MinReplyTokenLength = 10
 	MaxMessageLength    = 20000
 	MaxPostbackDataSize = 300
-	WebhookTimeout      = 25 * time.Second
+	// WebhookTimeout is now defined in internal/timeouts/timeouts.go
+	// as timeouts.WebhookProcessing with detailed documentation on
+	// why 25 seconds was chosen (LINE API constraints, user patience, etc.)
 )
 
 // Handler handles LINE webhook events
