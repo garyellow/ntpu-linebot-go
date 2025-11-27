@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,7 +21,6 @@ import (
 // Client is an HTTP client for web scraping with retry and URL failover
 type Client struct {
 	httpClient *http.Client
-	userAgents []string
 	maxRetries int
 	baseURLs   map[string][]string // Base URLs for failover by domain
 	mu         sync.RWMutex
@@ -53,7 +53,6 @@ func NewClient(timeout time.Duration, maxRetries int) *Client {
 				IdleConnTimeout:     90 * time.Second,
 			},
 		},
-		userAgents: generateUserAgents(),
 		maxRetries: maxRetries,
 		baseURLs:   baseURLs,
 	}
@@ -98,7 +97,12 @@ func (c *Client) Get(ctx context.Context, reqURL string) (*http.Response, error)
 			_ = resp.Body.Close()
 
 			switch resp.StatusCode {
-			case 429: // Rate limited - retry with backoff
+			case 429: // Rate limited - retry with backoff, respect Retry-After if present
+				if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
+					if seconds, err := strconv.Atoi(retryAfter); err == nil && seconds > 0 {
+						_ = Sleep(ctx, time.Duration(seconds)*time.Second)
+					}
+				}
 				lastErr = fmt.Errorf("rate limited for %s: status %d", reqURL, resp.StatusCode)
 			case 503, 502, 504: // Server errors - retry
 				lastErr = fmt.Errorf("server error for %s: status %d", reqURL, resp.StatusCode)
@@ -174,7 +178,12 @@ func (c *Client) PostFormDocumentRaw(ctx context.Context, postURL, formDataStr s
 			_ = resp.Body.Close()
 
 			switch resp.StatusCode {
-			case 429:
+			case 429: // Rate limited - retry with backoff, respect Retry-After if present
+				if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
+					if seconds, err := strconv.Atoi(retryAfter); err == nil && seconds > 0 {
+						_ = Sleep(ctx, time.Duration(seconds)*time.Second)
+					}
+				}
 				lastErr = fmt.Errorf("rate limited for %s: status %d", postURL, resp.StatusCode)
 			case 503, 502, 504:
 				lastErr = fmt.Errorf("server error for %s: status %d", postURL, resp.StatusCode)
@@ -234,12 +243,9 @@ func (c *Client) processResponseToDocument(resp *http.Response) (*goquery.Docume
 	return doc, nil
 }
 
-// randomUserAgent returns a random user agent string
+// randomUserAgent returns a random user agent string using uarand package
 func (c *Client) randomUserAgent() string {
-	if len(c.userAgents) == 0 {
-		return uarand.GetRandom()
-	}
-	return c.userAgents[time.Now().UnixNano()%int64(len(c.userAgents))]
+	return uarand.GetRandom()
 }
 
 // TryFailoverURLs attempts to use alternative base URLs when primary URL fails
@@ -292,34 +298,4 @@ func (c *Client) GetBaseURLs(domain string) []string {
 	result := make([]string, len(urls))
 	copy(result, urls)
 	return result
-}
-
-// generateUserAgents returns a list of common user agent strings
-func generateUserAgents() []string {
-	return []string{
-		// Chrome on Windows
-		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-
-		// Chrome on macOS
-		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-
-		// Firefox on Windows
-		"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
-		"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0",
-
-		// Firefox on macOS
-		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:121.0) Gecko/20100101 Firefox/121.0",
-
-		// Safari on macOS
-		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
-		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
-
-		// Edge on Windows
-		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",
-
-		// Chrome on Linux
-		"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-	}
 }
