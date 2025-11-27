@@ -30,7 +30,7 @@ type Handler struct {
 const (
 	moduleName           = "course"
 	senderName           = "課程魔法師"
-	MaxCoursesPerSearch  = 50 // Maximum courses to return in search results
+	MaxCoursesPerSearch  = 40 // Maximum courses to return in search results (40 courses = 4 carousels + 1 warning = 5 messages max)
 	MaxTitleDisplayChars = 60 // Maximum characters for course title display before truncation
 )
 
@@ -725,10 +725,34 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 	}
 
 	// Build carousel messages with automatic splitting (max 10 bubbles per carousel)
-	messages = lineutil.BuildCarouselMessages("課程列表", bubbles, sender)
+	// Limit to 4 carousels to leave room for warning message (LINE API: max 5 messages per reply)
+	for i := 0; i < len(bubbles); i += lineutil.MaxBubblesPerCarousel {
+		// Respect LINE reply limit (max 5 messages, reserve 1 for warning if truncated)
+		maxCarousels := 5
+		if truncated {
+			maxCarousels = 4 // Reserve 1 message slot for warning
+		}
+		if len(messages) >= maxCarousels {
+			break
+		}
 
-	// Prepend warning message if results were truncated
-	if truncated {
+		end := i + lineutil.MaxBubblesPerCarousel
+		if end > len(bubbles) {
+			end = len(bubbles)
+		}
+
+		carousel := lineutil.NewFlexCarousel(bubbles[i:end])
+		altText := "課程列表"
+		if i > 0 {
+			altText = fmt.Sprintf("課程列表 (%d-%d)", i+1, end)
+		}
+		msg := lineutil.NewFlexMessage(altText, carousel)
+		msg.Sender = sender
+		messages = append(messages, msg)
+	}
+
+	// Prepend warning message if results were truncated (and we have room)
+	if truncated && len(messages) < 5 {
 		warningMsg := lineutil.NewTextMessageWithConsistentSender(
 			fmt.Sprintf("⚠️ 搜尋結果超過 %d 門課程，僅顯示前 %d 門。\n\n建議使用更精確的搜尋條件以縮小範圍。", originalCount, MaxCoursesPerSearch),
 			sender,

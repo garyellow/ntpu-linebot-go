@@ -33,7 +33,7 @@ LINE Webhook → Gin Handler (25s timeout) → Bot Module Dispatcher
 
 **ID Module**: Year validation (89-130, AD↔ROC), department selection flow, student search (max 500 results), Flex Message cards
 
-**Course Module**: Smart semester detection (`semester.go`), UID regex (`(?i)\d{3,4}[umnp]\d{4}`), max 50 results, Flex Message carousels
+**Course Module**: Smart semester detection (`semester.go`), UID regex (`(?i)\d{3,4}[umnp]\d{4}`), max 40 results, Flex Message carousels
 
 **Contact Module**: Emergency phones (hardcoded), multilingual keywords, organization/individual contacts, Flex Message cards
 - **Search fields**: name, title (職稱)
