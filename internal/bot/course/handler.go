@@ -1,3 +1,5 @@
+// Package course implements the course query module for the LINE bot.
+// It handles course searches by title, teacher, or UID from NTPU's course system.
 package course
 
 import (
@@ -27,10 +29,11 @@ type Handler struct {
 	stickerManager *sticker.Manager
 }
 
+// Course handler constants.
 const (
 	moduleName           = "course"
 	senderName           = "課程魔法師"
-	MaxCoursesPerSearch  = 50 // Maximum courses to return in search results
+	MaxCoursesPerSearch  = 40 // Maximum courses to return (40 courses = 4 carousels @ 10 bubbles each), leaving 1 slot for warning (LINE API max: 5 messages)
 	MaxTitleDisplayChars = 60 // Maximum characters for course title display before truncation
 )
 
@@ -203,7 +206,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 	uid = strings.ToUpper(uid)
 
 	// Check cache first
-	course, err := h.db.GetCourseByUID(uid)
+	course, err := h.db.GetCourseByUID(ctx, uid)
 	if err != nil {
 		log.WithError(err).Error("Failed to query cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
@@ -252,7 +255,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 	}
 
 	// Save to cache
-	if err := h.db.SaveCourse(course); err != nil {
+	if err := h.db.SaveCourse(ctx, course); err != nil {
 		log.WithError(err).Warn("Failed to save course to cache")
 	}
 
@@ -267,7 +270,7 @@ func (h *Handler) handleCourseTitleSearch(ctx context.Context, title string) []m
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	// Search in cache first
-	courses, err := h.db.SearchCoursesByTitle(title)
+	courses, err := h.db.SearchCoursesByTitle(ctx, title)
 	if err != nil {
 		log.WithError(err).Error("Failed to search courses in cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
@@ -304,7 +307,7 @@ func (h *Handler) handleCourseTitleSearch(ctx context.Context, title string) []m
 
 		// Save courses to cache
 		for _, course := range scrapedCourses {
-			if err := h.db.SaveCourse(course); err != nil {
+			if err := h.db.SaveCourse(ctx, course); err != nil {
 				log.WithError(err).Warn("Failed to save course to cache")
 			}
 		}
@@ -362,7 +365,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	}
 
 	// Search in historical_courses cache first
-	courses, err := h.db.SearchHistoricalCoursesByYearAndTitle(year, keyword)
+	courses, err := h.db.SearchHistoricalCoursesByYearAndTitle(ctx, year, keyword)
 	if err != nil {
 		log.WithError(err).Error("Failed to search historical courses in cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
@@ -400,7 +403,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 
 	// Save courses to historical_courses table
 	for _, course := range scrapedCourses {
-		if err := h.db.SaveHistoricalCourse(course); err != nil {
+		if err := h.db.SaveHistoricalCourse(ctx, course); err != nil {
 			log.WithError(err).Warn("Failed to save historical course to cache")
 		}
 	}
@@ -454,7 +457,7 @@ func (h *Handler) handleTeacherSearch(ctx context.Context, teacherName string) [
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	// Search in cache using SQL LIKE first
-	courses, err := h.db.SearchCoursesByTeacher(teacherName)
+	courses, err := h.db.SearchCoursesByTeacher(ctx, teacherName)
 	if err != nil {
 		log.WithError(err).Error("Failed to search courses by teacher")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
@@ -466,7 +469,7 @@ func (h *Handler) handleTeacherSearch(ctx context.Context, teacherName string) [
 	// If SQL LIKE didn't find results, try fuzzy character-set matching
 	// This enables "王" to match "王小明" teacher names
 	if len(courses) == 0 {
-		allCourses, err := h.db.GetCoursesByRecentSemesters()
+		allCourses, err := h.db.GetCoursesByRecentSemesters(ctx)
 		if err == nil && len(allCourses) > 0 {
 			for _, c := range allCourses {
 				for _, teacher := range c.Teachers {
@@ -513,7 +516,7 @@ func (h *Handler) handleTeacherSearch(ctx context.Context, teacherName string) [
 		// Filter by teacher and save to cache
 		for _, course := range scrapedCourses {
 			// Save all courses for future queries
-			if err := h.db.SaveCourse(course); err != nil {
+			if err := h.db.SaveCourse(ctx, course); err != nil {
 				log.WithError(err).Warn("Failed to save course to cache")
 			}
 
@@ -679,7 +682,7 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 			lineutil.NewFlexBox("horizontal",
 				lineutil.NewFlexText("📅 開課學期：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
 				lineutil.NewFlexText(semesterText).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).FlexText,
-			).WithMargin("md").WithSpacing("sm").FlexBox,
+			).WithMargin("sm").WithSpacing("sm").FlexBox,
 			lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 		}
 
@@ -691,7 +694,7 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 				lineutil.NewFlexBox("horizontal",
 					lineutil.NewFlexText("👨‍🏫 授課教師：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
 					lineutil.NewFlexText(carouselTeachers).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).WithWrap(true).FlexText,
-				).WithMargin("md").WithSpacing("sm").FlexBox,
+				).WithMargin("sm").WithSpacing("sm").FlexBox,
 			)
 		}
 		// 第三列：上課時間
@@ -725,10 +728,34 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 	}
 
 	// Build carousel messages with automatic splitting (max 10 bubbles per carousel)
-	messages = lineutil.BuildCarouselMessages("課程列表", bubbles, sender)
+	// Limit to 4 carousels to leave room for warning message (LINE API: max 5 messages per reply)
+	for i := 0; i < len(bubbles); i += lineutil.MaxBubblesPerCarousel {
+		// Respect LINE reply limit (max 5 messages, reserve 1 for warning if truncated)
+		maxCarousels := 5
+		if truncated {
+			maxCarousels = 4 // Reserve 1 message slot for warning
+		}
+		if len(messages) >= maxCarousels {
+			break
+		}
 
-	// Prepend warning message if results were truncated
-	if truncated {
+		end := i + lineutil.MaxBubblesPerCarousel
+		if end > len(bubbles) {
+			end = len(bubbles)
+		}
+
+		carousel := lineutil.NewFlexCarousel(bubbles[i:end])
+		altText := "課程列表"
+		if i > 0 {
+			altText = fmt.Sprintf("課程列表 (%d-%d)", i+1, end)
+		}
+		msg := lineutil.NewFlexMessage(altText, carousel)
+		msg.Sender = sender
+		messages = append(messages, msg)
+	}
+
+	// Prepend warning message if results were truncated (and we have room)
+	if truncated && len(messages) < 5 {
 		warningMsg := lineutil.NewTextMessageWithConsistentSender(
 			fmt.Sprintf("⚠️ 搜尋結果超過 %d 門課程，僅顯示前 %d 門。\n\n建議使用更精確的搜尋條件以縮小範圍。", originalCount, MaxCoursesPerSearch),
 			sender,

@@ -12,7 +12,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 )
 
-// Department code mappings (大學部)
+// DepartmentCodes maps department names to codes (大學部).
 // Note: "法律" and base codes for 社學/社工 require 3rd digit from student ID
 var DepartmentCodes = map[string]string{
 	"法律": "71", // Base code, requires 3rd digit: 712(法學)/714(司法)/716(財法)
@@ -38,7 +38,7 @@ var DepartmentCodes = map[string]string{
 	"電機": "87",
 }
 
-// Full department name mappings (大學部)
+// FullDepartmentCodes maps full department names to codes (大學部)
 var FullDepartmentCodes = map[string]string{
 	"法律學系":       "71",
 	"法學組":        "712",
@@ -63,7 +63,7 @@ var FullDepartmentCodes = map[string]string{
 	"電機工程學系":     "87",
 }
 
-// Master's program department codes (碩士班)
+// MasterDepartmentCodes maps master's program department names to codes (碩士班)
 var MasterDepartmentCodes = map[string]string{
 	"企業管理學系碩士班":       "31",
 	"會計學系碩士班":         "32",
@@ -97,7 +97,7 @@ var MasterDepartmentCodes = map[string]string{
 	"智慧醫療管理英語碩士學位學程":  "91",
 }
 
-// PhD program department codes (博士班)
+// PhDDepartmentCodes maps PhD program department names to codes (博士班)
 var PhDDepartmentCodes = map[string]string{
 	"會計學系博士班":         "32",
 	"法律學系博士班":         "51",
@@ -109,9 +109,13 @@ var PhDDepartmentCodes = map[string]string{
 	"電機資訊學院博士班":       "76",
 }
 
-// Reverse mappings: code -> name
+// DepartmentNames provides reverse mappings: code -> name
 var DepartmentNames = reverseMap(DepartmentCodes)
+
+// MasterDepartmentNames provides reverse mappings for master degree programs: code -> name.
 var MasterDepartmentNames = reverseMap(MasterDepartmentCodes)
+
+// PhDDepartmentNames provides reverse mappings for PhD programs: code -> name.
 var PhDDepartmentNames = reverseMap(PhDDepartmentCodes)
 
 // reverseMap creates a reverse mapping from code to name

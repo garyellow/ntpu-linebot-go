@@ -1,3 +1,6 @@
+// Package config provides application configuration management.
+// It loads settings from environment variables and provides defaults for
+// server mode, warmup mode, timeouts, and cache settings.
 package config
 
 import (
@@ -7,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/garyellow/ntpu-linebot-go/internal/timeouts"
 	"github.com/joho/godotenv"
 )
 
@@ -27,9 +31,6 @@ type Config struct {
 	SoftTTL    time.Duration // Soft TTL: when to proactively refresh data (default: 5 days)
 
 	// Scraper Configuration
-	ScraperWorkers    int
-	ScraperMinDelay   time.Duration
-	ScraperMaxDelay   time.Duration
 	ScraperTimeout    time.Duration
 	ScraperMaxRetries int
 
@@ -38,7 +39,8 @@ type Config struct {
 	WarmupModules string // Comma-separated list of modules to warmup (default: "id,contact,course,sticker")
 
 	// Webhook Configuration
-	WebhookTimeout time.Duration // Timeout for webhook bot processing (default: 30s)
+	// See internal/timeouts/timeouts.go for detailed explanation of why 25s is used
+	WebhookTimeout time.Duration // Timeout for webhook bot processing
 
 	// Rate Limit Configuration
 	UserRateLimitTokens     float64 // Maximum tokens per user (default: 10)
@@ -84,18 +86,15 @@ func LoadForMode(mode ValidationMode) (*Config, error) {
 		SoftTTL:    getDurationEnv("SOFT_TTL", 120*time.Hour),  // Soft TTL: 5 days (trigger warmup)
 
 		// Scraper Configuration
-		ScraperWorkers:    getIntEnv("SCRAPER_WORKERS", 3),
-		ScraperMinDelay:   getDurationEnv("SCRAPER_MIN_DELAY", 5*time.Second),
-		ScraperMaxDelay:   getDurationEnv("SCRAPER_MAX_DELAY", 10*time.Second),
-		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", 120*time.Second), // Increased for large student data
-		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 3),                // Reduced retries, rely on longer timeout
+		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", timeouts.ScraperRequest), // HTTP request timeout
+		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 5),                        // Retry with exponential backoff
 
 		// Warmup Configuration
-		WarmupTimeout: getDurationEnv("WARMUP_TIMEOUT", 30*time.Minute),
+		WarmupTimeout: getDurationEnv("WARMUP_TIMEOUT", timeouts.WarmupDefault),
 		WarmupModules: getEnv("WARMUP_MODULES", "sticker,id,contact,course"),
 
 		// Webhook Configuration
-		WebhookTimeout: getDurationEnv("WEBHOOK_TIMEOUT", 30*time.Second),
+		WebhookTimeout: getDurationEnv("WEBHOOK_TIMEOUT", timeouts.WebhookProcessing),
 
 		// Rate Limit Configuration
 		UserRateLimitTokens:     getFloatEnv("USER_RATE_LIMIT_TOKENS", 10.0),
@@ -122,20 +121,38 @@ func (c *Config) Validate() error {
 func (c *Config) ValidateForMode(mode ValidationMode) error {
 	if mode == ServerMode {
 		if c.LineChannelToken == "" {
-			return fmt.Errorf("LINE_CHANNEL_ACCESS_TOKEN is required")
+			return fmt.Errorf("LINE_CHANNEL_ACCESS_TOKEN is required in server mode")
 		}
 		if c.LineChannelSecret == "" {
-			return fmt.Errorf("LINE_CHANNEL_SECRET is required")
+			return fmt.Errorf("LINE_CHANNEL_SECRET is required in server mode")
 		}
 		if c.Port == "" {
-			return fmt.Errorf("PORT is required")
+			return fmt.Errorf("PORT is required in server mode")
+		}
+		if c.WebhookTimeout <= 0 {
+			return fmt.Errorf("WEBHOOK_TIMEOUT must be positive")
+		}
+		if c.UserRateLimitTokens <= 0 {
+			return fmt.Errorf("USER_RATE_LIMIT_TOKENS must be positive")
+		}
+		if c.UserRateLimitRefillRate <= 0 {
+			return fmt.Errorf("USER_RATE_LIMIT_REFILL_RATE must be positive")
 		}
 	}
 	if c.SQLitePath == "" {
 		return fmt.Errorf("SQLITE_PATH is required")
 	}
-	if c.ScraperWorkers < 1 {
-		return fmt.Errorf("SCRAPER_WORKERS must be at least 1")
+	if c.CacheTTL <= 0 {
+		return fmt.Errorf("CACHE_TTL must be positive")
+	}
+	if c.SoftTTL <= 0 {
+		return fmt.Errorf("SOFT_TTL must be positive")
+	}
+	if c.SoftTTL >= c.CacheTTL {
+		return fmt.Errorf("SOFT_TTL must be less than CACHE_TTL")
+	}
+	if c.ScraperTimeout <= 0 {
+		return fmt.Errorf("SCRAPER_TIMEOUT must be positive")
 	}
 	if c.ScraperMaxRetries < 0 {
 		return fmt.Errorf("SCRAPER_MAX_RETRIES cannot be negative")

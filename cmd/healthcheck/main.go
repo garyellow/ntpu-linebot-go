@@ -1,6 +1,8 @@
+// Package main provides a health check binary for container orchestration.
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -8,25 +10,35 @@ import (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "10000"
 	}
 
-	client := &http.Client{Timeout: 8 * time.Second}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
 	url := fmt.Sprintf("http://localhost:%s/healthz", port)
-
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
-		os.Exit(1)
-	}
-	// Error ignored: response body close error is non-critical for healthcheck
-	// and process exits immediately anyway
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		os.Exit(1)
+		return 1
 	}
 
-	os.Exit(0)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 1
+	}
+
+	// Read status code before closing body
+	statusOK := resp.StatusCode == http.StatusOK
+	_ = resp.Body.Close()
+
+	if !statusOK {
+		return 1
+	}
+	return 0
 }

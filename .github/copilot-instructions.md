@@ -33,7 +33,7 @@ LINE Webhook → Gin Handler (25s timeout) → Bot Module Dispatcher
 
 **ID Module**: Year validation (89-130, AD↔ROC), department selection flow, student search (max 500 results), Flex Message cards
 
-**Course Module**: Smart semester detection (`semester.go`), UID regex (`(?i)\d{3,4}[umnp]\d{4}`), max 50 results, Flex Message carousels
+**Course Module**: Smart semester detection (`semester.go`), UID regex (`(?i)\d{3,4}[umnp]\d{4}`), max 40 results, Flex Message carousels
 
 **Contact Module**: Emergency phones (hardcoded), multilingual keywords, organization/individual contacts, Flex Message cards
 - **Search fields**: name, title (職稱)
@@ -62,7 +62,7 @@ LINE Webhook → Gin Handler (25s timeout) → Bot Module Dispatcher
 
 ## Rate Limiting
 
-**Scraper** (`internal/scraper/ratelimiter.go`): Token bucket (3 workers), 5-10s random delays, 120s timeout, max 3 retries with exponential backoff
+**Scraper** (`internal/scraper/ratelimiter.go`): Fixed 2s delay after success, exponential backoff on failure (4s initial, max 5 retries, ±25% jitter), 60s HTTP timeout per request
 
 **Webhook**: Per-user (10 req/s, burst 2), global (80 rps), silently drops excess requests
 
@@ -83,8 +83,8 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
 **UX Best Practices**: Quick Reply for guidance, Loading Animation for long queries, Flex Messages for rich UI, actionable error options
 
 **Flex Message 設計規範**:
-- **配色**: Hero 背景 `#1DB446` (NTPU 綠), 標題白色, Body 內容灰色
-- **間距**: Hero padding `15px`, Body/Footer spacing `sm`, 按鈕高度 `sm`
+- **配色**: Hero 背景 `#06C755` (LINE 綠), 標題白色, 標籤 `#666666` (WCAG AA)
+- **間距**: Hero padding `24px`/`16px` (4-point grid), Body/Footer spacing `sm`, 按鈕高度 `sm`
 - **文字**: 優先使用 `wrap: true` + `lineSpacing` 完整顯示資訊；僅 carousel 使用 `WithMaxLines()` 控制高度
 - **截斷**: `TruncateRunes()` 僅用於 LINE API 限制 (altText 400 字, displayText 長度限制)
 - **設計原則**: 對稱、現代、一致 - 確保視覺和諧，完整呈現資訊
@@ -107,8 +107,8 @@ text[:10] + "..."                       // ❌ Corrupts UTF-8
 
 **Prefer text wrapping** for Flex Message content - use `wrap: true` with `lineSpacing` for readability:
 ```go
-lineutil.NewInfoRow("標籤", value).WithWrap(true).WithLineSpacing("4px")  // ✅ Full display
-lineutil.TruncateRunes(value, 20)                                         // ❌ Hides information
+lineutil.NewInfoRow("標籤", value).WithWrap(true).WithLineSpacing(lineutil.SpacingXS)  // ✅ Full display
+lineutil.TruncateRunes(value, 20)                                                    // ❌ Hides information
 ```
 
 ## Testing

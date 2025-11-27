@@ -1,3 +1,6 @@
+// Package logger provides structured logging utilities for the application.
+// It wraps logrus with JSON formatting and supports context-based logging
+// with request IDs and module names.
 package logger
 
 import (
@@ -16,6 +19,8 @@ const (
 	RequestIDKey contextKey = "request_id"
 	// ModuleKey is the context key for module name
 	ModuleKey contextKey = "module"
+	// LoggerKey is the context key for storing logger entry
+	LoggerKey contextKey = "logger"
 )
 
 // Logger is the application logger
@@ -80,6 +85,23 @@ func (l *Logger) WithRequestID(requestID string) *logrus.Entry {
 // WithError creates a new entry with error field
 func (l *Logger) WithError(err error) *logrus.Entry {
 	return l.Logger.WithError(err)
+}
+
+// NewContext returns a new context with the logger entry stored
+// This avoids creating new Entry objects repeatedly
+func (l *Logger) NewContext(ctx context.Context, fields logrus.Fields) context.Context {
+	entry := l.WithFields(fields)
+	return context.WithValue(ctx, LoggerKey, entry)
+}
+
+// FromContext retrieves the logger entry from context
+// If not found, returns a new entry with context fields extracted
+func (l *Logger) FromContext(ctx context.Context) *logrus.Entry {
+	if entry, ok := ctx.Value(LoggerKey).(*logrus.Entry); ok {
+		return entry
+	}
+	// Fallback: create entry from context values
+	return l.WithContext(ctx)
 }
 
 // SetOutput sets the logger output

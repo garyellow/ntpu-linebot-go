@@ -1,3 +1,6 @@
+// Package scraper provides HTTP client utilities for web scraping.
+// It includes retry logic, rate limiting, URL failover, and encoding conversion
+// for scraping NTPU websites.
 package scraper
 
 import (
@@ -7,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -17,18 +21,18 @@ import (
 	"golang.org/x/text/transform"
 )
 
-// Client is an HTTP client for web scraping with rate limiting and URL failover
+// Client is an HTTP client for web scraping with retry and URL failover
 type Client struct {
-	httpClient  *http.Client
-	rateLimiter *RateLimiter
-	userAgents  []string
-	maxRetries  int
-	baseURLs    map[string][]string // Base URLs for failover by domain
-	mu          sync.RWMutex
+	httpClient *http.Client
+	maxRetries int
+	baseURLs   map[string][]string // Base URLs for failover by domain
+	mu         sync.RWMutex
 }
 
 // NewClient creates a new scraper client with URL failover support
-func NewClient(timeout time.Duration, workers int, minDelay, maxDelay time.Duration, maxRetries int) *Client {
+// timeout: HTTP request timeout (e.g., 60s)
+// maxRetries: max retry attempts with exponential backoff (e.g., 3)
+func NewClient(timeout time.Duration, maxRetries int) *Client {
 	// Define failover URLs for NTPU services
 	baseURLs := map[string][]string{
 		"lms": {
@@ -52,28 +56,26 @@ func NewClient(timeout time.Duration, workers int, minDelay, maxDelay time.Durat
 				IdleConnTimeout:     90 * time.Second,
 			},
 		},
-		rateLimiter: NewRateLimiter(workers, minDelay, maxDelay),
-		userAgents:  generateUserAgents(),
-		maxRetries:  maxRetries,
-		baseURLs:    baseURLs,
+		maxRetries: maxRetries,
+		baseURLs:   baseURLs,
 	}
 }
 
-// Get performs a GET request with rate limiting and retries
-// Caller is responsible for closing the response body
-func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
+// SuccessDelay is the fixed delay after each successful request (anti-scraping)
+const SuccessDelay = 2 * time.Second
+
+// Get performs a GET request with retries on failure
+// On success: waits SuccessDelay (2s) before returning (anti-scraping)
+// On failure: retries with exponential backoff (4s initial, 5 retries)
+// IMPORTANT: Caller must close the response body on success
+func (c *Client) Get(ctx context.Context, reqURL string) (*http.Response, error) {
 	var resp *http.Response
 	var lastErr error
 
-	// Retry with exponential backoff
-	err := RetryWithBackoff(ctx, c.maxRetries, 1*time.Second, 30*time.Second, func() error {
-		// Wait for rate limiter
-		if err := c.rateLimiter.Wait(ctx); err != nil {
-			return err
-		}
-
+	// Retry with exponential backoff on failure (4s initial delay)
+	err := RetryWithBackoff(ctx, c.maxRetries, 4*time.Second, func() error {
 		// Create request
-		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		req, err := http.NewRequestWithContext(ctx, "GET", reqURL, http.NoBody)
 		if err != nil {
 			return fmt.Errorf("failed to create request: %w", err)
 		}
@@ -85,9 +87,10 @@ func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
 		req.Header.Set("Accept-Encoding", "gzip, deflate")
 
 		// Perform request
-		resp, err = c.httpClient.Do(req)
-		if err != nil {
-			lastErr = fmt.Errorf("request failed: %w", err)
+		var httpErr error
+		resp, httpErr = c.httpClient.Do(req)
+		if httpErr != nil {
+			lastErr = fmt.Errorf("request failed: %w", httpErr)
 			return lastErr
 		}
 
@@ -97,14 +100,19 @@ func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
 			_ = resp.Body.Close()
 
 			switch resp.StatusCode {
-			case 429: // Rate limited - retry with backoff
-				lastErr = fmt.Errorf("rate limited for %s: status %d", url, resp.StatusCode)
+			case 429: // Rate limited - retry with backoff, respect Retry-After if present
+				if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
+					if seconds, err := strconv.Atoi(retryAfter); err == nil && seconds > 0 {
+						_ = Sleep(ctx, time.Duration(seconds)*time.Second)
+					}
+				}
+				lastErr = fmt.Errorf("rate limited for %s: status %d", reqURL, resp.StatusCode)
 			case 503, 502, 504: // Server errors - retry
-				lastErr = fmt.Errorf("server error for %s: status %d", url, resp.StatusCode)
+				lastErr = fmt.Errorf("server error for %s: status %d", reqURL, resp.StatusCode)
 			case 404, 403, 401: // Client errors - don't retry
-				return fmt.Errorf("client error for %s: status %d (not retrying)", url, resp.StatusCode)
+				return fmt.Errorf("client error for %s: status %d (not retrying)", reqURL, resp.StatusCode)
 			default:
-				lastErr = fmt.Errorf("unexpected status for %s: %d", url, resp.StatusCode)
+				lastErr = fmt.Errorf("unexpected status for %s: %d", reqURL, resp.StatusCode)
 			}
 			return lastErr
 		}
@@ -117,44 +125,19 @@ func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
 		return nil, err
 	}
 
+	// Anti-scraping delay after successful request
+	_ = Sleep(ctx, SuccessDelay)
+
 	return resp, nil
 }
 
 // GetDocument performs a GET request and parses the response as HTML
-func (c *Client) GetDocument(ctx context.Context, url string) (*goquery.Document, error) {
-	resp, err := c.Get(ctx, url)
+func (c *Client) GetDocument(ctx context.Context, reqURL string) (*goquery.Document, error) {
+	resp, err := c.Get(ctx, reqURL)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	// Handle gzip encoding
-	var reader io.Reader
-	if resp.Header.Get("Content-Encoding") == "gzip" {
-		gzipReader, err := gzip.NewReader(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decompress gzip: %w", err)
-		}
-		defer func() { _ = gzipReader.Close() }()
-		reader = gzipReader
-	} else {
-		reader = resp.Body
-	}
-
-	// Check if content is Big5 encoded (common for Taiwan websites)
-	contentType := resp.Header.Get("Content-Type")
-	if strings.Contains(strings.ToUpper(contentType), "BIG5") {
-		// Wrap reader with Big5 to UTF-8 decoder
-		reader = transform.NewReader(reader, traditionalchinese.Big5.NewDecoder())
-	}
-
-	// Parse HTML from reader
-	doc, err := goquery.NewDocumentFromReader(reader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse HTML: %w", err)
-	}
-
-	return doc, nil
+	return c.processResponseToDocument(resp)
 }
 
 // PostFormDocument performs a POST request with form data and parses the response as HTML
@@ -164,17 +147,14 @@ func (c *Client) PostFormDocument(ctx context.Context, postURL string, formData 
 
 // PostFormDocumentRaw performs a POST request with raw form data string and parses the response as HTML
 // Use this when you need custom encoding (e.g., Big5) instead of standard UTF-8 url.Values encoding
-func (c *Client) PostFormDocumentRaw(ctx context.Context, postURL string, formDataStr string) (*goquery.Document, error) {
+// On success: waits SuccessDelay (2s) before returning (anti-scraping)
+// On failure: retries with exponential backoff (4s initial, 5 retries)
+func (c *Client) PostFormDocumentRaw(ctx context.Context, postURL, formDataStr string) (*goquery.Document, error) {
 	var resp *http.Response
 	var lastErr error
 
-	// Retry with exponential backoff
-	err := RetryWithBackoff(ctx, c.maxRetries, 1*time.Second, 30*time.Second, func() error {
-		// Wait for rate limiter
-		if err := c.rateLimiter.Wait(ctx); err != nil {
-			return err
-		}
-
+	// Retry with exponential backoff on failure (4s initial delay)
+	err := RetryWithBackoff(ctx, c.maxRetries, 4*time.Second, func() error {
 		// Create POST request with form data
 		req, err := http.NewRequestWithContext(ctx, "POST", postURL, strings.NewReader(formDataStr))
 		if err != nil {
@@ -189,9 +169,10 @@ func (c *Client) PostFormDocumentRaw(ctx context.Context, postURL string, formDa
 		req.Header.Set("Accept-Encoding", "gzip, deflate")
 
 		// Perform request
-		resp, err = c.httpClient.Do(req)
-		if err != nil {
-			lastErr = fmt.Errorf("request failed: %w", err)
+		var httpErr error
+		resp, httpErr = c.httpClient.Do(req)
+		if httpErr != nil {
+			lastErr = fmt.Errorf("request failed: %w", httpErr)
 			return lastErr
 		}
 
@@ -200,7 +181,12 @@ func (c *Client) PostFormDocumentRaw(ctx context.Context, postURL string, formDa
 			_ = resp.Body.Close()
 
 			switch resp.StatusCode {
-			case 429:
+			case 429: // Rate limited - retry with backoff, respect Retry-After if present
+				if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
+					if seconds, err := strconv.Atoi(retryAfter); err == nil && seconds > 0 {
+						_ = Sleep(ctx, time.Duration(seconds)*time.Second)
+					}
+				}
 				lastErr = fmt.Errorf("rate limited for %s: status %d", postURL, resp.StatusCode)
 			case 503, 502, 504:
 				lastErr = fmt.Errorf("server error for %s: status %d", postURL, resp.StatusCode)
@@ -218,19 +204,30 @@ func (c *Client) PostFormDocumentRaw(ctx context.Context, postURL string, formDa
 	if err != nil {
 		return nil, err
 	}
+
+	// Anti-scraping delay after successful request
+	_ = Sleep(ctx, SuccessDelay)
+
+	return c.processResponseToDocument(resp)
+}
+
+// processResponseToDocument processes an HTTP response and parses it as HTML document.
+// Handles gzip decompression and Big5 to UTF-8 encoding conversion.
+// The response body is closed after processing.
+func (c *Client) processResponseToDocument(resp *http.Response) (*goquery.Document, error) {
 	defer func() { _ = resp.Body.Close() }()
 
 	// Handle gzip encoding
-	var reader io.Reader
+	var reader io.Reader = resp.Body
+	var gzipReader *gzip.Reader
 	if resp.Header.Get("Content-Encoding") == "gzip" {
-		gzipReader, err := gzip.NewReader(resp.Body)
+		var err error
+		gzipReader, err = gzip.NewReader(resp.Body)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decompress gzip: %w", err)
 		}
 		defer func() { _ = gzipReader.Close() }()
 		reader = gzipReader
-	} else {
-		reader = resp.Body
 	}
 
 	// Check if content is Big5 encoded (common for Taiwan websites)
@@ -249,12 +246,9 @@ func (c *Client) PostFormDocumentRaw(ctx context.Context, postURL string, formDa
 	return doc, nil
 }
 
-// randomUserAgent returns a random user agent string
+// randomUserAgent returns a random user agent string using uarand package
 func (c *Client) randomUserAgent() string {
-	if len(c.userAgents) == 0 {
-		return uarand.GetRandom()
-	}
-	return c.userAgents[time.Now().UnixNano()%int64(len(c.userAgents))]
+	return uarand.GetRandom()
 }
 
 // TryFailoverURLs attempts to use alternative base URLs when primary URL fails
@@ -271,7 +265,7 @@ func (c *Client) TryFailoverURLs(ctx context.Context, domain string) (string, er
 	// Try each URL
 	for _, baseURL := range urls {
 		// Simple HEAD request to check if URL is accessible
-		req, err := http.NewRequestWithContext(ctx, "HEAD", baseURL, nil)
+		req, err := http.NewRequestWithContext(ctx, "HEAD", baseURL, http.NoBody)
 		if err != nil {
 			continue
 		}
@@ -307,34 +301,4 @@ func (c *Client) GetBaseURLs(domain string) []string {
 	result := make([]string, len(urls))
 	copy(result, urls)
 	return result
-}
-
-// generateUserAgents returns a list of common user agent strings
-func generateUserAgents() []string {
-	return []string{
-		// Chrome on Windows
-		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-
-		// Chrome on macOS
-		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-
-		// Firefox on Windows
-		"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
-		"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0",
-
-		// Firefox on macOS
-		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:121.0) Gecko/20100101 Firefox/121.0",
-
-		// Safari on macOS
-		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
-		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
-
-		// Edge on Windows
-		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",
-
-		// Chrome on Linux
-		"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-	}
 }

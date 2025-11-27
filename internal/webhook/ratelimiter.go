@@ -131,12 +131,30 @@ func (url *UserRateLimiter) cleanupLoop() {
 
 	for range ticker.C {
 		url.mu.Lock()
+		cleanedCount := 0
 		// Remove limiters that are at maximum capacity (inactive users)
 		for userID, limiter := range url.limiters {
 			if limiter.GetAvailableTokens() >= limiter.maxTokens {
 				delete(url.limiters, userID)
+				cleanedCount++
 			}
 		}
+		activeCount := len(url.limiters)
 		url.mu.Unlock()
+
+		// Update metrics if available
+		if url.metrics != nil {
+			url.metrics.SetRateLimiterActiveUsers(activeCount)
+			if cleanedCount > 0 {
+				url.metrics.RecordRateLimiterCleanup(cleanedCount)
+			}
+		}
 	}
+}
+
+// GetActiveCount returns the current number of active user limiters
+func (url *UserRateLimiter) GetActiveCount() int {
+	url.mu.RLock()
+	defer url.mu.RUnlock()
+	return len(url.limiters)
 }

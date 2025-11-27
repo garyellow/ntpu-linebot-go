@@ -1,0 +1,160 @@
+# golangci-lint v2 configuration
+# Reference: https://golangci-lint.run/docs/configuration/
+version: "2"
+
+run:
+  # Modules download mode for go modules
+  modules-download-mode: readonly
+  # Allow parallel runners
+  allow-parallel-runners: true
+
+formatters:
+  enable:
+    - gofmt         # Check code formatting
+  settings:
+    gofmt:
+      # Simplify code
+      simplify: true
+  exclusions:
+    paths:
+      - "third_party$"
+      - "builtin$"
+      - "examples$"
+
+linters:
+  # Start with no linters, then enable specific ones for precise control
+  default: none
+  enable:
+    # Default linters (must have)
+    - errcheck      # Check for unchecked errors
+    - govet         # Report suspicious constructs
+    - ineffassign   # Detect unused variable assignments
+    - staticcheck   # Static analysis checks (includes gosimple, stylecheck)
+    - unused        # Find unused code
+
+    # Security and reliability
+    - bodyclose     # Check HTTP response body is closed
+    - contextcheck  # Check context.Context is passed correctly
+    - gosec         # Security checks
+    - noctx         # Find HTTP requests without context
+
+    # Code quality
+    - copyloopvar   # Check for pointers to loop variables (Go 1.22+)
+    - durationcheck # Check for two durations multiplied together
+    - errname       # Check error naming conventions
+    - errorlint     # Find issues with error wrapping
+    - gocritic      # Opinionated linter with many checks
+    - misspell      # Find commonly misspelled words
+    - nilerr        # Find returning nil after checking error
+    - predeclared   # Find shadowed predeclared identifiers
+    - revive        # Fast, configurable linter (golint replacement)
+    - unconvert     # Remove unnecessary type conversions
+    - wastedassign  # Find wasted assignment statements
+
+  settings:
+    errcheck:
+      # Check type assertions
+      check-type-assertions: true
+      # Check blank identifier assignments
+      check-blank: false
+      # Exclude some functions from checking
+      exclude-functions:
+        - io.Copy
+        - io.WriterTo.WriteTo
+        - (*bytes.Buffer).Write
+        - (*bytes.Buffer).WriteByte
+        - (*bytes.Buffer).WriteString
+        - (*strings.Builder).Write
+        - (*strings.Builder).WriteByte
+        - (*strings.Builder).WriteString
+
+    gocritic:
+      # Enable all stable checks
+      enabled-tags:
+        - diagnostic
+        - performance
+      disabled-checks:
+        - hugeParam        # Allow passing large structs by value
+        - rangeValCopy     # Allow range value copy for clarity
+        - appendCombine    # Allow separate appends for readability
+        - ifElseChain      # Allow if-else chains when clearer
+        - assignOp         # Allow explicit assignment for clarity
+
+    gosec:
+      # Exclude certain rules
+      excludes:
+        - G104  # Audit errors not checked (handled by errcheck)
+        - G115  # Integer overflow conversion (false positive for LINE API params)
+        - G304  # File path from variable (we validate paths)
+        - G401  # Use of weak cryptographic primitive (we only use for jitter)
+        - G501  # Import blocklist: crypto/md5 (not used)
+
+    misspell:
+      locale: US
+
+    revive:
+      # Revive rules configuration
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+        - name: if-return
+        - name: increment-decrement
+        - name: var-declaration
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unreachable-code
+
+    staticcheck:
+      # Enable all checks
+      checks: ["all"]
+
+  exclusions:
+    # Exclude generated files by default
+    generated: lax
+    # Preset exclusions
+    presets:
+      - std-error-handling
+    # Exclude some issues in specific paths
+    rules:
+      # Ignore certain linters in test files
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
+          - gocritic
+          - errorlint
+      # Ignore long lines in generated files
+      - path: ".*_generated\\.go"
+        linters:
+          - lll
+      # Scraper client: caller is responsible for closing response body
+      - path: internal/scraper/client\.go
+        linters:
+          - bodyclose
+    paths:
+      - "third_party$"
+      - "builtin$"
+      - "examples$"
+
+issues:
+  # Maximum issues count per linter (0 = unlimited)
+  max-issues-per-linter: 50
+  # Maximum same issues count (0 = unlimited)
+  max-same-issues: 10
+
+output:
+  # Show statistics per linter
+  show-stats: true

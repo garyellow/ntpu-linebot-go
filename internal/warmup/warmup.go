@@ -1,7 +1,10 @@
+// Package warmup provides background cache warming functionality for
+// proactively fetching and caching student, course, contact, and sticker data.
 package warmup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -28,18 +31,9 @@ type Stats struct {
 // Options configures cache warming behavior
 type Options struct {
 	Modules []string         // Modules to warm (id, contact, course, sticker)
-	Workers int              // Worker pool size for ID module
 	Timeout time.Duration    // Overall timeout
 	Reset   bool             // Whether to reset cache before warming
 	Metrics *metrics.Metrics // Optional metrics recorder
-}
-
-// min returns the minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // Run executes cache warming with the given options
@@ -61,7 +55,7 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 	// Reset cache if requested
 	if opts.Reset {
 		log.Warn("Resetting cache data...")
-		if err := resetCache(db); err != nil {
+		if err := resetCache(ctx, db); err != nil {
 			return nil, fmt.Errorf("failed to reset cache: %w", err)
 		}
 		log.Info("Cache reset complete")
@@ -74,7 +68,7 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 	for _, module := range opts.Modules {
 		select {
 		case <-ctx.Done():
-			return stats, fmt.Errorf("warmup cancelled: %w", ctx.Err())
+			return stats, fmt.Errorf("warmup canceled: %w", ctx.Err())
 		default:
 		}
 
@@ -85,7 +79,7 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 
 			switch moduleName {
 			case "id":
-				if err := warmupIDModule(ctx, db, client, log, stats, opts.Workers, opts.Metrics); err != nil {
+				if err := warmupIDModule(ctx, db, client, log, stats, opts.Metrics); err != nil {
 					log.WithError(err).Error("ID module warmup failed")
 					errChan <- fmt.Errorf("id module: %w", err)
 				}
@@ -143,16 +137,17 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 // RunInBackground executes cache warming asynchronously
 // Returns immediately without blocking. Logs progress to the provided logger.
 // Creates an independent context with timeout to prevent goroutine leaks on server shutdown.
-func RunInBackground(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, opts Options) {
+//
+//nolint:contextcheck // Intentionally using context.Background() for independent background operation
+func RunInBackground(_ context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, opts Options) {
 	// Create independent context with timeout for warmup
-	// This prevents the goroutine from leaking if server context is cancelled
+	// This prevents the goroutine from leaking if server context is canceled
 	warmupCtx, cancel := context.WithTimeout(context.Background(), opts.Timeout)
 
 	go func() {
 		defer cancel() // Ensure cleanup
 
 		log.WithField("modules", opts.Modules).
-			WithField("workers", opts.Workers).
 			Info("Starting background cache warming")
 
 		stats, err := Run(warmupCtx, db, client, stickerMgr, log, opts)
@@ -185,7 +180,7 @@ func ParseModules(modules string) []string {
 }
 
 // resetCache deletes all cached data
-func resetCache(db *storage.DB) error {
+func resetCache(ctx context.Context, db *storage.DB) error {
 	validTables := map[string]bool{
 		"students": true,
 		"contacts": true,
@@ -199,19 +194,20 @@ func resetCache(db *storage.DB) error {
 			return fmt.Errorf("invalid table name: %s", table)
 		}
 		query := fmt.Sprintf("DELETE FROM %s", table)
-		if _, err := db.Exec(query); err != nil {
+		if _, err := db.ExecContext(ctx, query); err != nil {
 			return fmt.Errorf("failed to delete from %s: %w", table, err)
 		}
 	}
 	// Run VACUUM to reclaim space
-	if _, err := db.Exec("VACUUM"); err != nil {
+	if _, err := db.ExecContext(ctx, "VACUUM"); err != nil {
 		return fmt.Errorf("failed to vacuum: %w", err)
 	}
 	return nil
 }
 
 // warmupIDModule warms student ID cache
-func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, workers int, m *metrics.Metrics) error {
+// Executes tasks sequentially (one at a time) to avoid overwhelming the server
+func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
 	// Warmup range: 101-112 (LMS 2.0 已無 113+ 資料)
 	currentYear := time.Now().Year() - 1911
 	fromYear := min(112, currentYear)
@@ -223,88 +219,68 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 	}
 
 	totalTasks := (fromYear - 100) * len(departments)
-	log.WithField("tasks", totalTasks).
-		WithField("workers", workers).
-		Info("Starting ID module warmup")
+	log.WithField("tasks", totalTasks).Info("Starting ID module warmup (sequential)")
 
-	// Create task channel
-	type task struct {
-		year int
-		dept string
-	}
-	tasks := make(chan task, totalTasks)
+	var completed int
+	var errorCount int
+
+	// Execute tasks sequentially (one at a time)
 	for year := fromYear; year > 100; year-- {
 		for _, dept := range departments {
-			tasks <- task{year, dept}
+			select {
+			case <-ctx.Done():
+				log.WithField("completed", completed).
+					WithField("errors", errorCount).
+					Warn("ID module warmup canceled")
+				return fmt.Errorf("canceled: %w", ctx.Err())
+			default:
+			}
+
+			students, err := ntpu.ScrapeStudentsByYear(ctx, client, year, dept)
+			if err != nil {
+				log.WithError(err).
+					WithField("year", year).
+					WithField("dept", dept).
+					Warn("Failed to scrape students")
+				errorCount++
+				continue
+			}
+
+			// Save to database
+			if err := db.SaveStudentsBatch(ctx, students); err != nil {
+				log.WithError(err).
+					WithField("year", year).
+					WithField("dept", dept).
+					WithField("count", len(students)).
+					Warn("Failed to save student batch")
+				errorCount++
+				continue
+			}
+
+			stats.Students.Add(int64(len(students)))
+			completed++
+
+			if completed%10 == 0 || completed == totalTasks {
+				log.WithField("progress", fmt.Sprintf("%d/%d", completed, totalTasks)).
+					WithField("students", stats.Students.Load()).
+					Info("ID module progress")
+			}
 		}
 	}
-	close(tasks)
 
-	// Worker pool
-	var wg sync.WaitGroup
-	var completed atomic.Int64
-	var errorCount atomic.Int64
-
-	for i := 0; i < workers; i++ {
-		wg.Add(1)
-		go func(workerID int) {
-			defer wg.Done()
-
-			for t := range tasks {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-				}
-
-				students, err := ntpu.ScrapeStudentsByYear(ctx, client, t.year, t.dept)
-				if err != nil {
-					log.WithError(err).
-						WithField("year", t.year).
-						WithField("dept", t.dept).
-						Warn("Failed to scrape students")
-					errorCount.Add(1)
-					continue
-				}
-
-				// Save to database using batch operation to reduce lock contention
-				if err := db.SaveStudentsBatch(students); err != nil {
-					log.WithError(err).
-						WithField("year", t.year).
-						WithField("dept", t.dept).
-						WithField("count", len(students)).
-						Warn("Failed to save student batch")
-					errorCount.Add(1)
-					continue
-				}
-
-				stats.Students.Add(int64(len(students)))
-				count := completed.Add(1)
-
-				if count%10 == 0 || count == int64(totalTasks) {
-					log.WithField("progress", fmt.Sprintf("%d/%d", count, totalTasks)).
-						WithField("students", stats.Students.Load()).
-						Info("ID module progress")
-				}
-			}
-		}(i)
-	}
-
-	wg.Wait()
-
-	// Record metrics using batch operations
+	// Record metrics
 	if m != nil {
-		successCount := completed.Load() - errorCount.Load()
+		successCount := completed - errorCount
 		if successCount > 0 {
 			m.WarmupTasksTotal.WithLabelValues("id", "success").Add(float64(successCount))
 		}
-		if errorCount.Load() > 0 {
-			m.WarmupTasksTotal.WithLabelValues("id", "error").Add(float64(errorCount.Load()))
+		if errorCount > 0 {
+			m.WarmupTasksTotal.WithLabelValues("id", "error").Add(float64(errorCount))
 		}
 	}
 
-	if errorCount.Load() > 0 {
-		return fmt.Errorf("completed with %d errors", errorCount.Load())
+	if errorCount > 0 {
+		return fmt.Errorf("completed with %d errors", errorCount)
 	}
 	return nil
 }
@@ -325,7 +301,7 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 		errs = append(errs, fmt.Errorf("administrative contacts: %w", err))
 	} else {
 		// Save using batch operation to reduce lock contention
-		if err := db.SaveContactsBatch(adminContacts); err != nil {
+		if err := db.SaveContactsBatch(ctx, adminContacts); err != nil {
 			log.WithError(err).Warn("Failed to save administrative contacts batch")
 			errs = append(errs, fmt.Errorf("save administrative contacts: %w", err))
 		} else {
@@ -341,7 +317,7 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 		errs = append(errs, fmt.Errorf("academic contacts: %w", err))
 	} else {
 		// Save using batch operation to reduce lock contention
-		if err := db.SaveContactsBatch(academicContacts); err != nil {
+		if err := db.SaveContactsBatch(ctx, academicContacts); err != nil {
 			log.WithError(err).Warn("Failed to save academic contacts batch")
 			errs = append(errs, fmt.Errorf("save academic contacts: %w", err))
 		} else {
@@ -365,7 +341,7 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 	// Return error only if both failed
 	// This allows the warmup to succeed with partial data (e.g., only academic or only administrative)
 	if len(errs) == 2 {
-		return fmt.Errorf("both contact sources failed - administrative: %v, academic: %v", errs[0], errs[1])
+		return fmt.Errorf("both contact sources failed: %w", errors.Join(errs[0], errs[1]))
 	}
 
 	// Log partial success details
@@ -401,7 +377,7 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 	for _, year := range years {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("course module cancelled: %w", ctx.Err())
+			return fmt.Errorf("course module canceled: %w", ctx.Err())
 		default:
 		}
 
@@ -419,7 +395,7 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 		}
 
 		// Save using batch operation to reduce lock contention
-		if err := db.SaveCoursesBatch(courses); err != nil {
+		if err := db.SaveCoursesBatch(ctx, courses); err != nil {
 			log.WithError(err).
 				WithField("year", year).
 				WithField("count", len(courses)).

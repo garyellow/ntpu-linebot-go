@@ -1,7 +1,10 @@
+// Package webhook provides LINE webhook handling and message dispatching
+// to appropriate bot modules based on message content and postback data.
 package webhook
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -28,7 +31,9 @@ const (
 	MinReplyTokenLength = 10
 	MaxMessageLength    = 20000
 	MaxPostbackDataSize = 300
-	WebhookTimeout      = 25 * time.Second
+	// WebhookTimeout is now defined in internal/timeouts/timeouts.go
+	// as timeouts.WebhookProcessing with detailed documentation on
+	// why 25 seconds was chosen (LINE API constraints, user patience, etc.)
 )
 
 // Handler handles LINE webhook events
@@ -104,7 +109,7 @@ func (h *Handler) Handle(c *gin.Context) {
 	cb, err := webhook.ParseRequest(h.channelSecret, c.Request)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to parse webhook request")
-		if err == webhook.ErrInvalidSignature {
+		if errors.Is(err, webhook.ErrInvalidSignature) {
 			// Invalid signature - potential security threat
 			h.metrics.RecordWebhook("invalid_signature", "error", time.Since(start).Seconds())
 			h.metrics.RecordHTTPError("invalid_signature", "webhook")

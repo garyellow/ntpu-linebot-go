@@ -1,3 +1,6 @@
+// Package bot provides the handler interface and utilities for LINE bot modules.
+// Each module (id, course, contact) implements the Handler interface to process
+// user messages and postback events.
 package bot
 
 import (

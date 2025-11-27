@@ -1,3 +1,4 @@
+// Package main provides the LINE bot server entry point.
 package main
 
 import (
@@ -16,6 +17,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
+	"github.com/garyellow/ntpu-linebot-go/internal/timeouts"
 	"github.com/garyellow/ntpu-linebot-go/internal/warmup"
 	"github.com/garyellow/ntpu-linebot-go/internal/webhook"
 	"github.com/gin-gonic/gin"
@@ -52,6 +54,7 @@ func main() {
 	// Register Go and process collectors
 	registry.MustRegister(collectors.NewGoCollector())
 	registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	registry.MustRegister(collectors.NewBuildInfoCollector())
 
 	// Create metrics
 	m := metrics.New(registry)
@@ -63,9 +66,6 @@ func main() {
 	// Create scraper client
 	scraperClient := scraper.NewClient(
 		cfg.ScraperTimeout,
-		cfg.ScraperWorkers,
-		cfg.ScraperMinDelay,
-		cfg.ScraperMaxDelay,
 		cfg.ScraperMaxRetries,
 	)
 	log.Info("Scraper client created")
@@ -81,7 +81,6 @@ func main() {
 
 	warmup.RunInBackground(warmupCtx, db, scraperClient, stickerManager, log, warmup.Options{
 		Modules: warmup.ParseModules(cfg.WarmupModules),
-		Workers: cfg.ScraperWorkers,
 		Timeout: cfg.WarmupTimeout,
 		Reset:   false, // Never reset in production
 		Metrics: m,     // Pass metrics for monitoring
@@ -118,18 +117,20 @@ func main() {
 
 	// Add middleware
 	router.Use(gin.Recovery())
+	router.Use(securityHeadersMiddleware())
 	router.Use(loggingMiddleware(log))
 
 	// Setup routes
 	setupRoutes(router, webhookHandler, db, registry, scraperClient, stickerManager)
 
-	// Create HTTP server
+	// Create HTTP server with timeouts optimized for LINE webhook handling
+	// See internal/timeouts/timeouts.go for detailed explanations
 	server := &http.Server{
 		Addr:         ":" + cfg.Port,
 		Handler:      router,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		ReadTimeout:  timeouts.WebhookHTTPRead,
+		WriteTimeout: timeouts.WebhookHTTPWrite,
+		IdleTimeout:  timeouts.WebhookHTTPIdle,
 	}
 
 	// Start background goroutines
@@ -237,11 +238,18 @@ func setupRoutes(router *gin.Engine, webhookHandler *webhook.Handler, db *storag
 
 	// Readiness Probe - checks if the application is ready to serve traffic (full dependency check)
 	readyHandler := func(c *gin.Context) {
-		// Check database connection
-		if err := db.Conn().Ping(); err != nil {
+		// Check database connections (both reader and writer)
+		if err := db.Reader().Ping(); err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"status": "not ready",
-				"reason": "database unavailable",
+				"reason": "database reader unavailable",
+			})
+			return
+		}
+		if err := db.Writer().Ping(); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status": "not ready",
+				"reason": "database writer unavailable",
 			})
 			return
 		}
@@ -256,7 +264,7 @@ func setupRoutes(router *gin.Engine, webhookHandler *webhook.Handler, db *storag
 		// Only check first URL in failover list (for speed)
 		seaURLs := scraperClient.GetBaseURLs("sea")
 		if len(seaURLs) > 0 {
-			req, _ := http.NewRequestWithContext(checkCtx, "HEAD", seaURLs[0], nil)
+			req, _ := http.NewRequestWithContext(checkCtx, "HEAD", seaURLs[0], http.NoBody)
 			if resp, err := http.DefaultClient.Do(req); err == nil {
 				_ = resp.Body.Close()
 				if resp.StatusCode < 500 {
@@ -267,7 +275,7 @@ func setupRoutes(router *gin.Engine, webhookHandler *webhook.Handler, db *storag
 
 		lmsURLs := scraperClient.GetBaseURLs("lms")
 		if len(lmsURLs) > 0 {
-			req, _ := http.NewRequestWithContext(checkCtx, "HEAD", lmsURLs[0], nil)
+			req, _ := http.NewRequestWithContext(checkCtx, "HEAD", lmsURLs[0], http.NoBody)
 			if resp, err := http.DefaultClient.Do(req); err == nil {
 				_ = resp.Body.Close()
 				if resp.StatusCode < 500 {
@@ -277,9 +285,9 @@ func setupRoutes(router *gin.Engine, webhookHandler *webhook.Handler, db *storag
 		}
 
 		// Check cache data availability
-		studentCount, _ := db.CountStudents()
-		contactCount, _ := db.CountContacts()
-		courseCount, _ := db.CountCourses()
+		studentCount, _ := db.CountStudents(c.Request.Context())
+		contactCount, _ := db.CountContacts(c.Request.Context())
+		courseCount, _ := db.CountCourses(c.Request.Context())
 		stickerCount := stickerManager.Count()
 
 		c.JSON(http.StatusOK, gin.H{
@@ -307,6 +315,26 @@ func setupRoutes(router *gin.Engine, webhookHandler *webhook.Handler, db *storag
 	router.GET("/metrics", gin.WrapH(promhttp.HandlerFor(registry, promhttp.HandlerOpts{})))
 }
 
+// securityHeadersMiddleware adds security headers to all responses
+// Reference: https://gin-gonic.com/en/docs/examples/security-headers
+func securityHeadersMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Prevent MIME type sniffing
+		c.Header("X-Content-Type-Options", "nosniff")
+		// Prevent clickjacking
+		c.Header("X-Frame-Options", "DENY")
+		// Enable XSS filter in browsers
+		c.Header("X-XSS-Protection", "1; mode=block")
+		// Strict referrer policy
+		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
+		// Restrict permissions
+		c.Header("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+		// Content Security Policy - prevent XSS attacks
+		c.Header("Content-Security-Policy", "default-src 'self'")
+		c.Next()
+	}
+}
+
 // loggingMiddleware logs HTTP requests
 func loggingMiddleware(log *logger.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -329,12 +357,15 @@ func loggingMiddleware(log *logger.Logger) gin.HandlerFunc {
 
 		if len(c.Errors) > 0 {
 			entry.WithField("errors", c.Errors.String()).Error("Request completed with errors")
-		} else if status >= 500 {
-			entry.Error("Request failed")
-		} else if status >= 400 {
-			entry.Warn("Request completed with client error")
 		} else {
-			entry.Debug("Request completed")
+			switch {
+			case status >= 500:
+				entry.Error("Request failed")
+			case status >= 400:
+				entry.Warn("Request completed with client error")
+			default:
+				entry.Debug("Request completed")
+			}
 		}
 	}
 }
@@ -354,25 +385,25 @@ func cleanupExpiredCache(ctx context.Context, db *storage.DB, ttl time.Duration,
 		case <-ctx.Done():
 			return
 		case <-initialDelay.C:
-			performCacheCleanup(db, ttl, log)
+			performCacheCleanup(ctx, db, ttl, log)
 		case <-ticker.C:
-			performCacheCleanup(db, ttl, log)
+			performCacheCleanup(ctx, db, ttl, log)
 		}
 	}
 }
 
 // performCacheCleanup executes cache cleanup operation
-func performCacheCleanup(db *storage.DB, ttl time.Duration, log *logger.Logger) {
+func performCacheCleanup(ctx context.Context, db *storage.DB, ttl time.Duration, log *logger.Logger) {
 	log.Info("Starting cache cleanup...")
 
 	var totalDeleted int64
 
 	// Cleanup students
-	if deleted, err := db.DeleteExpiredStudents(ttl); err != nil {
+	if deleted, err := db.DeleteExpiredStudents(ctx, ttl); err != nil {
 		log.WithError(err).Error("Failed to cleanup expired students")
 	} else {
 		totalDeleted += deleted
-		count, _ := db.CountStudents()
+		count, _ := db.CountStudents(ctx)
 		log.WithFields(map[string]interface{}{
 			"deleted":   deleted,
 			"remaining": count,
@@ -380,11 +411,11 @@ func performCacheCleanup(db *storage.DB, ttl time.Duration, log *logger.Logger) 
 	}
 
 	// Cleanup contacts
-	if deleted, err := db.DeleteExpiredContacts(ttl); err != nil {
+	if deleted, err := db.DeleteExpiredContacts(ctx, ttl); err != nil {
 		log.WithError(err).Error("Failed to cleanup expired contacts")
 	} else {
 		totalDeleted += deleted
-		count, _ := db.CountContacts()
+		count, _ := db.CountContacts(ctx)
 		log.WithFields(map[string]interface{}{
 			"deleted":   deleted,
 			"remaining": count,
@@ -392,11 +423,11 @@ func performCacheCleanup(db *storage.DB, ttl time.Duration, log *logger.Logger) 
 	}
 
 	// Cleanup courses
-	if deleted, err := db.DeleteExpiredCourses(ttl); err != nil {
+	if deleted, err := db.DeleteExpiredCourses(ctx, ttl); err != nil {
 		log.WithError(err).Error("Failed to cleanup expired courses")
 	} else {
 		totalDeleted += deleted
-		count, _ := db.CountCourses()
+		count, _ := db.CountCourses(ctx)
 		log.WithFields(map[string]interface{}{
 			"deleted":   deleted,
 			"remaining": count,
@@ -404,11 +435,11 @@ func performCacheCleanup(db *storage.DB, ttl time.Duration, log *logger.Logger) 
 	}
 
 	// Cleanup historical courses (uses same TTL as regular courses)
-	if deleted, err := db.DeleteExpiredHistoricalCourses(ttl); err != nil {
+	if deleted, err := db.DeleteExpiredHistoricalCourses(ctx, ttl); err != nil {
 		log.WithError(err).Error("Failed to cleanup expired historical courses")
 	} else {
 		totalDeleted += deleted
-		count, _ := db.CountHistoricalCourses()
+		count, _ := db.CountHistoricalCourses(ctx)
 		log.WithFields(map[string]interface{}{
 			"deleted":   deleted,
 			"remaining": count,
@@ -416,11 +447,11 @@ func performCacheCleanup(db *storage.DB, ttl time.Duration, log *logger.Logger) 
 	}
 
 	// Cleanup stickers
-	if deleted, err := db.CleanupExpiredStickers(); err != nil {
+	if deleted, err := db.CleanupExpiredStickers(ctx); err != nil {
 		log.WithError(err).Error("Failed to cleanup expired stickers")
 	} else {
 		totalDeleted += deleted
-		count, _ := db.CountStickers()
+		count, _ := db.CountStickers(ctx)
 		log.WithFields(map[string]interface{}{
 			"deleted":   deleted,
 			"remaining": count,
@@ -428,7 +459,7 @@ func performCacheCleanup(db *storage.DB, ttl time.Duration, log *logger.Logger) 
 	}
 
 	// Run SQLite VACUUM to reclaim space (optional, may be slow)
-	if _, err := db.Conn().Exec("VACUUM"); err != nil {
+	if _, err := db.Writer().Exec("VACUUM"); err != nil {
 		log.WithError(err).Warn("Failed to vacuum database")
 	} else {
 		log.Debug("Database vacuumed successfully")
@@ -470,7 +501,7 @@ func performStickerRefresh(ctx context.Context, stickerManager *sticker.Manager,
 		log.WithError(err).Error("Failed to refresh stickers")
 	} else {
 		count := stickerManager.Count()
-		stats, _ := stickerManager.GetStats()
+		stats, _ := stickerManager.GetStats(refreshCtx)
 		log.WithField("count", count).
 			WithField("stats", stats).
 			Info("Sticker refresh complete")
@@ -510,9 +541,9 @@ func performProactiveWarmup(ctx context.Context, db *storage.DB, client *scraper
 	log.Info("Starting proactive cache warmup check...")
 
 	// Check how much data is approaching expiration (past Soft TTL but not Hard TTL)
-	expiringStudents, _ := db.CountExpiringStudents(cfg.SoftTTL)
-	expiringCourses, _ := db.CountExpiringCourses(cfg.SoftTTL)
-	expiringContacts, _ := db.CountExpiringContacts(cfg.SoftTTL)
+	expiringStudents, _ := db.CountExpiringStudents(ctx, cfg.SoftTTL)
+	expiringCourses, _ := db.CountExpiringCourses(ctx, cfg.SoftTTL)
+	expiringContacts, _ := db.CountExpiringContacts(ctx, cfg.SoftTTL)
 
 	totalExpiring := expiringStudents + expiringCourses + expiringContacts
 
@@ -552,7 +583,6 @@ func performProactiveWarmup(ctx context.Context, db *storage.DB, client *scraper
 	// Run warmup (non-blocking, logs progress internally)
 	stats, err := warmup.Run(warmupCtx, db, client, stickerMgr, log, warmup.Options{
 		Modules: modules,
-		Workers: cfg.ScraperWorkers,
 		Timeout: cfg.WarmupTimeout,
 		Reset:   false, // Never reset existing data
 	})
@@ -575,36 +605,36 @@ func updateCacheSizeMetrics(ctx context.Context, db *storage.DB, stickerManager 
 	defer ticker.Stop()
 
 	// Run initial update immediately
-	performCacheSizeUpdate(db, stickerManager, m, log)
+	performCacheSizeUpdate(ctx, db, stickerManager, m, log)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			performCacheSizeUpdate(db, stickerManager, m, log)
+			performCacheSizeUpdate(ctx, db, stickerManager, m, log)
 		}
 	}
 }
 
 // performCacheSizeUpdate updates cache size metrics
-func performCacheSizeUpdate(db *storage.DB, stickerManager *sticker.Manager, m *metrics.Metrics, log *logger.Logger) {
-	if studentCount, err := db.CountStudents(); err == nil {
+func performCacheSizeUpdate(ctx context.Context, db *storage.DB, stickerManager *sticker.Manager, m *metrics.Metrics, log *logger.Logger) {
+	if studentCount, err := db.CountStudents(ctx); err == nil {
 		m.SetCacheSize("students", studentCount)
 	} else {
 		log.WithError(err).Debug("Failed to count students for metrics")
 	}
-	if contactCount, err := db.CountContacts(); err == nil {
+	if contactCount, err := db.CountContacts(ctx); err == nil {
 		m.SetCacheSize("contacts", contactCount)
 	} else {
 		log.WithError(err).Debug("Failed to count contacts for metrics")
 	}
-	if courseCount, err := db.CountCourses(); err == nil {
+	if courseCount, err := db.CountCourses(ctx); err == nil {
 		m.SetCacheSize("courses", courseCount)
 	} else {
 		log.WithError(err).Debug("Failed to count courses for metrics")
 	}
-	if historicalCount, err := db.CountHistoricalCourses(); err == nil {
+	if historicalCount, err := db.CountHistoricalCourses(ctx); err == nil {
 		m.SetCacheSize("historical_courses", historicalCount)
 	} else {
 		log.WithError(err).Debug("Failed to count historical courses for metrics")

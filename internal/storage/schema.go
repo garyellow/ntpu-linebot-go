@@ -1,19 +1,22 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 )
 
 // InitSchema creates all necessary tables and indexes
 func InitSchema(db *sql.DB) error {
+	ctx := context.Background()
+
 	// Enable WAL mode for better concurrency
-	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
+	if _, err := db.ExecContext(ctx, "PRAGMA journal_mode=WAL"); err != nil {
 		return fmt.Errorf("failed to enable WAL mode: %w", err)
 	}
 
 	// Set busy timeout to avoid SQLITE_BUSY errors
-	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
+	if _, err := db.ExecContext(ctx, "PRAGMA busy_timeout=5000"); err != nil {
 		return fmt.Errorf("failed to set busy timeout: %w", err)
 	}
 
@@ -38,11 +41,7 @@ func InitSchema(db *sql.DB) error {
 	}
 
 	// Create historical_courses table for on-demand historical course queries
-	if err := createHistoricalCoursesTable(db); err != nil {
-		return err
-	}
-
-	return nil
+	return createHistoricalCoursesTable(db)
 }
 
 func createStudentsTable(db *sql.DB) error {
@@ -59,7 +58,7 @@ func createStudentsTable(db *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_students_cached_at ON students(cached_at);
 	`
 
-	if _, err := db.Exec(query); err != nil {
+	if _, err := db.ExecContext(context.Background(), query); err != nil {
 		return fmt.Errorf("failed to create students table: %w", err)
 	}
 
@@ -89,7 +88,7 @@ func createContactsTable(db *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_contacts_cached_at ON contacts(cached_at);
 	`
 
-	if _, err := db.Exec(query); err != nil {
+	if _, err := db.ExecContext(context.Background(), query); err != nil {
 		return fmt.Errorf("failed to create contacts table: %w", err)
 	}
 
@@ -118,7 +117,7 @@ func createCoursesTable(db *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_courses_cached_at ON courses(cached_at);
 	`
 
-	if _, err := db.Exec(query); err != nil {
+	if _, err := db.ExecContext(context.Background(), query); err != nil {
 		return fmt.Errorf("failed to create courses table: %w", err)
 	}
 
@@ -139,7 +138,7 @@ func createStickersTable(db *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_stickers_success_rate ON stickers(success_count DESC, failure_count ASC);
 	`
 
-	if _, err := db.Exec(query); err != nil {
+	if _, err := db.ExecContext(context.Background(), query); err != nil {
 		return fmt.Errorf("failed to create stickers table: %w", err)
 	}
 
@@ -171,7 +170,7 @@ func createHistoricalCoursesTable(db *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_historical_courses_cached_at ON historical_courses(cached_at);
 	`
 
-	if _, err := db.Exec(query); err != nil {
+	if _, err := db.ExecContext(context.Background(), query); err != nil {
 		return fmt.Errorf("failed to create historical_courses table: %w", err)
 	}
 

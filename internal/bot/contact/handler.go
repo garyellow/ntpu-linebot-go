@@ -1,3 +1,5 @@
+// Package contact implements the contact directory module for the LINE bot.
+// It handles queries for NTPU faculty and staff contact information.
 package contact
 
 import (
@@ -133,16 +135,15 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 
 		if searchTerm != "" {
 			return h.handleContactSearch(ctx, searchTerm)
-		} else {
-			// No search term - provide guidance
-			sender := lineutil.GetSender(senderName, h.stickerManager)
-			msg := lineutil.NewTextMessageWithConsistentSender("📞 請輸入要查詢的單位或人員\n\n例如：\n• 電話 資工系\n• 分機 圖書館", sender)
-			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
-				{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
-			})
-			return []messaging_api.MessageInterface{msg}
 		}
+		// No search term - provide guidance
+		sender := lineutil.GetSender(senderName, h.stickerManager)
+		msg := lineutil.NewTextMessageWithConsistentSender("📞 請輸入要查詢的單位或人員\n\n例如：\n• 電話 資工系\n• 分機 圖書館", sender)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
+			{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
+		})
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	return []messaging_api.MessageInterface{}
@@ -291,7 +292,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	var contacts []storage.Contact
 
 	// Step 1: Try SQL LIKE search first (fast path for exact substrings)
-	sqlContacts, err := h.db.SearchContactsByName(searchTerm)
+	sqlContacts, err := h.db.SearchContactsByName(ctx, searchTerm)
 	if err != nil {
 		log.WithError(err).Error("Failed to search contacts in cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
@@ -304,7 +305,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	// Step 2: If SQL LIKE didn't find results, try fuzzy character-set matching
 	// This enables "資工系" to match "資訊工程學系" by checking if all characters exist
 	if len(contacts) == 0 {
-		allContacts, err := h.db.GetAllContacts()
+		allContacts, err := h.db.GetAllContacts(ctx)
 		if err == nil && len(allContacts) > 0 {
 			for _, c := range allContacts {
 				// Fuzzy character-set matching: check if all runes in searchTerm exist in target
@@ -387,7 +388,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 
 	// Save to cache
 	for i := range contacts {
-		if err := h.db.SaveContact(&contacts[i]); err != nil {
+		if err := h.db.SaveContact(ctx, &contacts[i]); err != nil {
 			log.WithError(err).Warnf("Failed to save contact to cache: %s", contacts[i].Name)
 		}
 	}
@@ -407,7 +408,7 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 	log.Infof("Handling members query for organization: %s", orgName)
 
 	// Step 1: Search cache for members of this organization
-	members, err := h.db.GetContactsByOrganization(orgName)
+	members, err := h.db.GetContactsByOrganization(ctx, orgName)
 	if err != nil {
 		log.WithError(err).Error("Failed to query organization members from cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
@@ -451,7 +452,7 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 	// Save to cache and filter individuals
 	individuals = make([]storage.Contact, 0)
 	for _, c := range scrapedContacts {
-		if err := h.db.SaveContact(c); err != nil {
+		if err := h.db.SaveContact(ctx, c); err != nil {
 			log.WithError(err).Warnf("Failed to save contact to cache: %s", c.Name)
 		}
 		// Check if this contact belongs to the target organization and is an individual

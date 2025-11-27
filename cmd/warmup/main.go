@@ -1,3 +1,4 @@
+// Package main provides a standalone cache warmup utility.
 package main
 
 import (
@@ -18,7 +19,6 @@ import (
 var (
 	resetFlag   = flag.Bool("reset", false, "Delete all cache data before warmup")
 	modulesFlag = flag.String("modules", "", "Comma-separated list of modules to warmup (empty = use config default)")
-	workersFlag = flag.Int("workers", 0, "Worker pool size (0 = use config default)")
 )
 
 func main() {
@@ -50,18 +50,9 @@ func main() {
 	}
 	moduleList := warmup.ParseModules(modulesStr)
 
-	// Determine worker count
-	workers := *workersFlag
-	if workers <= 0 {
-		workers = cfg.ScraperWorkers
-	}
-
 	// Create scraper client (same settings as server)
 	scraperClient := scraper.NewClient(
 		cfg.ScraperTimeout,
-		workers,
-		cfg.ScraperMinDelay,
-		cfg.ScraperMaxDelay,
 		cfg.ScraperMaxRetries,
 	)
 
@@ -75,7 +66,6 @@ func main() {
 	// Run warmup
 	stats, err := warmup.Run(ctx, db, scraperClient, stickerManager, log, warmup.Options{
 		Modules: moduleList,
-		Workers: workers,
 		Timeout: cfg.WarmupTimeout,
 		Reset:   *resetFlag,
 	})
