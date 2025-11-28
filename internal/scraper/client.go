@@ -74,7 +74,7 @@ func (c *Client) GetDocument(ctx context.Context, reqURL string) (*goquery.Docum
 	}
 
 	// Process document BEFORE sleep to avoid context cancellation affecting response body reading.
-	// The HTTP response body is tied to the request context, so if context is cancelled
+	// The HTTP response body is tied to the request context, so if context is canceled
 	// during sleep, the body may become unreadable.
 	doc, err := c.processResponseToDocument(resp)
 	if err != nil {
