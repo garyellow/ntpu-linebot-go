@@ -2,6 +2,7 @@ package course
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -45,11 +46,20 @@ func TestCanHandle(t *testing.T) {
 		input string
 		want  bool
 	}{
-		// Course UID patterns
-		{"Valid UID 4-4", "3141U0001", true},
-		{"Valid UID 3-4", "314U0001", true},
-		{"Valid UID lowercase", "3141u0001", true},
-		{"Valid UID mixed case", "3141M0001", true},
+		// Full UID patterns (year + term + course_no)
+		{"Valid UID 3-digit year", "1141U0001", true},
+		{"Valid UID 2-digit year", "991U0001", true},
+		{"Valid UID lowercase", "1141u0001", true},
+		{"Valid UID M code", "1141M0001", true},
+		{"Valid UID N code", "1132N0001", true},
+		{"Valid UID P code", "1132P0001", true},
+
+		// Course number only patterns (U/M/N/P + 4 digits)
+		{"Course no U", "U0001", true},
+		{"Course no M", "M0001", true},
+		{"Course no N", "N1234", true},
+		{"Course no P", "P9999", true},
+		{"Course no lowercase", "u0001", true},
 
 		// Course keywords (English)
 		{"Class keyword", "class schedule", true},
@@ -97,23 +107,28 @@ func TestUIDRegex(t *testing.T) {
 		input string
 		want  bool
 	}{
-		// Valid UIDs
-		{"3141U0001", true},
-		{"314U0001", true},
-		{"3141M0001", true},
-		{"3141N0001", true},
-		{"3141P0001", true},
-		{"3141u0001", true}, // lowercase
-		{"3141m0001", true},
+		// Valid full UIDs (year + term + course_no)
+		{"1141U0001", true}, // 114年 1學期 U0001
+		{"1132M0001", true}, // 113年 2學期 M0001
+		{"1141N0001", true}, // N code
+		{"1141P0001", true}, // P code
+		{"991U0001", true},  // 99年 (2-digit year)
+		{"1001U0001", true}, // 100年
+		{"1141u0001", true}, // lowercase
+		{"1141m0001", true}, // lowercase
 
-		// Invalid UIDs
-		{"314U001", false},   // too short
-		{"3141X0001", false}, // invalid character
-		{"3141A0001", false}, // invalid character
-		{"U31410001", false}, // wrong position
-		{"31410001U", false}, // wrong position
+		// Edge cases that still match (regex finds UID substring)
+		{"114U0001", true},   // matches as 11年 4學期 (invalid semester but regex matches)
+		{"11412U0001", true}, // contains valid UID substring 1141U0001
+
+		// Invalid UIDs (no valid UID pattern found)
+		{"1141X0001", false}, // invalid education code
+		{"1141A0001", false}, // invalid education code
+		{"U11410001", false}, // wrong position
+		{"11410001U", false}, // wrong position
 		{"12345678", false},  // no letter
-		{"abcd1234", false},  // too many letters
+		{"U0001", false},     // course no only (not full UID)
+		{"1U0001", false},    // missing year digits
 		{"", false},          // empty
 	}
 
@@ -122,6 +137,42 @@ func TestUIDRegex(t *testing.T) {
 			got := uidRegex.MatchString(tt.input)
 			if got != tt.want {
 				t.Errorf("uidRegex.MatchString(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCourseNoRegex(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		// Valid course numbers (U/M/N/P + 4 digits)
+		{"U0001", true},
+		{"M0001", true},
+		{"N1234", true},
+		{"P9999", true},
+		{"u0001", true}, // lowercase
+		{"m1234", true},
+
+		// Invalid course numbers
+		{"1U0001", false},    // has term prefix (not pure course no)
+		{"2M0001", false},    // has term prefix
+		{"U001", false},      // too short (only 3 digits)
+		{"U00001", false},    // too long (5 digits)
+		{"X0001", false},     // invalid education code
+		{"A0001", false},     // invalid education code
+		{"0001U", false},     // wrong position
+		{"1141U0001", false}, // full UID (not course no only)
+		{"12345", false},     // no letter
+		{"", false},          // empty
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := courseNoRegex.MatchString(tt.input)
+			if got != tt.want {
+				t.Errorf("courseNoRegex.MatchString(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
 	}
@@ -178,10 +229,10 @@ func TestFormatCourseResponse(t *testing.T) {
 	h := setupTestHandler(t)
 
 	course := &storage.Course{
-		UID:       "3141U0001",
-		Year:      113,
+		UID:       "1141U0001",
+		Year:      114,
 		Term:      1,
-		No:        "3141U0001",
+		No:        "U0001",
 		Title:     "資料結構",
 		Teachers:  []string{"王教授"},
 		Times:     []string{"星期二 3-4"},
@@ -207,8 +258,8 @@ func TestFormatCourseResponse_NoDetailURL(t *testing.T) {
 	h := setupTestHandler(t)
 
 	course := &storage.Course{
-		UID:      "3141U0001",
-		Year:     113,
+		UID:      "1141U0001",
+		Year:     114,
 		Term:     1,
 		Title:    "資料結構",
 		Teachers: []string{"王教授"},
@@ -237,8 +288,8 @@ func TestFormatCourseListResponse_SingleCourse(t *testing.T) {
 
 	courses := []storage.Course{
 		{
-			UID:       "3141U0001",
-			Year:      113,
+			UID:       "1141U0001",
+			Year:      114,
 			Term:      1,
 			Title:     "資料結構",
 			Teachers:  []string{"王教授"},
@@ -261,10 +312,10 @@ func TestFormatCourseListResponse_LargeList(t *testing.T) {
 	courses := make([]storage.Course, 60)
 	for i := 0; i < 60; i++ {
 		courses[i] = storage.Course{
-			UID:   "3141U000" + string(rune('0'+i%10)),
-			Year:  113,
+			UID:   fmt.Sprintf("1141U%04d", i),
+			Year:  114,
 			Term:  1,
-			Title: "Course " + string(rune(i)),
+			Title: fmt.Sprintf("Course %d", i),
 		}
 	}
 

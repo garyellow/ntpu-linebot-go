@@ -68,7 +68,11 @@ var (
 	// Full UID example: 11312U0001 (year=113, term=1, no=2U0001) or 9921U0001
 	// User input format: just the course_no part with term prefix, e.g., 1U0001, 2M0002
 	// So regex matches: 3-4 digits (year+term) + U/M/N/P + 4 digits
+	// Full UID: {year}{term}{no} (e.g., 11312U0001)
 	uidRegex = regexp.MustCompile(`(?i)\d{3,4}[umnp]\d{4}`)
+	// Course number only: {no} (e.g., U0001, M0002)
+	// Format: U/M/N/P (education level) + 4 digits
+	courseNoRegex = regexp.MustCompile(`(?i)^[umnp]\d{4}$`)
 	// Historical course query format: "課程 {year} {keyword}" or "課 {year} {keyword}"
 	// e.g., "課程 110 微積分", "課 108 程式設計"
 	// Year is in ROC format (e.g., 110 = AD 2021)
@@ -91,8 +95,13 @@ func NewHandler(db *storage.DB, scraper *scraper.Client, metrics *metrics.Metric
 func (h *Handler) CanHandle(text string) bool {
 	text = strings.TrimSpace(text)
 
-	// Check for course UID pattern
+	// Check for course UID pattern (full: 11312U0001)
 	if uidRegex.MatchString(text) {
+		return true
+	}
+
+	// Check for course number only pattern (e.g., U0001, 1U0001, 2U0001)
+	if courseNoRegex.MatchString(text) {
 		return true
 	}
 
@@ -116,9 +125,15 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 
 	log.Infof("Handling course message: %s", text)
 
-	// Check for course UID first (highest priority)
+	// Check for full course UID first (highest priority, e.g., 11312U0001)
 	if match := uidRegex.FindString(text); match != "" {
 		return h.handleCourseUIDQuery(ctx, match)
+	}
+
+	// Check for course number only (e.g., U0001, 1U0001, 2U0001)
+	// Will search in current and previous semester
+	if courseNoRegex.MatchString(text) {
+		return h.handleCourseNoQuery(ctx, text)
 	}
 
 	// Check for historical course query pattern BEFORE regular course search
@@ -243,7 +258,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 		log.Warnf("Course UID %s not found after scraping", uid)
 		h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 請確認：\n• 課程編號拼寫是否正確\n• 該課程是否在本學期或上學期開設", uid),
+			fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 請確認：\n• 課程編號拼寫是否正確\n• 該課程是否在近兩學年度開設", uid),
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -261,6 +276,84 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 
 	h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
 	return h.formatCourseResponse(course)
+}
+
+// handleCourseNoQuery handles course number only queries (e.g., U0001, M0002)
+// It searches in current and previous semester to find the course
+func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []messaging_api.MessageInterface {
+	log := h.logger.WithModule(moduleName)
+	startTime := time.Now()
+	sender := lineutil.GetSender(senderName, h.stickerManager)
+
+	// Normalize course number to uppercase
+	courseNo = strings.ToUpper(courseNo)
+
+	log.Infof("Handling course number query: %s", courseNo)
+
+	// Get semesters to search based on current date
+	searchYears, searchTerms := getSemestersToSearch()
+
+	// Search in cache first
+	for i := range searchYears {
+		year := searchYears[i]
+		term := searchTerms[i]
+		uid := fmt.Sprintf("%d%d%s", year, term, courseNo)
+
+		course, err := h.db.GetCourseByUID(ctx, uid)
+		if err != nil {
+			log.WithError(err).Warnf("Failed to query cache for UID: %s", uid)
+			continue
+		}
+
+		if course != nil {
+			h.metrics.RecordCacheHit(moduleName)
+			log.Infof("Cache hit for course UID: %s (from course no: %s)", uid, courseNo)
+			return h.formatCourseResponse(course)
+		}
+	}
+
+	// Cache miss - try scraping from each semester
+	h.metrics.RecordCacheMiss(moduleName)
+	log.Infof("Cache miss for course number: %s, scraping...", courseNo)
+
+	for i := range searchYears {
+		year := searchYears[i]
+		term := searchTerms[i]
+		uid := fmt.Sprintf("%d%d%s", year, term, courseNo)
+
+		course, err := ntpu.ScrapeCourseByUID(ctx, h.scraper, uid)
+		if err != nil {
+			log.WithError(err).Debugf("Course not found for UID: %s", uid)
+			continue
+		}
+
+		if course != nil {
+			// Save to cache
+			if err := h.db.SaveCourse(ctx, course); err != nil {
+				log.WithError(err).Warn("Failed to save course to cache")
+			}
+
+			h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
+			log.Infof("Found course for UID: %s (from course no: %s)", uid, courseNo)
+			return h.formatCourseResponse(course)
+		}
+	}
+
+	// No results found
+	h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
+
+	// Build helpful message with examples
+	exampleUID := fmt.Sprintf("%d1%s", searchYears[0], courseNo)
+	msg := lineutil.NewTextMessageWithConsistentSender(
+		fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 請確認：\n• 課程編號拼寫是否正確\n• 該課程是否在近兩學年度開設\n\n📝 若已知完整課號，可直接輸入：\n   例如：%s", courseNo, exampleUID),
+		sender,
+	)
+	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+		{Action: lineutil.NewMessageAction("📚 按課名查詢", "課程")},
+		{Action: lineutil.NewMessageAction("👨‍🏫 按教師查詢", "老師")},
+		{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
+	})
+	return []messaging_api.MessageInterface{msg}
 }
 
 // handleCourseTitleSearch handles course title search queries
@@ -328,7 +421,7 @@ func (h *Handler) handleCourseTitleSearch(ctx context.Context, title string) []m
 	// No results found even after scraping
 	h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
 	msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf(
-		"🔍 查無包含「%s」的課程\n\n💡 請確認：\n• 課程名稱是否正確\n• 該課程是否在本學期或上學期開設\n• 或使用課程編號直接查詢（如：3141U0001）",
+		"🔍 查無包含「%s」的課程\n\n💡 請確認：\n• 課程名稱是否正確\n• 該課程是否在近兩學年度開設\n• 或使用課程編號直接查詢（如：U0001）",
 		title,
 	), sender)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -543,7 +636,7 @@ func (h *Handler) handleTeacherSearch(ctx context.Context, teacherName string) [
 	// No results found
 	h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
 	msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf(
-		"🔍 查無教師「%s」的授課課程\n\n💡 請確認：\n• 教師姓名是否正確（可嘗試只輸入姓氏）\n• 該教師本學期或上學期是否有開課\n• 若為兼任或新進教師，資料可能尚未更新",
+		"🔍 查無教師「%s」的授課課程\n\n💡 請確認：\n• 教師姓名是否正確（可嘗試只輸入姓氏）\n• 該教師近兩學年度是否有開課\n• 若為兼任或新進教師，資料可能尚未更新",
 		teacherName,
 	), sender)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
