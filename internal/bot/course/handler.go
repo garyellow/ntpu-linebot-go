@@ -60,13 +60,11 @@ var (
 
 	courseRegex = bot.BuildKeywordRegex(validCourseKeywords)
 	// UID format: {year}{term}{no} where:
-	// - year: 2-3 digits (e.g., 113, 12)
+	// - year: 2-3 digits (e.g., 113, 99)
 	// - term: 1 digit (1=上學期, 2=下學期)
 	// - no: course number starting with U/M/N/P (case-insensitive) + 4 digits
-	// Full UID example: 11312U0001 (year=113, term=1, no=2U0001) or 9921U0001
-	// User input format: just the course_no part with term prefix, e.g., 1U0001, 2M0002
-	// So regex matches: 3-4 digits (year+term) + U/M/N/P + 4 digits
-	// Full UID: {year}{term}{no} (e.g., 11312U0001)
+	// Full UID example: 1131U0001 (year=113, term=1, no=U0001) or 991U0001
+	// Regex matches: 3-4 digits (year+term) + U/M/N/P + 4 digits
 	uidRegex = regexp.MustCompile(`(?i)\d{3,4}[umnp]\d{4}`)
 	// Course number only: {no} (e.g., U0001, M0002)
 	// Format: U/M/N/P (education level) + 4 digits
@@ -448,6 +446,10 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 	}
 
 	// Also scrape all courses to find by teacher name (if no results yet)
+	// WARNING: This is a heavy operation that scrapes all courses for each semester.
+	// It iterates through all education codes (U/M/N/P) since the school system
+	// doesn't support direct teacher search via URL parameters.
+	// This may take significant time and could approach the 25s webhook deadline.
 	if len(foundCourses) == 0 {
 		for i := range searchYears {
 			year := searchYears[i]
@@ -715,7 +717,9 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 			lineutil.NewURIAction("📖 選課大全", courseSelectionURL),
 		).WithStyle("secondary").WithHeight("sm"))
 
-		footerRows = append(footerRows, row3)
+		if len(row3) > 0 {
+			footerRows = append(footerRows, row3)
+		}
 	}
 
 	footer := lineutil.NewButtonFooter(footerRows...)

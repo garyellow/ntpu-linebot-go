@@ -32,7 +32,6 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - SQLITE_PATH=/data/cache.db
       - CACHE_TTL=${CACHE_TTL:-168h}
-      - SOFT_TTL=${SOFT_TTL:-120h}
       - SCRAPER_TIMEOUT=${SCRAPER_TIMEOUT:-60s}
       - SCRAPER_MAX_RETRIES=${SCRAPER_MAX_RETRIES:-5}
       - SHUTDOWN_TIMEOUT=${SHUTDOWN_TIMEOUT:-30s}

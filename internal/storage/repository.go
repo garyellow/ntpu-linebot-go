@@ -174,12 +174,13 @@ func (db *DB) CountStudents(ctx context.Context) (int, error) {
 // GetAllStudents retrieves all non-expired students from cache
 // Used for fuzzy character-set matching when SQL LIKE doesn't find results
 // Only returns non-expired cache entries based on configured TTL
+// NOTE: For best performance, ensure an index on (cached_at, year, id) exists in the students table.
 func (db *DB) GetAllStudents(ctx context.Context) ([]Student, error) {
 	ttlTimestamp := db.getTTLTimestamp()
 
-	// Get up to 5000 most recent students ordered by year and ID
+	// Get up to 3000 most recent students ordered by year and ID
 	query := `SELECT id, name, department, year, cached_at
-		FROM students WHERE cached_at > ? ORDER BY year DESC, id DESC LIMIT 5000`
+		FROM students WHERE cached_at > ? ORDER BY year DESC, id DESC LIMIT 3000`
 
 	rows, err := db.reader.QueryContext(ctx, query, ttlTimestamp)
 	if err != nil {
