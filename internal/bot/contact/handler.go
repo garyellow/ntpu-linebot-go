@@ -631,14 +631,14 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 					telURI = lineutil.BuildTelURI(c.Phone, "")
 				}
 				row1Buttons = append(row1Buttons,
-					lineutil.NewFlexButton(lineutil.NewURIAction("📞 撥打電話", telURI)).WithStyle("primary").WithHeight("sm"))
+					lineutil.NewFlexButton(lineutil.NewURIAction("📞 撥打電話", telURI)).WithStyle("primary").WithColor(lineutil.ColorButtonPrimary).WithHeight("sm"))
 				row1Buttons = append(row1Buttons,
 					lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製號碼", c.Phone)).WithStyle("secondary").WithHeight("sm"))
 			} else if c.Extension != "" {
 				// Only short extension (< 5 digits), can still dial via main + extension
 				telURI := lineutil.BuildTelURI(sanxiaNormalPhone, c.Extension)
 				row1Buttons = append(row1Buttons,
-					lineutil.NewFlexButton(lineutil.NewURIAction("📞 撥打電話", telURI)).WithStyle("primary").WithHeight("sm"))
+					lineutil.NewFlexButton(lineutil.NewURIAction("📞 撥打電話", telURI)).WithStyle("primary").WithColor(lineutil.ColorButtonPrimary).WithHeight("sm"))
 				row1Buttons = append(row1Buttons,
 					lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製分機", c.Extension)).WithStyle("secondary").WithHeight("sm"))
 			}
@@ -646,7 +646,7 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 			// Row 2: Email actions
 			if c.Email != "" {
 				row2Buttons = append(row2Buttons,
-					lineutil.NewFlexButton(lineutil.NewURIAction("✉️ 寄送郵件", "mailto:"+c.Email)).WithStyle("primary").WithHeight("sm"))
+					lineutil.NewFlexButton(lineutil.NewURIAction("✉️ 寄送郵件", "mailto:"+c.Email)).WithStyle("primary").WithColor(lineutil.ColorButtonPrimary).WithHeight("sm"))
 				row2Buttons = append(row2Buttons,
 					lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製信箱", c.Email)).WithStyle("secondary").WithHeight("sm"))
 			}

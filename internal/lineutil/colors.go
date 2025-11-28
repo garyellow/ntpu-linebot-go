@@ -20,18 +20,26 @@ const (
 
 // LINE Design System Colors
 // Reference: https://designsystem.line.me/LDSM/foundation/color/line-color-guide-ex-en
+// WCAG AA requires 4.5:1 contrast ratio for normal text, 3:1 for large text
 const (
 	// Brand & Semantic Colors
 	ColorPrimary = "#06C755" // LINE Green - hero backgrounds, primary buttons
 	ColorDanger  = "#FF334B" // Errors, warnings, urgent info
 
-	// Text Colors
-	ColorText    = "#111111" // Primary text (body, headings)
-	ColorLabel   = "#666666" // Labels, captions (WCAG AA compliant)
-	ColorSubtext = "#777777" // Secondary text, descriptions
-	ColorGray400 = "#B7B7B7" // Disabled/muted text
+	// Text Colors (all WCAG AA compliant on white background)
+	ColorText    = "#111111" // Primary text - contrast 18.9:1
+	ColorLabel   = "#666666" // Labels, captions - contrast 5.74:1
+	ColorSubtext = "#6B6B6B" // Secondary text, descriptions - contrast 5.36:1 (was #777777)
+	ColorNote    = "#888888" // Notes, less important info - contrast 3.54:1 (large text only)
+	ColorGray400 = "#B7B7B7" // Disabled/muted text, timestamps - contrast 2.24:1
 
 	// Component Colors
 	ColorHeroBg   = ColorPrimary // Hero section background
-	ColorHeroText = "#FFFFFF"    // Hero section text (white)
+	ColorHeroText = "#FFFFFF"    // Hero section text (white on green)
+
+	// Button Colors (LINE Design System)
+	// Primary buttons should use LINE Green for brand consistency
+	// Secondary buttons use default gray (no color override needed)
+	// Danger buttons use ColorDanger for urgent/destructive actions
+	ColorButtonPrimary = ColorPrimary // #06C755 - LINE Green for primary CTA
 )
