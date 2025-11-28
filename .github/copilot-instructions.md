@@ -121,13 +121,12 @@ Table-driven tests with `t.Run()`, in-memory SQLite for DB tests (`storage.NewTe
 
 ## Configuration
 
-Env vars loaded at startup (`internal/config/`): ServerMode (requires LINE creds) or WarmupMode (scraper only). Platform-specific paths via `runtime.GOOS`.
+Env vars loaded at startup (`internal/config/`). Requires LINE credentials. Platform-specific paths via `runtime.GOOS`.
 
 ## Task Commands
 
 ```powershell
 task dev          # Run server
-task warmup       # Manual warmup
 task ci           # Full CI pipeline
 task test:coverage  # Coverage report
 task compose:up   # Start monitoring stack
@@ -168,7 +167,7 @@ Multi-stage build (alpine builder + distroless runtime), init-data for permissio
 
 ## Key File Locations
 
-- **Entry points**: `cmd/server/main.go`, `cmd/warmup/main.go`, `cmd/healthcheck/main.go`
+- **Entry points**: `cmd/server/main.go`, `cmd/healthcheck/main.go`
 - **Warmup module**: `internal/warmup/warmup.go` (background cache warming)
 - **Webhook router**: `internal/webhook/handler.go:handleMessageEvent()`
 - **Bot module interface**: `internal/bot/handler.go`

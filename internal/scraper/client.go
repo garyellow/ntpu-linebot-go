@@ -202,6 +202,28 @@ func (e *permanentError) Unwrap() error {
 	return e.err
 }
 
+// ClearURLCache clears the URL cache for a specific domain.
+// This triggers re-detection of working URLs on the next request.
+// Domain must be one of: "lms", "sea"
+func (c *Client) ClearURLCache(domain string) {
+	NewURLCache(c, domain).Clear()
+}
+
+// ClearAllURLCaches clears URL caches for all configured domains.
+// Use this when widespread connectivity issues are detected.
+func (c *Client) ClearAllURLCaches() {
+	c.mu.RLock()
+	domains := make([]string, 0, len(c.baseURLs))
+	for domain := range c.baseURLs {
+		domains = append(domains, domain)
+	}
+	c.mu.RUnlock()
+
+	for _, domain := range domains {
+		c.ClearURLCache(domain)
+	}
+}
+
 // processResponseToDocument processes an HTTP response and parses it as HTML document.
 // Handles gzip decompression and Big5 to UTF-8 encoding conversion.
 // The response body is closed after processing.

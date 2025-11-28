@@ -46,26 +46,9 @@ type Config struct {
 	UserRateLimitRefillRate float64 // Tokens refill rate per second (default: 1/3, i.e., 1 token per 3 seconds)
 }
 
-// ValidationMode determines which fields are required during validation
-type ValidationMode int
-
-const (
-	// ServerMode requires all fields including LINE credentials
-	ServerMode ValidationMode = iota
-	// WarmupMode only requires scraper and database fields
-	WarmupMode
-)
-
-// Load reads configuration from environment variables with server mode validation
+// Load reads configuration from environment variables
 // It attempts to load .env file first, then reads from env vars
 func Load() (*Config, error) {
-	return LoadForMode(ServerMode)
-}
-
-// LoadForMode loads configuration for a specific execution mode
-// ServerMode: Validates LINE credentials (for webhook server)
-// WarmupMode: Skips LINE credentials validation (for cache warmup)
-func LoadForMode(mode ValidationMode) (*Config, error) {
 	// Try to load .env file (ignore error if file doesn't exist)
 	_ = godotenv.Load()
 
@@ -99,8 +82,8 @@ func LoadForMode(mode ValidationMode) (*Config, error) {
 		UserRateLimitRefillRate: getFloatEnv("USER_RATE_LIMIT_REFILL_RATE", 1.0/3.0),
 	}
 
-	// Validate based on mode
-	if err := cfg.ValidateForMode(mode); err != nil {
+	// Validate configuration
+	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
 
@@ -108,34 +91,24 @@ func LoadForMode(mode ValidationMode) (*Config, error) {
 }
 
 // Validate checks if required configuration values are set
-// For server mode, all fields are required. For warmup mode, LINE credentials are optional.
 func (c *Config) Validate() error {
-	return c.ValidateForMode(ServerMode)
-}
-
-// ValidateForMode validates config based on the execution mode
-// ServerMode requires LINE credentials and server fields
-// WarmupMode only requires scraper and database fields
-func (c *Config) ValidateForMode(mode ValidationMode) error {
-	if mode == ServerMode {
-		if c.LineChannelToken == "" {
-			return fmt.Errorf("LINE_CHANNEL_ACCESS_TOKEN is required in server mode")
-		}
-		if c.LineChannelSecret == "" {
-			return fmt.Errorf("LINE_CHANNEL_SECRET is required in server mode")
-		}
-		if c.Port == "" {
-			return fmt.Errorf("PORT is required in server mode")
-		}
-		if c.WebhookTimeout <= 0 {
-			return fmt.Errorf("WEBHOOK_TIMEOUT must be positive")
-		}
-		if c.UserRateLimitTokens <= 0 {
-			return fmt.Errorf("USER_RATE_LIMIT_TOKENS must be positive")
-		}
-		if c.UserRateLimitRefillRate <= 0 {
-			return fmt.Errorf("USER_RATE_LIMIT_REFILL_RATE must be positive")
-		}
+	if c.LineChannelToken == "" {
+		return fmt.Errorf("LINE_CHANNEL_ACCESS_TOKEN is required")
+	}
+	if c.LineChannelSecret == "" {
+		return fmt.Errorf("LINE_CHANNEL_SECRET is required")
+	}
+	if c.Port == "" {
+		return fmt.Errorf("PORT is required")
+	}
+	if c.WebhookTimeout <= 0 {
+		return fmt.Errorf("WEBHOOK_TIMEOUT must be positive")
+	}
+	if c.UserRateLimitTokens <= 0 {
+		return fmt.Errorf("USER_RATE_LIMIT_TOKENS must be positive")
+	}
+	if c.UserRateLimitRefillRate <= 0 {
+		return fmt.Errorf("USER_RATE_LIMIT_REFILL_RATE must be positive")
 	}
 	if c.SQLitePath == "" {
 		return fmt.Errorf("SQLITE_PATH is required")
