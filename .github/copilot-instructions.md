@@ -87,7 +87,11 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
 **UX Best Practices**: Quick Reply for guidance, Loading Animation for long queries, Flex Messages for rich UI, actionable error options
 
 **Flex Message 設計規範**:
-- **配色**: Hero 背景 `#06C755` (LINE 綠), 標題白色, 標籤 `#666666` (WCAG AA)
+- **配色** (WCAG AA 符合):
+  - Hero 背景 `#06C755` (LINE 綠), 標題白色
+  - 主要文字 `#111111` (ColorText), 標籤 `#666666` (ColorLabel)
+  - 次要文字 `#6B6B6B` (ColorSubtext), 備註 `#888888` (ColorNote)
+  - 時間戳記 `#B7B7B7` (ColorGray400) - 僅用於不強調資訊
 - **間距**: Hero padding `24px`/`16px` (4-point grid), Body/Footer spacing `sm`, 按鈕高度 `sm`
 - **文字**: 優先使用 `wrap: true` + `lineSpacing` 完整顯示資訊；僅 carousel 使用 `WithMaxLines()` 控制高度
 - **截斷**: `TruncateRunes()` 僅用於 LINE API 限制 (altText 400 字, displayText 長度限制)

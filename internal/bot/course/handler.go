@@ -638,7 +638,7 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 	if course.Note != "" {
 		noteStyle := lineutil.DefaultInfoRowStyle()
 		noteStyle.ValueSize = "xs"
-		noteStyle.ValueColor = "#666666"
+		noteStyle.ValueColor = lineutil.ColorLabel // Use semantic color constant
 		body.AddInfoRow("📝", "備註", course.Note, noteStyle)
 	}
 
@@ -655,7 +655,7 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 	if course.DetailURL != "" {
 		row1 = append(row1, lineutil.NewFlexButton(
 			lineutil.NewURIAction("📄 課程大綱", course.DetailURL),
-		).WithStyle("primary").WithHeight("sm"))
+		).WithStyle("primary").WithColor(lineutil.ColorButtonPrimary).WithHeight("sm"))
 	}
 	courseQueryURL := fmt.Sprintf("https://sea.cc.ntpu.edu.tw/pls/dev_stud/course_query_all.queryByKeyword?qYear=%d&qTerm=%d&courseno=%s&seq1=A&seq2=M",
 		course.Year, course.Term, course.No)
@@ -816,7 +816,7 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 		footer := lineutil.NewFlexBox("vertical",
 			lineutil.NewFlexButton(
 				lineutil.NewPostbackActionWithDisplayText("📝 查看詳細", displayText, "course:"+course.UID),
-			).WithStyle("primary").WithHeight("sm").FlexButton,
+			).WithStyle("primary").WithColor(lineutil.ColorButtonPrimary).WithHeight("sm").FlexButton,
 		).WithSpacing("sm")
 
 		bubble := lineutil.NewFlexBubble(

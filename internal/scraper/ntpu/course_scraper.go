@@ -262,11 +262,13 @@ func parseTitleField(td *goquery.Selection) (title, detailURL, note, location st
 	}
 
 	// Get note from <font> tag
+	// Format: "備註：..." where "備註：" is 3 runes (9 bytes in UTF-8)
 	font := td.Find("font")
 	if font.Length() > 0 {
 		noteText := font.Text()
-		if len(noteText) > 3 {
-			note = strings.TrimSpace(noteText[3:])
+		const notePrefix = "備註："
+		if strings.HasPrefix(noteText, notePrefix) {
+			note = strings.TrimSpace(noteText[len(notePrefix):])
 
 			// Extract location from note using regex
 			if matches := classroomRegex.FindStringSubmatch(note); len(matches) > 1 {

@@ -309,13 +309,13 @@ func TestNewInfoRow(t *testing.T) {
 			style: InfoRowStyle{
 				ValueSize:   "xs",
 				ValueWeight: "regular",
-				ValueColor:  "#666666",
+				ValueColor:  ColorLabel, // Use semantic color constant
 				Wrap:        true,
 			},
 			checkWrap:  true,
 			checkBold:  false,
 			valueSize:  "xs",
-			valueColor: "#666666",
+			valueColor: ColorLabel,
 		},
 	}
 
