@@ -141,7 +141,7 @@ Multiple base URLs per domain (LMS/SEA), automatic failover on 500+ errors, URLC
 
 ## Debugging
 
-**Logging**: `$env:LOG_LEVEL="debug"; task dev`
+**Logging**: `task dev` (debug level enabled by default in dev mode)
 
 **Prometheus** (`http://localhost:10000/metrics`):
 - Webhook: requests, latency
