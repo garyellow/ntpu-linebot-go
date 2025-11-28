@@ -31,7 +31,7 @@ type Handler struct {
 
 const (
 	moduleName = "contact"
-	senderName = "聯繫魔法師"
+	senderName = "聯繫小幫手"
 
 	// Emergency phone numbers (without hyphens for clipboard copy)
 	// 三峽校區
@@ -358,8 +358,8 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 			msg := lineutil.ErrorMessageWithDetailAndSender("無法取得聯絡資料，可能是網路問題或資料來源暫時無法使用", sender)
 			if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
 				textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-					{Action: lineutil.NewMessageAction("緊急電話", "緊急")},
-					{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+					{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
+					{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
 				})
 			}
 			return []messaging_api.MessageInterface{msg}
@@ -380,8 +380,8 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 			searchTerm,
 		), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("重新搜尋", "聯絡")},
-			{Action: lineutil.NewMessageAction("緊急電話", "緊急")},
+			{Action: lineutil.NewMessageAction("🔄 重新搜尋", "聯絡")},
+			{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
@@ -597,6 +597,11 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 			// Contact Info - Location and Email
 			body.AddInfoRowIf("📍", "辦公位置", c.Location, lineutil.DefaultInfoRowStyle())
 			body.AddInfoRowIf("✉️", "電子郵件", c.Email, lineutil.DefaultInfoRowStyle())
+
+			// Add cache time hint (unobtrusive, right-aligned)
+			if hint := lineutil.NewCacheTimeHint(c.CachedAt); hint != nil {
+				body.AddComponent(hint.FlexText)
+			}
 
 			// Footer: Multi-row button layout for optimal UX
 			// Row 1: Phone actions (call, copy)

@@ -64,109 +64,84 @@ func NewClient(timeout time.Duration, maxRetries int) *Client {
 // SuccessDelay is the fixed delay after each successful request (anti-scraping)
 const SuccessDelay = 2 * time.Second
 
-// Get performs a GET request with retries on failure
-// On success: waits SuccessDelay (2s) before returning (anti-scraping)
-// On failure: retries with exponential backoff (4s initial, 5 retries)
-// IMPORTANT: Caller must close the response body on success
-func (c *Client) Get(ctx context.Context, reqURL string) (*http.Response, error) {
-	var resp *http.Response
-	var lastErr error
-
-	// Retry with exponential backoff on failure (4s initial delay)
-	err := RetryWithBackoff(ctx, c.maxRetries, 4*time.Second, func() error {
-		// Create request
-		req, err := http.NewRequestWithContext(ctx, "GET", reqURL, http.NoBody)
-		if err != nil {
-			return fmt.Errorf("failed to create request: %w", err)
-		}
-
-		// Set random User-Agent
-		req.Header.Set("User-Agent", c.randomUserAgent())
-		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-		req.Header.Set("Accept-Language", "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7")
-		req.Header.Set("Accept-Encoding", "gzip, deflate")
-
-		// Perform request
-		var httpErr error
-		resp, httpErr = c.httpClient.Do(req)
-		if httpErr != nil {
-			lastErr = fmt.Errorf("request failed: %w", httpErr)
-			return lastErr
-		}
-
-		// Check status code
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			// Close body for non-success responses since we won't return it
-			_ = resp.Body.Close()
-
-			switch resp.StatusCode {
-			case 429: // Rate limited - retry with backoff, respect Retry-After if present
-				if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
-					if seconds, err := strconv.Atoi(retryAfter); err == nil && seconds > 0 {
-						_ = Sleep(ctx, time.Duration(seconds)*time.Second)
-					}
-				}
-				lastErr = fmt.Errorf("rate limited for %s: status %d", reqURL, resp.StatusCode)
-			case 503, 502, 504: // Server errors - retry
-				lastErr = fmt.Errorf("server error for %s: status %d", reqURL, resp.StatusCode)
-			case 404, 403, 401: // Client errors - don't retry
-				return fmt.Errorf("client error for %s: status %d (not retrying)", reqURL, resp.StatusCode)
-			default:
-				lastErr = fmt.Errorf("unexpected status for %s: %d", reqURL, resp.StatusCode)
-			}
-			return lastErr
-		}
-
-		// Success - caller must close response body
-		return nil
-	})
-
+// GetDocument performs a GET request and parses the response as HTML.
+// Includes retry with exponential backoff, gzip decompression, and Big5 encoding conversion.
+// Anti-scraping delay is applied AFTER document processing to avoid context cancellation issues.
+func (c *Client) GetDocument(ctx context.Context, reqURL string) (*goquery.Document, error) {
+	resp, err := c.doRequest(ctx, "GET", reqURL, "")
 	if err != nil {
 		return nil, err
 	}
 
-	// Anti-scraping delay after successful request
+	// Process document BEFORE sleep to avoid context cancellation affecting response body reading.
+	// The HTTP response body is tied to the request context, so if context is canceled
+	// during sleep, the body may become unreadable.
+	doc, err := c.processResponseToDocument(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	// Anti-scraping delay after successful request (ignore context cancellation)
 	_ = Sleep(ctx, SuccessDelay)
 
-	return resp, nil
+	return doc, nil
 }
 
-// GetDocument performs a GET request and parses the response as HTML
-func (c *Client) GetDocument(ctx context.Context, reqURL string) (*goquery.Document, error) {
-	resp, err := c.Get(ctx, reqURL)
-	if err != nil {
-		return nil, err
-	}
-	return c.processResponseToDocument(resp)
-}
-
-// PostFormDocument performs a POST request with form data and parses the response as HTML
+// PostFormDocument performs a POST request with form data and parses the response as HTML.
 func (c *Client) PostFormDocument(ctx context.Context, postURL string, formData url.Values) (*goquery.Document, error) {
 	return c.PostFormDocumentRaw(ctx, postURL, formData.Encode())
 }
 
-// PostFormDocumentRaw performs a POST request with raw form data string and parses the response as HTML
-// Use this when you need custom encoding (e.g., Big5) instead of standard UTF-8 url.Values encoding
-// On success: waits SuccessDelay (2s) before returning (anti-scraping)
-// On failure: retries with exponential backoff (4s initial, 5 retries)
+// PostFormDocumentRaw performs a POST request with raw form data string and parses the response as HTML.
+// Use this when you need custom encoding (e.g., Big5) instead of standard UTF-8 url.Values encoding.
+// Anti-scraping delay is applied AFTER document processing to avoid context cancellation issues.
 func (c *Client) PostFormDocumentRaw(ctx context.Context, postURL, formDataStr string) (*goquery.Document, error) {
+	resp, err := c.doRequest(ctx, "POST", postURL, formDataStr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Process document BEFORE sleep to avoid context cancellation affecting response body reading.
+	doc, err := c.processResponseToDocument(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	// Anti-scraping delay after successful request (ignore context cancellation)
+	_ = Sleep(ctx, SuccessDelay)
+
+	return doc, nil
+}
+
+// doRequest performs an HTTP request with retry logic and status code handling.
+// This is the core request method used by GetDocument and PostFormDocumentRaw.
+// Returns the response on success; caller is responsible for closing the body.
+func (c *Client) doRequest(ctx context.Context, method, reqURL, body string) (*http.Response, error) {
 	var resp *http.Response
 	var lastErr error
 
-	// Retry with exponential backoff on failure (4s initial delay)
 	err := RetryWithBackoff(ctx, c.maxRetries, 4*time.Second, func() error {
-		// Create POST request with form data
-		req, err := http.NewRequestWithContext(ctx, "POST", postURL, strings.NewReader(formDataStr))
+		// Create request with optional body
+		var bodyReader io.Reader = http.NoBody
+		if body != "" {
+			bodyReader = strings.NewReader(body)
+		}
+
+		req, err := http.NewRequestWithContext(ctx, method, reqURL, bodyReader)
 		if err != nil {
 			return fmt.Errorf("failed to create request: %w", err)
 		}
 
-		// Set headers for form POST
+		// Set common headers
 		req.Header.Set("User-Agent", c.randomUserAgent())
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 		req.Header.Set("Accept-Language", "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7")
 		req.Header.Set("Accept-Encoding", "gzip, deflate")
+
+		// Set Content-Type for POST requests
+		if method == "POST" {
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		}
 
 		// Perform request
 		var httpErr error
@@ -176,25 +151,10 @@ func (c *Client) PostFormDocumentRaw(ctx context.Context, postURL, formDataStr s
 			return lastErr
 		}
 
-		// Check status code
+		// Handle non-success status codes
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			_ = resp.Body.Close()
-
-			switch resp.StatusCode {
-			case 429: // Rate limited - retry with backoff, respect Retry-After if present
-				if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
-					if seconds, err := strconv.Atoi(retryAfter); err == nil && seconds > 0 {
-						_ = Sleep(ctx, time.Duration(seconds)*time.Second)
-					}
-				}
-				lastErr = fmt.Errorf("rate limited for %s: status %d", postURL, resp.StatusCode)
-			case 503, 502, 504:
-				lastErr = fmt.Errorf("server error for %s: status %d", postURL, resp.StatusCode)
-			case 404, 403, 401:
-				return fmt.Errorf("client error for %s: status %d (not retrying)", postURL, resp.StatusCode)
-			default:
-				lastErr = fmt.Errorf("unexpected status for %s: %d", postURL, resp.StatusCode)
-			}
+			lastErr = c.handleErrorStatus(ctx, reqURL, resp.StatusCode, resp.Header)
 			return lastErr
 		}
 
@@ -205,10 +165,41 @@ func (c *Client) PostFormDocumentRaw(ctx context.Context, postURL, formDataStr s
 		return nil, err
 	}
 
-	// Anti-scraping delay after successful request
-	_ = Sleep(ctx, SuccessDelay)
+	return resp, nil
+}
 
-	return c.processResponseToDocument(resp)
+// handleErrorStatus processes HTTP error status codes and returns appropriate errors.
+// For client errors (4xx except 429), returns a permanentError that won't be retried.
+// For server errors (5xx) and rate limits (429), returns a regular error for retry.
+func (c *Client) handleErrorStatus(ctx context.Context, reqURL string, statusCode int, header http.Header) error {
+	switch statusCode {
+	case 429: // Rate limited - retry with backoff, respect Retry-After if present
+		if retryAfter := header.Get("Retry-After"); retryAfter != "" {
+			if seconds, err := strconv.Atoi(retryAfter); err == nil && seconds > 0 {
+				_ = Sleep(ctx, time.Duration(seconds)*time.Second)
+			}
+		}
+		return fmt.Errorf("rate limited for %s: status %d", reqURL, statusCode)
+	case 503, 502, 504: // Server errors - retry
+		return fmt.Errorf("server error for %s: status %d", reqURL, statusCode)
+	case 404, 403, 401: // Client errors - don't retry
+		return &permanentError{fmt.Errorf("client error for %s: status %d", reqURL, statusCode)}
+	default:
+		return fmt.Errorf("unexpected status for %s: %d", reqURL, statusCode)
+	}
+}
+
+// permanentError wraps an error to indicate it should not be retried.
+type permanentError struct {
+	err error
+}
+
+func (e *permanentError) Error() string {
+	return e.err.Error()
+}
+
+func (e *permanentError) Unwrap() error {
+	return e.err
 }
 
 // processResponseToDocument processes an HTTP response and parses it as HTML document.
@@ -217,12 +208,11 @@ func (c *Client) PostFormDocumentRaw(ctx context.Context, postURL, formDataStr s
 func (c *Client) processResponseToDocument(resp *http.Response) (*goquery.Document, error) {
 	defer func() { _ = resp.Body.Close() }()
 
-	// Handle gzip encoding
 	var reader io.Reader = resp.Body
-	var gzipReader *gzip.Reader
+
+	// Handle gzip encoding
 	if resp.Header.Get("Content-Encoding") == "gzip" {
-		var err error
-		gzipReader, err = gzip.NewReader(resp.Body)
+		gzipReader, err := gzip.NewReader(resp.Body)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decompress gzip: %w", err)
 		}
@@ -230,14 +220,12 @@ func (c *Client) processResponseToDocument(resp *http.Response) (*goquery.Docume
 		reader = gzipReader
 	}
 
-	// Check if content is Big5 encoded (common for Taiwan websites)
-	contentType := resp.Header.Get("Content-Type")
-	if strings.Contains(strings.ToUpper(contentType), "BIG5") {
-		// Wrap reader with Big5 to UTF-8 decoder
+	// Handle Big5 encoding (common for Taiwan websites)
+	if strings.Contains(strings.ToUpper(resp.Header.Get("Content-Type")), "BIG5") {
 		reader = transform.NewReader(reader, traditionalchinese.Big5.NewDecoder())
 	}
 
-	// Parse HTML from reader
+	// Parse HTML
 	doc, err := goquery.NewDocumentFromReader(reader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse HTML: %w", err)
@@ -246,13 +234,14 @@ func (c *Client) processResponseToDocument(resp *http.Response) (*goquery.Docume
 	return doc, nil
 }
 
-// randomUserAgent returns a random user agent string using uarand package
+// randomUserAgent returns a random user agent string
 func (c *Client) randomUserAgent() string {
 	return uarand.GetRandom()
 }
 
-// TryFailoverURLs attempts to use alternative base URLs when primary URL fails
-// Returns the working URL or empty string if all URLs failed
+// TryFailoverURLs attempts to use alternative base URLs when primary URL fails.
+// Returns the working URL or error if all URLs failed.
+// Uses HEAD requests for quick availability checks.
 func (c *Client) TryFailoverURLs(ctx context.Context, domain string) (string, error) {
 	c.mu.RLock()
 	urls, exists := c.baseURLs[domain]

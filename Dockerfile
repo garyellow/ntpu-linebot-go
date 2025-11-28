@@ -45,6 +45,6 @@ ENV PORT=10000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD ["/app/healthcheck"]
 
-ENTRYPOINT ["/app/ntpu-linebot"]
-
 USER 65532:65532
+
+ENTRYPOINT ["/app/ntpu-linebot"]

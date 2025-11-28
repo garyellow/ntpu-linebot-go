@@ -5,7 +5,9 @@ package course
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -32,43 +34,41 @@ type Handler struct {
 // Course handler constants.
 const (
 	moduleName           = "course"
-	senderName           = "課程魔法師"
+	senderName           = "課程小幫手"
 	MaxCoursesPerSearch  = 40 // Maximum courses to return (40 courses = 4 carousels @ 10 bubbles each), leaving 1 slot for warning (LINE API max: 5 messages)
 	MaxTitleDisplayChars = 60 // Maximum characters for course title display before truncation
 )
 
 // Valid keywords for course queries
 var (
+	// Unified course search keywords (includes both course and teacher keywords)
+	// All keywords trigger the same unified search that matches both title and teacher
 	validCourseKeywords = []string{
-		// 中文關鍵字
+		// 中文課程關鍵字
 		"課", "課程", "科目",
 		"課名", "課程名", "課程名稱",
 		"科目名", "科目名稱",
-		// English keywords
-		"class", "course",
-	}
-	validTeacherKeywords = []string{
-		// 中文關鍵字（基本）
+		// 中文教師關鍵字（統一使用課程關鍵字搜尋教師）
 		"師", "老師", "教師", "教授",
-		// 中文關鍵字（完整）
 		"老師名", "教師名", "教授名",
 		"老師名稱", "教師名稱", "教授名稱",
-		// 中文關鍵字（授課相關）
 		"授課教師", "授課老師", "授課教授",
 		// English keywords
+		"class", "course",
 		"teacher", "professor", "prof", "dr", "doctor",
 	}
 
-	courseRegex  = bot.BuildKeywordRegex(validCourseKeywords)
-	teacherRegex = bot.BuildKeywordRegex(validTeacherKeywords)
+	courseRegex = bot.BuildKeywordRegex(validCourseKeywords)
 	// UID format: {year}{term}{no} where:
-	// - year: 2-3 digits (e.g., 113, 12)
+	// - year: 2-3 digits (e.g., 113, 99)
 	// - term: 1 digit (1=上學期, 2=下學期)
 	// - no: course number starting with U/M/N/P (case-insensitive) + 4 digits
-	// Full UID example: 11312U0001 (year=113, term=1, no=2U0001) or 9921U0001
-	// User input format: just the course_no part with term prefix, e.g., 1U0001, 2M0002
-	// So regex matches: 3-4 digits (year+term) + U/M/N/P + 4 digits
+	// Full UID example: 1131U0001 (year=113, term=1, no=U0001) or 991U0001
+	// Regex matches: 3-4 digits (year+term) + U/M/N/P + 4 digits
 	uidRegex = regexp.MustCompile(`(?i)\d{3,4}[umnp]\d{4}`)
+	// Course number only: {no} (e.g., U0001, M0002)
+	// Format: U/M/N/P (education level) + 4 digits
+	courseNoRegex = regexp.MustCompile(`(?i)^[umnp]\d{4}$`)
 	// Historical course query format: "課程 {year} {keyword}" or "課 {year} {keyword}"
 	// e.g., "課程 110 微積分", "課 108 程式設計"
 	// Year is in ROC format (e.g., 110 = AD 2021)
@@ -91,18 +91,18 @@ func NewHandler(db *storage.DB, scraper *scraper.Client, metrics *metrics.Metric
 func (h *Handler) CanHandle(text string) bool {
 	text = strings.TrimSpace(text)
 
-	// Check for course UID pattern
+	// Check for course UID pattern (full: 11312U0001)
 	if uidRegex.MatchString(text) {
 		return true
 	}
 
-	// Check for course keywords
-	if courseRegex.MatchString(text) {
+	// Check for course number only pattern (e.g., U0001, 1U0001, 2U0001)
+	if courseNoRegex.MatchString(text) {
 		return true
 	}
 
-	// Check for teacher keywords
-	if teacherRegex.MatchString(text) {
+	// Check for course keywords (unified: includes both course and teacher keywords)
+	if courseRegex.MatchString(text) {
 		return true
 	}
 
@@ -116,9 +116,15 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 
 	log.Infof("Handling course message: %s", text)
 
-	// Check for course UID first (highest priority)
+	// Check for full course UID first (highest priority, e.g., 11312U0001)
 	if match := uidRegex.FindString(text); match != "" {
 		return h.handleCourseUIDQuery(ctx, match)
+	}
+
+	// Check for course number only (e.g., U0001, 1U0001, 2U0001)
+	// Will search in current and previous semester
+	if courseNoRegex.MatchString(text) {
+		return h.handleCourseNoQuery(ctx, text)
 	}
 
 	// Check for historical course query pattern BEFORE regular course search
@@ -134,6 +140,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 
 	// Check for course title search - extract term after keyword
 	// Support both "keyword term" and "term keyword" patterns
+	// Unified search: matches both course title and teacher name
 	if courseRegex.MatchString(text) {
 		match := courseRegex.FindString(text)
 		searchTerm := bot.ExtractSearchTerm(text, match)
@@ -141,33 +148,13 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		if searchTerm == "" {
 			// If no search term provided, give helpful message
 			sender := lineutil.GetSender(senderName, h.stickerManager)
-			msg := lineutil.NewTextMessageWithConsistentSender("📚 請輸入課程名稱\n\n例如：\n• 課 程式設計\n• 課程 微積分\n• 微積分課\n\n💡 也可直接輸入課程編號（如：3141U0001）", sender)
+			msg := lineutil.NewTextMessageWithConsistentSender("📚 請輸入課程關鍵字\n\n例如：\n• 課 程式設計\n• 課程 微積分\n• 課 王小明（搜尋教師）\n• 課 線代 王（搜尋課名+教師）\n\n💡 也可直接輸入課程編號（如：3141U0001）", sender)
 			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("👨‍🏫 按教師查詢", "老師")},
-				{Action: lineutil.NewMessageAction("📌 使用說明", "使用說明")},
-			})
-			return []messaging_api.MessageInterface{msg}
-		}
-		return h.handleCourseTitleSearch(ctx, searchTerm)
-	}
-
-	// Check for teacher search - extract term after keyword
-	// Support both "keyword term" and "term keyword" patterns
-	if teacherRegex.MatchString(text) {
-		match := teacherRegex.FindString(text)
-		searchTerm := bot.ExtractSearchTerm(text, match)
-
-		if searchTerm == "" {
-			// If no search term provided, give helpful message
-			sender := lineutil.GetSender(senderName, h.stickerManager)
-			msg := lineutil.NewTextMessageWithConsistentSender("👨‍🏫 請輸入教師姓名\n\n例如：\n• 老師 王小明\n• 教師 李大華\n• 王小明老師\n\n💡 只輸入姓氏也可以（如：老師 王）", sender)
-			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("📚 按課程查詢", "課程")},
 				{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
 			})
 			return []messaging_api.MessageInterface{msg}
 		}
-		return h.handleTeacherSearch(ctx, searchTerm)
+		return h.handleUnifiedCourseSearch(ctx, searchTerm)
 	}
 
 	return []messaging_api.MessageInterface{}
@@ -184,7 +171,7 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 		if len(parts) >= 2 {
 			teacherName := parts[1]
 			log.Infof("Handling teacher courses postback for: %s", teacherName)
-			return h.handleTeacherSearch(ctx, teacherName)
+			return h.handleUnifiedCourseSearch(ctx, teacherName)
 		}
 	}
 
@@ -232,8 +219,8 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🔍 查無課程編號 %s\n\n請確認課程編號是否正確", uid), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("📚 按課名查詢", "課程")},
-			{Action: lineutil.NewMessageAction("👨‍🏫 按教師查詢", "老師")},
+			{Action: lineutil.NewMessageAction("📚 搜尋課程", "課程")},
+			{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
@@ -243,12 +230,11 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 		log.Warnf("Course UID %s not found after scraping", uid)
 		h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 請確認：\n• 課程編號拼寫是否正確\n• 該課程是否在本學期或上學期開設", uid),
+			fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 請確認：\n• 課程編號拼寫是否正確\n• 該課程是否在近兩學年度開設", uid),
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("📚 按課名查詢", "課程")},
-			{Action: lineutil.NewMessageAction("👨‍🏫 按教師查詢", "老師")},
+			{Action: lineutil.NewMessageAction("📚 搜尋課程", "課程")},
 			{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
 		})
 		return []messaging_api.MessageInterface{msg}
@@ -263,30 +249,169 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 	return h.formatCourseResponse(course)
 }
 
-// handleCourseTitleSearch handles course title search queries
-func (h *Handler) handleCourseTitleSearch(ctx context.Context, title string) []messaging_api.MessageInterface {
+// handleCourseNoQuery handles course number only queries (e.g., U0001, M0002)
+// It searches in current and previous semester to find the course
+func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(moduleName)
 	startTime := time.Now()
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
+	// Normalize course number to uppercase
+	courseNo = strings.ToUpper(courseNo)
+
+	log.Infof("Handling course number query: %s", courseNo)
+
+	// Get semesters to search based on current date
+	searchYears, searchTerms := getSemestersToSearch()
+
 	// Search in cache first
-	courses, err := h.db.SearchCoursesByTitle(ctx, title)
+	for i := range searchYears {
+		year := searchYears[i]
+		term := searchTerms[i]
+		uid := fmt.Sprintf("%d%d%s", year, term, courseNo)
+
+		course, err := h.db.GetCourseByUID(ctx, uid)
+		if err != nil {
+			log.WithError(err).Warnf("Failed to query cache for UID: %s", uid)
+			continue
+		}
+
+		if course != nil {
+			h.metrics.RecordCacheHit(moduleName)
+			log.Infof("Cache hit for course UID: %s (from course no: %s)", uid, courseNo)
+			return h.formatCourseResponse(course)
+		}
+	}
+
+	// Cache miss - try scraping from each semester
+	h.metrics.RecordCacheMiss(moduleName)
+	log.Infof("Cache miss for course number: %s, scraping...", courseNo)
+
+	for i := range searchYears {
+		year := searchYears[i]
+		term := searchTerms[i]
+		uid := fmt.Sprintf("%d%d%s", year, term, courseNo)
+
+		course, err := ntpu.ScrapeCourseByUID(ctx, h.scraper, uid)
+		if err != nil {
+			log.WithError(err).Debugf("Course not found for UID: %s", uid)
+			continue
+		}
+
+		if course != nil {
+			// Save to cache
+			if err := h.db.SaveCourse(ctx, course); err != nil {
+				log.WithError(err).Warn("Failed to save course to cache")
+			}
+
+			h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
+			log.Infof("Found course for UID: %s (from course no: %s)", uid, courseNo)
+			return h.formatCourseResponse(course)
+		}
+	}
+
+	// No results found
+	h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
+
+	// Build helpful message with examples
+	exampleUID := fmt.Sprintf("%d1%s", searchYears[0], courseNo)
+	msg := lineutil.NewTextMessageWithConsistentSender(
+		fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 請確認：\n• 課程編號拼寫是否正確\n• 該課程是否在近兩學年度開設\n\n📝 若已知完整課號，可直接輸入：\n   例如：%s", courseNo, exampleUID),
+		sender,
+	)
+	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+		{Action: lineutil.NewMessageAction("📚 搜尋課程", "課程")},
+		{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
+	})
+	return []messaging_api.MessageInterface{msg}
+}
+
+// handleUnifiedCourseSearch handles unified course search queries with fuzzy matching.
+// It searches both course titles and teacher names simultaneously.
+//
+// Search Strategy (3-tier cascade):
+//
+//  1. SQL LIKE (fast path): Search in both title and teachers fields
+//     Example: "微積分" matches courses with title containing "微積分"
+//     Example: "王" matches courses where any teacher name contains "王"
+//
+//  2. Fuzzy character-set matching (cache fallback): If SQL LIKE returns no results,
+//     loads cached courses and checks if all runes in searchTerm exist in title OR teachers.
+//     Example: "線代" matches "線性代數" (all chars exist in title)
+//     Example: "王明" matches teacher "王小明" (all chars exist)
+//
+//  3. Web scraping (external fallback): If cache has no results, scrape from website.
+//
+// Multi-word search: "微積分 王" will find courses where title contains "微積分王"
+// OR where all characters exist in title+teachers combined.
+func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm string) []messaging_api.MessageInterface {
+	log := h.logger.WithModule(moduleName)
+	startTime := time.Now()
+	sender := lineutil.GetSender(senderName, h.stickerManager)
+
+	var courses []storage.Course
+
+	// Step 1: Try SQL LIKE search for title first
+	titleCourses, err := h.db.SearchCoursesByTitle(ctx, searchTerm)
 	if err != nil {
-		log.WithError(err).Error("Failed to search courses in cache")
+		log.WithError(err).Error("Failed to search courses by title in cache")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
 		return []messaging_api.MessageInterface{
-			lineutil.ErrorMessageWithQuickReply("搜尋課程時發生問題", sender, "課程 "+title),
+			lineutil.ErrorMessageWithQuickReply("搜尋課程時發生問題", sender, "課程 "+searchTerm),
+		}
+	}
+	courses = append(courses, titleCourses...)
+
+	// Step 1b: Also try SQL LIKE search for teacher
+	teacherCourses, err := h.db.SearchCoursesByTeacher(ctx, searchTerm)
+	if err != nil {
+		log.WithError(err).Warn("Failed to search courses by teacher in cache")
+		// Don't return error, continue with title results
+	} else {
+		// Merge results, avoiding duplicates
+		existingUIDs := make(map[string]bool)
+		for _, c := range courses {
+			existingUIDs[c.UID] = true
+		}
+		for _, c := range teacherCourses {
+			if !existingUIDs[c.UID] {
+				courses = append(courses, c)
+				existingUIDs[c.UID] = true
+			}
+		}
+	}
+
+	// Step 2: If SQL LIKE didn't find results, try fuzzy character-set matching
+	if len(courses) == 0 {
+		allCourses, err := h.db.GetCoursesByRecentSemesters(ctx)
+		if err == nil && len(allCourses) > 0 {
+			existingUIDs := make(map[string]bool)
+			for _, c := range allCourses {
+				// Check if searchTerm matches title OR any teacher
+				titleMatch := lineutil.ContainsAllRunes(c.Title, searchTerm)
+				teacherMatch := false
+				for _, teacher := range c.Teachers {
+					if lineutil.ContainsAllRunes(teacher, searchTerm) {
+						teacherMatch = true
+						break
+					}
+				}
+				if (titleMatch || teacherMatch) && !existingUIDs[c.UID] {
+					courses = append(courses, c)
+					existingUIDs[c.UID] = true
+				}
+			}
 		}
 	}
 
 	if len(courses) > 0 {
 		h.metrics.RecordCacheHit(moduleName)
-		log.Infof("Found %d courses in cache for title: %s", len(courses), title)
+		log.Infof("Found %d courses in cache for search term: %s", len(courses), searchTerm)
 		return h.formatCourseListResponse(courses)
 	}
 
-	// Cache miss - Try scraping from current and previous semester
-	log.Infof("Cache miss for course title: %s, scraping from recent semesters...", title)
+	// Step 3: Cache miss - Try scraping from current and previous semester
+	log.Infof("Cache miss for search term: %s, scraping from recent semesters...", searchTerm)
 	h.metrics.RecordCacheMiss(moduleName)
 
 	// Get semesters to search based on current date
@@ -294,25 +419,73 @@ func (h *Handler) handleCourseTitleSearch(ctx context.Context, title string) []m
 
 	// Search courses from multiple semesters
 	foundCourses := make([]*storage.Course, 0)
+	existingUIDs := make(map[string]bool)
+
 	for i := range searchYears {
 		year := searchYears[i]
 		term := searchTerms[i]
 
-		scrapedCourses, err := ntpu.ScrapeCourses(ctx, h.scraper, year, term, title)
+		// Scrape courses (this will search by title on the school website)
+		scrapedCourses, err := ntpu.ScrapeCourses(ctx, h.scraper, year, term, searchTerm)
 		if err != nil {
 			log.WithError(err).WithField("year", year).WithField("term", term).
 				Debug("Failed to scrape courses for year/term")
 			continue
 		}
 
-		// Save courses to cache
+		// Save courses to cache and collect results
 		for _, course := range scrapedCourses {
 			if err := h.db.SaveCourse(ctx, course); err != nil {
 				log.WithError(err).Warn("Failed to save course to cache")
 			}
+			if !existingUIDs[course.UID] {
+				foundCourses = append(foundCourses, course)
+				existingUIDs[course.UID] = true
+			}
 		}
+	}
 
-		foundCourses = append(foundCourses, scrapedCourses...)
+	// Also scrape all courses to find by teacher name (if no results yet)
+	// WARNING: This is a heavy operation that scrapes all courses for each semester.
+	// It iterates through all education codes (U/M/N/P) since the school system
+	// doesn't support direct teacher search via URL parameters.
+	// This may take significant time and could approach the 25s webhook deadline.
+	if len(foundCourses) == 0 {
+		for i := range searchYears {
+			year := searchYears[i]
+			term := searchTerms[i]
+
+			// Scrape all courses for this semester (empty search term)
+			scrapedCourses, err := ntpu.ScrapeCourses(ctx, h.scraper, year, term, "")
+			if err != nil {
+				log.WithError(err).WithField("year", year).WithField("term", term).
+					Debug("Failed to scrape all courses for year/term")
+				continue
+			}
+
+			// Filter by searchTerm (title or teacher) using fuzzy matching
+			for _, course := range scrapedCourses {
+				// Save all courses for future queries
+				if err := h.db.SaveCourse(ctx, course); err != nil {
+					log.WithError(err).Warn("Failed to save course to cache")
+				}
+
+				// Check if matches title or teacher
+				titleMatch := lineutil.ContainsAllRunes(course.Title, searchTerm)
+				teacherMatch := false
+				for _, teacher := range course.Teachers {
+					if lineutil.ContainsAllRunes(teacher, searchTerm) {
+						teacherMatch = true
+						break
+					}
+				}
+
+				if (titleMatch || teacherMatch) && !existingUIDs[course.UID] {
+					foundCourses = append(foundCourses, course)
+					existingUIDs[course.UID] = true
+				}
+			}
+		}
 	}
 
 	if len(foundCourses) > 0 {
@@ -328,8 +501,8 @@ func (h *Handler) handleCourseTitleSearch(ctx context.Context, title string) []m
 	// No results found even after scraping
 	h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
 	msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf(
-		"🔍 查無包含「%s」的課程\n\n💡 請確認：\n• 課程名稱是否正確\n• 該課程是否在本學期或上學期開設\n• 或使用課程編號直接查詢（如：3141U0001）",
-		title,
+		"🔍 查無包含「%s」的課程或教師\n\n💡 請確認：\n• 課程名稱或教師姓名是否正確\n• 該課程是否在近兩學年度開設\n• 可嘗試只輸入部分關鍵字（如姓氏）",
+		searchTerm,
 	), sender)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 		{Action: lineutil.NewMessageAction("🔄 重新查詢", "課程")},
@@ -361,7 +534,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	// Check if this is a recent year (within warmup range) - use regular course search
 	if year >= currentYear-1 {
 		log.Infof("Year %d is within warmup range, redirecting to regular course search", year)
-		return h.handleCourseTitleSearch(ctx, keyword)
+		return h.handleUnifiedCourseSearch(ctx, keyword)
 	}
 
 	// Search in historical_courses cache first
@@ -431,128 +604,6 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	return []messaging_api.MessageInterface{msg}
 }
 
-// handleTeacherSearch handles teacher search queries with a 2-tier search strategy:
-//
-// Search Strategy:
-//
-//  1. SQL LIKE (fast path): Direct database LIKE query for teacher name substrings.
-//     Example: "王教授" matches courses where any teacher contains "王教授"
-//
-//  2. Fuzzy character-set matching (cache fallback): If SQL LIKE returns no results,
-//     loads up to 2000 recent courses and checks if all runes in teacherName exist in each teacher.
-//     Example: "王" matches "王小明" because all chars exist in the teacher name
-//     This enables single-character surname search.
-//
-// Note: Unlike contact search, teacher search does NOT use search variants for scraping.
-// If cache miss occurs, it triggers a full semester scrape (heavy operation).
-// Future optimization: Add "semester fully scraped" flag to avoid repeated scrapes.
-//
-// Performance notes:
-//   - SQL LIKE is indexed and fast; most queries resolve here
-//   - Fuzzy matching iterates O(n*m) where n=courses, m=teachers per course
-//   - Current limit of 2000 courses is acceptable within 25s webhook timeout
-func (h *Handler) handleTeacherSearch(ctx context.Context, teacherName string) []messaging_api.MessageInterface {
-	log := h.logger.WithModule(moduleName)
-	startTime := time.Now()
-	sender := lineutil.GetSender(senderName, h.stickerManager)
-
-	// Search in cache using SQL LIKE first
-	courses, err := h.db.SearchCoursesByTeacher(ctx, teacherName)
-	if err != nil {
-		log.WithError(err).Error("Failed to search courses by teacher")
-		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
-		return []messaging_api.MessageInterface{
-			lineutil.ErrorMessageWithQuickReply("搜尋教師課程時發生問題", sender, "老師 "+teacherName),
-		}
-	}
-
-	// If SQL LIKE didn't find results, try fuzzy character-set matching
-	// This enables "王" to match "王小明" teacher names
-	if len(courses) == 0 {
-		allCourses, err := h.db.GetCoursesByRecentSemesters(ctx)
-		if err == nil && len(allCourses) > 0 {
-			for _, c := range allCourses {
-				for _, teacher := range c.Teachers {
-					if lineutil.ContainsAllRunes(teacher, teacherName) {
-						courses = append(courses, c)
-						break
-					}
-				}
-			}
-		}
-	}
-
-	if len(courses) > 0 {
-		h.metrics.RecordCacheHit(moduleName)
-		log.Infof("Found %d courses for teacher: %s", len(courses), teacherName)
-		return h.formatCourseListResponse(courses)
-	}
-
-	// Cache miss - Try scraping recent semesters
-	// Note: This triggers a full scrape of all courses for the semester if the teacher is not found in cache.
-	// This is a heavy operation (iterates through all education codes U/M/N/P) but necessary as the
-	// school system doesn't support direct teacher search via URL parameters.
-	// Future optimization: Implement a "semester fully scraped" flag to avoid repeated scrapes for non-existent teachers.
-	h.metrics.RecordCacheMiss(moduleName)
-	log.Infof("Cache miss for teacher: %s, trying to scrape...", teacherName)
-
-	// Get semesters to search based on current date
-	searchYears, searchTerms := getSemestersToSearch()
-
-	// Search and save courses
-	foundCourses := make([]*storage.Course, 0)
-	for i := range searchYears {
-		year := searchYears[i]
-		term := searchTerms[i]
-
-		// Scrape all courses for this semester
-		scrapedCourses, err := ntpu.ScrapeCourses(ctx, h.scraper, year, term, "")
-		if err != nil {
-			log.WithError(err).WithField("year", year).WithField("term", term).
-				Debug("Failed to scrape courses for year/term")
-			continue
-		}
-
-		// Filter by teacher and save to cache
-		for _, course := range scrapedCourses {
-			// Save all courses for future queries
-			if err := h.db.SaveCourse(ctx, course); err != nil {
-				log.WithError(err).Warn("Failed to save course to cache")
-			}
-
-			// Check if teacher matches using fuzzy matching
-			for _, teacher := range course.Teachers {
-				if lineutil.ContainsAllRunes(teacher, teacherName) {
-					foundCourses = append(foundCourses, course)
-					break
-				}
-			}
-		}
-	}
-
-	if len(foundCourses) > 0 {
-		h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
-		// Convert []*storage.Course to []storage.Course
-		courses := make([]storage.Course, len(foundCourses))
-		for i, c := range foundCourses {
-			courses[i] = *c
-		}
-		return h.formatCourseListResponse(courses)
-	}
-
-	// No results found
-	h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
-	msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf(
-		"🔍 查無教師「%s」的授課課程\n\n💡 請確認：\n• 教師姓名是否正確（可嘗試只輸入姓氏）\n• 該教師本學期或上學期是否有開課\n• 若為兼任或新進教師，資料可能尚未更新",
-		teacherName,
-	), sender)
-	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		{Action: lineutil.NewMessageAction("🔄 重試", "老師 "+teacherName)},
-		{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
-	})
-	return []messaging_api.MessageInterface{msg}
-}
-
 // formatCourseResponse formats a single course as a LINE message
 func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.MessageInterface {
 	// Header: Course badge (using standardized component)
@@ -575,9 +626,10 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 		body.AddInfoRow("👨‍🏫", "授課教師", teacherNames, lineutil.DefaultInfoRowStyle())
 	}
 
-	// 時間 info
+	// 時間 info - 轉換節次為實際時間
 	if len(course.Times) > 0 {
-		timeStr := strings.Join(course.Times, "、")
+		formattedTimes := lineutil.FormatCourseTimes(course.Times)
+		timeStr := strings.Join(formattedTimes, "、")
 		body.AddInfoRow("⏰", "上課時間", timeStr, lineutil.DefaultInfoRowStyle())
 	}
 
@@ -595,43 +647,88 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 		body.AddInfoRow("📝", "備註", course.Note, noteStyle)
 	}
 
-	// Build footer actions
-	var footerContents []messaging_api.FlexComponentInterface
-
-	// Course Outline button (label: 6 chars + emoji)
-	if course.DetailURL != "" {
-		footerContents = append(footerContents, lineutil.NewFlexButton(
-			lineutil.NewURIAction("📄 課程大綱", course.DetailURL),
-		).WithStyle("primary").WithHeight("sm").FlexButton)
+	// Add cache time hint (unobtrusive, right-aligned)
+	if hint := lineutil.NewCacheTimeHint(course.CachedAt); hint != nil {
+		body.AddComponent(hint.FlexText)
 	}
 
-	// Course Query System button (label: 6 chars + emoji)
+	// Build footer actions using button rows for 2-column layout
+	var footerRows [][]*lineutil.FlexButton
+
+	// Row 1: 課程大綱 + 查詢系統
+	row1 := make([]*lineutil.FlexButton, 0, 2)
+	if course.DetailURL != "" {
+		row1 = append(row1, lineutil.NewFlexButton(
+			lineutil.NewURIAction("📄 課程大綱", course.DetailURL),
+		).WithStyle("primary").WithHeight("sm"))
+	}
 	courseQueryURL := fmt.Sprintf("https://sea.cc.ntpu.edu.tw/pls/dev_stud/course_query_all.queryByKeyword?qYear=%d&qTerm=%d&courseno=%s&seq1=A&seq2=M",
 		course.Year, course.Term, course.No)
-	footerContents = append(footerContents, lineutil.NewFlexButton(
+	row1 = append(row1, lineutil.NewFlexButton(
 		lineutil.NewURIAction("🔍 查詢系統", courseQueryURL),
-	).WithStyle("secondary").WithHeight("sm").FlexButton)
+	).WithStyle("secondary").WithHeight("sm"))
+	if len(row1) > 0 {
+		footerRows = append(footerRows, row1)
+	}
 
-	// Teacher schedule button (if teachers exist)
+	// Row 2: 教師課表 + 教師課程 (if teachers exist)
 	if len(course.Teachers) > 0 {
 		teacherName := course.Teachers[0]
-		// Truncate teacher name in display text if too long (using rune slicing for UTF-8 safety)
-		displayText := lineutil.TruncateRunes(fmt.Sprintf("搜尋 %s 的授課課程", teacherName), 40)
-		// Use course: prefix for proper postback routing
-		footerContents = append(footerContents, lineutil.NewFlexButton(
+		row2 := make([]*lineutil.FlexButton, 0, 2)
+
+		// Teacher schedule button - opens the teacher's course table webpage
+		if len(course.TeacherURLs) > 0 && course.TeacherURLs[0] != "" {
+			row2 = append(row2, lineutil.NewFlexButton(
+				lineutil.NewURIAction("📅 教師課表", course.TeacherURLs[0]),
+			).WithStyle("secondary").WithHeight("sm"))
+		}
+
+		// Teacher all courses button - searches for all courses taught by this teacher
+		displayText := lineutil.TruncateRunes(fmt.Sprintf("搜尋 %s 的近期課程", teacherName), 40)
+		row2 = append(row2, lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText(
 				"👤 教師課程",
 				displayText,
 				fmt.Sprintf("course:授課課程%s%s", bot.PostbackSplitChar, teacherName),
 			),
-		).WithStyle("secondary").WithHeight("sm").FlexButton)
+		).WithStyle("secondary").WithHeight("sm"))
+
+		if len(row2) > 0 {
+			footerRows = append(footerRows, row2)
+		}
 	}
+
+	// Row 3: Dcard 查詢 + 選課大全
+	if len(course.Teachers) > 0 {
+		teacherName := course.Teachers[0]
+		row3 := make([]*lineutil.FlexButton, 0, 2)
+
+		// Dcard search button - Google search with site:dcard.tw/f/ntpu
+		dcardQuery := fmt.Sprintf("%s %s site:dcard.tw/f/ntpu", teacherName, course.Title)
+		dcardURL := "https://www.google.com/search?q=" + url.QueryEscape(dcardQuery)
+		row3 = append(row3, lineutil.NewFlexButton(
+			lineutil.NewURIAction("💬 Dcard", dcardURL),
+		).WithStyle("secondary").WithHeight("sm"))
+
+		// 選課大全 button
+		courseSelectionQuery := fmt.Sprintf("%s %s", teacherName, course.Title)
+		courseSelectionURL := "https://no21.ntpu.org/?s=" + url.QueryEscape(courseSelectionQuery)
+		row3 = append(row3, lineutil.NewFlexButton(
+			lineutil.NewURIAction("📖 選課大全", courseSelectionURL),
+		).WithStyle("secondary").WithHeight("sm"))
+
+		if len(row3) > 0 {
+			footerRows = append(footerRows, row3)
+		}
+	}
+
+	footer := lineutil.NewButtonFooter(footerRows...)
 
 	bubble := lineutil.NewFlexBubble(
 		header,
 		hero.FlexBox,
 		body.Build(),
-		lineutil.NewFlexBox("vertical", footerContents...).WithSpacing("sm"),
+		footer,
 	)
 
 	// Limit altText to 400 chars (LINE API limit, using rune slicing for UTF-8 safety)
@@ -642,8 +739,8 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 
 	// Add Quick Reply for related actions
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		{Action: lineutil.NewMessageAction("查詢其他課程", "課程")},
-		{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+		{Action: lineutil.NewMessageAction("📚 查詢其他課程", "課程")},
+		{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
 	})
 
 	return []messaging_api.MessageInterface{msg}
@@ -657,6 +754,14 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 			lineutil.NewTextMessageWithConsistentSender("🔍 查無課程資料", sender),
 		}
 	}
+
+	// Sort courses: year descending (recent first), then term descending (term 2 before term 1)
+	sort.Slice(courses, func(i, j int) bool {
+		if courses[i].Year != courses[j].Year {
+			return courses[i].Year > courses[j].Year // Year: recent first
+		}
+		return courses[i].Term > courses[j].Term // Term: 2 (下學期) before 1 (上學期)
+	})
 
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	var messages []messaging_api.MessageInterface
@@ -697,10 +802,11 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 				).WithMargin("sm").WithSpacing("sm").FlexBox,
 			)
 		}
-		// 第三列：上課時間
+		// 第三列：上課時間 - 轉換節次為實際時間
 		if len(course.Times) > 0 {
-			// Display times with truncation if too many (max 4, then "等 N 節")
-			carouselTimes := lineutil.FormatTimes(course.Times, 4)
+			// Format times with actual time ranges, then truncate if too many (max 4, then "等 N 節")
+			formattedTimes := lineutil.FormatCourseTimes(course.Times)
+			carouselTimes := lineutil.FormatTimes(formattedTimes, 4)
 			contents = append(contents,
 				lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 				lineutil.NewFlexBox("horizontal",
@@ -710,7 +816,7 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 			)
 		}
 		// Footer with "View Detail" button - displayText shows course title
-		displayText := fmt.Sprintf("查詢「%s」課程", lineutil.TruncateRunes(course.Title, 30))
+		displayText := fmt.Sprintf("查詢「%s」課程資訊", lineutil.TruncateRunes(course.Title, 30))
 		// Use course: prefix for proper postback routing
 		footer := lineutil.NewFlexBox("vertical",
 			lineutil.NewFlexButton(
@@ -765,7 +871,7 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 
 	// Add Quick Reply to the last message
 	lineutil.AddQuickReplyToMessages(messages,
-		lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("重新查詢", "課程")},
+		lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("🔄 重新查詢", "課程")},
 		lineutil.QuickReplyHelpAction(),
 	)
 

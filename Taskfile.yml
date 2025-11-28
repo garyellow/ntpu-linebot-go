@@ -12,6 +12,8 @@ tasks:
   # Development
   dev:
     desc: Run server in development mode
+    env:
+      LOG_LEVEL: debug
     cmds:
       - go run ./cmd/server
 

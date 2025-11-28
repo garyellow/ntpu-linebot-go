@@ -9,7 +9,7 @@ import (
 
 // ExampleNewTextMessageWithConsistentSender demonstrates creating a text message with sender information.
 func ExampleNewTextMessageWithConsistentSender() {
-	sender := &messaging_api.Sender{Name: "魔法師", IconUrl: "https://example.com/avatar.png"}
+	sender := &messaging_api.Sender{Name: "小幫手", IconUrl: "https://example.com/avatar.png"}
 	msg := lineutil.NewTextMessageWithConsistentSender("Hello, World!", sender)
 	fmt.Printf("%T", msg)
 	// Output: *messaging_api.TextMessage
@@ -103,7 +103,7 @@ func ExampleTruncateRunes() {
 // ExampleErrorMessageWithSender demonstrates creating error messages.
 func ExampleErrorMessageWithSender() {
 	err := fmt.Errorf("database connection failed")
-	sender := &messaging_api.Sender{Name: "系統魔法師", IconUrl: "https://example.com/avatar.png"}
+	sender := &messaging_api.Sender{Name: "系統小幫手", IconUrl: "https://example.com/avatar.png"}
 	msg := lineutil.ErrorMessageWithSender(err, sender)
 	fmt.Printf("%T", msg)
 	// Output: *messaging_api.TextMessage

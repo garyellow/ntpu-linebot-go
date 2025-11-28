@@ -55,7 +55,7 @@ func NewFlexCarousel(bubbles []messaging_api.FlexBubble) *messaging_api.FlexCaro
 // Example:
 //
 //	bubbles := []messaging_api.FlexBubble{...}
-//	sender := lineutil.GetSender("課程魔法師", stickerManager)
+//	sender := lineutil.GetSender("課程小幫手", stickerManager)
 //	messages := lineutil.BuildCarouselMessages("課程列表", bubbles, sender)
 func BuildCarouselMessages(altText string, bubbles []messaging_api.FlexBubble, sender *messaging_api.Sender) []messaging_api.MessageInterface {
 	if len(bubbles) == 0 {

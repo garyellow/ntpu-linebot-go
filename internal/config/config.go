@@ -28,7 +28,6 @@ type Config struct {
 	// SQLite Configuration
 	SQLitePath string
 	CacheTTL   time.Duration // Hard TTL: absolute expiration for cache entries (default: 7 days)
-	SoftTTL    time.Duration // Soft TTL: when to proactively refresh data (default: 5 days)
 
 	// Scraper Configuration
 	ScraperTimeout    time.Duration
@@ -82,8 +81,7 @@ func LoadForMode(mode ValidationMode) (*Config, error) {
 
 		// SQLite Configuration
 		SQLitePath: getEnv("SQLITE_PATH", getDefaultDBPath()),
-		CacheTTL:   getDurationEnv("CACHE_TTL", 168*time.Hour), // Hard TTL: 7 days
-		SoftTTL:    getDurationEnv("SOFT_TTL", 120*time.Hour),  // Soft TTL: 5 days (trigger warmup)
+		CacheTTL:   getDurationEnv("CACHE_TTL", 168*time.Hour), // Hard TTL: 7 days (資料過期後強制刪除)
 
 		// Scraper Configuration
 		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", timeouts.ScraperRequest), // HTTP request timeout
@@ -144,12 +142,6 @@ func (c *Config) ValidateForMode(mode ValidationMode) error {
 	}
 	if c.CacheTTL <= 0 {
 		return fmt.Errorf("CACHE_TTL must be positive")
-	}
-	if c.SoftTTL <= 0 {
-		return fmt.Errorf("SOFT_TTL must be positive")
-	}
-	if c.SoftTTL >= c.CacheTTL {
-		return fmt.Errorf("SOFT_TTL must be less than CACHE_TTL")
 	}
 	if c.ScraperTimeout <= 0 {
 		return fmt.Errorf("SCRAPER_TIMEOUT must be positive")

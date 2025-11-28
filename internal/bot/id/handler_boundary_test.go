@@ -111,7 +111,7 @@ func TestFormatStudentResponse_LongFields(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			msgs := h.formatStudentResponse(tt.student, false)
+			msgs := h.formatStudentResponse(tt.student)
 			if len(msgs) == 0 {
 				t.Error("Expected formatted message")
 			}

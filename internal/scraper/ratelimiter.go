@@ -4,12 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"math"
 	"time"
 )
 
-// RetryWithBackoff retries a function with exponential backoff and jitter
-// Only used for FAILED requests. Success path is handled separately.
+// RetryWithBackoff retries a function with exponential backoff and jitter.
+// Stops retrying immediately if the error is a permanentError (e.g., 404/403/401).
 //
 // maxRetries: maximum number of retry attempts (0 = no retry, just try once)
 // initialDelay: initial delay before first retry (e.g., 4s)
@@ -33,6 +34,12 @@ func RetryWithBackoff(ctx context.Context, maxRetries int, initialDelay time.Dur
 			return nil
 		}
 		lastErr = err
+
+		// Don't retry permanent errors (e.g., 404, 403, 401)
+		var permErr *permanentError
+		if errors.As(err, &permErr) {
+			return permErr.Unwrap() // Return the underlying error
+		}
 
 		// Don't delay after the last attempt
 		if attempt == maxRetries {

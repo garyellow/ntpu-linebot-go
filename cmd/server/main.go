@@ -153,8 +153,9 @@ func main() {
 		refreshStickers(ctx, stickerManager, log)
 	}()
 
-	// Proactive cache warmup goroutine (daily at 3:00 AM)
-	// Refreshes data approaching Soft TTL to prevent user-triggered scraping
+	// Daily cache warmup goroutine (daily at 3:00 AM)
+	// Refreshes all data modules unconditionally to ensure freshness
+	// Data not updated within 7 days (Hard TTL) will be deleted by cleanup job
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -508,9 +509,9 @@ func performStickerRefresh(ctx context.Context, stickerManager *sticker.Manager,
 	}
 }
 
-// proactiveWarmup runs cache warmup proactively to prevent user-triggered scraping
-// Uses Soft TTL strategy: refresh data before it expires to ensure users always get cached data
-// Runs daily at 3:00 AM to minimize impact on system resources
+// proactiveWarmup runs daily cache warmup to ensure data freshness
+// Refreshes all modules unconditionally every day at 3:00 AM
+// Data not updated within 7 days (Hard TTL) will be deleted by cleanup job
 func proactiveWarmup(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, cfg *config.Config) {
 	const targetHour = 3 // 3:00 AM
 
@@ -525,7 +526,7 @@ func proactiveWarmup(ctx context.Context, db *storage.DB, client *scraper.Client
 		waitDuration := next.Sub(now)
 
 		log.WithField("next_run", next.Format("2006-01-02 15:04:05")).
-			Debug("Proactive warmup scheduled")
+			Debug("Daily warmup scheduled")
 
 		select {
 		case <-ctx.Done():
@@ -536,45 +537,15 @@ func proactiveWarmup(ctx context.Context, db *storage.DB, client *scraper.Client
 	}
 }
 
-// performProactiveWarmup checks for expiring data and triggers warmup if needed
+// performProactiveWarmup executes daily cache warmup for all modules
+// Runs unconditionally every day to ensure data freshness
 func performProactiveWarmup(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, cfg *config.Config) {
-	log.Info("Starting proactive cache warmup check...")
+	log.Info("Starting daily proactive cache warmup...")
 
-	// Check how much data is approaching expiration (past Soft TTL but not Hard TTL)
-	expiringStudents, _ := db.CountExpiringStudents(ctx, cfg.SoftTTL)
-	expiringCourses, _ := db.CountExpiringCourses(ctx, cfg.SoftTTL)
-	expiringContacts, _ := db.CountExpiringContacts(ctx, cfg.SoftTTL)
+	// Warm up all data modules daily (sticker handled separately)
+	modules := []string{"id", "contact", "course"}
 
-	totalExpiring := expiringStudents + expiringCourses + expiringContacts
-
-	log.WithFields(map[string]interface{}{
-		"expiring_students": expiringStudents,
-		"expiring_courses":  expiringCourses,
-		"expiring_contacts": expiringContacts,
-		"total_expiring":    totalExpiring,
-		"soft_ttl_hours":    cfg.SoftTTL.Hours(),
-	}).Info("Checked expiring cache entries")
-
-	// Only run warmup if there's data approaching expiration
-	// This prevents unnecessary scraping when cache is fresh
-	if totalExpiring == 0 {
-		log.Info("No expiring data found, skipping proactive warmup")
-		return
-	}
-
-	// Determine which modules need warming based on expiring data
-	var modules []string
-	if expiringStudents > 0 {
-		modules = append(modules, "id")
-	}
-	if expiringCourses > 0 {
-		modules = append(modules, "course")
-	}
-	if expiringContacts > 0 {
-		modules = append(modules, "contact")
-	}
-
-	log.WithField("modules", modules).Info("Starting proactive warmup for expiring modules")
+	log.WithField("modules", modules).Info("Running daily warmup for all modules")
 
 	// Create warmup context with timeout
 	warmupCtx, cancel := context.WithTimeout(ctx, cfg.WarmupTimeout)
@@ -588,13 +559,13 @@ func performProactiveWarmup(ctx context.Context, db *storage.DB, client *scraper
 	})
 
 	if err != nil {
-		log.WithError(err).Warn("Proactive warmup finished with errors")
+		log.WithError(err).Warn("Daily proactive warmup finished with errors")
 	} else {
 		log.WithFields(map[string]interface{}{
 			"students_refreshed": stats.Students.Load(),
 			"courses_refreshed":  stats.Courses.Load(),
 			"contacts_refreshed": stats.Contacts.Load(),
-		}).Info("Proactive warmup completed successfully")
+		}).Info("Daily proactive warmup completed successfully")
 	}
 }
 

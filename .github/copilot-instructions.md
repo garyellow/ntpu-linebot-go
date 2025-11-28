@@ -41,18 +41,17 @@ LINE Webhook → Gin Handler (25s timeout) → Bot Module Dispatcher
 
 **All modules**: Prefer text wrapping over truncation for complete info display, use `TruncateRunes()` only for LINE API limits (altText, displayText), consistent Sender pattern, cache-first strategy
 
-## Data Layer: Cache-First Strategy with Soft/Hard TTL
+## Data Layer: Cache-First Strategy with Daily Warmup
 
 **SQLite cache** (`internal/storage/`):
-- WAL mode, Soft/Hard TTL (configurable), pure Go (`modernc.org/sqlite`)
-- **Soft TTL (5 days)**: Data considered stale, triggers proactive warmup
+- WAL mode, Hard TTL (7 days), pure Go (`modernc.org/sqlite`)
 - **Hard TTL (7 days)**: Data absolutely expired, must be deleted
 - TTL enforced at SQL level: `WHERE cached_at > ?`
 
 
 **Background Jobs** (`cmd/server/main.go`):
-- **Proactive Warmup**: Daily 3:00 AM, refreshes data past Soft TTL
-- **Cache Cleanup**: Every 12 hours, deletes data past Hard TTL + VACUUM
+- **Daily Warmup**: Every day at 3:00 AM, refreshes all data modules unconditionally
+- **Cache Cleanup**: Every 12 hours, deletes data past Hard TTL (7 days) + VACUUM
 - **Sticker Refresh**: Every 24 hours
 
 **Data availability**:
@@ -141,7 +140,7 @@ Multiple base URLs per domain (LMS/SEA), automatic failover on 500+ errors, URLC
 
 ## Debugging
 
-**Logging**: `$env:LOG_LEVEL="debug"; task dev`
+**Logging**: `task dev` (debug level enabled by default in dev mode)
 
 **Prometheus** (`http://localhost:10000/metrics`):
 - Webhook: requests, latency
