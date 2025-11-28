@@ -36,10 +36,15 @@ LINE Webhook → Gin Handler (25s timeout) → Bot Module Dispatcher
 **Course Module**: Smart semester detection (`semester.go`), UID regex (`(?i)\d{3,4}[umnp]\d{4}`), max 40 results, Flex Message carousels
 
 **Contact Module**: Emergency phones (hardcoded), multilingual keywords, organization/individual contacts, Flex Message cards
-- **Search fields**: name, title (職稱)
+- **SQL LIKE fields**: name, title (fast path)
+- **Fuzzy search fields**: name, title, organization, superior (complete matching)
 - **Sorting**: Organizations by hierarchy (top-level first), individuals by match count → name → title → organization
 
-**All modules**: Prefer text wrapping over truncation for complete info display, use `TruncateRunes()` only for LINE API limits (altText, displayText), consistent Sender pattern, cache-first strategy
+**All modules**:
+- Prefer text wrapping over truncation for complete info display
+- Use `TruncateRunes()` only for LINE API limits (altText, displayText)
+- Consistent Sender pattern, cache-first strategy
+- **2-tier parallel search**: SQL LIKE + fuzzy `ContainsAllRunes()` always run together, results merged and deduplicated
 
 ## Data Layer: Cache-First Strategy with Daily Warmup
 
@@ -63,7 +68,7 @@ LINE Webhook → Gin Handler (25s timeout) → Bot Module Dispatcher
 
 **Scraper** (`internal/scraper/ratelimiter.go`): Fixed 2s delay after success, exponential backoff on failure (4s initial, max 5 retries, ±25% jitter), 60s HTTP timeout per request
 
-**Webhook**: Per-user (10 req/s, burst 2), global (80 rps), silently drops excess requests
+**Webhook**: Per-user (10 tokens, 1 token/3s refill), global (80 rps), silently drops excess requests
 
 **LINE SDK Conventions**
 
@@ -116,13 +121,12 @@ Table-driven tests with `t.Run()`, in-memory SQLite for DB tests (`storage.NewTe
 
 ## Configuration
 
-Env vars loaded at startup (`internal/config/`): ServerMode (requires LINE creds) or WarmupMode (scraper only). Platform-specific paths via `runtime.GOOS`.
+Env vars loaded at startup (`internal/config/`). Requires LINE credentials. Platform-specific paths via `runtime.GOOS`.
 
 ## Task Commands
 
 ```powershell
 task dev          # Run server
-task warmup       # Manual warmup
 task ci           # Full CI pipeline
 task test:coverage  # Coverage report
 task compose:up   # Start monitoring stack
@@ -163,7 +167,7 @@ Multi-stage build (alpine builder + distroless runtime), init-data for permissio
 
 ## Key File Locations
 
-- **Entry points**: `cmd/server/main.go`, `cmd/warmup/main.go`, `cmd/healthcheck/main.go`
+- **Entry points**: `cmd/server/main.go`, `cmd/healthcheck/main.go`
 - **Warmup module**: `internal/warmup/warmup.go` (background cache warming)
 - **Webhook router**: `internal/webhook/handler.go:handleMessageEvent()`
 - **Bot module interface**: `internal/bot/handler.go`

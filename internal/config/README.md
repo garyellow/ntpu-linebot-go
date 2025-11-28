@@ -15,7 +15,6 @@
   - Windows: `./data/cache.db`（預設）
   - Linux/Mac: `/data/cache.db`（預設）
 - `CACHE_TTL=168h` - Hard TTL：快取絕對過期時間（7 天）
-- `SOFT_TTL=120h` - Soft TTL：觸發主動刷新時間（5 天）
 - `SCRAPER_TIMEOUT=60s` - 每次 HTTP 請求超時
 - `SCRAPER_MAX_RETRIES=5` - 失敗時最大重試次數（指數退避）
 - `WARMUP_TIMEOUT=30m` - 預熱超時
@@ -26,8 +25,6 @@
 
 ## 使用方式
 
-### Server Mode（需要 LINE 憑證）
-
 ```go
 // 載入並驗證所有必填欄位（包含 LINE 憑證）
 cfg, err := config.Load()
@@ -36,26 +33,12 @@ if err != nil {
 }
 ```
 
-### Warmup Mode（不需要 LINE 憑證）
+## 驗證
 
-```go
-// 載入設定但跳過 LINE 憑證驗證（用於快取預熱工具）
-cfg, err := config.LoadForMode(config.WarmupMode)
-if err != nil {
-    log.Fatal(err)
-}
-```
-
-## 驗證模式
-
-專案使用 `ValidationMode` 來支援不同執行環境：
-
-- **ServerMode**: Webhook 伺服器，需要完整的 LINE 憑證
-- **WarmupMode**: 快取預熱工具，只需要爬蟲和資料庫設定
-
-這種模式化的設計遵循 Go 的最佳實踐：
-- 單一載入邏輯，避免程式碼重複
-- 明確的驗證需求，透過類型安全的 enum 控制
-- Fail-fast 原則，在啟動時就發現設定錯誤
+`Load()` 會驗證以下必填欄位：
+- LINE 憑證（`LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`）
+- 伺服器設定（`PORT`）
+- 資料庫設定（`SQLITE_PATH`）
+- 超時和重試設定
 
 完整環境變數列表請參考專案根目錄的 `.env.example`。

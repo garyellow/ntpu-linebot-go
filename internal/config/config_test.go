@@ -37,78 +37,26 @@ func TestLoad(t *testing.T) {
 	}
 }
 
-func TestLoadForMode(t *testing.T) {
-	tests := []struct {
-		name        string
-		mode        ValidationMode
-		setupEnv    func()
-		cleanupEnv  func()
-		wantErr     bool
-		errContains string
-	}{
-		{
-			name: "server mode - valid config",
-			mode: ServerMode,
-			setupEnv: func() {
-				_ = os.Setenv("LINE_CHANNEL_ACCESS_TOKEN", "test_token")
-				_ = os.Setenv("LINE_CHANNEL_SECRET", "test_secret")
-			},
-			cleanupEnv: func() {
-				_ = os.Unsetenv("LINE_CHANNEL_ACCESS_TOKEN")
-				_ = os.Unsetenv("LINE_CHANNEL_SECRET")
-			},
-			wantErr: false,
-		},
-		{
-			name: "server mode - missing credentials",
-			mode: ServerMode,
-			setupEnv: func() {
-				// No LINE credentials set
-			},
-			cleanupEnv:  func() {},
-			wantErr:     true,
-			errContains: "LINE_CHANNEL_ACCESS_TOKEN",
-		},
-		{
-			name: "warmup mode - no credentials required",
-			mode: WarmupMode,
-			setupEnv: func() {
-				// No LINE credentials needed
-			},
-			cleanupEnv: func() {},
-			wantErr:    false,
-		},
+func TestLoad_MissingCredentials(t *testing.T) {
+	// Ensure no LINE credentials are set
+	_ = os.Unsetenv("LINE_CHANNEL_ACCESS_TOKEN")
+	_ = os.Unsetenv("LINE_CHANNEL_SECRET")
+
+	_, err := Load()
+	if err == nil {
+		t.Error("Load() should fail when LINE credentials are missing")
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.setupEnv()
-			defer tt.cleanupEnv()
-
-			cfg, err := LoadForMode(tt.mode)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("LoadForMode(%v) error = %v, wantErr %v", tt.mode, err, tt.wantErr)
-				return
-			}
-
-			if tt.wantErr && tt.errContains != "" && err != nil {
-				if !contains(err.Error(), tt.errContains) {
-					t.Errorf("LoadForMode() error = %v, want error containing %q", err, tt.errContains)
-				}
-			}
-
-			if !tt.wantErr && cfg == nil {
-				t.Error("LoadForMode() returned nil config without error")
-			}
-		})
+	if !contains(err.Error(), "LINE_CHANNEL_ACCESS_TOKEN") {
+		t.Errorf("Load() error = %v, want error containing 'LINE_CHANNEL_ACCESS_TOKEN'", err)
 	}
 }
 
 func TestValidate(t *testing.T) {
 	tests := []struct {
-		name    string
-		cfg     *Config
-		wantErr bool
+		name        string
+		cfg         *Config
+		wantErr     bool
+		errContains string
 	}{
 		{
 			name: "valid config",
@@ -139,7 +87,40 @@ func TestValidate(t *testing.T) {
 				UserRateLimitTokens:     10,
 				UserRateLimitRefillRate: 0.33,
 			},
-			wantErr: true,
+			wantErr:     true,
+			errContains: "LINE_CHANNEL_ACCESS_TOKEN",
+		},
+		{
+			name: "missing secret",
+			cfg: &Config{
+				LineChannelToken:        "token",
+				Port:                    "10000",
+				SQLitePath:              "/data/cache.db",
+				CacheTTL:                168 * time.Hour,
+				ScraperTimeout:          60 * time.Second,
+				ScraperMaxRetries:       3,
+				WebhookTimeout:          25 * time.Second,
+				UserRateLimitTokens:     10,
+				UserRateLimitRefillRate: 0.33,
+			},
+			wantErr:     true,
+			errContains: "LINE_CHANNEL_SECRET",
+		},
+		{
+			name: "missing SQLite path",
+			cfg: &Config{
+				LineChannelToken:        "token",
+				LineChannelSecret:       "secret",
+				Port:                    "10000",
+				CacheTTL:                168 * time.Hour,
+				ScraperTimeout:          60 * time.Second,
+				ScraperMaxRetries:       3,
+				WebhookTimeout:          25 * time.Second,
+				UserRateLimitTokens:     10,
+				UserRateLimitRefillRate: 0.33,
+			},
+			wantErr:     true,
+			errContains: "SQLITE_PATH",
 		},
 		{
 			name: "negative retries",
@@ -155,7 +136,8 @@ func TestValidate(t *testing.T) {
 				UserRateLimitTokens:     10,
 				UserRateLimitRefillRate: 0.33,
 			},
-			wantErr: true,
+			wantErr:     true,
+			errContains: "SCRAPER_MAX_RETRIES",
 		},
 	}
 
@@ -165,97 +147,9 @@ func TestValidate(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
 			}
-		})
-	}
-}
-
-func TestValidateForMode(t *testing.T) {
-	tests := []struct {
-		name        string
-		cfg         *Config
-		mode        ValidationMode
-		wantErr     bool
-		errContains string
-	}{
-		{
-			name: "server mode - valid config",
-			cfg: &Config{
-				LineChannelToken:        "token",
-				LineChannelSecret:       "secret",
-				Port:                    "10000",
-				SQLitePath:              "/data/cache.db",
-				CacheTTL:                168 * time.Hour,
-				ScraperTimeout:          60 * time.Second,
-				ScraperMaxRetries:       3,
-				WebhookTimeout:          25 * time.Second,
-				UserRateLimitTokens:     10,
-				UserRateLimitRefillRate: 0.33,
-			},
-			mode:    ServerMode,
-			wantErr: false,
-		},
-		{
-			name: "server mode - missing token",
-			cfg: &Config{
-				LineChannelSecret:       "secret",
-				Port:                    "10000",
-				SQLitePath:              "/data/cache.db",
-				CacheTTL:                168 * time.Hour,
-				ScraperTimeout:          60 * time.Second,
-				ScraperMaxRetries:       3,
-				WebhookTimeout:          25 * time.Second,
-				UserRateLimitTokens:     10,
-				UserRateLimitRefillRate: 0.33,
-			},
-			mode:        ServerMode,
-			wantErr:     true,
-			errContains: "LINE_CHANNEL_ACCESS_TOKEN",
-		},
-		{
-			name: "warmup mode - missing LINE credentials OK",
-			cfg: &Config{
-				SQLitePath:        "/data/cache.db",
-				CacheTTL:          168 * time.Hour,
-				ScraperTimeout:    60 * time.Second,
-				ScraperMaxRetries: 3,
-			},
-			mode:    WarmupMode,
-			wantErr: false,
-		},
-		{
-			name: "warmup mode - missing SQLite path",
-			cfg: &Config{
-				CacheTTL:          168 * time.Hour,
-				ScraperTimeout:    60 * time.Second,
-				ScraperMaxRetries: 3,
-			},
-			mode:        WarmupMode,
-			wantErr:     true,
-			errContains: "SQLITE_PATH",
-		},
-		{
-			name: "warmup mode - negative retries",
-			cfg: &Config{
-				SQLitePath:        "/data/cache.db",
-				CacheTTL:          168 * time.Hour,
-				ScraperTimeout:    60 * time.Second,
-				ScraperMaxRetries: -1,
-			},
-			mode:        WarmupMode,
-			wantErr:     true,
-			errContains: "SCRAPER_MAX_RETRIES",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := tt.cfg.ValidateForMode(tt.mode)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ValidateForMode(%v) error = %v, wantErr %v", tt.mode, err, tt.wantErr)
-			}
 			if tt.wantErr && tt.errContains != "" && err != nil {
 				if !contains(err.Error(), tt.errContains) {
-					t.Errorf("ValidateForMode() error = %v, want error containing %q", err, tt.errContains)
+					t.Errorf("Validate() error = %v, want error containing %q", err, tt.errContains)
 				}
 			}
 		})

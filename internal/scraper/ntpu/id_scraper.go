@@ -148,6 +148,11 @@ func lmsCache(ctx context.Context, client *scraper.Client) (string, error) {
 // Returns a list of students matching the criteria
 // Supports automatic URL failover across multiple LMS endpoints
 func ScrapeStudentsByYear(ctx context.Context, client *scraper.Client, year int, deptCode string) ([]*storage.Student, error) {
+	// Check context before starting
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("context canceled before scraping students: %w", err)
+	}
+
 	students := make([]*storage.Student, 0)
 
 	// Get working base URL with failover support
@@ -184,11 +189,16 @@ func ScrapeStudentsByYear(ctx context.Context, client *scraper.Client, year int,
 
 	// Fetch and parse remaining pages
 	for page := 2; page <= totalPages; page++ {
+		// Check context before each page request
+		if err := ctx.Err(); err != nil {
+			return students, fmt.Errorf("context canceled during student scraping (partial results): %w", err)
+		}
+
 		url := fmt.Sprintf("%s%s?fmScope=2&page=%d&fmKeyword=%s", baseURL, studentSearchPath, page, keyword)
 
 		doc, err := client.GetDocument(ctx, url)
 		if err != nil {
-			return nil, fmt.Errorf("failed to fetch page %d: %w", page, err)
+			return students, fmt.Errorf("failed to fetch page %d: %w", page, err)
 		}
 
 		students = append(students, parseStudentPage(doc, year, deptCode)...)
@@ -240,6 +250,11 @@ func parseStudentPage(doc *goquery.Document, year int, deptCode string) []*stora
 // URL: {baseURL}/portfolio/search.php?fmScope=2&page=1&fmKeyword={studentID}
 // Supports automatic URL failover across multiple LMS endpoints
 func ScrapeStudentByID(ctx context.Context, client *scraper.Client, studentID string) (*storage.Student, error) {
+	// Check context before starting
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("context canceled before scraping student: %w", err)
+	}
+
 	// Get working base URL with failover support
 	baseURL, err := lmsCache(ctx, client)
 	if err != nil {

@@ -181,7 +181,6 @@ go install github.com/go-task/task/v3/cmd/task@latest
 常用指令：
 ```bash
 task dev              # 啟動開發服務
-task warmup           # 預熱快取
 task test             # 執行測試
 task test:coverage    # 測試覆蓋率報告
 task lint             # 程式碼檢查
@@ -195,7 +194,6 @@ task ci               # 完整 CI (fmt + lint + test)
 go run ./cmd/server                                     # 啟動服務
 go test ./...                                           # 執行測試
 go test -race -coverprofile=coverage.out ./...          # 測試 + 覆蓋率
-go run ./cmd/warmup -reset                              # 手動預熱（選用）
 ```
 
 ### Docker 操作

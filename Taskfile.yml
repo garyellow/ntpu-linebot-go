@@ -17,11 +17,6 @@ tasks:
     cmds:
       - go run ./cmd/server
 
-  warmup:
-    desc: Manual cache warmup (optional, server runs this automatically)
-    cmds:
-      - go run ./cmd/warmup
-
   # Testing
   test:
     desc: Run all tests (skipping network tests for faster CI)

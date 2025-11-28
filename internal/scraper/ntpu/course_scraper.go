@@ -38,6 +38,11 @@ func ScrapeCoursesByYear(ctx context.Context, client *scraper.Client, year int) 
 // When term=0, queries both semesters at once (more efficient for historical searches)
 // Supports automatic URL failover across multiple SEA endpoints
 func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, title string) ([]*storage.Course, error) {
+	// Check context before starting
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("context canceled before scraping courses: %w", err)
+	}
+
 	courses := make([]*storage.Course, 0)
 
 	// Get working base URL with failover support
@@ -69,8 +74,6 @@ func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, 
 
 		doc, err := client.PostFormDocumentRaw(ctx, queryURL, formData)
 		if err != nil {
-			// Clear cached URL on error to trigger re-detection
-			clearSEACache(client)
 			return nil, fmt.Errorf("failed to fetch courses: %w", err)
 		}
 
@@ -86,18 +89,29 @@ func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, 
 		baseParams = fmt.Sprintf("?qYear=%d&qTerm=%d&seq1=A&seq2=M", year, term)
 	}
 
+	var lastErr error
 	for _, eduCode := range AllEduCodes {
+		// Check context before each request
+		if err := ctx.Err(); err != nil {
+			return courses, fmt.Errorf("context canceled during course scraping (partial results): %w", err)
+		}
+
 		queryURL := fmt.Sprintf("%s%s%s&courseno=%s", courseBaseURL, courseQueryByKeywordPath, baseParams, eduCode)
 
 		doc, err := client.GetDocument(ctx, queryURL)
 		if err != nil {
-			// Clear cached URL on error to trigger re-detection
-			clearSEACache(client)
-			return nil, fmt.Errorf("failed to fetch courses for code %s: %w", eduCode, err)
+			lastErr = fmt.Errorf("failed to fetch courses for code %s: %w", eduCode, err)
+			// Continue with other education codes instead of failing immediately
+			continue
 		}
 
 		pageCourses := parseCoursesPage(doc, courseBaseURL, year, term)
 		courses = append(courses, pageCourses...)
+	}
+
+	// Return partial results with error if some requests failed
+	if lastErr != nil && len(courses) == 0 {
+		return nil, lastErr
 	}
 
 	return courses, nil
@@ -107,6 +121,11 @@ func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, 
 // Example UID: 11312U123 (year=113, term=1, no=2U123)
 // Supports automatic URL failover across multiple SEA endpoints
 func ScrapeCourseByUID(ctx context.Context, client *scraper.Client, uid string) (*storage.Course, error) {
+	// Check context before starting
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("context canceled before scraping course: %w", err)
+	}
+
 	if len(uid) < 5 {
 		return nil, fmt.Errorf("invalid course UID: %s", uid)
 	}
@@ -139,8 +158,6 @@ func ScrapeCourseByUID(ctx context.Context, client *scraper.Client, uid string) 
 
 	doc, err := client.GetDocument(ctx, queryURL)
 	if err != nil {
-		// Clear cached URL on error to trigger re-detection
-		clearSEACache(client)
 		return nil, fmt.Errorf("failed to fetch course: %w", err)
 	}
 

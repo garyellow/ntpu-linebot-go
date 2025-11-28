@@ -264,15 +264,19 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 
 // handleContactSearch handles contact search queries with a multi-tier search strategy:
 //
-// Search Strategy (3-tier cascade):
+// Search Strategy (2-tier parallel search + scraping fallback):
 //
 //  1. SQL LIKE (fast path): Direct database LIKE query for exact substrings.
-//     Example: "資工" matches "資訊工程學系" via SQL LIKE '%資工%'
+//     SQL searches in: name, title fields only
+//     Example: "資工" matches "資訊工程學系" via SQL LIKE '%資工%' (if consecutive)
 //
-//  2. Fuzzy character-set matching (cache fallback): If SQL LIKE returns no results,
-//     loads all cached contacts and checks if all runes in searchTerm exist in target.
+//  2. Fuzzy character-set matching (ALWAYS runs in parallel with SQL LIKE):
+//     Loads all cached contacts and checks if all runes in searchTerm exist in target.
+//     Searches in: name, title, organization, superior (more fields than SQL LIKE)
 //     Example: "資工系" matches "資訊工程學系" because all chars (資,工,系) exist in target
 //     This enables abbreviation matching where chars are scattered in the full name.
+//
+//     Results from both strategies are merged and deduplicated by UID.
 //
 //  3. Web scraping with search variants (external fallback): If cache has no results,
 //     scrape from NTPU website using multiple search variants.
@@ -282,7 +286,7 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 //
 // Performance notes:
 //   - SQL LIKE is indexed and fast; most queries resolve here
-//   - Fuzzy matching loads up to 1000 contacts; acceptable since it's a fallback
+//   - Fuzzy matching loads up to 1000 contacts; runs in parallel for complete results
 //   - Search variants only affect scraping, not cache lookups
 func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(moduleName)
@@ -292,6 +296,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	var contacts []storage.Contact
 
 	// Step 1: Try SQL LIKE search first (fast path for exact substrings)
+	// SQL LIKE searches in: name, title
 	sqlContacts, err := h.db.SearchContactsByName(ctx, searchTerm)
 	if err != nil {
 		log.WithError(err).Error("Failed to search contacts in cache")
@@ -300,25 +305,27 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 			lineutil.ErrorMessageWithQuickReply("查詢聯絡資訊時發生問題", sender, "聯絡 "+searchTerm),
 		}
 	}
-	contacts = sqlContacts
+	contacts = append(contacts, sqlContacts...)
 
-	// Step 2: If SQL LIKE didn't find results, try fuzzy character-set matching
-	// This enables "資工系" to match "資訊工程學系" by checking if all characters exist
-	if len(contacts) == 0 {
-		allContacts, err := h.db.GetAllContacts(ctx)
-		if err == nil && len(allContacts) > 0 {
-			for _, c := range allContacts {
-				// Fuzzy character-set matching: check if all runes in searchTerm exist in target
-				// Search in: name, title, organization, superior
-				if lineutil.ContainsAllRunes(c.Name, searchTerm) ||
-					lineutil.ContainsAllRunes(c.Title, searchTerm) ||
-					lineutil.ContainsAllRunes(c.Organization, searchTerm) ||
-					lineutil.ContainsAllRunes(c.Superior, searchTerm) {
-					contacts = append(contacts, c)
-				}
+	// Step 2: ALWAYS try fuzzy character-set matching to find additional results
+	// This catches cases like "資工系" -> "資訊工程學系" that SQL LIKE misses
+	// Also searches more fields: name, title, organization, superior
+	allContacts, err := h.db.GetAllContacts(ctx)
+	if err == nil && len(allContacts) > 0 {
+		for _, c := range allContacts {
+			// Fuzzy character-set matching: check if all runes in searchTerm exist in target
+			// Search in: name, title, organization, superior
+			if lineutil.ContainsAllRunes(c.Name, searchTerm) ||
+				lineutil.ContainsAllRunes(c.Title, searchTerm) ||
+				lineutil.ContainsAllRunes(c.Organization, searchTerm) ||
+				lineutil.ContainsAllRunes(c.Superior, searchTerm) {
+				contacts = append(contacts, c)
 			}
 		}
 	}
+
+	// Deduplicate results by UID (SQL LIKE and fuzzy may find overlapping results)
+	contacts = deduplicateContacts(contacts)
 
 	// If found in cache, return results
 	if len(contacts) > 0 {
@@ -810,4 +817,17 @@ func countMatchRunes(c storage.Contact, searchTerm string) int {
 	}
 
 	return count
+}
+
+// deduplicateContacts removes duplicate contacts by UID while preserving order
+func deduplicateContacts(contacts []storage.Contact) []storage.Contact {
+	seen := make(map[string]bool)
+	result := make([]storage.Contact, 0, len(contacts))
+	for _, c := range contacts {
+		if !seen[c.UID] {
+			seen[c.UID] = true
+			result = append(result, c)
+		}
+	}
+	return result
 }

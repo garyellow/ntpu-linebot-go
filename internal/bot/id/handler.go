@@ -506,16 +506,18 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	return h.formatStudentResponse(student)
 }
 
-// handleStudentNameQuery handles student name queries with a 2-tier search strategy:
+// handleStudentNameQuery handles student name queries with a 2-tier parallel search strategy:
 //
-// Search Strategy:
+// Search Strategy (parallel execution, merged results):
 //
 //  1. SQL LIKE (fast path): Direct database LIKE query for exact substrings.
 //     Example: "小明" matches "王小明" via SQL LIKE '%小明%'
 //
-//  2. Fuzzy character-set matching (cache fallback): If SQL LIKE returns no results,
-//     loads all cached students and checks if all runes in searchTerm exist in name.
+//  2. Fuzzy character-set matching (ALWAYS runs in parallel with SQL LIKE):
+//     Loads all cached students and checks if all runes in searchTerm exist in name.
 //     Example: "王明" matches "王小明" because all chars exist in the name
+//
+//     Results from both strategies are merged and deduplicated by student ID.
 func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(moduleName)
 	sender := lineutil.GetSender(senderName, h.stickerManager)
@@ -529,18 +531,19 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 		}
 	}
 
-	// Step 2: If SQL LIKE didn't find results, try fuzzy character-set matching
-	// This enables "王明" to match "王小明" by checking if all characters exist
-	if len(students) == 0 {
-		allStudents, err := h.db.GetAllStudents(ctx)
-		if err == nil && len(allStudents) > 0 {
-			for _, s := range allStudents {
-				if lineutil.ContainsAllRunes(s.Name, name) {
-					students = append(students, s)
-				}
+	// Step 2: ALWAYS try fuzzy character-set matching to find additional results
+	// This catches cases like "王明" -> "王小明" that SQL LIKE misses
+	allStudents, err := h.db.GetAllStudents(ctx)
+	if err == nil && len(allStudents) > 0 {
+		for _, s := range allStudents {
+			if lineutil.ContainsAllRunes(s.Name, name) {
+				students = append(students, s)
 			}
 		}
 	}
+
+	// Deduplicate results by student ID (SQL LIKE and fuzzy may find overlapping results)
+	students = deduplicateStudents(students)
 
 	if len(students) == 0 {
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf(
@@ -677,6 +680,19 @@ func isNumeric(s string) bool {
 		}
 	}
 	return len(s) > 0
+}
+
+// deduplicateStudents removes duplicate students by ID while preserving order
+func deduplicateStudents(students []storage.Student) []storage.Student {
+	seen := make(map[string]bool)
+	result := make([]storage.Student, 0, len(students))
+	for _, s := range students {
+		if !seen[s.ID] {
+			seen[s.ID] = true
+			result = append(result, s)
+		}
+	}
+	return result
 }
 
 // parseYear parses a year string (2-4 digits) to ROC year

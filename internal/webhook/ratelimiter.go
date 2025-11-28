@@ -84,15 +84,18 @@ type UserRateLimiter struct {
 	limiters map[string]*RateLimiter
 	cleanup  time.Duration
 	metrics  *metrics.Metrics // Optional metrics recorder for tracking dropped requests
+	stopCh   chan struct{}    // Channel to signal cleanup goroutine to stop
 }
 
 // NewUserRateLimiter creates a new per-user rate limiter
 // metrics parameter is optional and can be nil
+// Remember to call Stop() when done to prevent goroutine leaks
 func NewUserRateLimiter(cleanup time.Duration, m *metrics.Metrics) *UserRateLimiter {
 	url := &UserRateLimiter{
 		limiters: make(map[string]*RateLimiter),
 		cleanup:  cleanup,
 		metrics:  m,
+		stopCh:   make(chan struct{}),
 	}
 
 	// Start cleanup goroutine
@@ -125,28 +128,34 @@ func (url *UserRateLimiter) Allow(userID string, maxTokens, refillRate float64) 
 }
 
 // cleanupLoop periodically removes inactive rate limiters
+// Stops when Stop() is called (stopCh is closed)
 func (url *UserRateLimiter) cleanupLoop() {
 	ticker := time.NewTicker(url.cleanup)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		url.mu.Lock()
-		cleanedCount := 0
-		// Remove limiters that are at maximum capacity (inactive users)
-		for userID, limiter := range url.limiters {
-			if limiter.GetAvailableTokens() >= limiter.maxTokens {
-				delete(url.limiters, userID)
-				cleanedCount++
+	for {
+		select {
+		case <-url.stopCh:
+			return
+		case <-ticker.C:
+			url.mu.Lock()
+			cleanedCount := 0
+			// Remove limiters that are at maximum capacity (inactive users)
+			for userID, limiter := range url.limiters {
+				if limiter.GetAvailableTokens() >= limiter.maxTokens {
+					delete(url.limiters, userID)
+					cleanedCount++
+				}
 			}
-		}
-		activeCount := len(url.limiters)
-		url.mu.Unlock()
+			activeCount := len(url.limiters)
+			url.mu.Unlock()
 
-		// Update metrics if available
-		if url.metrics != nil {
-			url.metrics.SetRateLimiterActiveUsers(activeCount)
-			if cleanedCount > 0 {
-				url.metrics.RecordRateLimiterCleanup(cleanedCount)
+			// Update metrics if available
+			if url.metrics != nil {
+				url.metrics.SetRateLimiterActiveUsers(activeCount)
+				if cleanedCount > 0 {
+					url.metrics.RecordRateLimiterCleanup(cleanedCount)
+				}
 			}
 		}
 	}
@@ -157,4 +166,16 @@ func (url *UserRateLimiter) GetActiveCount() int {
 	url.mu.RLock()
 	defer url.mu.RUnlock()
 	return len(url.limiters)
+}
+
+// Stop gracefully stops the cleanup goroutine.
+// This should be called during server shutdown to prevent goroutine leaks.
+// Safe to call multiple times (subsequent calls are no-ops).
+func (url *UserRateLimiter) Stop() {
+	select {
+	case <-url.stopCh:
+		// Already closed, do nothing
+	default:
+		close(url.stopCh)
+	}
 }

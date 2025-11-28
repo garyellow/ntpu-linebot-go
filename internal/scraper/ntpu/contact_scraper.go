@@ -31,17 +31,16 @@ func seaCache(ctx context.Context, client *scraper.Client) (string, error) {
 	return scraper.NewURLCache(client, "sea").Get(ctx)
 }
 
-// clearSEACache invalidates the SEA URL cache to trigger re-detection on next request.
-// Call this when a scrape operation fails to enable automatic failover.
-func clearSEACache(client *scraper.Client) {
-	scraper.NewURLCache(client, "sea").Clear()
-}
-
 // ScrapeContacts scrapes contacts by search term
 // URL: {baseURL}/pls/ld/CAMPUS_DIR_M.pq?q={searchTerm}
 // The search term must be URL-encoded in Big5 encoding
 // Supports automatic URL failover across multiple SEA endpoints with cache invalidation
 func ScrapeContacts(ctx context.Context, client *scraper.Client, searchTerm string) ([]*storage.Contact, error) {
+	// Check context before starting
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("context canceled before scraping contacts: %w", err)
+	}
+
 	// Get working base URL with failover support
 	contactBaseURL, err := seaCache(ctx, client)
 	if err != nil {
@@ -61,8 +60,6 @@ func ScrapeContacts(ctx context.Context, client *scraper.Client, searchTerm stri
 
 	doc, err := client.GetDocument(ctx, url)
 	if err != nil {
-		// Clear cached URL on error to trigger re-detection on next request
-		clearSEACache(client)
 		return nil, fmt.Errorf("failed to fetch contacts: %w", err)
 	}
 
@@ -196,39 +193,42 @@ func generateUID(parts ...string) string {
 // ScrapeAdministrativeContacts scrapes all administrative contacts
 // Supports automatic URL failover across multiple SEA endpoints
 func ScrapeAdministrativeContacts(ctx context.Context, client *scraper.Client) ([]*storage.Contact, error) {
+	// Check context before starting
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("context canceled before scraping administrative contacts: %w", err)
+	}
+
 	contactBaseURL, err := seaCache(ctx, client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get working SEA URL: %w", err)
 	}
 	url := contactBaseURL + administrativePath
-	contacts, err := scrapeContactPages(ctx, client, contactBaseURL, url)
-	if err != nil {
-		// Clear cached URL on error to trigger re-detection
-		clearSEACache(client)
-		return nil, err
-	}
-	return contacts, nil
+	return scrapeContactPages(ctx, client, contactBaseURL, url)
 }
 
 // ScrapeAcademicContacts scrapes all academic contacts
 // Supports automatic URL failover across multiple SEA endpoints
 func ScrapeAcademicContacts(ctx context.Context, client *scraper.Client) ([]*storage.Contact, error) {
+	// Check context before starting
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("context canceled before scraping academic contacts: %w", err)
+	}
+
 	contactBaseURL, err := seaCache(ctx, client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get working SEA URL: %w", err)
 	}
 	url := contactBaseURL + academicPath
-	contacts, err := scrapeContactPages(ctx, client, contactBaseURL, url)
-	if err != nil {
-		// Clear cached URL on error to trigger re-detection
-		clearSEACache(client)
-		return nil, err
-	}
-	return contacts, nil
+	return scrapeContactPages(ctx, client, contactBaseURL, url)
 }
 
 // scrapeContactPages scrapes contact information from department listing pages
 func scrapeContactPages(ctx context.Context, client *scraper.Client, contactBaseURL, url string) ([]*storage.Contact, error) {
+	// Check context before starting
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("context canceled before fetching contact pages: %w", err)
+	}
+
 	doc, err := client.GetDocument(ctx, url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch contact pages: %w", err)
@@ -236,9 +236,15 @@ func scrapeContactPages(ctx context.Context, client *scraper.Client, contactBase
 
 	allContacts := make([]*storage.Contact, 0)
 	var scrapeErrors []string
+	var successCount int
 
 	// Find all department links: <div class="card-header">
 	doc.Find("div.card-header").Each(func(i int, s *goquery.Selection) {
+		// Check context cancellation within loop
+		if ctx.Err() != nil {
+			return
+		}
+
 		link := s.Find("a")
 		href, exists := link.Attr("href")
 		if !exists {
@@ -258,11 +264,17 @@ func scrapeContactPages(ctx context.Context, client *scraper.Client, contactBase
 		// Parse contacts from department page
 		contacts := parseContactsPage(deptDoc)
 		allContacts = append(allContacts, contacts...)
+		successCount++
 	})
+
+	// Check if context was canceled during processing
+	if err := ctx.Err(); err != nil {
+		return allContacts, fmt.Errorf("context canceled during contact scraping (partial results: %d departments): %w", successCount, err)
+	}
 
 	// If all requests failed, return error; otherwise return partial results
 	if len(allContacts) == 0 && len(scrapeErrors) > 0 {
-		return nil, fmt.Errorf("all department requests failed: %v", scrapeErrors)
+		return nil, fmt.Errorf("all department requests failed (%d errors): %v", len(scrapeErrors), scrapeErrors)
 	}
 
 	return allContacts, nil

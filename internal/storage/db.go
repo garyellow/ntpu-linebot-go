@@ -258,6 +258,25 @@ func (db *DB) getTTLTimestamp() int64 {
 	return time.Now().Unix() - int64(db.cacheTTL.Seconds())
 }
 
+// Ready checks if the database is ready to serve requests.
+// This performs a ping on both reader and writer connections to verify connectivity.
+// Use this for Kubernetes readiness probes or health checks.
+//
+// Returns nil if both connections are healthy, or an error describing the failure.
+func (db *DB) Ready(ctx context.Context) error {
+	// Check writer connection
+	if err := db.writer.PingContext(ctx); err != nil {
+		return fmt.Errorf("writer connection unhealthy: %w", err)
+	}
+
+	// Check reader connection
+	if err := db.reader.PingContext(ctx); err != nil {
+		return fmt.Errorf("reader connection unhealthy: %w", err)
+	}
+
+	return nil
+}
+
 // NewTestDB creates an in-memory database for testing.
 // Note: In-memory databases don't support read/write separation as they use
 // a single shared connection. Both reader and writer point to the same connection.

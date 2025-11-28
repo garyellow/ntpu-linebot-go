@@ -71,11 +71,11 @@ NTPU LineBot 是一個為國立臺北大學設計的 LINE 聊天機器人，提�
 │                      Scraper Layer                              │
 │                  (internal/scraper/)                            │
 │  ┌───────────────────────────────────────────────────────────┐ │
-│  │  Rate Limiter (Token Bucket)                              │ │
-│  │  • Workers: configurable (default: 3)                     │ │
-│  │  • Random delay: 5-10s (configurable)                     │ │
-│  │  • Timeout: 120s (increased for large student data)       │ │
-│  │  • Exponential backoff: 1s → 2s → 4s → 8s → 16s          │ │
+│  │  Rate Limiter & Retry                                     │ │
+│  │  • Fixed delay: 2s after each success (anti-scraping)     │ │
+│  │  • Timeout: 60s per request (configurable)                │ │
+│  │  • Exponential backoff: 4s → 8s → 16s → 32s → 64s        │ │
+│  │  • Jitter: ±25% randomization                             │ │
 │  │  • Max retries: 3 (configurable)                          │ │
 │  └───────────────────────────────────────────────────────────┘ │
 │  ┌───────────────────────────────────────────────────────────┐ │
@@ -161,13 +161,13 @@ User Query → Bot Module → Repository Layer
 **兩層限流機制**:
 
 1. **Scraper Level（爬蟲層）**
-   - Token Bucket 演算法
-   - 10 tokens/second
+   - Fixed delay: 2s after each successful request
+   - Exponential backoff on failure: 4s → 8s → 16s → 32s → 64s
    - 用於保護目標網站
 
 2. **Webhook Level（API 層）**
    - Global: 80 rps（LINE API limit）
-   - Per-User: 10 rps
+   - Per-User: 10 tokens, refill 1 token/3s
    - 防止濫用
 
 ### 3. Strategy Pattern（策略模式）
@@ -192,27 +192,6 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
     return h.getHelpMessage()
 }
 ```
-
-## 設定管理
-
-### ValidationMode Pattern
-
-**問題**: warmup 工具不需要 LINE 憑證，但使用相同的設定載入邏輯
-
-**解決方案**: 使用模式化驗證而非 boolean 參數
-```go
-// ✅ Good: 清晰的模式化 API
-cfg, err := config.LoadForMode(config.WarmupMode)
-
-// ❌ Bad: 布林參數不清晰
-cfg, err := config.Load(false) // false 代表什麼？
-```
-
-**優勢**:
-- 類型安全（使用 enum 而非 boolean）
-- API 清晰（`WarmupMode` vs `true/false`）
-- 易於擴展（未來可新增 `TestMode`）
-- 單一載入邏輯（DRY 原則）
 
 ## 關鍵技術決策
 
@@ -261,13 +240,12 @@ cfg, err := config.Load(false) // false 代表什麼？
 
 ## 效能優化
 
-### 1. 快取策略（Soft TTL / Hard TTL）
+### 1. 快取策略（Hard TTL）
 
-採用業界最佳實踐的雙層 TTL 策略：
+採用單層 TTL 策略：
 
 | TTL 類型 | 預設值 | 用途 |
 |---------|--------|------|
-| **Soft TTL** | 5 天 | 觸發主動刷新，資料仍可使用 |
 | **Hard TTL** | 7 天 | 絕對過期，資料必須刪除 |
 
 **資料類型考量**:
@@ -276,17 +254,9 @@ cfg, err := config.Load(false) // false 代表什麼？
 - 課程資料：學期內穩定
 
 **背景任務排程**:
-- **主動 Warmup**: 每日凌晨 3:00，刷新接近 Soft TTL 的資料
-- **Cache Cleanup**: 每 12 小時，刪除超過 Hard TTL 的資料
+- **主動 Warmup**: 每日凌晨 3:00，刷新所有資料模組
+- **Cache Cleanup**: 每 12 小時，刪除超過 Hard TTL 的資料 + VACUUM
 - **Sticker Refresh**: 每 24 小時，更新貼圖快取
-
-```go
-// 主動 warmup：每日 3:00 AM 檢查並刷新即將過期的資料
-func proactiveWarmup(ctx context.Context, db *storage.DB, ...) {
-    // 只刷新 Soft TTL <= 資料年齡 < Hard TTL 的資料
-    // 確保使用者永遠從快取取得資料，而非觸發即時爬蟲
-}
-```
 
 ### 2. SQL 查詢優化
 
