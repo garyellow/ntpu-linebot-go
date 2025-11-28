@@ -372,9 +372,7 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 		// Don't return error, continue with title results
 	} else {
 		// Merge results, avoiding duplicates
-		for _, c := range teacherCourses {
-			courses = append(courses, c)
-		}
+		courses = append(courses, teacherCourses...)
 	}
 
 	// Step 2: ALWAYS try fuzzy character-set matching to find additional results
