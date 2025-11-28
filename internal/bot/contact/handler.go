@@ -31,7 +31,7 @@ type Handler struct {
 
 const (
 	moduleName = "contact"
-	senderName = "聯繫魔法師"
+	senderName = "聯繫小幫手"
 
 	// Emergency phone numbers (without hyphens for clipboard copy)
 	// 三峽校區

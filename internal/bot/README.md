@@ -33,7 +33,7 @@ type Handler interface {
   - 系代碼對照
   - 學年度學生名單（按學院→科系選擇）
 - **Postback 前綴**：`id:`
-- **Sender 名稱**：學號魔法師
+- **Sender 名稱**：學號小幫手
 
 ### contact/ - 聯絡資訊
 - **關鍵字**：聯繫、聯絡、電話、分機、緊急
@@ -42,7 +42,7 @@ type Handler interface {
   - 緊急聯絡電話（三峽/台北校區）
   - 組織成員查詢
 - **Postback 前綴**：`contact:`
-- **Sender 名稱**：聯繫魔法師
+- **Sender 名稱**：聯繫小幫手
 
 ### course/ - 課程查詢
 - **關鍵字**：課程、課、教師、老師
@@ -52,7 +52,7 @@ type Handler interface {
   - 教師授課查詢
   - 歷史課程查詢（`課程 {年度} {關鍵字}`）
 - **Postback 前綴**：`course:`
-- **Sender 名稱**：課程魔法師
+- **Sender 名稱**：課程小幫手
 
 ## 共用工具 (utils.go)
 

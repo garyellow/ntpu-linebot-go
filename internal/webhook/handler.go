@@ -170,7 +170,7 @@ func (h *Handler) Handle(c *gin.Context) {
 				h.logger.Warnf("Message count %d exceeds limit, truncating to %d", len(messages), MaxMessagesPerReply)
 				// Add a warning message at the end (keep room for warning)
 				messages = messages[:MaxMessagesPerReply-1]
-				sender := lineutil.GetSender("系統魔法師", h.stickerManager)
+				sender := lineutil.GetSender("系統小幫手", h.stickerManager)
 				messages = append(messages, lineutil.NewTextMessageWithConsistentSender(
 					"ℹ️ 由於訊息數量限制，部分內容未完全顯示。\n請使用更具體的關鍵字縮小搜尋範圍。",
 					sender,
@@ -259,7 +259,7 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 	}
 	if len(text) > MaxMessageLength {
 		h.logger.Warnf("Text message too long: %d characters", len(text))
-		sender := lineutil.GetSender("系統魔法師", h.stickerManager)
+		sender := lineutil.GetSender("系統小幫手", h.stickerManager)
 		return []messaging_api.MessageInterface{
 			lineutil.NewTextMessageWithConsistentSender(
 				fmt.Sprintf("❌ 訊息內容過長\n\n訊息長度超過 %d 字元，請縮短後重試。", MaxMessageLength),
@@ -322,7 +322,7 @@ func (h *Handler) handlePostbackEvent(ctx context.Context, event webhook.Postbac
 	}
 	if len(data) > 300 { // LINE postback data limit is 300 bytes
 		h.logger.Warnf("Postback data too long: %d bytes", len(data))
-		sender := lineutil.GetSender("系統魔法師", h.stickerManager)
+		sender := lineutil.GetSender("系統小幫手", h.stickerManager)
 		return []messaging_api.MessageInterface{
 			lineutil.NewTextMessageWithConsistentSender("❌ 操作資料異常\n\n請重新使用功能。", sender),
 		}, nil
@@ -373,7 +373,7 @@ func (h *Handler) handlePostbackEvent(ctx context.Context, event webhook.Postbac
 	}
 
 	// No handler matched
-	sender := lineutil.GetSender("系統魔法師", h.stickerManager)
+	sender := lineutil.GetSender("系統小幫手", h.stickerManager)
 	return []messaging_api.MessageInterface{
 		lineutil.NewTextMessageWithConsistentSender("操作已過期或無效", sender),
 	}, nil
@@ -385,7 +385,7 @@ func (h *Handler) handleStickerMessage(event webhook.MessageEvent) []messaging_a
 
 	// Get random sticker URL and create consistent sender
 	stickerURL := h.stickerManager.GetRandomSticker()
-	sender := lineutil.GetSender("貼圖魔法師", h.stickerManager)
+	sender := lineutil.GetSender("貼圖小幫手", h.stickerManager)
 
 	// Reply with image message using the sticker URL
 	// Note: ImageMessage supports Sender field for consistent visual identity
@@ -403,7 +403,7 @@ func (h *Handler) handleFollowEvent(event webhook.FollowEvent) ([]messaging_api.
 	h.logger.Info("New user followed the bot")
 
 	// Send welcome message
-	sender := lineutil.GetSender("初階魔法師", h.stickerManager)
+	sender := lineutil.GetSender("初階小幫手", h.stickerManager)
 	messages := []messaging_api.MessageInterface{
 		lineutil.NewTextMessageWithConsistentSender("泥好~~我是北大查詢小工具🔍", sender),
 		lineutil.NewTextMessageWithConsistentSender("使用說明請點選下方選單\n或輸入「使用說明」查看", sender),
@@ -516,7 +516,7 @@ func (h *Handler) getHelpMessage() []messaging_api.MessageInterface {
 		"   • 緊急電話：「緊急」\n\n" +
 		"💡 輸入「使用說明」查看完整說明"
 
-	sender := lineutil.GetSender("幫助魔法師", h.stickerManager)
+	sender := lineutil.GetSender("幫助小幫手", h.stickerManager)
 	msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 		lineutil.QuickReplyHelpAction(),

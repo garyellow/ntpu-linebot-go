@@ -32,7 +32,7 @@ type Handler struct {
 // Course handler constants.
 const (
 	moduleName           = "course"
-	senderName           = "課程魔法師"
+	senderName           = "課程小幫手"
 	MaxCoursesPerSearch  = 40 // Maximum courses to return (40 courses = 4 carousels @ 10 bubbles each), leaving 1 slot for warning (LINE API max: 5 messages)
 	MaxTitleDisplayChars = 60 // Maximum characters for course title display before truncation
 )

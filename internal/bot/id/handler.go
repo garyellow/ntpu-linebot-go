@@ -32,7 +32,7 @@ type Handler struct {
 // ID handler constants.
 const (
 	moduleName           = "id"
-	senderName           = "學號魔法師"
+	senderName           = "學號小幫手"
 	MaxStudentsPerSearch = 500 // Maximum students to return in name search results
 )
 

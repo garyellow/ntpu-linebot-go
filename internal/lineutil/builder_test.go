@@ -142,7 +142,7 @@ func TestContainsAllRunes(t *testing.T) {
 // TestErrorMessage tests that technical errors are NOT exposed to users
 func TestErrorMessage(t *testing.T) {
 	err := fmt.Errorf("database connection failed")
-	sender := &messaging_api.Sender{Name: "系統魔法師", IconUrl: "https://example.com/avatar.png"}
+	sender := &messaging_api.Sender{Name: "系統小幫手", IconUrl: "https://example.com/avatar.png"}
 	msg := ErrorMessageWithSender(err, sender)
 
 	textMsg, ok := msg.(*messaging_api.TextMessage)
@@ -446,19 +446,19 @@ func TestNewTextMessageWithConsistentSender(t *testing.T) {
 		{
 			name:           "With sticker icon",
 			text:           "Hello, World!",
-			senderName:     "學號魔法師",
+			senderName:     "學號小幫手",
 			stickerIconURL: "https://stickershop.line-scdn.net/stickershop/v1/sticker/52002734/android/sticker.png",
 		},
 		{
 			name:           "With UI avatar",
 			text:           "查詢結果",
-			senderName:     "聯繫魔法師",
+			senderName:     "聯繫小幫手",
 			stickerIconURL: "https://ui-avatars.com/api/?name=A&size=256",
 		},
 		{
 			name:           "Empty sticker URL",
 			text:           "測試訊息",
-			senderName:     "課程魔法師",
+			senderName:     "課程小幫手",
 			stickerIconURL: "",
 		},
 	}
