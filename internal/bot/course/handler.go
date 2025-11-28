@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -765,6 +766,14 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 			lineutil.NewTextMessageWithConsistentSender("🔍 查無課程資料", sender),
 		}
 	}
+
+	// Sort courses: year descending (recent first), then term descending (term 2 before term 1)
+	sort.Slice(courses, func(i, j int) bool {
+		if courses[i].Year != courses[j].Year {
+			return courses[i].Year > courses[j].Year // Year: recent first
+		}
+		return courses[i].Term > courses[j].Term // Term: 2 (下學期) before 1 (上學期)
+	})
 
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	var messages []messaging_api.MessageInterface

@@ -327,6 +327,33 @@ func TestFormatCourseListResponse_LargeList(t *testing.T) {
 	}
 }
 
+func TestFormatCourseListResponse_Sorting(t *testing.T) {
+	h := setupTestHandler(t)
+
+	// Create courses in random order to test sorting
+	courses := []storage.Course{
+		{UID: "1121U0001", Year: 112, Term: 1, Title: "Course A"}, // 112-1 (oldest)
+		{UID: "1142U0003", Year: 114, Term: 2, Title: "Course B"}, // 114-2 (newest)
+		{UID: "1131U0004", Year: 113, Term: 1, Title: "Course C"}, // 113-1
+		{UID: "1132U0005", Year: 113, Term: 2, Title: "Course D"}, // 113-2
+		{UID: "1141U0002", Year: 114, Term: 1, Title: "Course E"}, // 114-1
+		{UID: "1122U0006", Year: 112, Term: 2, Title: "Course F"}, // 112-2
+	}
+
+	// Call formatCourseListResponse - it will sort the courses
+	_ = h.formatCourseListResponse(courses)
+
+	// Verify sorting: year descending, then term descending
+	// Expected order: 114-2, 114-1, 113-2, 113-1, 112-2, 112-1
+	expectedOrder := []string{"1142U0003", "1141U0002", "1132U0005", "1131U0004", "1122U0006", "1121U0001"}
+
+	for i, expected := range expectedOrder {
+		if courses[i].UID != expected {
+			t.Errorf("Position %d: expected %s, got %s", i, expected, courses[i].UID)
+		}
+	}
+}
+
 func TestHandlePostback_InvalidData(t *testing.T) {
 	h := setupTestHandler(t)
 	ctx := context.Background()
