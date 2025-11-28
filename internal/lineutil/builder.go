@@ -487,11 +487,6 @@ func QuickReplyCourseAction() QuickReplyItem {
 	return QuickReplyItem{Action: NewMessageAction("📚 課程", "課程")}
 }
 
-// QuickReplyTeacherAction returns a "教師" quick reply item
-func QuickReplyTeacherAction() QuickReplyItem {
-	return QuickReplyItem{Action: NewMessageAction("👨‍🏫 教師", "教師")}
-}
-
 // QuickReplyStudentAction returns a "學號" quick reply item
 func QuickReplyStudentAction() QuickReplyItem {
 	return QuickReplyItem{Action: NewMessageAction("🎓 學號", "學號")}

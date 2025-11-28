@@ -15,11 +15,6 @@ func InitSchema(db *sql.DB) error {
 		return fmt.Errorf("failed to enable WAL mode: %w", err)
 	}
 
-	// Set busy timeout to avoid SQLITE_BUSY errors
-	if _, err := db.ExecContext(ctx, "PRAGMA busy_timeout=5000"); err != nil {
-		return fmt.Errorf("failed to set busy timeout: %w", err)
-	}
-
 	// Create students table
 	if err := createStudentsTable(db); err != nil {
 		return err

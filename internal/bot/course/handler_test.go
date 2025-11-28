@@ -71,12 +71,10 @@ func TestCanHandle(t *testing.T) {
 		{"科目 keyword", "科目名稱", true},
 		{"課名 keyword", "課名查詢", true},
 
-		// Teacher keywords (English)
+		// Teacher keywords (now unified with course keywords)
 		{"Professor keyword", "professor Wang", true},
 		{"Teacher keyword", "teacher info", true},
 		{"Dr keyword", "dr Chen", true},
-
-		// Teacher keywords (Chinese)
 		{"老師 keyword", "王老師", true},
 		{"教授 keyword", "陳教授", true},
 		{"教師 keyword", "授課教師", true},

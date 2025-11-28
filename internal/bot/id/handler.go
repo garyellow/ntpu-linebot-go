@@ -267,24 +267,69 @@ func (h *Handler) handleAllDepartmentCodes() []messaging_api.MessageInterface {
 	return []messaging_api.MessageInterface{msg}
 }
 
-// handleDepartmentNameQuery handles department name to code queries
+// handleDepartmentNameQuery handles department name to code queries with fuzzy matching
+// Search Strategy:
+//  1. Exact match: Check DepartmentCodes and FullDepartmentCodes maps directly
+//  2. Fuzzy match: If no exact match, use ContainsAllRunes to find matching department names
+//     Example: "資工" matches "資訊工程學系" because all chars exist in the full name
 func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.MessageInterface {
 	deptName = strings.TrimSuffix(deptName, "系")
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
-	// Check regular department codes
+	// Step 1: Check regular department codes (exact match)
 	if code, ok := ntpu.DepartmentCodes[deptName]; ok {
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("%s系的系代碼是：%s", deptName, code), sender)
-		// Add quick reply for all department codes
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyDeptCodeAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	// Check full department codes
+	// Step 2: Check full department codes (exact match)
 	if code, ok := ntpu.FullDepartmentCodes[deptName]; ok {
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("%s的系代碼是：%s", deptName, code), sender)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			lineutil.QuickReplyDeptCodeAction(),
+		})
+		return []messaging_api.MessageInterface{msg}
+	}
+
+	// Step 3: Fuzzy matching - search in FullDepartmentCodes using ContainsAllRunes
+	// This enables "資工" to match "資訊工程學系"
+	var matches []struct {
+		name string
+		code string
+	}
+	for fullName, code := range ntpu.FullDepartmentCodes {
+		if lineutil.ContainsAllRunes(fullName, deptName) {
+			matches = append(matches, struct {
+				name string
+				code string
+			}{fullName, code})
+		}
+	}
+
+	// If exactly one match, return it directly
+	if len(matches) == 1 {
+		msg := lineutil.NewTextMessageWithConsistentSender(
+			fmt.Sprintf("🔍「%s」→ %s\n\n系代碼是：%s", deptName, matches[0].name, matches[0].code),
+			sender,
+		)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			lineutil.QuickReplyDeptCodeAction(),
+		})
+		return []messaging_api.MessageInterface{msg}
+	}
+
+	// If multiple matches, show all options
+	if len(matches) > 1 {
+		var builder strings.Builder
+		builder.WriteString(fmt.Sprintf("🔍「%s」找到多個符合的系所：\n\n", deptName))
+		for _, m := range matches {
+			builder.WriteString(fmt.Sprintf("• %s → %s\n", m.name, m.code))
+		}
+		builder.WriteString("\n請輸入更完整的系名以縮小範圍")
+		msg := lineutil.NewTextMessageWithConsistentSender(builder.String(), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyDeptCodeAction(),
 		})
@@ -461,17 +506,39 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	return h.formatStudentResponse(student)
 }
 
-// handleStudentNameQuery handles student name queries
+// handleStudentNameQuery handles student name queries with a 2-tier search strategy:
+//
+// Search Strategy:
+//
+//  1. SQL LIKE (fast path): Direct database LIKE query for exact substrings.
+//     Example: "小明" matches "王小明" via SQL LIKE '%小明%'
+//
+//  2. Fuzzy character-set matching (cache fallback): If SQL LIKE returns no results,
+//     loads all cached students and checks if all runes in searchTerm exist in name.
+//     Example: "王明" matches "王小明" because all chars exist in the name
 func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(moduleName)
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
-	// Search in cache
+	// Step 1: Try SQL LIKE search first (fast path for exact substrings)
 	students, err := h.db.SearchStudentsByName(ctx, name)
 	if err != nil {
 		log.WithError(err).Error("Failed to search students by name")
 		return []messaging_api.MessageInterface{
 			lineutil.ErrorMessageWithQuickReply("搜尋姓名時發生問題", sender, "學號 "+name),
+		}
+	}
+
+	// Step 2: If SQL LIKE didn't find results, try fuzzy character-set matching
+	// This enables "王明" to match "王小明" by checking if all characters exist
+	if len(students) == 0 {
+		allStudents, err := h.db.GetAllStudents(ctx)
+		if err == nil && len(allStudents) > 0 {
+			for _, s := range allStudents {
+				if lineutil.ContainsAllRunes(s.Name, name) {
+					students = append(students, s)
+				}
+			}
 		}
 	}
 

@@ -171,6 +171,34 @@ func (db *DB) CountStudents(ctx context.Context) (int, error) {
 	return count, nil
 }
 
+// GetAllStudents retrieves all non-expired students from cache
+// Used for fuzzy character-set matching when SQL LIKE doesn't find results
+// Only returns non-expired cache entries based on configured TTL
+func (db *DB) GetAllStudents(ctx context.Context) ([]Student, error) {
+	ttlTimestamp := db.getTTLTimestamp()
+
+	// Get up to 5000 most recent students ordered by year and ID
+	query := `SELECT id, name, department, year, cached_at
+		FROM students WHERE cached_at > ? ORDER BY year DESC, id DESC LIMIT 5000`
+
+	rows, err := db.reader.QueryContext(ctx, query, ttlTimestamp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all students: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var students []Student
+	for rows.Next() {
+		var student Student
+		if err := rows.Scan(&student.ID, &student.Name, &student.Department, &student.Year, &student.CachedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan student row: %w", err)
+		}
+		students = append(students, student)
+	}
+
+	return students, nil
+}
+
 // ContactRepository provides CRUD operations for contacts table
 
 // SaveContact inserts or updates a contact record
