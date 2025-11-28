@@ -152,9 +152,9 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("查詢 112 學年度", "學年 112")},
-			{Action: lineutil.NewMessageAction("查詢 111 學年度", "學年 111")},
-			{Action: lineutil.NewMessageAction("查詢 110 學年度", "學年 110")},
+			{Action: lineutil.NewMessageAction("📅 查詢 112 學年度", "學年 112")},
+			{Action: lineutil.NewMessageAction("📅 查詢 111 學年度", "學年 111")},
+			{Action: lineutil.NewMessageAction("📅 查詢 110 學年度", "學年 110")},
 		})
 		return []messaging_api.MessageInterface{msg}
 	}

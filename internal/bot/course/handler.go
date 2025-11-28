@@ -617,15 +617,25 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 		lineutil.NewURIAction("🔍 查詢系統", courseQueryURL),
 	).WithStyle("secondary").WithHeight("sm").FlexButton)
 
-	// Teacher schedule button (if teachers exist)
+	// Teacher-related buttons (if teachers exist)
 	if len(course.Teachers) > 0 {
 		teacherName := course.Teachers[0]
+
+		// Teacher schedule button - opens the teacher's course table webpage
+		// This shows the teacher's weekly schedule for the current semester
+		if len(course.TeacherURLs) > 0 && course.TeacherURLs[0] != "" {
+			footerContents = append(footerContents, lineutil.NewFlexButton(
+				lineutil.NewURIAction("📅 教師課表", course.TeacherURLs[0]),
+			).WithStyle("secondary").WithHeight("sm").FlexButton)
+		}
+
+		// Teacher all courses button - searches for all courses taught by this teacher
 		// Truncate teacher name in display text if too long (using rune slicing for UTF-8 safety)
-		displayText := lineutil.TruncateRunes(fmt.Sprintf("搜尋 %s 的授課課程", teacherName), 40)
+		displayText := lineutil.TruncateRunes(fmt.Sprintf("搜尋 %s 的所有課程", teacherName), 40)
 		// Use course: prefix for proper postback routing
 		footerContents = append(footerContents, lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText(
-				"👤 教師課程",
+				"👤 教師所有課程",
 				displayText,
 				fmt.Sprintf("course:授課課程%s%s", bot.PostbackSplitChar, teacherName),
 			),
@@ -647,8 +657,8 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 
 	// Add Quick Reply for related actions
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		{Action: lineutil.NewMessageAction("查詢其他課程", "課程")},
-		{Action: lineutil.NewMessageAction("使用說明", "使用說明")},
+		{Action: lineutil.NewMessageAction("📚 查詢其他課程", "課程")},
+		{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
 	})
 
 	return []messaging_api.MessageInterface{msg}
@@ -715,7 +725,7 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 			)
 		}
 		// Footer with "View Detail" button - displayText shows course title
-		displayText := fmt.Sprintf("查詢「%s」課程", lineutil.TruncateRunes(course.Title, 30))
+		displayText := fmt.Sprintf("查詢「%s」課程資訊", lineutil.TruncateRunes(course.Title, 30))
 		// Use course: prefix for proper postback routing
 		footer := lineutil.NewFlexBox("vertical",
 			lineutil.NewFlexButton(
@@ -770,7 +780,7 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 
 	// Add Quick Reply to the last message
 	lineutil.AddQuickReplyToMessages(messages,
-		lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("重新查詢", "課程")},
+		lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("🔄 重新查詢", "課程")},
 		lineutil.QuickReplyHelpAction(),
 	)
 
