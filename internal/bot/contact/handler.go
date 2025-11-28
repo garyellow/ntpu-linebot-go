@@ -651,17 +651,18 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 					lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製信箱", c.Email)).WithStyle("secondary").WithHeight("sm"))
 			}
 
-			// Row 3: Website (standalone for better visibility)
+			// Row 3: Website button (standalone row for visibility)
 			if c.Website != "" {
 				row3Buttons = append(row3Buttons,
 					lineutil.NewFlexButton(lineutil.NewURIAction("🌐 開啟網站", c.Website)).WithStyle("secondary").WithHeight("sm"))
 			}
 
-			// Row 3 (continued): View Members button for organizations
+			// Row 4: View Members button for organizations (separate row for better UX)
 			// Allows querying all members belonging to this organization
+			var row4Buttons []*lineutil.FlexButton
 			if c.Type == "organization" {
 				displayText := fmt.Sprintf("查詢「%s」的成員", lineutil.TruncateRunes(c.Name, 20))
-				row3Buttons = append(row3Buttons,
+				row4Buttons = append(row4Buttons,
 					lineutil.NewFlexButton(
 						lineutil.NewPostbackActionWithDisplayText("👥 查看成員", displayText, fmt.Sprintf("contact:members%s%s", bot.PostbackSplitChar, c.Name)),
 					).WithStyle("secondary").WithHeight("sm"))
@@ -676,8 +677,8 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 			)
 
 			// Build footer with multi-row button layout
-			if len(row1Buttons) > 0 || len(row2Buttons) > 0 || len(row3Buttons) > 0 {
-				bubble.Footer = lineutil.NewButtonFooter(row1Buttons, row2Buttons, row3Buttons).FlexBox
+			if len(row1Buttons) > 0 || len(row2Buttons) > 0 || len(row3Buttons) > 0 || len(row4Buttons) > 0 {
+				bubble.Footer = lineutil.NewButtonFooter(row1Buttons, row2Buttons, row3Buttons, row4Buttons).FlexBox
 			}
 
 			bubbles = append(bubbles, *bubble.FlexBubble)
