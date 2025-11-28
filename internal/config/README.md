@@ -15,7 +15,6 @@
   - Windows: `./data/cache.db`（預設）
   - Linux/Mac: `/data/cache.db`（預設）
 - `CACHE_TTL=168h` - Hard TTL：快取絕對過期時間（7 天）
-- `SOFT_TTL=120h` - Soft TTL：觸發主動刷新時間（5 天）
 - `SCRAPER_TIMEOUT=60s` - 每次 HTTP 請求超時
 - `SCRAPER_MAX_RETRIES=5` - 失敗時最大重試次數（指數退避）
 - `WARMUP_TIMEOUT=30m` - 預熱超時

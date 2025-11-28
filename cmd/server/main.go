@@ -185,6 +185,9 @@ func main() {
 
 	log.Info("Shutting down server...")
 
+	// Stop webhook handler background goroutines
+	webhookHandler.Stop()
+
 	// Cancel context to stop metrics updater
 	cancel()
 
@@ -240,17 +243,10 @@ func setupRoutes(router *gin.Engine, webhookHandler *webhook.Handler, db *storag
 	// Readiness Probe - checks if the application is ready to serve traffic (full dependency check)
 	readyHandler := func(c *gin.Context) {
 		// Check database connections (both reader and writer)
-		if err := db.Reader().Ping(); err != nil {
+		if err := db.Ready(c.Request.Context()); err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"status": "not ready",
-				"reason": "database reader unavailable",
-			})
-			return
-		}
-		if err := db.Writer().Ping(); err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"status": "not ready",
-				"reason": "database writer unavailable",
+				"reason": err.Error(),
 			})
 			return
 		}

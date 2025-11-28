@@ -93,6 +93,14 @@ func NewHandler(channelSecret, channelToken string, db *storage.DB, scraperClien
 	}, nil
 }
 
+// Stop gracefully stops the handler's background goroutines.
+// This should be called during server shutdown to prevent goroutine leaks.
+func (h *Handler) Stop() {
+	if h.userLimiter != nil {
+		h.userLimiter.Stop()
+	}
+}
+
 // Handle processes incoming webhook requests
 func (h *Handler) Handle(c *gin.Context) {
 	start := time.Now()

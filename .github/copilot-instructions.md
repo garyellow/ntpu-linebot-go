@@ -68,7 +68,7 @@ LINE Webhook → Gin Handler (25s timeout) → Bot Module Dispatcher
 
 **Scraper** (`internal/scraper/ratelimiter.go`): Fixed 2s delay after success, exponential backoff on failure (4s initial, max 5 retries, ±25% jitter), 60s HTTP timeout per request
 
-**Webhook**: Per-user (10 req/s, burst 2), global (80 rps), silently drops excess requests
+**Webhook**: Per-user (10 tokens, 1 token/3s refill), global (80 rps), silently drops excess requests
 
 **LINE SDK Conventions**
 
