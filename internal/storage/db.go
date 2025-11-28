@@ -258,51 +258,6 @@ func (db *DB) getTTLTimestamp() int64 {
 	return time.Now().Unix() - int64(db.cacheTTL.Seconds())
 }
 
-// CountExpiringStudents counts students that will expire within the given duration
-// Used by warmup scheduler to determine if proactive refresh is needed
-func (db *DB) CountExpiringStudents(ctx context.Context, softTTL time.Duration) (int, error) {
-	// Count entries where: softTTL <= age < hardTTL
-	// These are entries that should be refreshed proactively
-	softTimestamp := time.Now().Unix() - int64(softTTL.Seconds())
-	hardTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
-
-	query := `SELECT COUNT(*) FROM students WHERE cached_at <= ? AND cached_at > ?`
-	var count int
-	err := db.reader.QueryRowContext(ctx, query, softTimestamp, hardTimestamp).Scan(&count)
-	if err != nil {
-		return 0, fmt.Errorf("failed to count expiring students: %w", err)
-	}
-	return count, nil
-}
-
-// CountExpiringCourses counts courses that will expire within the given duration
-func (db *DB) CountExpiringCourses(ctx context.Context, softTTL time.Duration) (int, error) {
-	softTimestamp := time.Now().Unix() - int64(softTTL.Seconds())
-	hardTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
-
-	query := `SELECT COUNT(*) FROM courses WHERE cached_at <= ? AND cached_at > ?`
-	var count int
-	err := db.reader.QueryRowContext(ctx, query, softTimestamp, hardTimestamp).Scan(&count)
-	if err != nil {
-		return 0, fmt.Errorf("failed to count expiring courses: %w", err)
-	}
-	return count, nil
-}
-
-// CountExpiringContacts counts contacts that will expire within the given duration
-func (db *DB) CountExpiringContacts(ctx context.Context, softTTL time.Duration) (int, error) {
-	softTimestamp := time.Now().Unix() - int64(softTTL.Seconds())
-	hardTimestamp := time.Now().Unix() - int64(db.cacheTTL.Seconds())
-
-	query := `SELECT COUNT(*) FROM contacts WHERE cached_at <= ? AND cached_at > ?`
-	var count int
-	err := db.reader.QueryRowContext(ctx, query, softTimestamp, hardTimestamp).Scan(&count)
-	if err != nil {
-		return 0, fmt.Errorf("failed to count expiring contacts: %w", err)
-	}
-	return count, nil
-}
-
 // NewTestDB creates an in-memory database for testing.
 // Note: In-memory databases don't support read/write separation as they use
 // a single shared connection. Both reader and writer point to the same connection.
