@@ -598,6 +598,11 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 			body.AddInfoRowIf("📍", "辦公位置", c.Location, lineutil.DefaultInfoRowStyle())
 			body.AddInfoRowIf("✉️", "電子郵件", c.Email, lineutil.DefaultInfoRowStyle())
 
+			// Add cache time hint (unobtrusive, right-aligned)
+			if hint := lineutil.NewCacheTimeHint(c.CachedAt); hint != nil {
+				body.AddComponent(hint.FlexText)
+			}
+
 			// Footer: Multi-row button layout for optimal UX
 			// Row 1: Phone actions (call, copy)
 			// Row 2: Email actions (send, copy)

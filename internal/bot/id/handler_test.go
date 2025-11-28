@@ -182,18 +182,20 @@ func TestFormatStudentResponse(t *testing.T) {
 		Name:       "測試學生",
 		Department: "資訊工程學系",
 		Year:       112,
+		CachedAt:   1732780800, // Add CachedAt for time hint display
 	}
 
-	// Test with cache flag false
-	msgs := h.formatStudentResponse(student, false)
+	// Test formatStudentResponse (now shows cache time instead of bool)
+	msgs := h.formatStudentResponse(student)
 	if len(msgs) != 1 {
 		t.Errorf("Expected 1 message, got %d", len(msgs))
 	}
 
-	// Test with cache flag true
-	msgsWithCache := h.formatStudentResponse(student, true)
-	if len(msgsWithCache) != 1 {
-		t.Errorf("Expected 1 message with cache, got %d", len(msgsWithCache))
+	// Test with different CachedAt (should still return 1 message)
+	student.CachedAt = 0 // No cache time
+	msgsNoCacheTime := h.formatStudentResponse(student)
+	if len(msgsNoCacheTime) != 1 {
+		t.Errorf("Expected 1 message with no cache time, got %d", len(msgsNoCacheTime))
 	}
 }
 

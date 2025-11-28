@@ -595,6 +595,11 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 		body.AddInfoRow("📝", "備註", course.Note, noteStyle)
 	}
 
+	// Add cache time hint (unobtrusive, right-aligned)
+	if hint := lineutil.NewCacheTimeHint(course.CachedAt); hint != nil {
+		body.AddComponent(hint.FlexText)
+	}
+
 	// Build footer actions
 	var footerContents []messaging_api.FlexComponentInterface
 

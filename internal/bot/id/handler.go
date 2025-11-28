@@ -433,7 +433,7 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 		// Cache hit
 		h.metrics.RecordCacheHit(moduleName)
 		log.Infof("Cache hit for student ID: %s", studentID)
-		return h.formatStudentResponse(student, true)
+		return h.formatStudentResponse(student)
 	}
 
 	// Cache miss - scrape from website
@@ -458,7 +458,7 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	}
 
 	h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
-	return h.formatStudentResponse(student, false)
+	return h.formatStudentResponse(student)
 }
 
 // handleStudentNameQuery handles student name queries
@@ -523,6 +523,21 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 		messages = append(messages, lineutil.NewTextMessageWithConsistentSender(builder.String(), sender))
 	}
 
+	// Add cache time footer to the last message (use oldest CachedAt)
+	if len(messages) > 0 && len(students) > 0 {
+		// Collect all CachedAt values to find the minimum
+		cachedAts := make([]int64, len(students))
+		for i, s := range students {
+			cachedAts[i] = s.CachedAt
+		}
+		minCachedAt := lineutil.MinCachedAt(cachedAts...)
+		if minCachedAt > 0 {
+			if lastMsg, ok := messages[len(messages)-1].(*messaging_api.TextMessage); ok {
+				lastMsg.Text += lineutil.FormatCacheTimeFooter(minCachedAt)
+			}
+		}
+	}
+
 	// Add Quick Reply to the last message
 	lineutil.AddQuickReplyToMessages(messages,
 		lineutil.QuickReplyStudentAction(),
@@ -534,7 +549,7 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 
 // formatStudentResponse formats a student record as a LINE message
 // Uses Flex Message for modern, card-based UI
-func (h *Handler) formatStudentResponse(student *storage.Student, fromCache bool) []messaging_api.MessageInterface {
+func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_api.MessageInterface {
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	// Header: Student badge (using standardized component)
@@ -549,8 +564,9 @@ func (h *Handler) formatStudentResponse(student *storage.Student, fromCache bool
 	body.AddInfoRow("🏫", "系所", student.Department, lineutil.BoldInfoRowStyle())
 	body.AddInfoRow("📅", "入學學年", fmt.Sprintf("%d 學年度", student.Year), lineutil.BoldInfoRowStyle())
 
-	if fromCache {
-		body.AddComponent(lineutil.NewFlexText("📌 資料來自快取").WithSize("xs").WithColor(lineutil.ColorGray400).WithMargin("sm").FlexText)
+	// Add cache time hint (unobtrusive, right-aligned)
+	if hint := lineutil.NewCacheTimeHint(student.CachedAt); hint != nil {
+		body.AddComponent(hint.FlexText)
 	}
 
 	// Footer: Action buttons
@@ -879,11 +895,18 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 
 	builder.WriteString(fmt.Sprintf("%d學年度%s%s學生名單：\n\n", year, displayName, departmentType))
 
-	for _, student := range students {
+	// Collect CachedAt values for time footer
+	cachedAts := make([]int64, len(students))
+	for i, student := range students {
 		builder.WriteString(fmt.Sprintf("%s  %s\n", student.ID, student.Name))
+		cachedAts[i] = student.CachedAt
 	}
 
 	builder.WriteString(fmt.Sprintf("\n%d學年度%s%s共有%d位學生", year, displayName, departmentType, len(students)))
+
+	// Add cache time footer
+	minCachedAt := lineutil.MinCachedAt(cachedAts...)
+	builder.WriteString(lineutil.FormatCacheTimeFooter(minCachedAt))
 
 	// Note: sender was already created at the start of handleDepartmentSelection, reuse it
 	msg := lineutil.NewTextMessageWithConsistentSender(builder.String(), sender)
