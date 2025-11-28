@@ -106,15 +106,15 @@ func MinCachedAt(cachedAts ...int64) int64 {
 		return 0
 	}
 
-	var min int64
+	var minTime int64
 	for _, t := range cachedAts {
 		if t == 0 {
 			continue
 		}
-		if min == 0 || t < min {
-			min = t
+		if minTime == 0 || t < minTime {
+			minTime = t
 		}
 	}
 
-	return min
+	return minTime
 }
