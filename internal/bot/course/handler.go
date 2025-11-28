@@ -5,6 +5,7 @@ package course
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -695,53 +696,81 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 		body.AddComponent(hint.FlexText)
 	}
 
-	// Build footer actions
-	var footerContents []messaging_api.FlexComponentInterface
+	// Build footer actions using button rows for 2-column layout
+	var footerRows [][]*lineutil.FlexButton
 
-	// Course Outline button (label: 6 chars + emoji)
+	// Row 1: 課程大綱 + 查詢系統
+	row1 := make([]*lineutil.FlexButton, 0, 2)
 	if course.DetailURL != "" {
-		footerContents = append(footerContents, lineutil.NewFlexButton(
+		row1 = append(row1, lineutil.NewFlexButton(
 			lineutil.NewURIAction("📄 課程大綱", course.DetailURL),
-		).WithStyle("primary").WithHeight("sm").FlexButton)
+		).WithStyle("primary").WithHeight("sm"))
 	}
-
-	// Course Query System button (label: 6 chars + emoji)
 	courseQueryURL := fmt.Sprintf("https://sea.cc.ntpu.edu.tw/pls/dev_stud/course_query_all.queryByKeyword?qYear=%d&qTerm=%d&courseno=%s&seq1=A&seq2=M",
 		course.Year, course.Term, course.No)
-	footerContents = append(footerContents, lineutil.NewFlexButton(
+	row1 = append(row1, lineutil.NewFlexButton(
 		lineutil.NewURIAction("🔍 查詢系統", courseQueryURL),
-	).WithStyle("secondary").WithHeight("sm").FlexButton)
+	).WithStyle("secondary").WithHeight("sm"))
+	if len(row1) > 0 {
+		footerRows = append(footerRows, row1)
+	}
 
-	// Teacher-related buttons (if teachers exist)
+	// Row 2: 教師課表 + 教師課程 (if teachers exist)
 	if len(course.Teachers) > 0 {
 		teacherName := course.Teachers[0]
+		row2 := make([]*lineutil.FlexButton, 0, 2)
 
 		// Teacher schedule button - opens the teacher's course table webpage
-		// This shows the teacher's weekly schedule for the current semester
 		if len(course.TeacherURLs) > 0 && course.TeacherURLs[0] != "" {
-			footerContents = append(footerContents, lineutil.NewFlexButton(
+			row2 = append(row2, lineutil.NewFlexButton(
 				lineutil.NewURIAction("📅 教師課表", course.TeacherURLs[0]),
-			).WithStyle("secondary").WithHeight("sm").FlexButton)
+			).WithStyle("secondary").WithHeight("sm"))
 		}
 
 		// Teacher all courses button - searches for all courses taught by this teacher
-		// Truncate teacher name in display text if too long (using rune slicing for UTF-8 safety)
 		displayText := lineutil.TruncateRunes(fmt.Sprintf("搜尋 %s 的近期課程", teacherName), 40)
-		// Use course: prefix for proper postback routing
-		footerContents = append(footerContents, lineutil.NewFlexButton(
+		row2 = append(row2, lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText(
 				"👤 教師課程",
 				displayText,
 				fmt.Sprintf("course:授課課程%s%s", bot.PostbackSplitChar, teacherName),
 			),
-		).WithStyle("secondary").WithHeight("sm").FlexButton)
+		).WithStyle("secondary").WithHeight("sm"))
+
+		if len(row2) > 0 {
+			footerRows = append(footerRows, row2)
+		}
 	}
+
+	// Row 3: Dcard 查詢 + 選課大全
+	if len(course.Teachers) > 0 {
+		teacherName := course.Teachers[0]
+		row3 := make([]*lineutil.FlexButton, 0, 2)
+
+		// Dcard search button - Google search with site:dcard.tw/f/ntpu
+		dcardQuery := fmt.Sprintf("%s %s site:dcard.tw/f/ntpu", teacherName, course.Title)
+		dcardURL := "https://www.google.com/search?q=" + url.QueryEscape(dcardQuery)
+		row3 = append(row3, lineutil.NewFlexButton(
+			lineutil.NewURIAction("💬 Dcard", dcardURL),
+		).WithStyle("secondary").WithHeight("sm"))
+
+		// 選課大全 button
+		courseSelectionQuery := fmt.Sprintf("%s %s", teacherName, course.Title)
+		courseSelectionURL := "https://no21.ntpu.org/?s=" + url.QueryEscape(courseSelectionQuery)
+		row3 = append(row3, lineutil.NewFlexButton(
+			lineutil.NewURIAction("📖 選課大全", courseSelectionURL),
+		).WithStyle("secondary").WithHeight("sm"))
+
+		footerRows = append(footerRows, row3)
+	}
+
+	footer := lineutil.NewButtonFooter(footerRows...)
 
 	bubble := lineutil.NewFlexBubble(
 		header,
 		hero.FlexBox,
 		body.Build(),
-		lineutil.NewFlexBox("vertical", footerContents...).WithSpacing("sm"),
+		footer,
 	)
 
 	// Limit altText to 400 chars (LINE API limit, using rune slicing for UTF-8 safety)
