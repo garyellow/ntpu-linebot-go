@@ -239,7 +239,8 @@ func NewClipboardAction(label, clipboardText string) Action {
 	}
 }
 
-// ContainsAllRunes checks if string s contains all runes from string chars.
+// ContainsAllRunes checks if string s contains all runes from string chars,
+// counting character occurrences (e.g., "aa" requires at least 2 'a's in s).
 // Example: ContainsAllRunes("資訊工程學系", "資工系") returns true
 // because all characters in "資工系" exist in "資訊工程學系".
 // This is case-insensitive for ASCII characters.
@@ -255,15 +256,21 @@ func ContainsAllRunes(s, chars string) bool {
 	sLower := strings.ToLower(s)
 	charsLower := strings.ToLower(chars)
 
-	// Build a set of runes from s
-	runeSet := make(map[rune]struct{})
+	// Build a map counting rune occurrences in s
+	runeCount := make(map[rune]int)
 	for _, r := range sLower {
-		runeSet[r] = struct{}{}
+		runeCount[r]++
 	}
 
-	// Check if all runes in chars exist in s
+	// Build a map counting required rune occurrences in chars
+	requiredCount := make(map[rune]int)
 	for _, r := range charsLower {
-		if _, exists := runeSet[r]; !exists {
+		requiredCount[r]++
+	}
+
+	// Check if s has at least as many of each rune as required
+	for r, required := range requiredCount {
+		if runeCount[r] < required {
 			return false
 		}
 	}

@@ -329,16 +329,19 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 // handleUnifiedCourseSearch handles unified course search queries with fuzzy matching.
 // It searches both course titles and teacher names simultaneously.
 //
-// Search Strategy (3-tier cascade):
+// Search Strategy (2-tier parallel search + scraping fallback):
 //
-//  1. SQL LIKE (fast path): Search in both title and teachers fields
+//  1. SQL LIKE (fast path): Search in both title and teachers fields for consecutive substrings.
 //     Example: "微積分" matches courses with title containing "微積分"
 //     Example: "王" matches courses where any teacher name contains "王"
 //
-//  2. Fuzzy character-set matching (cache fallback): If SQL LIKE returns no results,
-//     loads cached courses and checks if all runes in searchTerm exist in title OR teachers.
-//     Example: "線代" matches "線性代數" (all chars exist in title)
+//  2. Fuzzy character-set matching (ALWAYS runs in parallel with SQL LIKE):
+//     Loads cached courses and checks if all runes in searchTerm exist in title OR teachers.
+//     This catches abbreviations that SQL LIKE misses because characters are scattered.
+//     Example: "線代" matches "線性代數" (all chars exist in title but not consecutive)
 //     Example: "王明" matches teacher "王小明" (all chars exist)
+//
+//     Results from both strategies are merged and deduplicated by UID.
 //
 //  3. Web scraping (external fallback): If cache has no results, scrape from website.
 //
@@ -369,40 +372,34 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 		// Don't return error, continue with title results
 	} else {
 		// Merge results, avoiding duplicates
-		existingUIDs := make(map[string]bool)
-		for _, c := range courses {
-			existingUIDs[c.UID] = true
-		}
 		for _, c := range teacherCourses {
-			if !existingUIDs[c.UID] {
+			courses = append(courses, c)
+		}
+	}
+
+	// Step 2: ALWAYS try fuzzy character-set matching to find additional results
+	// This catches cases like "線代" -> "線性代數" that SQL LIKE misses
+	// SQL LIKE only finds consecutive substrings, but fuzzy matching finds scattered characters
+	allCourses, err := h.db.GetCoursesByRecentSemesters(ctx)
+	if err == nil && len(allCourses) > 0 {
+		for _, c := range allCourses {
+			// Check if searchTerm matches title OR any teacher using fuzzy matching
+			titleMatch := lineutil.ContainsAllRunes(c.Title, searchTerm)
+			teacherMatch := false
+			for _, teacher := range c.Teachers {
+				if lineutil.ContainsAllRunes(teacher, searchTerm) {
+					teacherMatch = true
+					break
+				}
+			}
+			if titleMatch || teacherMatch {
 				courses = append(courses, c)
-				existingUIDs[c.UID] = true
 			}
 		}
 	}
 
-	// Step 2: If SQL LIKE didn't find results, try fuzzy character-set matching
-	if len(courses) == 0 {
-		allCourses, err := h.db.GetCoursesByRecentSemesters(ctx)
-		if err == nil && len(allCourses) > 0 {
-			existingUIDs := make(map[string]bool)
-			for _, c := range allCourses {
-				// Check if searchTerm matches title OR any teacher
-				titleMatch := lineutil.ContainsAllRunes(c.Title, searchTerm)
-				teacherMatch := false
-				for _, teacher := range c.Teachers {
-					if lineutil.ContainsAllRunes(teacher, searchTerm) {
-						teacherMatch = true
-						break
-					}
-				}
-				if (titleMatch || teacherMatch) && !existingUIDs[c.UID] {
-					courses = append(courses, c)
-					existingUIDs[c.UID] = true
-				}
-			}
-		}
-	}
+	// Deduplicate results by UID (SQL LIKE and fuzzy may find overlapping results)
+	courses = deduplicateCourses(courses)
 
 	if len(courses) > 0 {
 		h.metrics.RecordCacheHit(moduleName)
@@ -876,4 +873,17 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 	)
 
 	return messages
+}
+
+// deduplicateCourses removes duplicate courses by UID while preserving order
+func deduplicateCourses(courses []storage.Course) []storage.Course {
+	seen := make(map[string]bool)
+	result := make([]storage.Course, 0, len(courses))
+	for _, c := range courses {
+		if !seen[c.UID] {
+			seen[c.UID] = true
+			result = append(result, c)
+		}
+	}
+	return result
 }

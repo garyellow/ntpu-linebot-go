@@ -127,6 +127,14 @@ func TestContainsAllRunes(t *testing.T) {
 		{"程式 in 程式設計", "程式設計", "程式", true},
 		{"微積分 matches", "微積分（一）", "微積分", true},
 		{"資料結構 matches", "資料結構與演算法", "資料", true},
+
+		// Duplicate character handling (rune count must match)
+		{"Duplicate char - single in target", "王", "王王", false},   // Only 1 王, need 2
+		{"Duplicate char - enough in target", "王王小明", "王王", true}, // Has 2 王
+		{"Duplicate char - Chinese single", "程式設計", "程程", false},  // Only 1 程, need 2
+		{"Duplicate char - Chinese enough", "程程式設計", "程程", true},  // Has 2 程
+		{"Duplicate char - ASCII mixed", "aabb", "aaab", false},   // Has 2 a, need 3
+		{"Duplicate char - ASCII exact", "aabb", "aabb", true},    // Exact match with duplicates
 	}
 
 	for _, tt := range tests {
