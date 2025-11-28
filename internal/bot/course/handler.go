@@ -669,9 +669,10 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 		body.AddInfoRow("👨‍🏫", "授課教師", teacherNames, lineutil.DefaultInfoRowStyle())
 	}
 
-	// 時間 info
+	// 時間 info - 轉換節次為實際時間
 	if len(course.Times) > 0 {
-		timeStr := strings.Join(course.Times, "、")
+		formattedTimes := lineutil.FormatCourseTimes(course.Times)
+		timeStr := strings.Join(formattedTimes, "、")
 		body.AddInfoRow("⏰", "上課時間", timeStr, lineutil.DefaultInfoRowStyle())
 	}
 
@@ -725,11 +726,11 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 
 		// Teacher all courses button - searches for all courses taught by this teacher
 		// Truncate teacher name in display text if too long (using rune slicing for UTF-8 safety)
-		displayText := lineutil.TruncateRunes(fmt.Sprintf("搜尋 %s 的所有課程", teacherName), 40)
+		displayText := lineutil.TruncateRunes(fmt.Sprintf("搜尋 %s 的近期課程", teacherName), 40)
 		// Use course: prefix for proper postback routing
 		footerContents = append(footerContents, lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText(
-				"👤 教師所有課程",
+				"👤 教師課程",
 				displayText,
 				fmt.Sprintf("course:授課課程%s%s", bot.PostbackSplitChar, teacherName),
 			),
@@ -814,10 +815,11 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 				).WithMargin("sm").WithSpacing("sm").FlexBox,
 			)
 		}
-		// 第三列：上課時間
+		// 第三列：上課時間 - 轉換節次為實際時間
 		if len(course.Times) > 0 {
-			// Display times with truncation if too many (max 4, then "等 N 節")
-			carouselTimes := lineutil.FormatTimes(course.Times, 4)
+			// Format times with actual time ranges, then truncate if too many (max 4, then "等 N 節")
+			formattedTimes := lineutil.FormatCourseTimes(course.Times)
+			carouselTimes := lineutil.FormatTimes(formattedTimes, 4)
 			contents = append(contents,
 				lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 				lineutil.NewFlexBox("horizontal",
