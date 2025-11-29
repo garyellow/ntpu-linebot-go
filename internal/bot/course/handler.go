@@ -166,7 +166,14 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 
 		if searchTerm == "" {
 			sender := lineutil.GetSender(senderName, h.stickerManager)
-			msg := lineutil.NewTextMessageWithConsistentSender("🔮 請輸入想找的課程描述\n\n例如：\n• 找課 想學習資料分析\n• 找課 Python 機器學習\n• 找課 商業管理相關課程\n\n💡 語意搜尋會根據課程大綱內容智慧匹配", sender)
+			// Check if semantic search is actually enabled
+			var helpText string
+			if h.vectorDB != nil && h.vectorDB.IsEnabled() {
+				helpText = "🔮 請輸入想找的課程描述\n\n例如：\n• 找課 想學習資料分析\n• 找課 Python 機器學習\n• 找課 商業管理相關課程\n\n💡 語意搜尋會根據課程大綱內容智慧匹配"
+			} else {
+				helpText = "🔮 語意搜尋目前未啟用\n\n請使用「課程 關鍵字」進行搜尋\n例如：課程 微積分、課程 王小明"
+			}
+			msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
 			return []messaging_api.MessageInterface{msg}
 		}
 
@@ -973,10 +980,11 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 	log.Infof("Performing semantic search for: %s", query)
 
 	// Perform semantic search
+	// Errors are logged but ignored - gracefully fall back to keyword search
 	results, err := h.vectorDB.Search(ctx, query, 10)
 	if err != nil {
-		log.WithError(err).Error("Semantic search failed")
-		// Fall back to keyword search
+		// Log error but don't fail - semantic search errors should not block user
+		log.WithError(err).Warn("Semantic search failed, falling back to keyword search")
 		return h.handleUnifiedCourseSearch(ctx, query)
 	}
 
@@ -1071,8 +1079,9 @@ func (h *Handler) formatSemanticSearchResponse(courses []storage.Course, results
 
 // buildSemanticCourseBubble creates a Flex Message bubble for a course with similarity badge
 func (h *Handler) buildSemanticCourseBubble(course storage.Course, similarity float32) *lineutil.FlexBubble {
-	// Similarity badge text
+	// Similarity badge text and color based on similarity score
 	similarityBadge := fmt.Sprintf("🎯 %.0f%% 相關", similarity*100)
+	similarityColor := getSimilarityColor(similarity)
 
 	// Build body components
 	bodyComponents := []messaging_api.FlexComponentInterface{
@@ -1081,10 +1090,10 @@ func (h *Handler) buildSemanticCourseBubble(course storage.Course, similarity fl
 			WithWeight("bold").
 			WithSize("lg").
 			WithWrap(true).FlexText,
-		// Similarity badge
+		// Similarity badge with dynamic color
 		lineutil.NewFlexText(similarityBadge).
 			WithSize("sm").
-			WithColor(lineutil.ColorPrimary).FlexText,
+			WithColor(similarityColor).FlexText,
 		// Semester info
 		lineutil.NewFlexText(fmt.Sprintf("%d 學年度 第 %d 學期", course.Year, course.Term)).
 			WithSize("sm").
@@ -1117,4 +1126,17 @@ func (h *Handler) buildSemanticCourseBubble(course storage.Course, similarity fl
 	bubble := lineutil.NewFlexBubble(nil, nil, body, footer)
 	bubble.Size = messaging_api.FlexBubbleSIZE_KILO
 	return bubble
+}
+
+// getSimilarityColor returns a color based on similarity score
+// High (>=70%): Primary green, Medium (>=50%): Subtext gray, Low (<50%): Label gray
+func getSimilarityColor(similarity float32) string {
+	switch {
+	case similarity >= 0.70:
+		return lineutil.ColorPrimary // LINE Green - high relevance
+	case similarity >= 0.50:
+		return lineutil.ColorSubtext // Gray - medium relevance
+	default:
+		return lineutil.ColorLabel // Darker gray - low relevance
+	}
 }

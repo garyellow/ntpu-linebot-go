@@ -26,6 +26,13 @@ const (
 
 	// geminiAPIBaseURL is the base URL for Gemini API
 	geminiAPIBaseURL = "https://generativelanguage.googleapis.com/v1beta/models"
+
+	// Retry configuration for transient errors (similar to scraper)
+	defaultMaxRetries    = 5
+	defaultInitialDelay  = 2 * time.Second
+	defaultMaxDelay      = 60 * time.Second
+	defaultBackoffFactor = 2.0
+	defaultJitterFactor  = 0.25
 )
 
 // EmbeddingClient provides embedding generation using Gemini API
@@ -127,6 +134,7 @@ type embeddingResponse struct {
 }
 
 // Embed generates an embedding vector for the given text
+// Uses exponential backoff with jitter for transient errors (429, 500+)
 func (c *EmbeddingClient) Embed(ctx context.Context, text string) ([]float32, error) {
 	if c.apiKey == "" {
 		return nil, fmt.Errorf("gemini API key not configured")
@@ -136,11 +144,55 @@ func (c *EmbeddingClient) Embed(ctx context.Context, text string) ([]float32, er
 		return nil, fmt.Errorf("empty text cannot be embedded")
 	}
 
-	// Wait for rate limit
-	if err := c.rateLimiter.wait(ctx); err != nil {
-		return nil, fmt.Errorf("rate limit wait: %w", err)
+	var lastErr error
+	delay := defaultInitialDelay
+
+	for attempt := 0; attempt <= defaultMaxRetries; attempt++ {
+		// Wait for rate limit
+		if err := c.rateLimiter.wait(ctx); err != nil {
+			return nil, fmt.Errorf("rate limit wait: %w", err)
+		}
+
+		result, err, retryable := c.embedOnce(ctx, text)
+		if err == nil {
+			return result, nil
+		}
+
+		lastErr = err
+
+		// Don't retry non-retryable errors
+		if !retryable {
+			return nil, err
+		}
+
+		// Don't retry if this was the last attempt
+		if attempt == defaultMaxRetries {
+			break
+		}
+
+		// Apply jitter to delay (±25%)
+		jitteredDelay := c.applyJitter(delay)
+
+		// Wait before retry
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(jitteredDelay):
+		}
+
+		// Exponential backoff
+		delay = time.Duration(float64(delay) * defaultBackoffFactor)
+		if delay > defaultMaxDelay {
+			delay = defaultMaxDelay
+		}
 	}
 
+	return nil, fmt.Errorf("max retries exceeded: %w", lastErr)
+}
+
+// embedOnce performs a single embedding request
+// Returns (result, error, retryable)
+func (c *EmbeddingClient) embedOnce(ctx context.Context, text string) ([]float32, error, bool) {
 	// Build request
 	url := fmt.Sprintf("%s/%s:embedContent?key=%s", geminiAPIBaseURL, GeminiEmbeddingModel, c.apiKey)
 
@@ -153,41 +205,60 @@ func (c *EmbeddingClient) Embed(ctx context.Context, text string) ([]float32, er
 
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
+		return nil, fmt.Errorf("marshal request: %w", err), false
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonBody))
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return nil, fmt.Errorf("create request: %w", err), false
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	// Execute request
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("execute request: %w", err)
+		// Network errors are retryable
+		return nil, fmt.Errorf("execute request: %w", err), true
 	}
 	defer resp.Body.Close()
+
+	// Check HTTP status for retryable errors
+	if resp.StatusCode == 429 || resp.StatusCode >= 500 {
+		return nil, fmt.Errorf("HTTP %d: server error or rate limited", resp.StatusCode), true
+	}
 
 	// Parse response
 	var embeddingResp embeddingResponse
 	if err := json.NewDecoder(resp.Body).Decode(&embeddingResp); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
+		return nil, fmt.Errorf("decode response: %w", err), false
 	}
 
 	// Check for API error
 	if embeddingResp.Error != nil {
+		// 429 RESOURCE_EXHAUSTED is retryable
+		retryable := embeddingResp.Error.Code == 429 ||
+			embeddingResp.Error.Status == "RESOURCE_EXHAUSTED" ||
+			embeddingResp.Error.Code >= 500
+
 		return nil, fmt.Errorf("API error %d: %s - %s",
 			embeddingResp.Error.Code,
 			embeddingResp.Error.Status,
-			embeddingResp.Error.Message)
+			embeddingResp.Error.Message), retryable
 	}
 
 	if len(embeddingResp.Embedding.Values) == 0 {
-		return nil, fmt.Errorf("empty embedding returned")
+		return nil, fmt.Errorf("empty embedding returned"), false
 	}
 
-	return embeddingResp.Embedding.Values, nil
+	return embeddingResp.Embedding.Values, nil, false
+}
+
+// applyJitter adds random jitter to delay (±25%)
+func (c *EmbeddingClient) applyJitter(delay time.Duration) time.Duration {
+	// Use current time nanoseconds for simple randomness (no need for crypto/rand)
+	jitter := float64(time.Now().UnixNano()%1000) / 1000.0 // 0.0 to 0.999
+	jitter = (jitter - 0.5) * 2 * defaultJitterFactor      // -0.25 to +0.25
+	return time.Duration(float64(delay) * (1 + jitter))
 }
 
 // NewEmbeddingFunc creates a chromem-go compatible EmbeddingFunc

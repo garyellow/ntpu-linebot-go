@@ -13,13 +13,19 @@
 - 向量維度: 768
 - API 限流: 1000 RPM (自動處理)
 
+## 錯誤處理
+
+- **指數退避重試**: 針對 429 (RESOURCE_EXHAUSTED) 和 500+ 錯誤自動重試
+- **重試配置**: 最多 5 次重試，初始延遲 2 秒，最大延遲 60 秒
+- **Jitter**: ±25% 隨機抖動，避免 thundering herd
+
 ## 使用
 
 ```go
 // 建立客戶端
 client := genai.NewEmbeddingClient(apiKey)
 
-// 產生 embedding
+// 產生 embedding（自動處理重試）
 vector, err := client.Embed(ctx, "課程內容文字")
 
 // 或使用 chromem-go 相容的函數

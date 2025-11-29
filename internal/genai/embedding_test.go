@@ -157,3 +157,42 @@ func TestConstants(t *testing.T) {
 		t.Errorf("GeminiAPIRateLimit = %d, want %d", GeminiAPIRateLimit, 1000)
 	}
 }
+
+// TestRetryConstants tests retry configuration constants
+func TestRetryConstants(t *testing.T) {
+	if defaultMaxRetries != 5 {
+		t.Errorf("defaultMaxRetries = %d, want 5", defaultMaxRetries)
+	}
+	if defaultInitialDelay != 2*time.Second {
+		t.Errorf("defaultInitialDelay = %v, want 2s", defaultInitialDelay)
+	}
+	if defaultMaxDelay != 60*time.Second {
+		t.Errorf("defaultMaxDelay = %v, want 60s", defaultMaxDelay)
+	}
+	if defaultBackoffFactor != 2.0 {
+		t.Errorf("defaultBackoffFactor = %v, want 2.0", defaultBackoffFactor)
+	}
+	if defaultJitterFactor != 0.25 {
+		t.Errorf("defaultJitterFactor = %v, want 0.25", defaultJitterFactor)
+	}
+}
+
+// TestApplyJitter tests the jitter application
+func TestApplyJitter(t *testing.T) {
+	client := NewEmbeddingClient("test-key")
+	baseDelay := 2 * time.Second
+
+	// Run multiple times to ensure jitter is within bounds
+	for i := 0; i < 100; i++ {
+		jittered := client.applyJitter(baseDelay)
+
+		// Jitter should be within ±25%
+		minExpected := time.Duration(float64(baseDelay) * 0.75)
+		maxExpected := time.Duration(float64(baseDelay) * 1.25)
+
+		if jittered < minExpected || jittered > maxExpected {
+			t.Errorf("applyJitter(%v) = %v, expected between %v and %v",
+				baseDelay, jittered, minExpected, maxExpected)
+		}
+	}
+}
