@@ -255,8 +255,8 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 		lineutil.NewFlexText("📍 三峽校區").WithWeight("bold").WithSize("md").WithColor(lineutil.ColorPrimary).WithMargin("lg").FlexText,
 		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 		createRow("📞", "總機", sanxiaNormalPhone, ""),
-		createRow("🏢", "24H行政", sanxia24HPhone, ""),
-		createRow("🚨", "24H校安", sanxiaEmergencyPhone, lineutil.ColorDanger), // Highlight emergency
+		createRow("🏢", "24H緊急行政電話", sanxia24HPhone, ""),
+		createRow("🚨", "24H急難救助電話", sanxiaEmergencyPhone, lineutil.ColorDanger), // Highlight emergency
 		createRow("🚪", "大門哨所", sanxiaGatePhone, ""),
 		createRow("🏠", "宿舍夜間", sanxiaDormPhone, ""),
 	).WithSpacing("sm").WithMargin("sm").FlexBox
@@ -266,7 +266,7 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 		lineutil.NewFlexText("📍 台北校區").WithWeight("bold").WithSize("md").WithColor(lineutil.ColorPrimary).WithMargin("lg").FlexText,
 		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 		createRow("📞", "總機", taipeiNormalPhone, ""),
-		createRow("🚨", "24H校安", taipeiEmergencyPhone, lineutil.ColorDanger),
+		createRow("🚨", "24H急難救助電話", taipeiEmergencyPhone, lineutil.ColorDanger),
 	).WithSpacing("sm").WithMargin("sm").FlexBox
 
 	// External Emergency Box

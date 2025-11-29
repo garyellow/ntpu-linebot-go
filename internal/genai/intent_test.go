@@ -2,6 +2,7 @@
 package genai
 
 import (
+	"context"
 	"testing"
 )
 
@@ -91,7 +92,7 @@ func TestBuildIntentFunctions(t *testing.T) {
 }
 
 func TestNewIntentParser_NilWithEmptyKey(t *testing.T) {
-	parser, err := NewIntentParser(nil, "")
+	parser, err := NewIntentParser(context.Background(), "")
 	if err != nil {
 		t.Errorf("Expected nil error for empty key, got: %v", err)
 	}
@@ -116,7 +117,7 @@ func TestIntentParser_IsEnabled(t *testing.T) {
 
 func TestIntentParser_ParseNil(t *testing.T) {
 	var nilParser *IntentParser
-	_, err := nilParser.Parse(nil, "test")
+	_, err := nilParser.Parse(context.Background(), "test")
 	if err == nil {
 		t.Error("Expected error for nil parser")
 	}
