@@ -559,20 +559,20 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 
 	// Sort by student ID (newest first)
 	// Database query already limits to 500 students
-	// Add warning if we hit the limit (likely more results available)
-	var messages []messaging_api.MessageInterface
-	if len(students) >= MaxStudentsPerSearch {
-		warningMsg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("⚠️ 搜尋結果達到上限 %d 筆\n\n可能有更多結果未顯示，建議：\n• 輸入更完整的姓名\n• 使用「學年」功能按年度查詢", MaxStudentsPerSearch),
-			sender,
-		)
-		messages = append(messages, warningMsg)
-	}
+	// Track if we hit the limit (likely more results available) - warning added at end
+	truncated := len(students) >= MaxStudentsPerSearch
 
 	// Format results - split into multiple messages if needed (100 students per message)
+	// Reserve 1 message slot for warning if truncated (LINE API: max 5 messages)
+	var messages []messaging_api.MessageInterface
+	maxMessages := 5
+	if truncated {
+		maxMessages = 4 // Reserve 1 slot for warning message at the end
+	}
+
 	for i := 0; i < len(students); i += 100 {
-		// Respect LINE reply limit (max 5 messages)
-		if len(messages) >= 5 {
+		// Respect LINE reply limit
+		if len(messages) >= maxMessages {
 			break
 		}
 
@@ -606,6 +606,15 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 				lastMsg.Text += lineutil.FormatCacheTimeFooter(minCachedAt)
 			}
 		}
+	}
+
+	// Append warning message at the end if results were truncated
+	if truncated {
+		warningMsg := lineutil.NewTextMessageWithConsistentSender(
+			fmt.Sprintf("⚠️ 搜尋結果達到上限 %d 筆\n\n可能有更多結果未顯示，建議：\n• 輸入更完整的姓名\n• 使用「學年」功能按年度查詢", MaxStudentsPerSearch),
+			sender,
+		)
+		messages = append(messages, warningMsg)
 	}
 
 	// Add Quick Reply to the last message

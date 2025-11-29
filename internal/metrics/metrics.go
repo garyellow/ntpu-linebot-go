@@ -39,6 +39,12 @@ type Metrics struct {
 	// Warmup metrics
 	WarmupTasksTotal *prometheus.CounterVec
 	WarmupDuration   prometheus.Histogram
+
+	// Semantic search metrics
+	SemanticSearchTotal    *prometheus.CounterVec   // Total searches by status
+	SemanticSearchDuration *prometheus.HistogramVec // Search latency
+	SemanticSearchResults  *prometheus.HistogramVec // Number of results returned
+	VectorDBSize           prometheus.Gauge         // Current document count in vector store
 }
 
 // New creates a new Metrics instance with all metrics registered
@@ -95,7 +101,7 @@ func New(registry *prometheus.Registry) *Metrics {
 			prometheus.HistogramOpts{
 				Name:    "ntpu_webhook_duration_seconds",
 				Help:    "Webhook processing duration in seconds by event type",
-				Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 25}, // Extended for webhook timeout (25s)
+				Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 25, 60}, // Extended for webhook timeout (60s)
 			},
 			[]string{"event_type"}, // event_type: message, postback, follow
 		),
@@ -165,6 +171,40 @@ func New(registry *prometheus.Registry) *Metrics {
 				Buckets: []float64{10, 30, 60, 120, 300, 600, 900, 1800}, // 10s to 30min
 			},
 		),
+
+		// Semantic search metrics
+		SemanticSearchTotal: promauto.With(registry).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "ntpu_semantic_search_total",
+				Help: "Total number of semantic searches by status",
+			},
+			[]string{"status"}, // status: success, error, fallback, disabled
+		),
+
+		SemanticSearchDuration: promauto.With(registry).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "ntpu_semantic_search_duration_seconds",
+				Help:    "Semantic search latency in seconds",
+				Buckets: []float64{0.1, 0.25, 0.5, 1, 2, 5, 10}, // 100ms to 10s
+			},
+			[]string{"type"}, // type: query, embedding
+		),
+
+		SemanticSearchResults: promauto.With(registry).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "ntpu_semantic_search_results",
+				Help:    "Number of results returned by semantic search",
+				Buckets: []float64{0, 1, 2, 5, 10, 20}, // 0 to 20 results
+			},
+			[]string{"source"}, // source: direct, fallback
+		),
+
+		VectorDBSize: promauto.With(registry).NewGauge(
+			prometheus.GaugeOpts{
+				Name: "ntpu_vectordb_documents",
+				Help: "Current number of documents in vector database",
+			},
+		),
 	}
 
 	return m
@@ -230,6 +270,23 @@ func (m *Metrics) RecordWarmupDuration(duration float64) {
 // SetCacheSize sets the current cache size for a module
 func (m *Metrics) SetCacheSize(module string, size int) {
 	m.CacheSize.WithLabelValues(module).Set(float64(size))
+}
+
+// RecordSemanticSearch records a semantic search request
+func (m *Metrics) RecordSemanticSearch(status string, duration float64, resultCount int, source string) {
+	m.SemanticSearchTotal.WithLabelValues(status).Inc()
+	m.SemanticSearchDuration.WithLabelValues("query").Observe(duration)
+	m.SemanticSearchResults.WithLabelValues(source).Observe(float64(resultCount))
+}
+
+// RecordEmbeddingLatency records embedding generation latency
+func (m *Metrics) RecordEmbeddingLatency(duration float64) {
+	m.SemanticSearchDuration.WithLabelValues("embedding").Observe(duration)
+}
+
+// SetVectorDBSize sets the current vector database document count
+func (m *Metrics) SetVectorDBSize(count int) {
+	m.VectorDBSize.Set(float64(count))
 }
 
 // Registry returns the custom Prometheus registry

@@ -16,6 +16,7 @@ func TestParseModules(t *testing.T) {
 		{"with spaces", "id, contact , course", []string{"id", "contact", "course"}},
 		{"with empty items", "id,,contact", []string{"id", "contact"}},
 		{"all modules", "id,contact,course,sticker", []string{"id", "contact", "course", "sticker"}},
+		{"all modules with syllabus", "sticker,id,contact,course,syllabus", []string{"sticker", "id", "contact", "course", "syllabus"}},
 		// Note: ParseModules does NOT convert to lowercase - removed this test
 		{"duplicate modules", "id,id,contact", []string{"id", "id", "contact"}},
 	}

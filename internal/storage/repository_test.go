@@ -1093,3 +1093,412 @@ func TestHistoricalCoursesTTLFiltering(t *testing.T) {
 		t.Errorf("Expected 1 non-expired course, got %d", len(courses))
 	}
 }
+
+// ==================== Syllabus Repository Tests ====================
+
+func TestSaveSyllabus(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+	ctx := context.Background()
+
+	syllabus := &Syllabus{
+		UID:         "1131U0001",
+		Year:        113,
+		Term:        1,
+		Title:       "程式設計",
+		Teachers:    []string{"王小明", "李小華"},
+		Objectives:  "培養程式設計能力",
+		Outline:     "變數、迴圈、函數",
+		Schedule:    "第1週：課程介紹",
+		ContentHash: "abc123hash",
+	}
+
+	err := db.SaveSyllabus(ctx, syllabus)
+	if err != nil {
+		t.Fatalf("SaveSyllabus failed: %v", err)
+	}
+
+	// Verify it was saved
+	retrieved, err := db.GetSyllabusByUID(ctx, syllabus.UID)
+	if err != nil {
+		t.Fatalf("GetSyllabusByUID failed: %v", err)
+	}
+
+	if retrieved.UID != syllabus.UID {
+		t.Errorf("UID = %q, want %q", retrieved.UID, syllabus.UID)
+	}
+	if retrieved.Year != syllabus.Year {
+		t.Errorf("Year = %d, want %d", retrieved.Year, syllabus.Year)
+	}
+	if retrieved.Term != syllabus.Term {
+		t.Errorf("Term = %d, want %d", retrieved.Term, syllabus.Term)
+	}
+	if retrieved.Title != syllabus.Title {
+		t.Errorf("Title = %q, want %q", retrieved.Title, syllabus.Title)
+	}
+	if len(retrieved.Teachers) != len(syllabus.Teachers) {
+		t.Errorf("Teachers count = %d, want %d", len(retrieved.Teachers), len(syllabus.Teachers))
+	}
+	if retrieved.Objectives != syllabus.Objectives {
+		t.Errorf("Objectives = %q, want %q", retrieved.Objectives, syllabus.Objectives)
+	}
+	if retrieved.Outline != syllabus.Outline {
+		t.Errorf("Outline = %q, want %q", retrieved.Outline, syllabus.Outline)
+	}
+	if retrieved.Schedule != syllabus.Schedule {
+		t.Errorf("Schedule = %q, want %q", retrieved.Schedule, syllabus.Schedule)
+	}
+	if retrieved.ContentHash != syllabus.ContentHash {
+		t.Errorf("ContentHash = %q, want %q", retrieved.ContentHash, syllabus.ContentHash)
+	}
+}
+
+func TestSaveSyllabus_Upsert(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+	ctx := context.Background()
+
+	// Save initial syllabus
+	syllabus := &Syllabus{
+		UID:         "1131U0001",
+		Year:        113,
+		Term:        1,
+		Title:       "程式設計",
+		Teachers:    []string{"王小明"},
+		Objectives:  "原始目標",
+		Outline:     "原始大綱",
+		ContentHash: "hash1",
+	}
+	if err := db.SaveSyllabus(ctx, syllabus); err != nil {
+		t.Fatalf("First SaveSyllabus failed: %v", err)
+	}
+
+	// Update with new content
+	syllabus.Objectives = "更新目標"
+	syllabus.ContentHash = "hash2"
+	syllabus.Teachers = []string{"李小華"}
+	if err := db.SaveSyllabus(ctx, syllabus); err != nil {
+		t.Fatalf("Second SaveSyllabus failed: %v", err)
+	}
+
+	// Verify update
+	retrieved, err := db.GetSyllabusByUID(ctx, syllabus.UID)
+	if err != nil {
+		t.Fatalf("GetSyllabusByUID failed: %v", err)
+	}
+
+	if retrieved.Objectives != "更新目標" {
+		t.Errorf("Objectives not updated: got %q", retrieved.Objectives)
+	}
+	if retrieved.ContentHash != "hash2" {
+		t.Errorf("ContentHash not updated: got %q", retrieved.ContentHash)
+	}
+	if len(retrieved.Teachers) != 1 || retrieved.Teachers[0] != "李小華" {
+		t.Errorf("Teachers not updated: got %v", retrieved.Teachers)
+	}
+
+	// Verify there's only one record
+	count, err := db.CountSyllabi(ctx)
+	if err != nil {
+		t.Fatalf("CountSyllabi failed: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("Expected 1 syllabus after upsert, got %d", count)
+	}
+}
+
+func TestSaveSyllabusBatch(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+	ctx := context.Background()
+
+	syllabi := []*Syllabus{
+		{
+			UID:         "1131U0001",
+			Year:        113,
+			Term:        1,
+			Title:       "程式設計",
+			Teachers:    []string{"王小明"},
+			Objectives:  "程式設計目標",
+			Outline:     "程式設計大綱",
+			ContentHash: "hash1",
+		},
+		{
+			UID:         "1131U0002",
+			Year:        113,
+			Term:        1,
+			Title:       "資料結構",
+			Teachers:    []string{"李小華"},
+			Objectives:  "資料結構目標",
+			Outline:     "資料結構大綱",
+			ContentHash: "hash2",
+		},
+		{
+			UID:         "1132U0003",
+			Year:        113,
+			Term:        2,
+			Title:       "演算法",
+			Teachers:    []string{"張小龍"},
+			Objectives:  "演算法目標",
+			Outline:     "演算法大綱",
+			ContentHash: "hash3",
+		},
+	}
+
+	err := db.SaveSyllabusBatch(ctx, syllabi)
+	if err != nil {
+		t.Fatalf("SaveSyllabusBatch failed: %v", err)
+	}
+
+	// Verify count
+	count, err := db.CountSyllabi(ctx)
+	if err != nil {
+		t.Fatalf("CountSyllabi failed: %v", err)
+	}
+	if count != 3 {
+		t.Errorf("Expected 3 syllabi, got %d", count)
+	}
+
+	// Verify each syllabus was saved
+	for _, s := range syllabi {
+		retrieved, err := db.GetSyllabusByUID(ctx, s.UID)
+		if err != nil {
+			t.Errorf("GetSyllabusByUID(%s) failed: %v", s.UID, err)
+			continue
+		}
+		if retrieved.Title != s.Title {
+			t.Errorf("Syllabus %s title = %q, want %q", s.UID, retrieved.Title, s.Title)
+		}
+	}
+}
+
+func TestSaveSyllabusBatch_Empty(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+	ctx := context.Background()
+
+	// Empty batch should succeed
+	err := db.SaveSyllabusBatch(ctx, nil)
+	if err != nil {
+		t.Errorf("SaveSyllabusBatch(nil) failed: %v", err)
+	}
+
+	err = db.SaveSyllabusBatch(ctx, []*Syllabus{})
+	if err != nil {
+		t.Errorf("SaveSyllabusBatch([]) failed: %v", err)
+	}
+}
+
+func TestGetSyllabusContentHash(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+	ctx := context.Background()
+
+	// Test non-existent syllabus
+	hash, err := db.GetSyllabusContentHash(ctx, "nonexistent")
+	if err != nil {
+		t.Errorf("GetSyllabusContentHash for nonexistent UID failed: %v", err)
+	}
+	if hash != "" {
+		t.Errorf("Expected empty hash for nonexistent UID, got %q", hash)
+	}
+
+	// Save a syllabus
+	syllabus := &Syllabus{
+		UID:         "1131U0001",
+		Year:        113,
+		Term:        1,
+		Title:       "程式設計",
+		Teachers:    []string{"王小明"},
+		Objectives:  "測試目標",
+		ContentHash: "expected_hash_value",
+	}
+	if err := db.SaveSyllabus(ctx, syllabus); err != nil {
+		t.Fatalf("SaveSyllabus failed: %v", err)
+	}
+
+	// Test existing syllabus
+	hash, err = db.GetSyllabusContentHash(ctx, syllabus.UID)
+	if err != nil {
+		t.Fatalf("GetSyllabusContentHash failed: %v", err)
+	}
+	if hash != "expected_hash_value" {
+		t.Errorf("Hash = %q, want %q", hash, "expected_hash_value")
+	}
+}
+
+func TestGetSyllabusByUID_NotFound(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+	ctx := context.Background()
+
+	_, err := db.GetSyllabusByUID(ctx, "nonexistent")
+	if err != ErrNotFound {
+		t.Errorf("Expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestGetAllSyllabi(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+	ctx := context.Background()
+
+	// Test empty result
+	syllabi, err := db.GetAllSyllabi(ctx)
+	if err != nil {
+		t.Fatalf("GetAllSyllabi (empty) failed: %v", err)
+	}
+	if len(syllabi) != 0 {
+		t.Errorf("Expected 0 syllabi, got %d", len(syllabi))
+	}
+
+	// Insert some syllabi
+	testData := []*Syllabus{
+		{UID: "1131U0001", Year: 113, Term: 1, Title: "課程1", Teachers: []string{"教師1"}, Objectives: "目標1", ContentHash: "h1"},
+		{UID: "1132U0002", Year: 113, Term: 2, Title: "課程2", Teachers: []string{"教師2"}, Objectives: "目標2", ContentHash: "h2"},
+	}
+	if err := db.SaveSyllabusBatch(ctx, testData); err != nil {
+		t.Fatalf("SaveSyllabusBatch failed: %v", err)
+	}
+
+	// Test with data
+	syllabi, err = db.GetAllSyllabi(ctx)
+	if err != nil {
+		t.Fatalf("GetAllSyllabi failed: %v", err)
+	}
+	if len(syllabi) != 2 {
+		t.Errorf("Expected 2 syllabi, got %d", len(syllabi))
+	}
+}
+
+func TestGetSyllabiByYearTerm(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+	ctx := context.Background()
+
+	// Insert syllabi for different year/terms
+	testData := []*Syllabus{
+		{UID: "1131U0001", Year: 113, Term: 1, Title: "113-1 課程1", Teachers: []string{"教師"}, Objectives: "目標", ContentHash: "h1"},
+		{UID: "1131U0002", Year: 113, Term: 1, Title: "113-1 課程2", Teachers: []string{"教師"}, Objectives: "目標", ContentHash: "h2"},
+		{UID: "1132U0003", Year: 113, Term: 2, Title: "113-2 課程3", Teachers: []string{"教師"}, Objectives: "目標", ContentHash: "h3"},
+		{UID: "1121U0004", Year: 112, Term: 1, Title: "112-1 課程4", Teachers: []string{"教師"}, Objectives: "目標", ContentHash: "h4"},
+	}
+	if err := db.SaveSyllabusBatch(ctx, testData); err != nil {
+		t.Fatalf("SaveSyllabusBatch failed: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		year     int
+		term     int
+		expected int
+	}{
+		{"113-1", 113, 1, 2},
+		{"113-2", 113, 2, 1},
+		{"112-1", 112, 1, 1},
+		{"114-1 (empty)", 114, 1, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			syllabi, err := db.GetSyllabiByYearTerm(ctx, tt.year, tt.term)
+			if err != nil {
+				t.Fatalf("GetSyllabiByYearTerm(%d, %d) failed: %v", tt.year, tt.term, err)
+			}
+			if len(syllabi) != tt.expected {
+				t.Errorf("GetSyllabiByYearTerm(%d, %d) = %d syllabi, want %d", tt.year, tt.term, len(syllabi), tt.expected)
+			}
+		})
+	}
+}
+
+func TestDeleteExpiredSyllabi(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+	ctx := context.Background()
+
+	// Insert fresh syllabus
+	fresh := &Syllabus{
+		UID:         "1131U0001",
+		Year:        113,
+		Term:        1,
+		Title:       "新課程",
+		Teachers:    []string{"教師"},
+		Objectives:  "目標",
+		ContentHash: "hash1",
+	}
+	if err := db.SaveSyllabus(ctx, fresh); err != nil {
+		t.Fatalf("SaveSyllabus failed: %v", err)
+	}
+
+	// Manually insert expired syllabus (8 days ago)
+	query := `INSERT INTO syllabi (uid, year, term, title, teachers, objectives, outline, schedule, content_hash, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
+	_, err := db.writer.ExecContext(ctx, query, "1131U0002", 113, 1, "舊課程", `["舊教師"]`, "舊目標", "", "", "oldhash", oldTime)
+	if err != nil {
+		t.Fatalf("Manual insert failed: %v", err)
+	}
+
+	// Verify both exist
+	count, _ := db.CountSyllabi(ctx)
+	if count != 2 {
+		t.Fatalf("Expected 2 syllabi before deletion, got %d", count)
+	}
+
+	// Delete expired (TTL = 7 days)
+	deleted, err := db.DeleteExpiredSyllabi(ctx, 7*24*time.Hour)
+	if err != nil {
+		t.Fatalf("DeleteExpiredSyllabi failed: %v", err)
+	}
+	if deleted != 1 {
+		t.Errorf("Expected 1 deleted, got %d", deleted)
+	}
+
+	// Verify only fresh syllabus remains
+	count, _ = db.CountSyllabi(ctx)
+	if count != 1 {
+		t.Errorf("Expected 1 syllabus after deletion, got %d", count)
+	}
+
+	// Verify it's the fresh one
+	retrieved, err := db.GetSyllabusByUID(ctx, fresh.UID)
+	if err != nil {
+		t.Fatalf("GetSyllabusByUID failed: %v", err)
+	}
+	if retrieved.Title != "新課程" {
+		t.Errorf("Wrong syllabus remained: %s", retrieved.Title)
+	}
+}
+
+func TestCountSyllabi(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+	ctx := context.Background()
+
+	// Test empty count
+	count, err := db.CountSyllabi(ctx)
+	if err != nil {
+		t.Fatalf("CountSyllabi failed: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("Expected 0 syllabi, got %d", count)
+	}
+
+	// Add some syllabi
+	syllabi := []*Syllabus{
+		{UID: "1131U0001", Year: 113, Term: 1, Title: "課程1", Teachers: []string{}, Objectives: "目標1", ContentHash: "h1"},
+		{UID: "1131U0002", Year: 113, Term: 1, Title: "課程2", Teachers: []string{}, Objectives: "目標2", ContentHash: "h2"},
+		{UID: "1131U0003", Year: 113, Term: 1, Title: "課程3", Teachers: []string{}, Objectives: "目標3", ContentHash: "h3"},
+	}
+	if err := db.SaveSyllabusBatch(ctx, syllabi); err != nil {
+		t.Fatalf("SaveSyllabusBatch failed: %v", err)
+	}
+
+	count, err = db.CountSyllabi(ctx)
+	if err != nil {
+		t.Fatalf("CountSyllabi failed: %v", err)
+	}
+	if count != 3 {
+		t.Errorf("Expected 3 syllabi, got %d", count)
+	}
+}

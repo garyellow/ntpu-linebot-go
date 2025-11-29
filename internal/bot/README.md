@@ -48,12 +48,17 @@ type Handler interface {
 
 ### course/ - 課程查詢
 - **關鍵字**：課程、課、教師、老師（統一查詢）
+- **語意關鍵字**：找課、找課程、搜課（直接觸發語意搜尋）
 - **功能**：
   - 課程名稱搜尋（最多 50 門）
   - 課程編號查詢（UID 格式）
   - 統一查詢（2-tier 並行搜尋：同時搜尋課程名稱和教師姓名）
   - 歷史課程查詢（`課程 {年度} {關鍵字}`）
-- **搜尋策略**：SQL LIKE (title, teachers) + 模糊 ContainsAllRunes (title, teachers)
+  - 語意搜尋（基於課程大綱的智慧匹配，需設定 `GEMINI_API_KEY`）
+- **搜尋策略**：
+  - 關鍵字：SQL LIKE (title, teachers) + 模糊 ContainsAllRunes (title, teachers)
+  - 語意：chromem-go 向量搜尋 + Gemini embedding
+- **Fallback 策略**：關鍵字搜尋無結果時，自動嘗試語意搜尋（需啟用 VectorDB）
 - **Postback 前綴**：`course:`
 - **Sender 名稱**：課程小幫手
 
@@ -111,7 +116,7 @@ term := bot.ExtractSearchTerm("課程 微積分", "課程") // → "微積分"
 
 1. **使用 `lineutil`**：所有訊息建構透過 lineutil，不直接使用 LINE SDK
 2. **Sender 一致性**：每次回覆使用同一個 `GetSender()` 返回的 Sender
-3. **Context timeout**：25 秒（LINE webhook 限制）
+3. **Context timeout**：60 秒（LINE loading animation 上限）
 4. **訊息限制**：每次最多 5 則訊息（LINE API 限制）
 5. **Postback 前綴**：使用 `{module}:` 前綴便於 webhook dispatcher 路由
 6. **Table-driven tests**：所有測試使用 table-driven 模式

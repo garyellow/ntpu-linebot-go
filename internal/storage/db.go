@@ -205,13 +205,6 @@ func (db *DB) Reader() *sql.DB {
 	return db.reader
 }
 
-// Conn returns the writer connection for backward compatibility.
-//
-// Deprecated: Use Writer() for writes or Reader() for reads.
-func (db *DB) Conn() *sql.DB {
-	return db.writer
-}
-
 // Path returns the database file path
 func (db *DB) Path() string {
 	return db.path
@@ -275,35 +268,6 @@ func (db *DB) Ready(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// NewTestDB creates an in-memory database for testing.
-// Note: In-memory databases don't support read/write separation as they use
-// a single shared connection. Both reader and writer point to the same connection.
-// This ensures consistent test data isolation across all test files.
-// Uses default 7-day TTL for tests.
-func NewTestDB() (*DB, error) {
-	return New(":memory:", 168*time.Hour) // 7 days
-}
-
-// ExecBatch executes a batch of operations within a single transaction.
-// This is a generic helper that reduces lock contention during warmup.
-// The execFn receives the prepared statement and should execute it for each item.
-//
-// Deprecated: Use ExecBatchContext instead.
-//
-// Example:
-//
-//	err := db.ExecBatch("INSERT INTO t (a,b) VALUES (?,?)", func(stmt *sql.Stmt) error {
-//	    for _, item := range items {
-//	        if _, err := stmt.Exec(item.A, item.B); err != nil {
-//	            return err
-//	        }
-//	    }
-//	    return nil
-//	})
-func (db *DB) ExecBatch(query string, execFn func(stmt *sql.Stmt) error) error {
-	return db.ExecBatchContext(context.Background(), query, execFn)
 }
 
 // ExecBatchContext executes a batch of operations within a single transaction with context support.

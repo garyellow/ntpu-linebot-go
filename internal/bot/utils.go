@@ -11,9 +11,12 @@ import (
 // Example: "action$data1$data2" where "$" is the split character.
 const PostbackSplitChar = "$"
 
-// BuildKeywordRegex creates a regex pattern from keywords.
+// BuildKeywordRegex creates a regex pattern from keywords that matches at the START of text.
 // Keywords are sorted by length (longest first) to ensure correct alternation matching.
 // For example, "課程" should match before "課" to prevent partial matches.
+//
+// The regex uses ^ anchor to ensure keywords only match at the beginning of text.
+// This prevents false positives like "我想找課程" matching "課程".
 //
 // Panics if keywords is empty, as this indicates a programming error.
 //
@@ -22,6 +25,7 @@ const PostbackSplitChar = "$"
 //	keywords := []string{"課", "課程", "課名"}
 //	regex := BuildKeywordRegex(keywords)
 //	match := regex.FindString("課程 微積分") // Returns "課程"
+//	match := regex.FindString("微積分課程") // Returns "" (no match - keyword not at start)
 func BuildKeywordRegex(keywords []string) *regexp.Regexp {
 	if len(keywords) == 0 {
 		panic("BuildKeywordRegex: keywords cannot be empty")
@@ -36,7 +40,9 @@ func BuildKeywordRegex(keywords []string) *regexp.Regexp {
 		return len(sorted[i]) > len(sorted[j])
 	})
 
-	pattern := "(?i)" + strings.Join(sorted, "|")
+	// Use ^ anchor to match only at the start of text
+	// (?i) for case-insensitive matching
+	pattern := "(?i)^(" + strings.Join(sorted, "|") + ")"
 	return regexp.MustCompile(pattern)
 }
 

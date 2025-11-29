@@ -185,7 +185,7 @@ func ScrapeStudentsByYear(ctx context.Context, client *scraper.Client, year int,
 	})
 
 	// Parse first page
-	students = append(students, parseStudentPage(doc, year, deptCode)...)
+	students = append(students, parseStudentPage(doc, year)...)
 
 	// Fetch and parse remaining pages
 	for page := 2; page <= totalPages; page++ {
@@ -201,14 +201,14 @@ func ScrapeStudentsByYear(ctx context.Context, client *scraper.Client, year int,
 			return students, fmt.Errorf("failed to fetch page %d: %w", page, err)
 		}
 
-		students = append(students, parseStudentPage(doc, year, deptCode)...)
+		students = append(students, parseStudentPage(doc, year)...)
 	}
 
 	return students, nil
 }
 
 // parseStudentPage extracts student information from a search result page
-func parseStudentPage(doc *goquery.Document, year int, deptCode string) []*storage.Student {
+func parseStudentPage(doc *goquery.Document, year int) []*storage.Student {
 	students := make([]*storage.Student, 0)
 	cachedAt := time.Now().Unix()
 

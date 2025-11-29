@@ -46,23 +46,28 @@ func TestCanHandle(t *testing.T) {
 		input string
 		want  bool
 	}{
-		// Emergency keywords
+		// Emergency keywords (must be at start)
 		{"Emergency query", "緊急電話", true},
 		{"Emergency without space", "緊急", true},
 
-		// Contact keywords (English)
-		{"Contact keyword", "contact info", true},
-		{"Touch keyword", "touch base", true},
-		{"Connect keyword", "how to connect", true},
+		// Contact keywords at START (English)
+		{"Contact keyword at start", "contact info", true},
+		{"Touch keyword at start", "touch base", true},
+		{"Connect keyword at start", "connect with", true},
 
-		// Contact keywords (Chinese)
-		{"聯繫 keyword", "聯繫方式", true},
-		{"聯絡 keyword", "聯絡電話", true},
-		{"連絡 keyword", "連絡方式", true},
-		{"電話 keyword", "電話分機", true},
-		{"分機 keyword", "查詢分機", true},
-		{"Email keyword", "email信箱", true},
-		{"信箱 keyword", "電子信箱", true},
+		// Contact keywords at START (Chinese)
+		{"聯繫 keyword at start", "聯繫 資工系", true},
+		{"聯絡 keyword at start", "聯絡 圖書館", true},
+		{"連絡 keyword at start", "連絡方式", true},
+		{"電話 keyword at start", "電話分機", true},
+		{"分機 keyword at start", "分機查詢", true},
+		{"Email keyword at start", "email信箱", true},
+		{"信箱 keyword at start", "信箱查詢", true},
+
+		// Keywords NOT at start should NOT match
+		{"Connect keyword not at start", "how to connect", false},
+		{"分機 keyword not at start", "查詢分機", false},
+		{"信箱 keyword not at start", "電子信箱", false},
 
 		// Invalid queries
 		{"Random text", "hello world", false},

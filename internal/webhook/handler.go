@@ -101,6 +101,12 @@ func (h *Handler) Stop() {
 	}
 }
 
+// GetCourseHandler returns the course handler for external configuration
+// Used to set VectorDB for semantic search from main.go
+func (h *Handler) GetCourseHandler() *course.Handler {
+	return h.courseHandler
+}
+
 // Handle processes incoming webhook requests
 func (h *Handler) Handle(c *gin.Context) {
 	start := time.Now()
@@ -242,11 +248,21 @@ func (h *Handler) Handle(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
+// isPersonalChat checks if the event source is a personal (1-on-1) chat
+func (h *Handler) isPersonalChat(source webhook.SourceInterface) bool {
+	_, ok := source.(webhook.UserSource)
+	return ok
+}
+
 // handleMessageEvent processes text message events
 func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageEvent) ([]messaging_api.MessageInterface, error) {
-	// Handle sticker messages
+	// Handle sticker messages - only in personal chats
 	if event.Message.GetType() == "sticker" {
-		return h.handleStickerMessage(event), nil
+		if h.isPersonalChat(event.Source) {
+			return h.handleStickerMessage(event), nil
+		}
+		// Ignore sticker messages in group/room chats
+		return nil, nil
 	}
 
 	// Only handle text messages
@@ -367,19 +383,6 @@ func (h *Handler) handlePostbackEvent(ctx context.Context, event webhook.Postbac
 		return h.courseHandler.HandlePostback(processCtx, strings.TrimPrefix(data, "course:")), nil
 	}
 
-	// Try dispatching to all handlers (for backward compatibility with handlers without prefix)
-	if messages := h.idHandler.HandlePostback(processCtx, data); len(messages) > 0 {
-		return messages, nil
-	}
-
-	if messages := h.contactHandler.HandlePostback(processCtx, data); len(messages) > 0 {
-		return messages, nil
-	}
-
-	if messages := h.courseHandler.HandlePostback(processCtx, data); len(messages) > 0 {
-		return messages, nil
-	}
-
 	// No handler matched
 	sender := lineutil.GetSender("系統小幫手", h.stickerManager)
 	return []messaging_api.MessageInterface{
@@ -388,7 +391,7 @@ func (h *Handler) handlePostbackEvent(ctx context.Context, event webhook.Postbac
 }
 
 // handleStickerMessage processes sticker messages (reply with random sticker image)
-func (h *Handler) handleStickerMessage(event webhook.MessageEvent) []messaging_api.MessageInterface {
+func (h *Handler) handleStickerMessage(_ webhook.MessageEvent) []messaging_api.MessageInterface {
 	h.logger.Info("Received sticker message, replying with random sticker image")
 
 	// Get random sticker URL and create consistent sender
@@ -407,7 +410,9 @@ func (h *Handler) handleStickerMessage(event webhook.MessageEvent) []messaging_a
 }
 
 // handleFollowEvent processes follow events (when user adds the bot)
-func (h *Handler) handleFollowEvent(event webhook.FollowEvent) ([]messaging_api.MessageInterface, error) {
+//
+//nolint:unparam // error is kept for interface consistency with other event handlers
+func (h *Handler) handleFollowEvent(_ webhook.FollowEvent) ([]messaging_api.MessageInterface, error) {
 	h.logger.Info("New user followed the bot")
 
 	// Send welcome message
@@ -489,21 +494,28 @@ func removePunctuation(s string) string {
 	return result.String()
 }
 
-// getChatID extracts chat ID from event
+// getChatID extracts chat ID from event (supports user, group, and room sources)
 func (h *Handler) getChatID(event webhook.EventInterface) string {
+	var source webhook.SourceInterface
+
 	switch e := event.(type) {
 	case webhook.MessageEvent:
-		if userSource, ok := e.Source.(webhook.UserSource); ok {
-			return userSource.UserId
-		}
+		source = e.Source
 	case webhook.PostbackEvent:
-		if userSource, ok := e.Source.(webhook.UserSource); ok {
-			return userSource.UserId
-		}
+		source = e.Source
 	case webhook.FollowEvent:
-		if userSource, ok := e.Source.(webhook.UserSource); ok {
-			return userSource.UserId
-		}
+		source = e.Source
+	default:
+		return ""
+	}
+
+	switch s := source.(type) {
+	case webhook.UserSource:
+		return s.UserId
+	case webhook.GroupSource:
+		return s.GroupId
+	case webhook.RoomSource:
+		return s.RoomId
 	}
 	return ""
 }

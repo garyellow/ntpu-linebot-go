@@ -24,12 +24,22 @@ Prometheus 指標收集。
 - **ntpu_course_data_integrity_issues_total** - 課程資料完整性問題 (labels: issue_type)
 
 ### Rate Limiter Metrics
-- **ntpu_rate_limiter_wait_duration_seconds** - Rate limiter 等待時間直方圖 (labels: limiter_type)
 - **ntpu_rate_limiter_dropped_total** - Rate limiter 丟棄的請求數 (labels: limiter_type)
+- **ntpu_rate_limiter_active_users** - 當前活躍的使用者限流器數量
+- **ntpu_rate_limiter_cleaned_total** - 清理的限流器總數
 
 ### Warmup Metrics
 - **ntpu_warmup_tasks_total** - Warmup 任務總數 (labels: module, status)
 - **ntpu_warmup_duration_seconds** - Warmup 總耗時直方圖
+
+### Semantic Search Metrics (需要 GEMINI_API_KEY)
+- **ntpu_semantic_search_total** - 語意搜尋總數 (labels: status)
+  - status: success, error, fallback, disabled
+- **ntpu_semantic_search_duration_seconds** - 語意搜尋耗時直方圖 (labels: type)
+  - type: query, embedding
+- **ntpu_semantic_search_results** - 語意搜尋結果數量直方圖 (labels: source)
+  - source: direct, fallback
+- **ntpu_vectordb_documents** - 向量資料庫文件數量 Gauge
 
 ### Go Runtime Metrics (標準收集器)
 - **go_goroutines** - Goroutine 數量
@@ -58,12 +68,18 @@ m.RecordHTTPError("invalid_signature", "webhook")
 m.RecordCourseIntegrityIssue("missing_no")
 
 // Rate limiter metrics
-m.RecordRateLimiterWait("scraper", 0.5)
 m.RecordRateLimiterDrop("user")
+m.SetRateLimiterActiveUsers(10)
+m.RecordRateLimiterCleanup(5)
 
 // Warmup metrics
 m.RecordWarmupTask("id", "success")
 m.RecordWarmupDuration(120.5)
+
+// Semantic search metrics
+m.RecordSemanticSearch("success", 1.5, 10, "direct")
+m.RecordEmbeddingLatency(0.5)
+m.SetVectorDBSize(1000)
 ```
 
 ## 查看指標

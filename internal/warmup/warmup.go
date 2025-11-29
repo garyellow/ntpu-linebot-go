@@ -1,5 +1,5 @@
 // Package warmup provides background cache warming functionality for
-// proactively fetching and caching student, course, contact, and sticker data.
+// proactively fetching and caching student, course, contact, sticker, and syllabus data.
 package warmup
 
 import (
@@ -13,10 +13,12 @@ import (
 
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
+	"github.com/garyellow/ntpu-linebot-go/internal/rag"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper/ntpu"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
+	"github.com/garyellow/ntpu-linebot-go/internal/syllabus"
 )
 
 // Stats tracks cache warming statistics
@@ -26,31 +28,21 @@ type Stats struct {
 	Contacts atomic.Int64
 	Courses  atomic.Int64
 	Stickers atomic.Int64
+	Syllabi  atomic.Int64
 }
 
 // Options configures cache warming behavior
 type Options struct {
-	Modules []string         // Modules to warm (id, contact, course, sticker)
-	Timeout time.Duration    // Overall timeout
-	Reset   bool             // Whether to reset cache before warming
-	Metrics *metrics.Metrics // Optional metrics recorder
+	Modules  []string         // Modules to warm (id, contact, course, sticker, syllabus)
+	Reset    bool             // Whether to reset cache before warming
+	Metrics  *metrics.Metrics // Optional metrics recorder
+	VectorDB *rag.VectorDB    // Optional vector database for syllabus indexing
 }
 
 // Run executes cache warming with the given options
 func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, opts Options) (*Stats, error) {
 	stats := &Stats{}
 	startTime := time.Now()
-
-	// Always create a cancel function for cleanup if timeout is set
-	if opts.Timeout > 0 {
-		var cancel context.CancelFunc
-		if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-			ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
-		} else {
-			ctx, cancel = context.WithCancel(ctx)
-		}
-		defer cancel()
-	}
 
 	// Reset cache if requested
 	if opts.Reset {
@@ -61,11 +53,32 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 		log.Info("Cache reset complete")
 	}
 
-	// Warm modules concurrently (no dependencies between modules)
+	// Separate modules:
+	// - Independent modules: can run concurrently (id, contact, sticker)
+	// - Course module: runs concurrently but syllabus waits for it
+	// - Syllabus module: depends on course data, starts after course completes
+	var independentModules []string
+	var hasCourse, hasSyllabus bool
+
+	for _, module := range opts.Modules {
+		switch module {
+		case "course":
+			hasCourse = true
+		case "syllabus":
+			hasSyllabus = true
+		default:
+			independentModules = append(independentModules, module)
+		}
+	}
+
 	var wg sync.WaitGroup
 	errChan := make(chan error, len(opts.Modules))
 
-	for _, module := range opts.Modules {
+	// Channel to signal course completion (for syllabus dependency)
+	courseDone := make(chan struct{})
+
+	// Start independent modules concurrently
+	for _, module := range independentModules {
 		select {
 		case <-ctx.Done():
 			return stats, fmt.Errorf("warmup canceled: %w", ctx.Err())
@@ -88,11 +101,6 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 					log.WithError(err).Error("Contact module warmup failed")
 					errChan <- fmt.Errorf("contact module: %w", err)
 				}
-			case "course":
-				if err := warmupCourseModule(ctx, db, client, log, stats, opts.Metrics); err != nil {
-					log.WithError(err).Error("Course module warmup failed")
-					errChan <- fmt.Errorf("course module: %w", err)
-				}
 			case "sticker":
 				if err := warmupStickerModule(ctx, stickerMgr, log, stats, opts.Metrics); err != nil {
 					log.WithError(err).Error("Sticker module warmup failed")
@@ -100,6 +108,53 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 				}
 			default:
 				log.WithField("module", moduleName).Warn("Unknown module, skipping")
+			}
+		}()
+	}
+
+	// Start course module (syllabus will wait for this)
+	if hasCourse {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer close(courseDone) // Signal course completion
+
+			if err := warmupCourseModule(ctx, db, client, log, stats, opts.Metrics); err != nil {
+				log.WithError(err).Error("Course module warmup failed")
+				errChan <- fmt.Errorf("course module: %w", err)
+			}
+		}()
+	} else {
+		// No course module requested, close channel immediately
+		close(courseDone)
+	}
+
+	// Start syllabus module (waits for course to complete first)
+	if hasSyllabus {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			// Wait for course module to complete (syllabus needs course data)
+			if hasCourse {
+				log.Debug("Syllabus waiting for course module to complete")
+			}
+			select {
+			case <-ctx.Done():
+				errChan <- fmt.Errorf("syllabus canceled while waiting for course: %w", ctx.Err())
+				return
+			case <-courseDone:
+				// Course completed (or wasn't requested), proceed with syllabus
+			}
+
+			if opts.VectorDB == nil {
+				log.Info("Syllabus module skipped: VectorDB not configured")
+				return
+			}
+
+			if err := warmupSyllabusModule(ctx, db, client, opts.VectorDB, log, stats, opts.Metrics); err != nil {
+				log.WithError(err).Error("Syllabus module warmup failed")
+				errChan <- fmt.Errorf("syllabus module: %w", err)
 			}
 		}()
 	}
@@ -124,6 +179,7 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 		WithField("contacts", stats.Contacts.Load()).
 		WithField("courses", stats.Courses.Load()).
 		WithField("stickers", stats.Stickers.Load()).
+		WithField("syllabi", stats.Syllabi.Load()).
 		Info("Cache warming complete")
 
 	// Record warmup metrics if available
@@ -136,21 +192,15 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 
 // RunInBackground executes cache warming asynchronously
 // Returns immediately without blocking. Logs progress to the provided logger.
-// Creates an independent context with timeout to prevent goroutine leaks on server shutdown.
+// Uses context.Background() for independent operation that runs until completion.
 //
 //nolint:contextcheck // Intentionally using context.Background() for independent background operation
 func RunInBackground(_ context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, opts Options) {
-	// Create independent context with timeout for warmup
-	// This prevents the goroutine from leaking if server context is canceled
-	warmupCtx, cancel := context.WithTimeout(context.Background(), opts.Timeout)
-
 	go func() {
-		defer cancel() // Ensure cleanup
-
 		log.WithField("modules", opts.Modules).
 			Info("Starting background cache warming")
 
-		stats, err := Run(warmupCtx, db, client, stickerMgr, log, opts)
+		stats, err := Run(context.Background(), db, client, stickerMgr, log, opts)
 		if err != nil {
 			log.WithError(err).Warn("Background cache warming finished with errors")
 		} else {
@@ -158,6 +208,7 @@ func RunInBackground(_ context.Context, db *storage.DB, client *scraper.Client, 
 				WithField("contacts", stats.Contacts.Load()).
 				WithField("courses", stats.Courses.Load()).
 				WithField("stickers", stats.Stickers.Load()).
+				WithField("syllabi", stats.Syllabi.Load()).
 				Info("Background cache warming completed successfully")
 		}
 	}()
@@ -435,6 +486,139 @@ func warmupStickerModule(ctx context.Context, stickerMgr *sticker.Manager, log *
 		m.RecordWarmupTask("sticker", "success")
 	}
 	log.WithField("count", count).Info("Stickers cached")
+
+	return nil
+}
+
+// warmupSyllabusModule warms syllabus cache and vector store
+// Fetches syllabus content for all courses in cache, using content hash for incremental updates
+// Only processes courses that have changed since last warmup
+func warmupSyllabusModule(ctx context.Context, db *storage.DB, client *scraper.Client, vectorDB *rag.VectorDB, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
+	log.Info("Starting syllabus module warmup")
+
+	// Get all courses from recent semesters
+	courses, err := db.GetCoursesByRecentSemesters(ctx)
+	if err != nil {
+		if m != nil {
+			m.RecordWarmupTask("syllabus", "error")
+		}
+		return fmt.Errorf("failed to get courses: %w", err)
+	}
+
+	if len(courses) == 0 {
+		log.Info("No courses found for syllabus warmup")
+		return nil
+	}
+
+	log.WithField("total_courses", len(courses)).Info("Processing syllabi for courses")
+
+	// Create syllabus scraper
+	syllabusScraper := syllabus.NewScraper(client)
+
+	// Process courses and extract syllabi
+	var newSyllabi []*storage.Syllabus
+	var updatedCount, skippedCount, errorCount int
+
+processLoop:
+	for i, course := range courses {
+		select {
+		case <-ctx.Done():
+			log.WithField("processed", i).WithField("total", len(courses)).
+				Info("Syllabus warmup interrupted")
+			break processLoop
+		default:
+		}
+
+		// Skip courses without detail URL
+		if course.DetailURL == "" {
+			skippedCount++
+			continue
+		}
+
+		// Scrape syllabus content
+		fields, err := syllabusScraper.ScrapeSyllabus(ctx, &course)
+		if err != nil {
+			log.WithError(err).WithField("uid", course.UID).Debug("Failed to scrape syllabus")
+			errorCount++
+			continue
+		}
+
+		// Skip empty syllabi
+		if fields.IsEmpty() {
+			skippedCount++
+			continue
+		}
+
+		// Compute content hash from all fields for change detection
+		contentForHash := fields.Objectives + "\n" + fields.Outline + "\n" + fields.Schedule
+		contentHash := syllabus.ComputeContentHash(contentForHash)
+
+		// Check if content has changed (incremental update)
+		existingHash, err := db.GetSyllabusContentHash(ctx, course.UID)
+		if err != nil {
+			log.WithError(err).WithField("uid", course.UID).Debug("Failed to get existing hash")
+		}
+
+		if existingHash == contentHash {
+			// Content unchanged, skip
+			skippedCount++
+			continue
+		}
+
+		// Create syllabus record with separate fields
+		syl := &storage.Syllabus{
+			UID:         course.UID,
+			Year:        course.Year,
+			Term:        course.Term,
+			Title:       course.Title,
+			Teachers:    course.Teachers,
+			Objectives:  fields.Objectives,
+			Outline:     fields.Outline,
+			Schedule:    fields.Schedule,
+			ContentHash: contentHash,
+		}
+
+		newSyllabi = append(newSyllabi, syl)
+		updatedCount++
+
+		// Log progress every 100 courses
+		if i > 0 && i%100 == 0 {
+			log.WithField("progress", fmt.Sprintf("%d/%d", i, len(courses))).
+				WithField("updated", updatedCount).
+				WithField("skipped", skippedCount).
+				Info("Syllabus warmup progress")
+		}
+	}
+
+	// Save syllabi to database
+	if len(newSyllabi) > 0 {
+		if err := db.SaveSyllabusBatch(ctx, newSyllabi); err != nil {
+			log.WithError(err).Error("Failed to save syllabi batch")
+			if m != nil {
+				m.RecordWarmupTask("syllabus", "error")
+			}
+			return fmt.Errorf("failed to save syllabi: %w", err)
+		}
+
+		// Add to vector store
+		if vectorDB != nil {
+			if err := vectorDB.AddSyllabi(ctx, newSyllabi); err != nil {
+				log.WithError(err).Warn("Failed to add syllabi to vector store")
+				// Don't fail the whole warmup for vector store errors
+			}
+		}
+	}
+
+	stats.Syllabi.Add(int64(len(newSyllabi)))
+	if m != nil {
+		m.RecordWarmupTask("syllabus", "success")
+	}
+
+	log.WithField("new", updatedCount).
+		WithField("skipped", skippedCount).
+		WithField("errors", errorCount).
+		WithField("total_indexed", len(newSyllabi)).
+		Info("Syllabus module warmup complete")
 
 	return nil
 }

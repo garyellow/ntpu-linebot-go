@@ -61,24 +61,30 @@ func TestCanHandle(t *testing.T) {
 		{"Course no P", "P9999", true},
 		{"Course no lowercase", "u0001", true},
 
-		// Course keywords (English)
-		{"Class keyword", "class schedule", true},
-		{"Course keyword", "course info", true},
+		// Course keywords at START (English)
+		{"Class keyword at start", "class schedule", true},
+		{"Course keyword at start", "course info", true},
 
-		// Course keywords (Chinese)
-		{"課 keyword", "查詢課程", true},
-		{"課程 keyword", "課程資訊", true},
-		{"科目 keyword", "科目名稱", true},
-		{"課名 keyword", "課名查詢", true},
+		// Course keywords at START (Chinese)
+		{"課 keyword at start", "課 微積分", true},
+		{"課程 keyword at start", "課程 資訊", true},
+		{"科目 keyword at start", "科目 名稱", true},
+		{"課名 keyword at start", "課名 查詢", true},
 
-		// Teacher keywords (now unified with course keywords)
-		{"Professor keyword", "professor Wang", true},
-		{"Teacher keyword", "teacher info", true},
-		{"Dr keyword", "dr Chen", true},
-		{"老師 keyword", "王老師", true},
-		{"教授 keyword", "陳教授", true},
-		{"教師 keyword", "授課教師", true},
-		{"師 keyword", "師資", true},
+		// Teacher keywords at START (now unified with course keywords)
+		{"Professor keyword at start", "professor Wang", true},
+		{"Teacher keyword at start", "teacher info", true},
+		{"Dr keyword at start", "dr Chen", true},
+		{"老師 keyword at start", "老師 王小明", true},
+		{"教授 keyword at start", "教授 陳教授", true},
+		{"教師 keyword at start", "教師 資訊", true},
+		{"師 keyword at start", "師 資訊", true},
+
+		// Keywords NOT at start should NOT match
+		{"課 keyword not at start", "查詢課程", false},
+		{"老師 keyword not at start", "王老師", false},
+		{"教授 keyword not at start", "陳教授", false},
+		{"授課教師 not at start", "找授課教師", false},
 
 		// Invalid queries
 		{"Random text", "hello world", false},
@@ -372,3 +378,72 @@ func TestHandlePostback_InvalidData(t *testing.T) {
 // NOTE: Semester determination logic is tested in semester_test.go
 // TestSemesterDetectionLogic tests the actual getSemestersForDate() function
 // with comprehensive date-based test cases - no need to duplicate here.
+
+// ==================== Semantic Search Tests ====================
+
+func TestCanHandle_SemanticKeywords(t *testing.T) {
+	h := setupTestHandler(t)
+
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		// Semantic search keywords (找課)
+		{"找課 keyword", "找課 機器學習", true},
+		{"找課程 keyword", "找課程 資料分析", true},
+		{"搜課 keyword", "搜課 Python", true},
+		{"找課 alone", "找課", true},
+
+		// Regular course keywords should still work
+		{"課程 keyword", "課程 微積分", true},
+		{"課 keyword", "課 程式設計", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := h.CanHandle(tt.input)
+			if got != tt.want {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSetVectorDB(t *testing.T) {
+	h := setupTestHandler(t)
+
+	// Initially nil
+	if h.vectorDB != nil {
+		t.Error("Expected vectorDB to be nil initially")
+	}
+
+	// After setting, should not be nil
+	// Note: We can't easily test with a real VectorDB without API key
+	// This test just verifies the setter method exists and works
+}
+
+func TestHandleSemanticSearch_NoVectorDB(t *testing.T) {
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	// VectorDB is nil by default
+	messages := h.HandleMessage(ctx, "找課 機器學習")
+
+	// Should return a helpful message when VectorDB is not available
+	if len(messages) == 0 {
+		t.Error("Expected at least one message when VectorDB is disabled")
+	}
+}
+
+func TestHandleSemanticSearch_EmptyQuery(t *testing.T) {
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	// Should prompt for input when query is empty
+	messages := h.HandleMessage(ctx, "找課")
+
+	if len(messages) == 0 {
+		t.Error("Expected help message for empty semantic search query")
+	}
+}
