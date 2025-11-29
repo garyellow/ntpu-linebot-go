@@ -6,74 +6,93 @@ import (
 	"testing"
 )
 
-func TestDispatchIntent(t *testing.T) {
-	// Note: Full integration tests require database and scraper setup.
-	// These tests focus on parameter validation logic.
-
+// TestDispatchIntent_ParamValidation tests parameter validation logic
+// without requiring full handler setup. Uses nil dependencies (acceptable for error paths).
+func TestDispatchIntent_ParamValidation(t *testing.T) {
 	tests := []struct {
 		name        string
 		intent      string
 		params      map[string]string
-		wantErr     bool
 		errContains string
 	}{
-		{
-			name:   "search intent with query",
-			intent: IntentSearch,
-			params: map[string]string{"query": "資工系"},
-		},
 		{
 			name:        "search intent missing query",
 			intent:      IntentSearch,
 			params:      map[string]string{},
-			wantErr:     true,
 			errContains: "missing required param: query",
 		},
 		{
 			name:        "search intent empty query",
 			intent:      IntentSearch,
 			params:      map[string]string{"query": ""},
-			wantErr:     true,
 			errContains: "missing required param: query",
-		},
-		{
-			name:   "emergency intent (no params)",
-			intent: IntentEmergency,
-			params: map[string]string{},
 		},
 		{
 			name:        "unknown intent",
 			intent:      "unknown",
 			params:      map[string]string{},
-			wantErr:     true,
 			errContains: "unknown intent",
 		},
 	}
 
-	// Create a minimal handler for testing
+	// Minimal handler for param validation tests (nil dependencies are acceptable)
 	h := &Handler{}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Skip tests that would actually call handler methods
-			// Emergency intent doesn't require handler setup for error validation
-			if !tt.wantErr && tt.intent != IntentEmergency {
-				t.Skip("Skipping test that requires full handler setup")
-			}
-			// Emergency intent calls handleEmergencyPhones which uses stickerManager
-			if tt.intent == IntentEmergency {
-				t.Skip("Skipping test that requires stickerManager setup")
-			}
-
 			_, err := h.DispatchIntent(context.Background(), tt.intent, tt.params)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("DispatchIntent() error = %v, wantErr %v", err, tt.wantErr)
+			if err == nil {
+				t.Error("DispatchIntent() expected error, got nil")
 				return
 			}
-			if tt.wantErr && tt.errContains != "" {
-				if err == nil || !strings.Contains(err.Error(), tt.errContains) {
-					t.Errorf("DispatchIntent() error = %v, should contain %q", err, tt.errContains)
-				}
+			if !strings.Contains(err.Error(), tt.errContains) {
+				t.Errorf("DispatchIntent() error = %v, should contain %q", err, tt.errContains)
+			}
+		})
+	}
+}
+
+// TestDispatchIntent_Integration tests the full dispatch flow with real dependencies.
+// These tests verify that valid parameters correctly route to handler methods.
+func TestDispatchIntent_Integration(t *testing.T) {
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	tests := []struct {
+		name         string
+		intent       string
+		params       map[string]string
+		wantMessages bool // expect at least one message (success or error message)
+	}{
+		{
+			name:         "search intent with query",
+			intent:       IntentSearch,
+			params:       map[string]string{"query": "資工系"},
+			wantMessages: true,
+		},
+		{
+			name:         "search intent with person name",
+			intent:       IntentSearch,
+			params:       map[string]string{"query": "王教授"},
+			wantMessages: true,
+		},
+		{
+			name:         "emergency intent (no params)",
+			intent:       IntentEmergency,
+			params:       map[string]string{},
+			wantMessages: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msgs, err := h.DispatchIntent(ctx, tt.intent, tt.params)
+			if err != nil {
+				t.Errorf("DispatchIntent() unexpected error: %v", err)
+				return
+			}
+			if tt.wantMessages && len(msgs) == 0 {
+				t.Error("DispatchIntent() expected messages, got none")
 			}
 		})
 	}

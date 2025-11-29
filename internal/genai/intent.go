@@ -150,10 +150,3 @@ func (p *IntentParser) parseFunctionCall(fc *genai.FunctionCall) (*ParseResult, 
 func (p *IntentParser) IsEnabled() bool {
 	return p != nil && p.client != nil
 }
-
-// Close closes the intent parser and releases resources.
-func (p *IntentParser) Close() error {
-	// genai.Client doesn't have a Close method in the current SDK
-	// This is a no-op placeholder for future compatibility
-	return nil
-}

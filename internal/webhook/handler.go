@@ -37,6 +37,9 @@ const (
 	// why 25 seconds was chosen (LINE API constraints, user patience, etc.)
 )
 
+// helpKeywords are the keywords that trigger the help message
+var helpKeywords = []string{"使用說明", "help"}
+
 // Handler handles LINE webhook events
 type Handler struct {
 	channelSecret  string
@@ -347,7 +350,6 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 	h.logger.WithField("text", text).Debug("Received text message")
 
 	// Check for help keywords FIRST (before dispatching to bot modules)
-	helpKeywords := []string{"使用說明", "help", "Help", "HELP"}
 	for _, keyword := range helpKeywords {
 		if strings.EqualFold(text, keyword) {
 			h.logger.Info("User requested help/instruction")
@@ -401,7 +403,6 @@ func (h *Handler) handlePostbackEvent(ctx context.Context, event webhook.Postbac
 	h.logger.WithField("data", data).Debug("Received postback")
 
 	// Check for help keywords FIRST (before dispatching to bot modules)
-	helpKeywords := []string{"使用說明", "help", "Help", "HELP"}
 	for _, keyword := range helpKeywords {
 		if strings.EqualFold(data, keyword) {
 			h.logger.Info("User requested help/instruction via postback")
