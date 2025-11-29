@@ -33,6 +33,9 @@ const (
 	moduleName = "contact"
 	senderName = "聯繫小幫手"
 
+	// MaxContactsPerSearch is the maximum contacts to return from database search (matches DB LIMIT 500)
+	MaxContactsPerSearch = 500
+
 	// Emergency phone numbers (without hyphens for clipboard copy)
 	// 三峽校區
 	sanxiaNormalPhone    = "0286741111" // 總機
@@ -549,9 +552,18 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	var messages []messaging_api.MessageInterface
 
+	// Track if we hit the limit (likely more results available) - warning added at end
+	truncated := len(contacts) >= MaxContactsPerSearch
+
+	// Reserve 1 message slot for warning if truncated (LINE API: max 5 messages)
+	maxMessages := 5
+	if truncated {
+		maxMessages = 4
+	}
+
 	for i := 0; i < len(contacts); i += lineutil.MaxBubblesPerCarousel {
-		// Limit to 5 messages (LINE reply limit)
-		if len(messages) >= 5 {
+		// Limit to maxMessages (LINE reply limit, minus 1 if truncated for warning)
+		if len(messages) >= maxMessages {
 			break
 		}
 
@@ -694,6 +706,15 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 		msg := lineutil.NewFlexMessage(altText, carousel)
 		msg.Sender = sender
 		messages = append(messages, msg)
+	}
+
+	// Append warning message at the end if results were truncated
+	if truncated {
+		warningMsg := lineutil.NewTextMessageWithConsistentSender(
+			fmt.Sprintf("⚠️ 搜尋結果達到上限 %d 筆\n\n可能有更多結果未顯示，建議使用更精確的關鍵字搜尋。", MaxContactsPerSearch),
+			sender,
+		)
+		messages = append(messages, warningMsg)
 	}
 
 	// Add Quick Reply to the last message

@@ -935,13 +935,13 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 		messages = append(messages, msg)
 	}
 
-	// Prepend warning message if results were truncated (and we have room)
-	if truncated && len(messages) < 5 {
+	// Append warning message at the end if results were truncated
+	if truncated {
 		warningMsg := lineutil.NewTextMessageWithConsistentSender(
 			fmt.Sprintf("⚠️ 搜尋結果超過 %d 門課程，僅顯示前 %d 門。\n\n建議使用更精確的搜尋條件以縮小範圍。", originalCount, MaxCoursesPerSearch),
 			sender,
 		)
-		messages = append([]messaging_api.MessageInterface{warningMsg}, messages...)
+		messages = append(messages, warningMsg)
 	}
 
 	// Add Quick Reply to the last message
