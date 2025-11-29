@@ -34,6 +34,9 @@ docker compose up -d
 - `WARMUP_MODULES` - 預熱模組（預設：sticker,id,contact,course）
   - 加入 `syllabus` 啟用課程大綱預熱（需設定 `GEMINI_API_KEY`）
 - `LOG_LEVEL` - 日誌層級（預設：info）
+- `WEBHOOK_TIMEOUT` - Webhook 處理超時時間（預設：60s，配合 LINE Loading Animation）
+- `USER_RATE_LIMIT_TOKENS` - 每位使用者的令牌數量上限（預設：10）
+- `USER_RATE_LIMIT_REFILL_RATE` - 令牌回填速率（預設：0.333，每 3 秒補充 1 個令牌）
 - `GRAFANA_PASSWORD` - Grafana 密碼（預設：admin123）
 
 ## 指定版本

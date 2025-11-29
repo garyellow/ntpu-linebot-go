@@ -31,7 +31,7 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - PORT=${PORT:-10000}
       - LOG_LEVEL=${LOG_LEVEL:-info}
-      - DATA_DIR=/data
+      - DATA_DIR=${DATA_DIR:-/data}
       - CACHE_TTL=${CACHE_TTL:-168h}
       - SCRAPER_TIMEOUT=${SCRAPER_TIMEOUT:-60s}
       - SCRAPER_MAX_RETRIES=${SCRAPER_MAX_RETRIES:-5}
