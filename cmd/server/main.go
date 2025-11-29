@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/config"
+	"github.com/garyellow/ntpu-linebot-go/internal/genai"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 	"github.com/garyellow/ntpu-linebot-go/internal/rag"
@@ -128,6 +129,17 @@ func main() {
 	if vectorDB != nil {
 		webhookHandler.GetCourseHandler().SetVectorDB(vectorDB)
 		log.Info("Semantic search enabled for course module")
+	}
+
+	// Create NLU intent parser (optional - requires Gemini API key)
+	if cfg.GeminiAPIKey != "" {
+		intentParser, err := genai.NewIntentParser(context.Background(), cfg.GeminiAPIKey)
+		if err != nil {
+			log.WithError(err).Warn("Failed to create intent parser, NLU disabled")
+		} else if intentParser != nil {
+			webhookHandler.SetIntentParser(intentParser)
+			log.Info("NLU intent parser enabled")
+		}
 	}
 	log.Info("Webhook handler created")
 

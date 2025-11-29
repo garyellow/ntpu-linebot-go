@@ -103,6 +103,60 @@ func (h *Handler) SetVectorDB(vectorDB *rag.VectorDB) {
 	h.vectorDB = vectorDB
 }
 
+// Intent names for NLU dispatcher
+const (
+	IntentSearch   = "search"   // Unified course/teacher search
+	IntentSemantic = "semantic" // Semantic search via VectorDB
+	IntentUID      = "uid"      // Direct course UID lookup
+)
+
+// DispatchIntent handles NLU-parsed intents for the course module.
+// It validates required parameters and calls the appropriate handler method.
+//
+// Supported intents:
+//   - "search": requires "keyword" param, calls handleUnifiedCourseSearch
+//   - "semantic": requires "query" param, calls handleSemanticSearch
+//   - "uid": requires "uid" param, calls handleCourseUIDQuery
+//
+// Returns error if intent is unknown or required parameters are missing.
+func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[string]string) ([]messaging_api.MessageInterface, error) {
+	// Validate parameters first (before logging) to support testing with nil dependencies
+	switch intent {
+	case IntentSearch:
+		keyword, ok := params["keyword"]
+		if !ok || keyword == "" {
+			return nil, fmt.Errorf("missing required param: keyword")
+		}
+		if h.logger != nil {
+			h.logger.WithModule(moduleName).Infof("Dispatching course intent: %s, keyword: %s", intent, keyword)
+		}
+		return h.handleUnifiedCourseSearch(ctx, keyword), nil
+
+	case IntentSemantic:
+		query, ok := params["query"]
+		if !ok || query == "" {
+			return nil, fmt.Errorf("missing required param: query")
+		}
+		if h.logger != nil {
+			h.logger.WithModule(moduleName).Infof("Dispatching course intent: %s, query: %s", intent, query)
+		}
+		return h.handleSemanticSearch(ctx, query), nil
+
+	case IntentUID:
+		uid, ok := params["uid"]
+		if !ok || uid == "" {
+			return nil, fmt.Errorf("missing required param: uid")
+		}
+		if h.logger != nil {
+			h.logger.WithModule(moduleName).Infof("Dispatching course intent: %s, uid: %s", intent, uid)
+		}
+		return h.handleCourseUIDQuery(ctx, uid), nil
+
+	default:
+		return nil, fmt.Errorf("unknown intent: %s", intent)
+	}
+}
+
 // CanHandle checks if the message is for the course module
 func (h *Handler) CanHandle(text string) bool {
 	text = strings.TrimSpace(text)

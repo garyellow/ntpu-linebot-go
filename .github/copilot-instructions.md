@@ -17,8 +17,8 @@ LINE Webhook → Gin Handler (60s timeout) → Bot Module Dispatcher
 ```
 
 **Critical Flow Details:**
-- **Context timeout**: All bot operations inherit 60s deadline from webhook (`internal/webhook/handler.go:214`)
-- **Message batching**: LINE allows max 5 messages per reply; webhook auto-truncates to 4 + warning (`handler.go:159`)
+- **Context timeout**: All bot operations inherit 60s deadline from webhook (`internal/webhook/handler.go:processCtx`)
+- **Message batching**: LINE allows max 5 messages per reply; webhook auto-truncates to 4 + warning
 
 ## Bot Module Registration Pattern
 
@@ -178,6 +178,41 @@ histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by 
 
 Multi-stage build (alpine builder + distroless runtime), init-data for permissions, healthcheck binary (no shell).
 
+## NLU Intent Parser
+
+**Location**: `internal/genai/` (types.go, intent.go, functions.go, prompts.go)
+
+**Architecture**:
+```
+User Input → Keyword Matching (existing handlers)
+     ↓ (no match)
+handleUnmatchedMessage()
+     ↓
+┌─ Group Chat ─┐     ┌─ Personal Chat ─┐
+│ No @Bot → silent │  NLU Parser       │
+│ Has @Bot → remove│                   │
+│ mention & process│                   │
+└─────────────────┴───────────────────┘
+     ↓
+IntentParser.Parse() (Gemini 2.0 Flash Lite)
+     ↓
+dispatchIntent() → Route to Handler
+     ↓ (failure)
+Fallback → getHelpMessage() + Warning Log
+```
+
+**Key Features**:
+- Function Calling (AUTO mode): Model chooses function call or text response
+- 9 intent functions: `course_search`, `course_semantic`, `course_uid`, `id_search`, `id_student_id`, `id_department`, `contact_search`, `contact_emergency`, `help`
+- Group @Bot detection: Uses `mention.Index` and `mention.Length` for precise removal
+- Fallback strategy: NLU failure → help message with warning log
+- Metrics: `NLURequestsTotal`, `NLUDurationSeconds`, `NLUFallbackTotal`
+
+**Interface Pattern**:
+- `genai.IntentParserInterface`: Defines Parse() and IsEnabled()
+- `genai.ParseResult`: Module, Intent, Params, ClarificationText, FunctionName
+- webhook imports genai package directly (no adapter needed)
+
 ## Key File Locations
 
 - **Entry points**: `cmd/server/main.go`, `cmd/healthcheck/main.go`
@@ -189,4 +224,5 @@ Multi-stage build (alpine builder + distroless runtime), init-data for permissio
 - **Sticker manager**: `internal/sticker/sticker.go` (avatar URLs for messages)
 - **Semantic search**: `internal/rag/vectordb.go` (chromem-go wrapper)
 - **Embedding client**: `internal/genai/embedding.go` (Gemini API)
+- **NLU intent parser**: `internal/genai/intent.go` (Function Calling)
 - **Syllabus scraper**: `internal/syllabus/scraper.go` (course syllabus extraction)

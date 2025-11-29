@@ -82,6 +82,45 @@ func NewHandler(db *storage.DB, scraper *scraper.Client, metrics *metrics.Metric
 	}
 }
 
+// Intent names for NLU dispatcher
+const (
+	IntentSearch    = "search"    // Contact search by name/organization
+	IntentEmergency = "emergency" // Emergency phone numbers
+)
+
+// DispatchIntent handles NLU-parsed intents for the contact module.
+// It validates required parameters and calls the appropriate handler method.
+//
+// Supported intents:
+//   - "search": requires "query" param, calls handleContactSearch
+//   - "emergency": no params required, calls handleEmergencyPhones
+//
+// Returns error if intent is unknown or required parameters are missing.
+func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[string]string) ([]messaging_api.MessageInterface, error) {
+	// Validate parameters first (before logging) to support testing with nil dependencies
+	switch intent {
+	case IntentSearch:
+		query, ok := params["query"]
+		if !ok || query == "" {
+			return nil, fmt.Errorf("missing required param: query")
+		}
+		if h.logger != nil {
+			h.logger.WithModule(moduleName).Infof("Dispatching contact intent: %s, query: %s", intent, query)
+		}
+		return h.handleContactSearch(ctx, query), nil
+
+	case IntentEmergency:
+		// Emergency intent doesn't require any parameters
+		if h.logger != nil {
+			h.logger.WithModule(moduleName).Info("Dispatching contact intent: emergency")
+		}
+		return h.handleEmergencyPhones(), nil
+
+	default:
+		return nil, fmt.Errorf("unknown intent: %s", intent)
+	}
+}
+
 // CanHandle checks if the message is for the contact module
 func (h *Handler) CanHandle(text string) bool {
 	text = strings.TrimSpace(text)

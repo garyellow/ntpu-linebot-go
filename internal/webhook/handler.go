@@ -13,6 +13,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/bot/contact"
 	"github.com/garyellow/ntpu-linebot-go/internal/bot/course"
 	"github.com/garyellow/ntpu-linebot-go/internal/bot/id"
+	"github.com/garyellow/ntpu-linebot-go/internal/genai"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
@@ -53,6 +54,9 @@ type Handler struct {
 	// Rate limit configuration
 	userRateLimitTokens     float64
 	userRateLimitRefillRate float64
+
+	// NLU intent parser (optional - requires Gemini API key)
+	intentParser genai.IntentParserInterface
 }
 
 // NewHandler creates a new webhook handler
@@ -105,6 +109,12 @@ func (h *Handler) Stop() {
 // Used to set VectorDB for semantic search from main.go
 func (h *Handler) GetCourseHandler() *course.Handler {
 	return h.courseHandler
+}
+
+// SetIntentParser sets the NLU intent parser for the handler.
+// This is optional - if not set, the handler falls back to keyword matching only.
+func (h *Handler) SetIntentParser(parser genai.IntentParserInterface) {
+	h.intentParser = parser
 }
 
 // Handle processes incoming webhook requests
@@ -204,16 +214,7 @@ func (h *Handler) Handle(c *gin.Context) {
 				continue
 			}
 
-			// Check rate limit before sending
-			chatID := h.getChatID(event)
-			if chatID != "" && !h.userLimiter.Allow(chatID, h.userRateLimitTokens, h.userRateLimitRefillRate) {
-				h.logger.WithField("chat_id", chatID[:8]+"...").Warn("User rate limit exceeded")
-				h.metrics.RecordWebhook(eventType, "rate_limited", time.Since(eventStart).Seconds())
-				h.metrics.RecordHTTPError("rate_limit_user", "webhook")
-				continue
-			}
-
-			// Check global rate limit
+			// Check global rate limit (user rate limit is checked in handleMessageEvent)
 			if !h.rateLimiter.Allow() {
 				h.logger.Warn("Global rate limit exceeded, waiting...")
 				h.metrics.RecordHTTPError("rate_limit_global", "webhook")
@@ -254,8 +255,50 @@ func (h *Handler) isPersonalChat(source webhook.SourceInterface) bool {
 	return ok
 }
 
+// checkUserRateLimit checks if the user has exceeded their rate limit.
+// Returns (allowed bool, rateLimitMessage []MessageInterface).
+// For personal chats, returns a friendly message when rate limited.
+// For group/room chats, returns nil to silently ignore (avoid spamming groups).
+func (h *Handler) checkUserRateLimit(source webhook.SourceInterface, chatID string) (bool, []messaging_api.MessageInterface) {
+	if chatID == "" {
+		return true, nil // No chat ID, allow by default
+	}
+
+	if h.userLimiter.Allow(chatID, h.userRateLimitTokens, h.userRateLimitRefillRate) {
+		return true, nil // Rate limit not exceeded
+	}
+
+	// Rate limit exceeded - log it
+	logChatID := chatID
+	if len(chatID) > 8 {
+		logChatID = chatID[:8] + "..."
+	}
+	h.logger.WithField("chat_id", logChatID).Warn("User rate limit exceeded")
+	h.metrics.RecordHTTPError("rate_limit_user", "webhook")
+
+	// For personal chats, return a friendly message
+	if h.isPersonalChat(source) {
+		sender := lineutil.GetSender("系統小幫手", h.stickerManager)
+		return false, []messaging_api.MessageInterface{
+			lineutil.NewTextMessageWithConsistentSender(
+				"⏳ 訊息過於頻繁，請稍後再試",
+				sender,
+			),
+		}
+	}
+
+	// For group/room chats, return nil to silently ignore
+	return false, nil
+}
+
 // handleMessageEvent processes text message events
 func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageEvent) ([]messaging_api.MessageInterface, error) {
+	// Check rate limit early to avoid unnecessary processing
+	chatID := h.getChatIDFromSource(event.Source)
+	if allowed, rateLimitMsg := h.checkUserRateLimit(event.Source, chatID); !allowed {
+		return rateLimitMsg, nil
+	}
+
 	// Handle sticker messages - only in personal chats
 	if event.Message.GetType() == "sticker" {
 		if h.isPersonalChat(event.Source) {
@@ -331,8 +374,8 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 		return h.idHandler.HandleMessage(processCtx, text), nil
 	}
 
-	// No handler matched - return help message
-	return h.getHelpMessage(), nil
+	// No handler matched - try NLU if available
+	return h.handleUnmatchedMessage(processCtx, event.Source, textMsg, text)
 }
 
 // handlePostbackEvent processes postback events
@@ -520,6 +563,19 @@ func (h *Handler) getChatID(event webhook.EventInterface) string {
 	return ""
 }
 
+// getChatIDFromSource extracts chat ID directly from a source interface
+func (h *Handler) getChatIDFromSource(source webhook.SourceInterface) string {
+	switch s := source.(type) {
+	case webhook.UserSource:
+		return s.UserId
+	case webhook.GroupSource:
+		return s.GroupId
+	case webhook.RoomSource:
+		return s.RoomId
+	}
+	return ""
+}
+
 // getHelpMessage returns a simplified help message (fallback when no handler matches)
 func (h *Handler) getHelpMessage() []messaging_api.MessageInterface {
 	helpText := "🔍 NTPU 查詢小工具\n\n" +
@@ -545,6 +601,116 @@ func (h *Handler) getHelpMessage() []messaging_api.MessageInterface {
 		lineutil.QuickReplyEmergencyAction(),
 	})
 	return []messaging_api.MessageInterface{msg}
+}
+
+// handleUnmatchedMessage handles messages that don't match any keyword pattern.
+// It uses NLU intent parsing if available, otherwise returns help message.
+// For group chats without @Bot mention, it silently ignores the message.
+func (h *Handler) handleUnmatchedMessage(ctx context.Context, source webhook.SourceInterface, textMsg webhook.TextMessageContent, sanitizedText string) ([]messaging_api.MessageInterface, error) {
+	// Check if we're in a group chat
+	isGroup := !h.isPersonalChat(source)
+
+	// For group chats, only respond if bot is mentioned
+	if isGroup {
+		if !isBotMentioned(textMsg) {
+			// No @Bot mention in group - silently ignore
+			return nil, nil
+		}
+		// Remove @Bot mentions from text for NLU processing
+		if textMsg.Mention != nil {
+			sanitizedText = removeBotMentions(sanitizedText, textMsg.Mention)
+			sanitizedText = normalizeWhitespaceForMention(sanitizedText)
+			if sanitizedText == "" {
+				// Only @Bot mention, no actual content - return help
+				return h.getHelpMessage(), nil
+			}
+		}
+	}
+
+	// Try NLU if available
+	if h.intentParser != nil && h.intentParser.IsEnabled() {
+		return h.handleWithNLU(ctx, sanitizedText)
+	}
+
+	// NLU not available - return help message
+	return h.getHelpMessage(), nil
+}
+
+// handleWithNLU processes the message using NLU intent parsing.
+func (h *Handler) handleWithNLU(ctx context.Context, text string) ([]messaging_api.MessageInterface, error) {
+	start := time.Now()
+
+	result, err := h.intentParser.Parse(ctx, text)
+	duration := time.Since(start).Seconds()
+
+	if err != nil {
+		// NLU error - log warning and fallback to help message
+		h.logger.WithError(err).Warn("NLU intent parsing failed")
+		h.metrics.RecordNLURequest("error", "", duration)
+		h.metrics.RecordNLUFallback()
+		return h.getHelpMessage(), nil
+	}
+
+	if result == nil {
+		// No result - fallback to help message
+		h.metrics.RecordNLURequest("error", "", duration)
+		h.metrics.RecordNLUFallback()
+		return h.getHelpMessage(), nil
+	}
+
+	// Check if model returned clarification text instead of function call
+	if result.ClarificationText != "" {
+		h.logger.WithField("clarification", result.ClarificationText).Debug("NLU returned clarification")
+		h.metrics.RecordNLURequest("clarification", "", duration)
+
+		// Return clarification text as a message
+		sender := lineutil.GetSender("小幫手", h.stickerManager)
+		return []messaging_api.MessageInterface{
+			lineutil.NewTextMessageWithConsistentSender(result.ClarificationText, sender),
+		}, nil
+	}
+
+	// Successfully parsed intent
+	h.logger.WithField("module", result.Module).
+		WithField("intent", result.Intent).
+		WithField("params", result.Params).
+		Debug("NLU intent parsed")
+	h.metrics.RecordNLURequest("success", result.FunctionName, duration)
+
+	// Dispatch to appropriate handler based on intent
+	return h.dispatchIntent(ctx, result)
+}
+
+// dispatchIntent dispatches the parsed intent to the appropriate handler.
+func (h *Handler) dispatchIntent(ctx context.Context, result *genai.ParseResult) ([]messaging_api.MessageInterface, error) {
+	switch result.Module {
+	case "course":
+		msgs, err := h.courseHandler.DispatchIntent(ctx, result.Intent, result.Params)
+		if err != nil {
+			h.logger.WithError(err).WithField("intent", result.Intent).Warn("Course dispatch failed")
+			return h.getHelpMessage(), nil
+		}
+		return msgs, nil
+	case "id":
+		msgs, err := h.idHandler.DispatchIntent(ctx, result.Intent, result.Params)
+		if err != nil {
+			h.logger.WithError(err).WithField("intent", result.Intent).Warn("ID dispatch failed")
+			return h.getHelpMessage(), nil
+		}
+		return msgs, nil
+	case "contact":
+		msgs, err := h.contactHandler.DispatchIntent(ctx, result.Intent, result.Params)
+		if err != nil {
+			h.logger.WithError(err).WithField("intent", result.Intent).Warn("Contact dispatch failed")
+			return h.getHelpMessage(), nil
+		}
+		return msgs, nil
+	case "help":
+		return h.getDetailedInstructionMessages(), nil
+	default:
+		h.logger.WithField("module", result.Module).Warn("Unknown module from NLU")
+		return h.getHelpMessage(), nil
+	}
 }
 
 // getDetailedInstructionMessages returns detailed instruction messages

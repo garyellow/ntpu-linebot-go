@@ -73,6 +73,60 @@ func NewHandler(db *storage.DB, scraper *scraper.Client, metrics *metrics.Metric
 	}
 }
 
+// Intent names for NLU dispatcher
+const (
+	IntentSearch     = "search"     // Student name search
+	IntentStudentID  = "student_id" // Direct student ID lookup
+	IntentDepartment = "department" // Department name query
+)
+
+// DispatchIntent handles NLU-parsed intents for the ID module.
+// It validates required parameters and calls the appropriate handler method.
+//
+// Supported intents:
+//   - "search": requires "name" param, calls handleStudentNameQuery
+//   - "student_id": requires "student_id" param, calls handleStudentIDQuery
+//   - "department": requires "department" param, calls handleDepartmentNameQuery
+//
+// Returns error if intent is unknown or required parameters are missing.
+func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[string]string) ([]messaging_api.MessageInterface, error) {
+	// Validate parameters first (before logging) to support testing with nil dependencies
+	switch intent {
+	case IntentSearch:
+		name, ok := params["name"]
+		if !ok || name == "" {
+			return nil, fmt.Errorf("missing required param: name")
+		}
+		if h.logger != nil {
+			h.logger.WithModule(moduleName).Infof("Dispatching ID intent: %s, name: %s", intent, name)
+		}
+		return h.handleStudentNameQuery(ctx, name), nil
+
+	case IntentStudentID:
+		studentID, ok := params["student_id"]
+		if !ok || studentID == "" {
+			return nil, fmt.Errorf("missing required param: student_id")
+		}
+		if h.logger != nil {
+			h.logger.WithModule(moduleName).Infof("Dispatching ID intent: %s, student_id: %s", intent, studentID)
+		}
+		return h.handleStudentIDQuery(ctx, studentID), nil
+
+	case IntentDepartment:
+		department, ok := params["department"]
+		if !ok || department == "" {
+			return nil, fmt.Errorf("missing required param: department")
+		}
+		if h.logger != nil {
+			h.logger.WithModule(moduleName).Infof("Dispatching ID intent: %s, department: %s", intent, department)
+		}
+		return h.handleDepartmentNameQuery(department), nil
+
+	default:
+		return nil, fmt.Errorf("unknown intent: %s", intent)
+	}
+}
+
 // CanHandle checks if the message is for the ID module
 func (h *Handler) CanHandle(text string) bool {
 	text = strings.TrimSpace(text)
