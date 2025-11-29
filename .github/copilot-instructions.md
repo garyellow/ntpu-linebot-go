@@ -63,6 +63,8 @@ LINE Webhook → Gin Handler (60s timeout) → Bot Module Dispatcher
 
 **Background Jobs** (`cmd/server/main.go`):
 - **Daily Warmup**: Every day at 3:00 AM, refreshes all data modules unconditionally
+  - **Concurrent**: id, contact, sticker, course - no dependencies between them
+  - **Dependency**: syllabus waits for course to complete (needs course data), runs in parallel with others
 - **Cache Cleanup**: Every 12 hours, deletes data past Hard TTL (7 days) + VACUUM
 - **Sticker Refresh**: Every 24 hours
 

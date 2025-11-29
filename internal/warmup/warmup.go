@@ -53,11 +53,32 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 		log.Info("Cache reset complete")
 	}
 
-	// Warm modules concurrently (no dependencies between modules)
+	// Separate modules:
+	// - Independent modules: can run concurrently (id, contact, sticker)
+	// - Course module: runs concurrently but syllabus waits for it
+	// - Syllabus module: depends on course data, starts after course completes
+	var independentModules []string
+	var hasCourse, hasSyllabus bool
+
+	for _, module := range opts.Modules {
+		switch module {
+		case "course":
+			hasCourse = true
+		case "syllabus":
+			hasSyllabus = true
+		default:
+			independentModules = append(independentModules, module)
+		}
+	}
+
 	var wg sync.WaitGroup
 	errChan := make(chan error, len(opts.Modules))
 
-	for _, module := range opts.Modules {
+	// Channel to signal course completion (for syllabus dependency)
+	courseDone := make(chan struct{})
+
+	// Start independent modules concurrently
+	for _, module := range independentModules {
 		select {
 		case <-ctx.Done():
 			return stats, fmt.Errorf("warmup canceled: %w", ctx.Err())
@@ -80,25 +101,60 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 					log.WithError(err).Error("Contact module warmup failed")
 					errChan <- fmt.Errorf("contact module: %w", err)
 				}
-			case "course":
-				if err := warmupCourseModule(ctx, db, client, log, stats, opts.Metrics); err != nil {
-					log.WithError(err).Error("Course module warmup failed")
-					errChan <- fmt.Errorf("course module: %w", err)
-				}
 			case "sticker":
 				if err := warmupStickerModule(ctx, stickerMgr, log, stats, opts.Metrics); err != nil {
 					log.WithError(err).Error("Sticker module warmup failed")
 					errChan <- fmt.Errorf("sticker module: %w", err)
 				}
-			case "syllabus":
-				if opts.VectorDB == nil {
-					log.Info("Syllabus module skipped: VectorDB not configured")
-				} else if err := warmupSyllabusModule(ctx, db, client, opts.VectorDB, log, stats, opts.Metrics); err != nil {
-					log.WithError(err).Error("Syllabus module warmup failed")
-					errChan <- fmt.Errorf("syllabus module: %w", err)
-				}
 			default:
 				log.WithField("module", moduleName).Warn("Unknown module, skipping")
+			}
+		}()
+	}
+
+	// Start course module (syllabus will wait for this)
+	if hasCourse {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer close(courseDone) // Signal course completion
+
+			if err := warmupCourseModule(ctx, db, client, log, stats, opts.Metrics); err != nil {
+				log.WithError(err).Error("Course module warmup failed")
+				errChan <- fmt.Errorf("course module: %w", err)
+			}
+		}()
+	} else {
+		// No course module requested, close channel immediately
+		close(courseDone)
+	}
+
+	// Start syllabus module (waits for course to complete first)
+	if hasSyllabus {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			// Wait for course module to complete (syllabus needs course data)
+			if hasCourse {
+				log.Debug("Syllabus waiting for course module to complete")
+			}
+			select {
+			case <-ctx.Done():
+				errChan <- fmt.Errorf("syllabus canceled while waiting for course: %w", ctx.Err())
+				return
+			case <-courseDone:
+				// Course completed (or wasn't requested), proceed with syllabus
+			}
+
+			if opts.VectorDB == nil {
+				log.Info("Syllabus module skipped: VectorDB not configured")
+				return
+			}
+
+			if err := warmupSyllabusModule(ctx, db, client, opts.VectorDB, log, stats, opts.Metrics); err != nil {
+				log.WithError(err).Error("Syllabus module warmup failed")
+				errChan <- fmt.Errorf("syllabus module: %w", err)
 			}
 		}()
 	}
