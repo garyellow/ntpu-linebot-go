@@ -170,7 +170,7 @@ func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
 }
 
 // fetchWithRetry retries fetching with exponential backoff
-func (m *Manager) fetchWithRetry(ctx context.Context, url, source string, fetchFunc func(context.Context, *scraper.Client, string) ([]string, error), maxRetries int) ([]string, error) {
+func (m *Manager) fetchWithRetry(ctx context.Context, url, _ string, fetchFunc func(context.Context, *scraper.Client, string) ([]string, error), maxRetries int) ([]string, error) {
 	var lastErr error
 
 	for attempt := 0; attempt < maxRetries; attempt++ {

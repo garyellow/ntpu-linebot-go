@@ -391,7 +391,7 @@ func (h *Handler) handlePostbackEvent(ctx context.Context, event webhook.Postbac
 }
 
 // handleStickerMessage processes sticker messages (reply with random sticker image)
-func (h *Handler) handleStickerMessage(event webhook.MessageEvent) []messaging_api.MessageInterface {
+func (h *Handler) handleStickerMessage(_ webhook.MessageEvent) []messaging_api.MessageInterface {
 	h.logger.Info("Received sticker message, replying with random sticker image")
 
 	// Get random sticker URL and create consistent sender
@@ -410,7 +410,9 @@ func (h *Handler) handleStickerMessage(event webhook.MessageEvent) []messaging_a
 }
 
 // handleFollowEvent processes follow events (when user adds the bot)
-func (h *Handler) handleFollowEvent(event webhook.FollowEvent) ([]messaging_api.MessageInterface, error) {
+//
+//nolint:unparam // error is kept for interface consistency with other event handlers
+func (h *Handler) handleFollowEvent(_ webhook.FollowEvent) ([]messaging_api.MessageInterface, error) {
 	h.logger.Info("New user followed the bot")
 
 	// Send welcome message
