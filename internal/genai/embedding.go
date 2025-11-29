@@ -30,7 +30,6 @@ const (
 	// Retry configuration for transient errors (similar to scraper)
 	defaultMaxRetries    = 5
 	defaultInitialDelay  = 2 * time.Second
-	defaultMaxDelay      = 60 * time.Second
 	defaultBackoffFactor = 2.0
 	defaultJitterFactor  = 0.25
 )
@@ -182,9 +181,6 @@ func (c *EmbeddingClient) Embed(ctx context.Context, text string) ([]float32, er
 
 		// Exponential backoff
 		delay = time.Duration(float64(delay) * defaultBackoffFactor)
-		if delay > defaultMaxDelay {
-			delay = defaultMaxDelay
-		}
 	}
 
 	return nil, fmt.Errorf("max retries exceeded: %w", lastErr)

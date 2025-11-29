@@ -166,9 +166,6 @@ func TestRetryConstants(t *testing.T) {
 	if defaultInitialDelay != 2*time.Second {
 		t.Errorf("defaultInitialDelay = %v, want 2s", defaultInitialDelay)
 	}
-	if defaultMaxDelay != 60*time.Second {
-		t.Errorf("defaultMaxDelay = %v, want 60s", defaultMaxDelay)
-	}
 	if defaultBackoffFactor != 2.0 {
 		t.Errorf("defaultBackoffFactor = %v, want 2.0", defaultBackoffFactor)
 	}
