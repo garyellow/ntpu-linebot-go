@@ -153,7 +153,7 @@ func (c *EmbeddingClient) Embed(ctx context.Context, text string) ([]float32, er
 			return nil, fmt.Errorf("rate limit wait: %w", err)
 		}
 
-		result, err, retryable := c.embedOnce(ctx, text)
+		result, retryable, err := c.embedOnce(ctx, text)
 		if err == nil {
 			return result, nil
 		}
@@ -191,8 +191,8 @@ func (c *EmbeddingClient) Embed(ctx context.Context, text string) ([]float32, er
 }
 
 // embedOnce performs a single embedding request
-// Returns (result, error, retryable)
-func (c *EmbeddingClient) embedOnce(ctx context.Context, text string) ([]float32, error, bool) {
+// Returns (result, retryable, error) - error is last per Go convention
+func (c *EmbeddingClient) embedOnce(ctx context.Context, text string) ([]float32, bool, error) {
 	// Build request
 	url := fmt.Sprintf("%s/%s:embedContent?key=%s", geminiAPIBaseURL, GeminiEmbeddingModel, c.apiKey)
 
@@ -205,12 +205,12 @@ func (c *EmbeddingClient) embedOnce(ctx context.Context, text string) ([]float32
 
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err), false
+		return nil, false, fmt.Errorf("marshal request: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonBody))
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err), false
+		return nil, false, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -218,19 +218,19 @@ func (c *EmbeddingClient) embedOnce(ctx context.Context, text string) ([]float32
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		// Network errors are retryable
-		return nil, fmt.Errorf("execute request: %w", err), true
+		return nil, true, fmt.Errorf("execute request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	// Check HTTP status for retryable errors
 	if resp.StatusCode == 429 || resp.StatusCode >= 500 {
-		return nil, fmt.Errorf("HTTP %d: server error or rate limited", resp.StatusCode), true
+		return nil, true, fmt.Errorf("HTTP %d: server error or rate limited", resp.StatusCode)
 	}
 
 	// Parse response
 	var embeddingResp embeddingResponse
 	if err := json.NewDecoder(resp.Body).Decode(&embeddingResp); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err), false
+		return nil, false, fmt.Errorf("decode response: %w", err)
 	}
 
 	// Check for API error
@@ -240,17 +240,17 @@ func (c *EmbeddingClient) embedOnce(ctx context.Context, text string) ([]float32
 			embeddingResp.Error.Status == "RESOURCE_EXHAUSTED" ||
 			embeddingResp.Error.Code >= 500
 
-		return nil, fmt.Errorf("API error %d: %s - %s",
+		return nil, retryable, fmt.Errorf("API error %d: %s - %s",
 			embeddingResp.Error.Code,
 			embeddingResp.Error.Status,
-			embeddingResp.Error.Message), retryable
+			embeddingResp.Error.Message)
 	}
 
 	if len(embeddingResp.Embedding.Values) == 0 {
-		return nil, fmt.Errorf("empty embedding returned"), false
+		return nil, false, fmt.Errorf("empty embedding returned")
 	}
 
-	return embeddingResp.Embedding.Values, nil, false
+	return embeddingResp.Embedding.Values, false, nil
 }
 
 // applyJitter adds random jitter to delay (±25%)

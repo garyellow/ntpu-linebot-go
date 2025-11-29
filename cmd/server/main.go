@@ -193,7 +193,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		updateCacheSizeMetrics(ctx, db, stickerManager, m, log)
+		updateCacheSizeMetrics(ctx, db, stickerManager, vectorDB, m, log)
 	}()
 
 	// Start server in goroutine
@@ -613,26 +613,26 @@ func performProactiveWarmup(ctx context.Context, db *storage.DB, client *scraper
 }
 
 // updateCacheSizeMetrics periodically updates cache size gauge metrics
-func updateCacheSizeMetrics(ctx context.Context, db *storage.DB, stickerManager *sticker.Manager, m *metrics.Metrics, log *logger.Logger) {
+func updateCacheSizeMetrics(ctx context.Context, db *storage.DB, stickerManager *sticker.Manager, vectorDB *rag.VectorDB, m *metrics.Metrics, log *logger.Logger) {
 	// Update metrics every 5 minutes
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
 	// Run initial update immediately
-	performCacheSizeUpdate(ctx, db, stickerManager, m, log)
+	performCacheSizeUpdate(ctx, db, stickerManager, vectorDB, m, log)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			performCacheSizeUpdate(ctx, db, stickerManager, m, log)
+			performCacheSizeUpdate(ctx, db, stickerManager, vectorDB, m, log)
 		}
 	}
 }
 
 // performCacheSizeUpdate updates cache size metrics
-func performCacheSizeUpdate(ctx context.Context, db *storage.DB, stickerManager *sticker.Manager, m *metrics.Metrics, log *logger.Logger) {
+func performCacheSizeUpdate(ctx context.Context, db *storage.DB, stickerManager *sticker.Manager, vectorDB *rag.VectorDB, m *metrics.Metrics, log *logger.Logger) {
 	if studentCount, err := db.CountStudents(ctx); err == nil {
 		m.SetCacheSize("students", studentCount)
 	} else {
@@ -659,4 +659,9 @@ func performCacheSizeUpdate(ctx context.Context, db *storage.DB, stickerManager 
 		log.WithError(err).Debug("Failed to count syllabi for metrics")
 	}
 	m.SetCacheSize("stickers", stickerManager.Count())
+
+	// Update VectorDB document count if enabled
+	if vectorDB != nil && vectorDB.IsEnabled() {
+		m.SetVectorDBSize(vectorDB.Count())
+	}
 }

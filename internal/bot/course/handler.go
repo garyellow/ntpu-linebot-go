@@ -970,10 +970,12 @@ func deduplicateCourses(courses []storage.Course) []storage.Course {
 // This is triggered by "找課" keywords and searches course syllabi content
 func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(moduleName)
+	startTime := time.Now()
 
 	// Check if semantic search is enabled
 	if h.vectorDB == nil || !h.vectorDB.IsEnabled() {
 		log.Info("Semantic search not enabled, falling back to keyword search")
+		h.metrics.RecordSemanticSearch("disabled", time.Since(startTime).Seconds(), 0, "direct")
 		return h.handleUnifiedCourseSearch(ctx, query)
 	}
 
@@ -985,12 +987,14 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 	if err != nil {
 		// Log error but don't fail - semantic search errors should not block user
 		log.WithError(err).Warn("Semantic search failed, falling back to keyword search")
+		h.metrics.RecordSemanticSearch("error", time.Since(startTime).Seconds(), 0, "direct")
 		return h.handleUnifiedCourseSearch(ctx, query)
 	}
 
 	if len(results) == 0 {
 		// No semantic results, fall back to keyword search
 		log.Info("No semantic search results, falling back to keyword search")
+		h.metrics.RecordSemanticSearch("fallback", time.Since(startTime).Seconds(), 0, "direct")
 		return h.handleUnifiedCourseSearch(ctx, query)
 	}
 
@@ -1012,6 +1016,9 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 			courses = append(courses, *course)
 		}
 	}
+
+	// Record successful semantic search metrics
+	h.metrics.RecordSemanticSearch("success", time.Since(startTime).Seconds(), len(results), "direct")
 
 	// Format response with similarity badges
 	return h.formatSemanticSearchResponse(courses, results)
