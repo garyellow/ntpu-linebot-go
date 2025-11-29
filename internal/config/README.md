@@ -11,9 +11,10 @@
 ### 可選（含預設值）
 - `PORT=10000` - HTTP 服務埠號
 - `LOG_LEVEL=info` - 日誌等級（debug/info/warn/error）
-- `SQLITE_PATH` - SQLite 路徑
-  - Windows: `./data/cache.db`（預設）
-  - Linux/Mac: `/data/cache.db`（預設）
+- `DATA_DIR` - 資料目錄（包含 SQLite 資料庫與 Vector DB）
+  - Windows: `./data`（預設）
+  - Linux/Mac: `/data`（預設）
+  - 檔案路徑：`cache.db`（SQLite）、`chromem/syllabi/`（Vector DB）
 - `CACHE_TTL=168h` - Hard TTL：快取絕對過期時間（7 天）
 - `SCRAPER_TIMEOUT=60s` - 每次 HTTP 請求超時
 - `SCRAPER_MAX_RETRIES=5` - 失敗時最大重試次數（指數退避）
@@ -43,7 +44,7 @@ if err != nil {
 `Load()` 會驗證以下必填欄位：
 - LINE 憑證（`LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`）
 - 伺服器設定（`PORT`）
-- 資料庫設定（`SQLITE_PATH`）
+- 資料目錄設定（`DATA_DIR`）
 - 超時和重試設定
 
 完整環境變數列表請參考專案根目錄的 `.env.example`。

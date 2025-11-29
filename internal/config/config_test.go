@@ -64,7 +64,7 @@ func TestValidate(t *testing.T) {
 				LineChannelToken:        "token",
 				LineChannelSecret:       "secret",
 				Port:                    "10000",
-				SQLitePath:              "/data/cache.db",
+				DataDir:                 "/data",
 				CacheTTL:                168 * time.Hour,
 				ScraperTimeout:          60 * time.Second,
 				ScraperMaxRetries:       3,
@@ -79,7 +79,7 @@ func TestValidate(t *testing.T) {
 			cfg: &Config{
 				LineChannelSecret:       "secret",
 				Port:                    "10000",
-				SQLitePath:              "/data/cache.db",
+				DataDir:                 "/data",
 				CacheTTL:                168 * time.Hour,
 				ScraperTimeout:          60 * time.Second,
 				ScraperMaxRetries:       3,
@@ -95,7 +95,7 @@ func TestValidate(t *testing.T) {
 			cfg: &Config{
 				LineChannelToken:        "token",
 				Port:                    "10000",
-				SQLitePath:              "/data/cache.db",
+				DataDir:                 "/data",
 				CacheTTL:                168 * time.Hour,
 				ScraperTimeout:          60 * time.Second,
 				ScraperMaxRetries:       3,
@@ -107,7 +107,7 @@ func TestValidate(t *testing.T) {
 			errContains: "LINE_CHANNEL_SECRET",
 		},
 		{
-			name: "missing SQLite path",
+			name: "missing DataDir",
 			cfg: &Config{
 				LineChannelToken:        "token",
 				LineChannelSecret:       "secret",
@@ -120,7 +120,7 @@ func TestValidate(t *testing.T) {
 				UserRateLimitRefillRate: 0.33,
 			},
 			wantErr:     true,
-			errContains: "SQLITE_PATH",
+			errContains: "DATA_DIR",
 		},
 		{
 			name: "negative retries",
@@ -128,7 +128,7 @@ func TestValidate(t *testing.T) {
 				LineChannelToken:        "token",
 				LineChannelSecret:       "secret",
 				Port:                    "10000",
-				SQLitePath:              "/data/cache.db",
+				DataDir:                 "/data",
 				CacheTTL:                168 * time.Hour,
 				ScraperTimeout:          60 * time.Second,
 				ScraperMaxRetries:       -1,

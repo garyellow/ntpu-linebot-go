@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -41,12 +40,12 @@ func main() {
 	log.Info("Starting NTPU LineBot Server")
 
 	// Connect to database with configured TTL
-	db, err := storage.New(cfg.SQLitePath, cfg.CacheTTL)
+	db, err := storage.New(cfg.SQLitePath(), cfg.CacheTTL)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to connect to database")
 	}
 	defer func() { _ = db.Close() }()
-	log.WithField("path", cfg.SQLitePath).
+	log.WithField("path", cfg.SQLitePath()).
 		WithField("cache_ttl", cfg.CacheTTL).
 		Info("Database connected")
 
@@ -79,9 +78,8 @@ func main() {
 	// Create vector database for semantic search (optional - requires Gemini API key)
 	var vectorDB *rag.VectorDB
 	if cfg.GeminiAPIKey != "" {
-		dataDir := filepath.Dir(cfg.SQLitePath)
 		var err error
-		vectorDB, err = rag.NewVectorDB(dataDir, cfg.GeminiAPIKey, log)
+		vectorDB, err = rag.NewVectorDB(cfg.DataDir, cfg.GeminiAPIKey, log)
 		if err != nil {
 			log.WithError(err).Warn("Failed to create vector database, semantic search disabled")
 		} else if vectorDB != nil {

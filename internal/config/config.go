@@ -6,6 +6,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"time"
@@ -28,9 +29,9 @@ type Config struct {
 	LogLevel        string
 	ShutdownTimeout time.Duration
 
-	// SQLite Configuration
-	SQLitePath string
-	CacheTTL   time.Duration // Hard TTL: absolute expiration for cache entries (default: 7 days)
+	// Data Configuration
+	DataDir  string        // Data directory for SQLite and vector database
+	CacheTTL time.Duration // Hard TTL: absolute expiration for cache entries (default: 7 days)
 
 	// Scraper Configuration
 	ScraperTimeout    time.Duration
@@ -67,9 +68,9 @@ func Load() (*Config, error) {
 		LogLevel:        getEnv("LOG_LEVEL", "info"),
 		ShutdownTimeout: getDurationEnv("SHUTDOWN_TIMEOUT", 30*time.Second),
 
-		// SQLite Configuration
-		SQLitePath: getEnv("SQLITE_PATH", getDefaultDBPath()),
-		CacheTTL:   getDurationEnv("CACHE_TTL", 168*time.Hour), // Hard TTL: 7 days (資料過期後強制刪除)
+		// Data Configuration
+		DataDir:  getEnv("DATA_DIR", getDefaultDataDir()),
+		CacheTTL: getDurationEnv("CACHE_TTL", 168*time.Hour), // Hard TTL: 7 days (資料過期後強制刪除)
 
 		// Scraper Configuration
 		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", timeouts.ScraperRequest), // HTTP request timeout
@@ -114,8 +115,8 @@ func (c *Config) Validate() error {
 	if c.UserRateLimitRefillRate <= 0 {
 		return fmt.Errorf("USER_RATE_LIMIT_REFILL_RATE must be positive")
 	}
-	if c.SQLitePath == "" {
-		return fmt.Errorf("SQLITE_PATH is required")
+	if c.DataDir == "" {
+		return fmt.Errorf("DATA_DIR is required")
 	}
 	if c.CacheTTL <= 0 {
 		return fmt.Errorf("CACHE_TTL must be positive")
@@ -167,10 +168,20 @@ func getFloatEnv(key string, defaultValue float64) float64 {
 	return defaultValue
 }
 
-// getDefaultDBPath returns platform-specific default database path
-func getDefaultDBPath() string {
+// getDefaultDataDir returns platform-specific default data directory
+func getDefaultDataDir() string {
 	if runtime.GOOS == "windows" {
-		return "./data/cache.db"
+		return "./data"
 	}
-	return "/data/cache.db"
+	return "/data"
+}
+
+// SQLitePath returns the full path to the SQLite database file
+func (c *Config) SQLitePath() string {
+	return filepath.Join(c.DataDir, "cache.db")
+}
+
+// VectorDBPath returns the full path to the vector database directory
+func (c *Config) VectorDBPath() string {
+	return filepath.Join(c.DataDir, "chromem", "syllabi")
 }

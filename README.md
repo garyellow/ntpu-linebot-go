@@ -70,7 +70,7 @@ docker compose up -d
 
 ```bash
 # 1. Clone 專案
-git clone https://github.com/garyellow/ntpu-linebot-go.git
+gt clone https://github.com/garyellow/ntpu-linebot-go.git
 cd ntpu-linebot-go
 
 # 2. 安裝依賴
@@ -79,8 +79,8 @@ go mod download
 # 3. 設定環境變數
 cp .env.example .env
 # 編輯 .env 填入你的 LINE 憑證
-# Windows: SQLITE_PATH=./data/cache.db
-# Linux/Mac: SQLITE_PATH=/data/cache.db
+# Windows: DATA_DIR=./data
+# Linux/Mac: DATA_DIR=/data
 
 # 4. 啟動服務（會自動在背景預熱快取）
 go run ./cmd/server
