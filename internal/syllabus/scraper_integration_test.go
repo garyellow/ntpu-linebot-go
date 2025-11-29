@@ -63,12 +63,12 @@ func TestScrapeSyllabus_RealPage(t *testing.T) {
 		t.Log("Schedule (教學進度) is empty - this may be normal for some courses")
 	}
 
-	// Test that merged content works
-	merged := fields.MergeForEmbedding()
-	if merged == "" {
-		t.Error("MergeForEmbedding() returned empty string")
+	// Test that ChunksForEmbedding works
+	chunks := fields.ChunksForEmbedding("測試課程")
+	if len(chunks) == 0 && !fields.IsEmpty() {
+		t.Error("ChunksForEmbedding() returned empty for non-empty fields")
 	}
-	t.Logf("Merged content length: %d chars", len(merged))
+	t.Logf("Generated %d chunks", len(chunks))
 
 	// Verify the three sections are distinct (not duplicated)
 	if fields.Objectives != "" && fields.Outline != "" {

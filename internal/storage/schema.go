@@ -178,7 +178,7 @@ func createHistoricalCoursesTable(db *sql.DB) error {
 }
 
 // createSyllabiTable creates table for course syllabus content
-// Stores merged content (教學目標 + 內容綱要 + 教學進度) for semantic search
+// Stores separate fields (教學目標, 內容綱要, 教學進度) for semantic search
 // Uses content_hash for incremental update detection
 func createSyllabiTable(db *sql.DB) error {
 	query := `
@@ -188,7 +188,9 @@ func createSyllabiTable(db *sql.DB) error {
 		term INTEGER NOT NULL,
 		title TEXT NOT NULL,
 		teachers TEXT,
-		content TEXT NOT NULL,
+		objectives TEXT,
+		outline TEXT,
+		schedule TEXT,
 		content_hash TEXT NOT NULL,
 		cached_at INTEGER NOT NULL
 	);

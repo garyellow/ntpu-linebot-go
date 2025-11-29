@@ -98,59 +98,6 @@ func TestContentNeedsUpdate(t *testing.T) {
 	}
 }
 
-func TestFields_MergeForEmbedding(t *testing.T) {
-	tests := []struct {
-		name   string
-		fields Fields
-		want   string
-	}{
-		{
-			name:   "empty fields",
-			fields: Fields{},
-			want:   "",
-		},
-		{
-			name: "objectives only",
-			fields: Fields{
-				Objectives: "培養程式設計能力",
-			},
-			want: "教學目標：培養程式設計能力",
-		},
-		{
-			name: "outline only",
-			fields: Fields{
-				Outline: "變數、迴圈、函數",
-			},
-			want: "內容綱要：變數、迴圈、函數",
-		},
-		{
-			name: "schedule only",
-			fields: Fields{
-				Schedule: "第1週：課程介紹",
-			},
-			want: "教學進度：第1週：課程介紹",
-		},
-		{
-			name: "all fields",
-			fields: Fields{
-				Objectives: "培養程式設計能力",
-				Outline:    "變數、迴圈、函數",
-				Schedule:   "第1週：課程介紹",
-			},
-			want: "教學目標：培養程式設計能力\n\n內容綱要：變數、迴圈、函數\n\n教學進度：第1週：課程介紹",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := tt.fields.MergeForEmbedding()
-			if got != tt.want {
-				t.Errorf("Fields.MergeForEmbedding() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestFields_IsEmpty(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -193,4 +140,125 @@ func TestFields_IsEmpty(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFields_ChunksForEmbedding(t *testing.T) {
+	tests := []struct {
+		name        string
+		fields      Fields
+		courseTitle string
+		wantCount   int
+		wantTypes   []ChunkType
+	}{
+		{
+			name:        "empty fields",
+			fields:      Fields{},
+			courseTitle: "測試課程",
+			wantCount:   0,
+			wantTypes:   nil,
+		},
+		{
+			name: "objectives only",
+			fields: Fields{
+				Objectives: "培養程式設計能力",
+			},
+			courseTitle: "程式設計",
+			wantCount:   1,
+			wantTypes:   []ChunkType{ChunkTypeObjectives},
+		},
+		{
+			name: "all fields",
+			fields: Fields{
+				Objectives: "培養程式設計能力",
+				Outline:    "變數、迴圈、函數",
+				Schedule:   "第1週：課程介紹",
+			},
+			courseTitle: "程式設計",
+			wantCount:   3,
+			wantTypes:   []ChunkType{ChunkTypeObjectives, ChunkTypeOutline, ChunkTypeSchedule},
+		},
+		{
+			name: "empty course title",
+			fields: Fields{
+				Objectives: "培養能力",
+			},
+			courseTitle: "",
+			wantCount:   1,
+			wantTypes:   []ChunkType{ChunkTypeObjectives},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			chunks := tt.fields.ChunksForEmbedding(tt.courseTitle)
+			if len(chunks) != tt.wantCount {
+				t.Errorf("ChunksForEmbedding() count = %d, want %d", len(chunks), tt.wantCount)
+			}
+			for i, chunk := range chunks {
+				if i < len(tt.wantTypes) && chunk.Type != tt.wantTypes[i] {
+					t.Errorf("ChunksForEmbedding()[%d].Type = %s, want %s", i, chunk.Type, tt.wantTypes[i])
+				}
+				// Verify course title is included in content
+				if tt.courseTitle != "" && len(chunk.Content) > 0 {
+					if !containsStr(chunk.Content, tt.courseTitle) {
+						t.Errorf("Chunk content should contain course title %q", tt.courseTitle)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestFields_ChunksForEmbedding_FullContent(t *testing.T) {
+	// Create a very long schedule - should NOT be truncated (2025 best practice)
+	longSchedule := ""
+	for i := 0; i < 100; i++ {
+		longSchedule += "第" + string(rune('0'+i%10)) + "週：課程內容說明與實作練習\n"
+	}
+
+	fields := Fields{
+		Objectives: "目標",
+		Schedule:   longSchedule,
+	}
+
+	chunks := fields.ChunksForEmbedding("測試課程")
+
+	// Find schedule chunk
+	var scheduleChunk *Chunk
+	for i := range chunks {
+		if chunks[i].Type == ChunkTypeSchedule {
+			scheduleChunk = &chunks[i]
+			break
+		}
+	}
+
+	if scheduleChunk == nil {
+		t.Fatal("Expected schedule chunk")
+	}
+
+	// Schedule should contain full content (no truncation)
+	// Full content: prefix + "教學進度：" + longSchedule
+	expectedContent := "【測試課程】\n教學進度：" + longSchedule
+	if scheduleChunk.Content != expectedContent {
+		t.Error("Schedule chunk should contain full content without truncation")
+	}
+
+	// Should NOT end with "..." (no truncation)
+	if containsStr(scheduleChunk.Content, "...") {
+		t.Error("Schedule should not be truncated")
+	}
+}
+
+func containsStr(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
+		(len(s) > 0 && len(substr) > 0 && containsStrHelper(s, substr)))
+}
+
+func containsStrHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

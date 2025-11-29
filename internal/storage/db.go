@@ -270,15 +270,6 @@ func (db *DB) Ready(ctx context.Context) error {
 	return nil
 }
 
-// NewTestDB creates an in-memory database for testing.
-// Note: In-memory databases don't support read/write separation as they use
-// a single shared connection. Both reader and writer point to the same connection.
-// This ensures consistent test data isolation across all test files.
-// Uses default 7-day TTL for tests.
-func NewTestDB() (*DB, error) {
-	return New(":memory:", 168*time.Hour) // 7 days
-}
-
 // ExecBatchContext executes a batch of operations within a single transaction with context support.
 // This is a generic helper that reduces lock contention during warmup.
 // The execFn receives the prepared statement and should execute it for each item.

@@ -180,8 +180,3 @@ func getDefaultDataDir() string {
 func (c *Config) SQLitePath() string {
 	return filepath.Join(c.DataDir, "cache.db")
 }
-
-// VectorDBPath returns the full path to the vector database directory
-func (c *Config) VectorDBPath() string {
-	return filepath.Join(c.DataDir, "chromem", "syllabi")
-}

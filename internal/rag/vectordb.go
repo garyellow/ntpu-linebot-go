@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/genai"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
+	"github.com/garyellow/ntpu-linebot-go/internal/syllabus"
 )
 
 const (
@@ -25,6 +27,15 @@ const (
 
 	// MaxSearchResults is the maximum number of results for semantic search
 	MaxSearchResults = 20
+
+	// MinSimilarityThreshold is the minimum cosine similarity score to include a result
+	// Results below this threshold are considered not relevant enough
+	// Range: 0.0 to 1.0 (cosine similarity)
+	//
+	// Note: We use asymmetric semantic search (short query vs chunked document)
+	// With chunking, similarity scores should be higher than whole-document embedding
+	// 0.3 is reasonable for filtering clearly irrelevant results
+	MinSimilarityThreshold float32 = 0.3
 )
 
 // VectorDB wraps chromem-go database for course syllabus semantic search
@@ -141,48 +152,84 @@ func (v *VectorDB) AddSyllabi(ctx context.Context, syllabi []*storage.Syllabus) 
 }
 
 // addSyllabusInternal adds a single syllabus (internal, assumes lock held)
-func (v *VectorDB) addSyllabusInternal(ctx context.Context, syllabus *storage.Syllabus) error {
-	if syllabus.Content == "" {
-		return nil // Skip empty content
+// Uses chunking strategy: each syllabus field becomes a separate document
+// Document IDs are formatted as "{UID}_{chunk_type}" for deduplication during search
+func (v *VectorDB) addSyllabusInternal(ctx context.Context, syl *storage.Syllabus) error {
+	// Skip if all fields are empty
+	if syl.Objectives == "" && syl.Outline == "" && syl.Schedule == "" {
+		return nil
 	}
 
-	doc := chromem.Document{
-		ID:      syllabus.UID,
-		Content: syllabus.Content,
-		Metadata: map[string]string{
-			"title":    syllabus.Title,
-			"teachers": strings.Join(syllabus.Teachers, ", "),
-			"year":     fmt.Sprintf("%d", syllabus.Year),
-			"term":     fmt.Sprintf("%d", syllabus.Term),
-		},
+	// Create Fields from Syllabus and generate chunks
+	fields := &syllabus.Fields{
+		Objectives: syl.Objectives,
+		Outline:    syl.Outline,
+		Schedule:   syl.Schedule,
+	}
+	chunks := fields.ChunksForEmbedding(syl.Title)
+
+	if len(chunks) == 0 {
+		return nil
 	}
 
-	if err := v.collection.AddDocument(ctx, doc); err != nil {
-		return fmt.Errorf("failed to add document %s: %w", syllabus.UID, err)
+	docs := make([]chromem.Document, 0, len(chunks))
+	for _, chunk := range chunks {
+		docID := fmt.Sprintf("%s_%s", syl.UID, chunk.Type)
+		docs = append(docs, chromem.Document{
+			ID:      docID,
+			Content: chunk.Content,
+			Metadata: map[string]string{
+				"uid":        syl.UID,
+				"title":      syl.Title,
+				"teachers":   strings.Join(syl.Teachers, ", "),
+				"year":       fmt.Sprintf("%d", syl.Year),
+				"term":       fmt.Sprintf("%d", syl.Term),
+				"chunk_type": string(chunk.Type),
+			},
+		})
+	}
+
+	if err := v.collection.AddDocuments(ctx, docs, 4); err != nil {
+		return fmt.Errorf("failed to add document chunks for %s: %w", syl.UID, err)
 	}
 
 	return nil
 }
 
 // addSyllabiInternal adds multiple syllabi (internal, assumes lock held)
+// Uses chunking strategy: each syllabus produces multiple documents
 func (v *VectorDB) addSyllabiInternal(ctx context.Context, syllabi []*storage.Syllabus) error {
-	docs := make([]chromem.Document, 0, len(syllabi))
+	docs := make([]chromem.Document, 0, len(syllabi)*3) // Estimate 3 chunks per syllabus
 
-	for _, syllabus := range syllabi {
-		if syllabus.Content == "" {
+	for _, syl := range syllabi {
+		// Skip if all fields are empty
+		if syl.Objectives == "" && syl.Outline == "" && syl.Schedule == "" {
 			continue
 		}
 
-		docs = append(docs, chromem.Document{
-			ID:      syllabus.UID,
-			Content: syllabus.Content,
-			Metadata: map[string]string{
-				"title":    syllabus.Title,
-				"teachers": strings.Join(syllabus.Teachers, ", "),
-				"year":     fmt.Sprintf("%d", syllabus.Year),
-				"term":     fmt.Sprintf("%d", syllabus.Term),
-			},
-		})
+		// Create Fields from Syllabus and generate chunks
+		fields := &syllabus.Fields{
+			Objectives: syl.Objectives,
+			Outline:    syl.Outline,
+			Schedule:   syl.Schedule,
+		}
+		chunks := fields.ChunksForEmbedding(syl.Title)
+
+		for _, chunk := range chunks {
+			docID := fmt.Sprintf("%s_%s", syl.UID, chunk.Type)
+			docs = append(docs, chromem.Document{
+				ID:      docID,
+				Content: chunk.Content,
+				Metadata: map[string]string{
+					"uid":        syl.UID,
+					"title":      syl.Title,
+					"teachers":   strings.Join(syl.Teachers, ", "),
+					"year":       fmt.Sprintf("%d", syl.Year),
+					"term":       fmt.Sprintf("%d", syl.Term),
+					"chunk_type": string(chunk.Type),
+				},
+			})
+		}
 	}
 
 	if len(docs) == 0 {
@@ -198,6 +245,7 @@ func (v *VectorDB) addSyllabiInternal(ctx context.Context, syllabi []*storage.Sy
 
 // Search performs semantic search for courses matching the query
 // Returns up to nResults courses sorted by similarity
+// Chunks from the same course are deduplicated, keeping the highest similarity
 func (v *VectorDB) Search(ctx context.Context, query string, nResults int) ([]SearchResult, error) {
 	if v == nil || v.collection == nil {
 		return nil, nil
@@ -217,44 +265,103 @@ func (v *VectorDB) Search(ctx context.Context, query string, nResults int) ([]Se
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
+	// Check collection size and adjust nResults if needed
+	// chromem-go returns error if nResults > document count
+	docCount := v.collection.Count()
+	if docCount == 0 {
+		return nil, nil // No documents to search
+	}
+
+	// Request more results than needed to account for deduplication
+	// With chunking, we may get multiple chunks from the same course
+	queryLimit := nResults * 3
+	if queryLimit > docCount {
+		queryLimit = docCount
+	}
+
 	// Query the collection
-	results, err := v.collection.Query(ctx, query, nResults, nil, nil)
+	results, err := v.collection.Query(ctx, query, queryLimit, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query collection: %w", err)
 	}
 
-	// Convert to SearchResult
-	searchResults := make([]SearchResult, 0, len(results))
+	// Deduplicate by UID, keeping highest similarity for each course
+	uidBestResult := make(map[string]SearchResult)
+
 	for _, result := range results {
-		sr := SearchResult{
-			UID:        result.ID,
-			Content:    result.Content,
-			Similarity: result.Similarity,
+		// Skip results below minimum similarity threshold
+		if result.Similarity < MinSimilarityThreshold {
+			continue
 		}
 
-		// Extract metadata
-		if title, ok := result.Metadata["title"]; ok {
-			sr.Title = title
+		// Extract UID from metadata (chunk documents store uid separately)
+		uid := result.Metadata["uid"]
+		if uid == "" {
+			// Fallback: try to extract from document ID (format: "UID_chunktype")
+			uid = extractUIDFromDocID(result.ID)
 		}
-		if teachers, ok := result.Metadata["teachers"]; ok {
-			sr.Teachers = strings.Split(teachers, ", ")
-		}
-		if yearStr, ok := result.Metadata["year"]; ok {
-			_, _ = fmt.Sscanf(yearStr, "%d", &sr.Year)
-		}
-		if termStr, ok := result.Metadata["term"]; ok {
-			_, _ = fmt.Sscanf(termStr, "%d", &sr.Term)
+		if uid == "" {
+			continue
 		}
 
+		// Check if we already have a result for this UID
+		existing, exists := uidBestResult[uid]
+		if !exists || result.Similarity > existing.Similarity {
+			sr := SearchResult{
+				UID:        uid,
+				Content:    result.Content,
+				Similarity: result.Similarity,
+			}
+
+			// Extract metadata
+			if title, ok := result.Metadata["title"]; ok {
+				sr.Title = title
+			}
+			if teachers, ok := result.Metadata["teachers"]; ok && teachers != "" {
+				sr.Teachers = strings.Split(teachers, ", ")
+			}
+			if yearStr, ok := result.Metadata["year"]; ok {
+				_, _ = fmt.Sscanf(yearStr, "%d", &sr.Year)
+			}
+			if termStr, ok := result.Metadata["term"]; ok {
+				_, _ = fmt.Sscanf(termStr, "%d", &sr.Term)
+			}
+
+			uidBestResult[uid] = sr
+		}
+	}
+
+	// Convert map to slice and sort by similarity (descending)
+	searchResults := make([]SearchResult, 0, len(uidBestResult))
+	for _, sr := range uidBestResult {
 		searchResults = append(searchResults, sr)
+	}
+
+	sort.Slice(searchResults, func(i, j int) bool {
+		return searchResults[i].Similarity > searchResults[j].Similarity
+	})
+
+	// Limit to requested number of results
+	if len(searchResults) > nResults {
+		searchResults = searchResults[:nResults]
 	}
 
 	return searchResults, nil
 }
 
+// extractUIDFromDocID extracts UID from document ID format "UID_chunktype"
+func extractUIDFromDocID(docID string) string {
+	// Document ID format: "UID_chunktype" (e.g., "1131U0001_objectives")
+	lastIdx := strings.LastIndex(docID, "_")
+	if lastIdx > 0 {
+		return docID[:lastIdx]
+	}
+	return ""
+}
+
 // UpdateSyllabus updates a syllabus in the vector store
-// Removes old embedding and adds new one
-func (v *VectorDB) UpdateSyllabus(ctx context.Context, syllabus *storage.Syllabus) error {
+// Removes all old chunks and adds new ones
+func (v *VectorDB) UpdateSyllabus(ctx context.Context, syl *storage.Syllabus) error {
 	if v == nil || v.collection == nil {
 		return nil
 	}
@@ -262,17 +369,25 @@ func (v *VectorDB) UpdateSyllabus(ctx context.Context, syllabus *storage.Syllabu
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
-	// Delete old document
-	if err := v.collection.Delete(ctx, nil, nil, syllabus.UID); err != nil {
-		// Ignore not found errors
-		v.logger.WithError(err).WithField("uid", syllabus.UID).Debug("Failed to delete old syllabus")
+	// Delete all old chunks for this syllabus
+	chunkTypes := []syllabus.ChunkType{
+		syllabus.ChunkTypeObjectives,
+		syllabus.ChunkTypeOutline,
+		syllabus.ChunkTypeSchedule,
+	}
+	for _, ct := range chunkTypes {
+		docID := fmt.Sprintf("%s_%s", syl.UID, ct)
+		if err := v.collection.Delete(ctx, nil, nil, docID); err != nil {
+			// Ignore not found errors
+			v.logger.WithError(err).WithField("docID", docID).Debug("Failed to delete old chunk")
+		}
 	}
 
-	// Add new document
-	return v.addSyllabusInternal(ctx, syllabus)
+	// Add new chunks
+	return v.addSyllabusInternal(ctx, syl)
 }
 
-// DeleteSyllabus removes a syllabus from the vector store
+// DeleteSyllabus removes all chunks for a syllabus from the vector store
 func (v *VectorDB) DeleteSyllabus(ctx context.Context, uid string) error {
 	if v == nil || v.collection == nil {
 		return nil
@@ -281,7 +396,21 @@ func (v *VectorDB) DeleteSyllabus(ctx context.Context, uid string) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
-	return v.collection.Delete(ctx, nil, nil, uid)
+	// Delete all chunks for this syllabus
+	chunkTypes := []syllabus.ChunkType{
+		syllabus.ChunkTypeObjectives,
+		syllabus.ChunkTypeOutline,
+		syllabus.ChunkTypeSchedule,
+	}
+	for _, ct := range chunkTypes {
+		docID := fmt.Sprintf("%s_%s", uid, ct)
+		if err := v.collection.Delete(ctx, nil, nil, docID); err != nil {
+			// Ignore errors (chunk might not exist)
+			v.logger.WithError(err).WithField("docID", docID).Debug("Failed to delete chunk")
+		}
+	}
+
+	return nil
 }
 
 // Count returns the number of documents in the collection

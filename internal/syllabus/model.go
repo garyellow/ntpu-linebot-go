@@ -7,6 +7,22 @@ import (
 	"encoding/hex"
 )
 
+// ChunkType identifies the type of content in a chunk
+type ChunkType string
+
+// Chunk types for syllabus embedding
+const (
+	ChunkTypeObjectives ChunkType = "objectives" // 教學目標
+	ChunkTypeOutline    ChunkType = "outline"    // 內容綱要
+	ChunkTypeSchedule   ChunkType = "schedule"   // 教學進度
+)
+
+// Chunk represents a single chunk of syllabus content for embedding
+type Chunk struct {
+	Type    ChunkType // Type of chunk content
+	Content string    // The actual content for embedding
+}
+
 // ComputeContentHash calculates SHA256 hash of the content.
 // Used for incremental update detection - only re-embed if content changed.
 func ComputeContentHash(content string) string {
@@ -22,33 +38,46 @@ type Fields struct {
 	Schedule   string // 教學進度
 }
 
-// MergeForEmbedding combines relevant fields into a single string for embedding
-// Only includes: 教學目標, 內容綱要, 教學進度
-func (f *Fields) MergeForEmbedding() string {
-	var parts []string
+// ChunksForEmbedding returns separate chunks for better asymmetric semantic search.
+// Each chunk includes the course title as context prefix.
+// This improves retrieval accuracy for short queries against long documents.
+//
+// Strategy (2025 best practices):
+// - Each syllabus field is already a semantically coherent unit
+// - No truncation needed as Gemini embedding supports 2048 tokens (~8000 chars)
+// - Full content preserved for maximum retrieval accuracy
+func (f *Fields) ChunksForEmbedding(courseTitle string) []Chunk {
+	var chunks []Chunk
+	prefix := ""
+	if courseTitle != "" {
+		prefix = "【" + courseTitle + "】\n"
+	}
 
+	// Chunk 1: Objectives (most important for "what will I learn" queries)
 	if f.Objectives != "" {
-		parts = append(parts, "教學目標："+f.Objectives)
+		chunks = append(chunks, Chunk{
+			Type:    ChunkTypeObjectives,
+			Content: prefix + "教學目標：" + f.Objectives,
+		})
 	}
+
+	// Chunk 2: Outline (important for topic/content queries)
 	if f.Outline != "" {
-		parts = append(parts, "內容綱要："+f.Outline)
+		chunks = append(chunks, Chunk{
+			Type:    ChunkTypeOutline,
+			Content: prefix + "內容綱要：" + f.Outline,
+		})
 	}
+
+	// Chunk 3: Schedule (full content, may contain useful info like exam weeks)
 	if f.Schedule != "" {
-		parts = append(parts, "教學進度："+f.Schedule)
+		chunks = append(chunks, Chunk{
+			Type:    ChunkTypeSchedule,
+			Content: prefix + "教學進度：" + f.Schedule,
+		})
 	}
 
-	if len(parts) == 0 {
-		return ""
-	}
-
-	result := ""
-	for i, part := range parts {
-		if i > 0 {
-			result += "\n\n"
-		}
-		result += part
-	}
-	return result
+	return chunks
 }
 
 // IsEmpty returns true if all fields are empty

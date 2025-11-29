@@ -70,8 +70,8 @@ func TestVectorDB_AddSyllabus_Nil(t *testing.T) {
 	ctx := context.Background()
 
 	err := vdb.AddSyllabus(ctx, &storage.Syllabus{
-		UID:     "1131U0001",
-		Content: "test content",
+		UID:        "1131U0001",
+		Objectives: "test objectives",
 	})
 	if err != nil {
 		t.Errorf("AddSyllabus() on nil VectorDB error = %v", err)
@@ -83,7 +83,7 @@ func TestVectorDB_AddSyllabi_Nil(t *testing.T) {
 	ctx := context.Background()
 
 	err := vdb.AddSyllabi(ctx, []*storage.Syllabus{
-		{UID: "1131U0001", Content: "test"},
+		{UID: "1131U0001", Objectives: "test"},
 	})
 	if err != nil {
 		t.Errorf("AddSyllabi() on nil VectorDB error = %v", err)
@@ -110,8 +110,8 @@ func TestVectorDB_UpdateSyllabus_Nil(t *testing.T) {
 	ctx := context.Background()
 
 	err := vdb.UpdateSyllabus(ctx, &storage.Syllabus{
-		UID:     "1131U0001",
-		Content: "updated content",
+		UID:        "1131U0001",
+		Objectives: "updated objectives",
 	})
 	if err != nil {
 		t.Errorf("UpdateSyllabus() on nil VectorDB error = %v", err)
@@ -195,6 +195,31 @@ func TestConstants(t *testing.T) {
 	}
 	if MaxSearchResults != 20 {
 		t.Errorf("MaxSearchResults = %d, want 20", MaxSearchResults)
+	}
+	if MinSimilarityThreshold != 0.3 {
+		t.Errorf("MinSimilarityThreshold = %f, want 0.3", MinSimilarityThreshold)
+	}
+}
+
+func TestExtractUIDFromDocID(t *testing.T) {
+	tests := []struct {
+		docID   string
+		wantUID string
+	}{
+		{"1141U3556_objectives", "1141U3556"},
+		{"1141U3556_outline", "1141U3556"},
+		{"1141U3556_schedule", "1141U3556"},
+		{"1131U0001_objectives", "1131U0001"},
+		{"", ""},            // empty input
+		{"invalid", ""},     // no underscore
+		{"_objectives", ""}, // empty UID (lastIdx == 0)
+	}
+
+	for _, tt := range tests {
+		got := extractUIDFromDocID(tt.docID)
+		if got != tt.wantUID {
+			t.Errorf("extractUIDFromDocID(%q) = %q, want %q", tt.docID, got, tt.wantUID)
+		}
 	}
 }
 

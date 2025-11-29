@@ -130,7 +130,7 @@ lineutil.TruncateRunes(value, 20)                                               
 
 ## Testing
 
-Table-driven tests with `t.Run()`, in-memory SQLite for DB tests (`storage.NewTestDB()`)
+Table-driven tests with `t.Run()`, in-memory SQLite for DB tests (`setupTestDB()` helper in test files)
 
 ## Configuration
 

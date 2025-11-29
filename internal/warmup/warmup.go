@@ -549,15 +549,9 @@ processLoop:
 			continue
 		}
 
-		// Merge content for embedding
-		content := fields.MergeForEmbedding()
-		if content == "" {
-			skippedCount++
-			continue
-		}
-
-		// Compute content hash
-		contentHash := syllabus.ComputeContentHash(content)
+		// Compute content hash from all fields for change detection
+		contentForHash := fields.Objectives + "\n" + fields.Outline + "\n" + fields.Schedule
+		contentHash := syllabus.ComputeContentHash(contentForHash)
 
 		// Check if content has changed (incremental update)
 		existingHash, err := db.GetSyllabusContentHash(ctx, course.UID)
@@ -571,14 +565,16 @@ processLoop:
 			continue
 		}
 
-		// Create syllabus record
+		// Create syllabus record with separate fields
 		syl := &storage.Syllabus{
 			UID:         course.UID,
 			Year:        course.Year,
 			Term:        course.Term,
 			Title:       course.Title,
 			Teachers:    course.Teachers,
-			Content:     content,
+			Objectives:  fields.Objectives,
+			Outline:     fields.Outline,
+			Schedule:    fields.Schedule,
 			ContentHash: contentHash,
 		}
 

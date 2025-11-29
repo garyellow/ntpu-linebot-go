@@ -974,28 +974,37 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 
 	// Check if semantic search is enabled
 	if h.vectorDB == nil || !h.vectorDB.IsEnabled() {
-		log.Info("Semantic search not enabled, falling back to keyword search")
+		log.Info("Semantic search not enabled")
 		h.metrics.RecordSemanticSearch("disabled", time.Since(startTime).Seconds(), 0, "direct")
-		return h.handleUnifiedCourseSearch(ctx, query)
+		sender := lineutil.GetSender(senderName, h.stickerManager)
+		return []messaging_api.MessageInterface{
+			lineutil.NewTextMessageWithConsistentSender(
+				"🔍 語意搜尋功能尚未啟用\n\n請使用「課程 關鍵字」進行一般搜尋", sender),
+		}
 	}
 
 	log.Infof("Performing semantic search for: %s", query)
 
 	// Perform semantic search
-	// Errors are logged but ignored - gracefully fall back to keyword search
 	results, err := h.vectorDB.Search(ctx, query, 10)
 	if err != nil {
-		// Log error but don't fail - semantic search errors should not block user
-		log.WithError(err).Warn("Semantic search failed, falling back to keyword search")
+		log.WithError(err).Warn("Semantic search failed")
 		h.metrics.RecordSemanticSearch("error", time.Since(startTime).Seconds(), 0, "direct")
-		return h.handleUnifiedCourseSearch(ctx, query)
+		sender := lineutil.GetSender(senderName, h.stickerManager)
+		return []messaging_api.MessageInterface{
+			lineutil.NewTextMessageWithConsistentSender(
+				"🔍 語意搜尋暫時無法使用\n\n請稍後再試，或使用「課程 關鍵字」進行一般搜尋", sender),
+		}
 	}
 
 	if len(results) == 0 {
-		// No semantic results, fall back to keyword search
-		log.Info("No semantic search results, falling back to keyword search")
-		h.metrics.RecordSemanticSearch("fallback", time.Since(startTime).Seconds(), 0, "direct")
-		return h.handleUnifiedCourseSearch(ctx, query)
+		log.Info("No semantic search results found")
+		h.metrics.RecordSemanticSearch("no_results", time.Since(startTime).Seconds(), 0, "direct")
+		sender := lineutil.GetSender(senderName, h.stickerManager)
+		return []messaging_api.MessageInterface{
+			lineutil.NewTextMessageWithConsistentSender(
+				"🔍 找不到相關課程\n\n沒有找到與您描述足夠相關的課程\n請嘗試不同的描述方式", sender),
+		}
 	}
 
 	// Convert search results to Course objects for display
