@@ -367,19 +367,6 @@ func (h *Handler) handlePostbackEvent(ctx context.Context, event webhook.Postbac
 		return h.courseHandler.HandlePostback(processCtx, strings.TrimPrefix(data, "course:")), nil
 	}
 
-	// Try dispatching to all handlers (for backward compatibility with handlers without prefix)
-	if messages := h.idHandler.HandlePostback(processCtx, data); len(messages) > 0 {
-		return messages, nil
-	}
-
-	if messages := h.contactHandler.HandlePostback(processCtx, data); len(messages) > 0 {
-		return messages, nil
-	}
-
-	if messages := h.courseHandler.HandlePostback(processCtx, data); len(messages) > 0 {
-		return messages, nil
-	}
-
 	// No handler matched
 	sender := lineutil.GetSender("系統小幫手", h.stickerManager)
 	return []messaging_api.MessageInterface{
