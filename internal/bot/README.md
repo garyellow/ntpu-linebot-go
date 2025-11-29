@@ -48,12 +48,17 @@ type Handler interface {
 
 ### course/ - 課程查詢
 - **關鍵字**：課程、課、教師、老師（統一查詢）
+- **語意關鍵字**：找課、找課程、搜課（直接觸發語意搜尋）
 - **功能**：
   - 課程名稱搜尋（最多 50 門）
   - 課程編號查詢（UID 格式）
   - 統一查詢（2-tier 並行搜尋：同時搜尋課程名稱和教師姓名）
   - 歷史課程查詢（`課程 {年度} {關鍵字}`）
-- **搜尋策略**：SQL LIKE (title, teachers) + 模糊 ContainsAllRunes (title, teachers)
+  - 語意搜尋（基於課程大綱的智慧匹配，需設定 `GEMINI_API_KEY`）
+- **搜尋策略**：
+  - 關鍵字：SQL LIKE (title, teachers) + 模糊 ContainsAllRunes (title, teachers)
+  - 語意：chromem-go 向量搜尋 + Gemini embedding
+- **Fallback 策略**：關鍵字搜尋無結果時，自動嘗試語意搜尋（需啟用 VectorDB）
 - **Postback 前綴**：`course:`
 - **Sender 名稱**：課程小幫手
 

@@ -15,6 +15,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
+	"github.com/garyellow/ntpu-linebot-go/internal/rag"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper/ntpu"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
@@ -29,6 +30,7 @@ type Handler struct {
 	metrics        *metrics.Metrics
 	logger         *logger.Logger
 	stickerManager *sticker.Manager
+	vectorDB       *rag.VectorDB // Optional: for semantic search (nil if disabled)
 }
 
 // Course handler constants.
@@ -58,7 +60,14 @@ var (
 		"teacher", "professor", "prof", "dr", "doctor",
 	}
 
-	courseRegex = bot.BuildKeywordRegex(validCourseKeywords)
+	// Semantic search keywords (direct semantic search)
+	// 找課: directly triggers semantic search without keyword fallback
+	validSemanticKeywords = []string{
+		"找課", "找課程", "搜課",
+	}
+
+	courseRegex         = bot.BuildKeywordRegex(validCourseKeywords)
+	semanticCourseRegex = bot.BuildKeywordRegex(validSemanticKeywords)
 	// UID format: {year}{term}{no} where:
 	// - year: 2-3 digits (e.g., 113, 99)
 	// - term: 1 digit (1=上學期, 2=下學期)
@@ -84,7 +93,14 @@ func NewHandler(db *storage.DB, scraper *scraper.Client, metrics *metrics.Metric
 		metrics:        metrics,
 		logger:         logger,
 		stickerManager: stickerManager,
+		vectorDB:       nil, // Set via SetVectorDB after initialization
 	}
+}
+
+// SetVectorDB sets the vector database for semantic search
+// This is optional - if not set, semantic search is disabled
+func (h *Handler) SetVectorDB(vectorDB *rag.VectorDB) {
+	h.vectorDB = vectorDB
 }
 
 // CanHandle checks if the message is for the course module
@@ -98,6 +114,11 @@ func (h *Handler) CanHandle(text string) bool {
 
 	// Check for course number only pattern (e.g., U0001, 1U0001, 2U0001)
 	if courseNoRegex.MatchString(text) {
+		return true
+	}
+
+	// Check for semantic search keywords (找課)
+	if semanticCourseRegex.MatchString(text) {
 		return true
 	}
 
@@ -136,6 +157,20 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		if _, err := fmt.Sscanf(yearStr, "%d", &year); err == nil && keyword != "" {
 			return h.handleHistoricalCourseSearch(ctx, year, keyword)
 		}
+	}
+
+	// Check for semantic search keywords (找課) - direct semantic search
+	if semanticCourseRegex.MatchString(text) {
+		match := semanticCourseRegex.FindString(text)
+		searchTerm := bot.ExtractSearchTerm(text, match)
+
+		if searchTerm == "" {
+			sender := lineutil.GetSender(senderName, h.stickerManager)
+			msg := lineutil.NewTextMessageWithConsistentSender("🔮 請輸入想找的課程描述\n\n例如：\n• 找課 想學習資料分析\n• 找課 Python 機器學習\n• 找課 商業管理相關課程\n\n💡 語意搜尋會根據課程大綱內容智慧匹配", sender)
+			return []messaging_api.MessageInterface{msg}
+		}
+
+		return h.handleSemanticSearch(ctx, searchTerm)
 	}
 
 	// Check for course title search - extract term after keyword
@@ -493,16 +528,54 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 		return h.formatCourseListResponse(courses)
 	}
 
-	// No results found even after scraping
+	// Step 4: No keyword results - try semantic search as last resort
+	if h.vectorDB != nil && h.vectorDB.IsEnabled() {
+		log.Infof("No keyword results for %s, trying semantic search...", searchTerm)
+
+		semanticResults, err := h.vectorDB.Search(ctx, searchTerm, 5)
+		if err == nil && len(semanticResults) > 0 {
+			// Convert semantic results to courses
+			var semanticCourses []storage.Course
+			for _, result := range semanticResults {
+				if course, err := h.db.GetCourseByUID(ctx, result.UID); err == nil && course != nil {
+					semanticCourses = append(semanticCourses, *course)
+				}
+			}
+
+			if len(semanticCourses) > 0 {
+				h.metrics.RecordScraperRequest(moduleName, "semantic_fallback", time.Since(startTime).Seconds())
+				return h.formatSemanticSearchResponse(semanticCourses, semanticResults)
+			}
+		}
+	}
+
+	// No results found even after scraping and semantic search
 	h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
-	msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf(
+
+	// Build help message with semantic search suggestion
+	helpText := fmt.Sprintf(
 		"🔍 查無包含「%s」的課程或教師\n\n💡 請確認：\n• 課程名稱或教師姓名是否正確\n• 該課程是否在近兩學年度開設\n• 可嘗試只輸入部分關鍵字（如姓氏）",
 		searchTerm,
-	), sender)
-	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+	)
+	if h.vectorDB != nil && h.vectorDB.IsEnabled() {
+		helpText += "\n\n🔮 試試語意搜尋：「找課 " + searchTerm + "」"
+	}
+
+	msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
+
+	// Build quick reply items
+	quickReplyItems := []lineutil.QuickReplyItem{
 		{Action: lineutil.NewMessageAction("🔄 重新查詢", "課程")},
-		{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
-	})
+	}
+	if h.vectorDB != nil && h.vectorDB.IsEnabled() {
+		quickReplyItems = append(quickReplyItems,
+			lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("🔮 語意搜尋", "找課 "+searchTerm)},
+		)
+	}
+	quickReplyItems = append(quickReplyItems,
+		lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
+	)
+	msg.QuickReply = lineutil.NewQuickReply(quickReplyItems)
 	return []messaging_api.MessageInterface{msg}
 }
 
@@ -884,4 +957,164 @@ func deduplicateCourses(courses []storage.Course) []storage.Course {
 		}
 	}
 	return result
+}
+
+// handleSemanticSearch performs semantic search using syllabus embeddings
+// This is triggered by "找課" keywords and searches course syllabi content
+func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []messaging_api.MessageInterface {
+	log := h.logger.WithModule(moduleName)
+
+	// Check if semantic search is enabled
+	if h.vectorDB == nil || !h.vectorDB.IsEnabled() {
+		log.Info("Semantic search not enabled, falling back to keyword search")
+		return h.handleUnifiedCourseSearch(ctx, query)
+	}
+
+	log.Infof("Performing semantic search for: %s", query)
+
+	// Perform semantic search
+	results, err := h.vectorDB.Search(ctx, query, 10)
+	if err != nil {
+		log.WithError(err).Error("Semantic search failed")
+		// Fall back to keyword search
+		return h.handleUnifiedCourseSearch(ctx, query)
+	}
+
+	if len(results) == 0 {
+		// No semantic results, fall back to keyword search
+		log.Info("No semantic search results, falling back to keyword search")
+		return h.handleUnifiedCourseSearch(ctx, query)
+	}
+
+	// Convert search results to Course objects for display
+	var courses []storage.Course
+	for _, result := range results {
+		// Get full course data from DB
+		course, err := h.db.GetCourseByUID(ctx, result.UID)
+		if err != nil || course == nil {
+			// Use data from search result if course not in DB
+			courses = append(courses, storage.Course{
+				UID:      result.UID,
+				Title:    result.Title,
+				Teachers: result.Teachers,
+				Year:     result.Year,
+				Term:     result.Term,
+			})
+		} else {
+			courses = append(courses, *course)
+		}
+	}
+
+	// Format response with similarity badges
+	return h.formatSemanticSearchResponse(courses, results)
+}
+
+// formatSemanticSearchResponse formats semantic search results with similarity badges
+func (h *Handler) formatSemanticSearchResponse(courses []storage.Course, results []rag.SearchResult) []messaging_api.MessageInterface {
+	if len(courses) == 0 {
+		sender := lineutil.GetSender(senderName, h.stickerManager)
+		return []messaging_api.MessageInterface{
+			lineutil.NewTextMessageWithConsistentSender("🔍 找不到相關課程\n\n請嘗試其他描述或使用「課程」關鍵字搜尋", sender),
+		}
+	}
+
+	sender := lineutil.GetSender(senderName, h.stickerManager)
+
+	// Create similarity map for lookup
+	similarityMap := make(map[string]float32)
+	for _, r := range results {
+		similarityMap[r.UID] = r.Similarity
+	}
+
+	// Build bubbles with similarity badges
+	bubbles := make([]messaging_api.FlexBubble, 0, len(courses))
+	for _, course := range courses {
+		similarity := similarityMap[course.UID]
+		bubble := h.buildSemanticCourseBubble(course, similarity)
+		bubbles = append(bubbles, *bubble.FlexBubble)
+	}
+
+	// Group into carousels
+	var messages []messaging_api.MessageInterface
+
+	for i := 0; i < len(bubbles); i += lineutil.MaxBubblesPerCarousel {
+		end := i + lineutil.MaxBubblesPerCarousel
+		if end > len(bubbles) {
+			end = len(bubbles)
+		}
+
+		carousel := lineutil.NewFlexCarousel(bubbles[i:end])
+		altText := "🔮 語意搜尋結果"
+		if i > 0 {
+			altText = fmt.Sprintf("語意搜尋結果 (%d-%d)", i+1, end)
+		}
+		msg := lineutil.NewFlexMessage(altText, carousel)
+		msg.Sender = sender
+		messages = append(messages, msg)
+	}
+
+	// Add header message
+	headerMsg := lineutil.NewTextMessageWithConsistentSender(
+		fmt.Sprintf("🔮 語意搜尋找到 %d 門相關課程\n\n根據課程大綱內容智慧匹配", len(courses)),
+		sender,
+	)
+	messages = append([]messaging_api.MessageInterface{headerMsg}, messages...)
+
+	// Add Quick Reply
+	lineutil.AddQuickReplyToMessages(messages,
+		lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("🔄 重新搜尋", "找課")},
+		lineutil.QuickReplyHelpAction(),
+	)
+
+	return messages
+}
+
+// buildSemanticCourseBubble creates a Flex Message bubble for a course with similarity badge
+func (h *Handler) buildSemanticCourseBubble(course storage.Course, similarity float32) *lineutil.FlexBubble {
+	// Similarity badge text
+	similarityBadge := fmt.Sprintf("🎯 %.0f%% 相關", similarity*100)
+
+	// Build body components
+	bodyComponents := []messaging_api.FlexComponentInterface{
+		// Course title
+		lineutil.NewFlexText(course.Title).
+			WithWeight("bold").
+			WithSize("lg").
+			WithWrap(true).FlexText,
+		// Similarity badge
+		lineutil.NewFlexText(similarityBadge).
+			WithSize("sm").
+			WithColor(lineutil.ColorPrimary).FlexText,
+		// Semester info
+		lineutil.NewFlexText(fmt.Sprintf("%d 學年度 第 %d 學期", course.Year, course.Term)).
+			WithSize("sm").
+			WithColor(lineutil.ColorLabel).FlexText,
+	}
+
+	// Add teachers
+	if len(course.Teachers) > 0 {
+		teacherText := "👨‍🏫 " + strings.Join(course.Teachers, "、")
+		bodyComponents = append(bodyComponents,
+			lineutil.NewFlexText(teacherText).
+				WithSize("sm").
+				WithColor(lineutil.ColorSubtext).
+				WithWrap(true).FlexText,
+		)
+	}
+
+	// Footer with action button
+	footerComponents := []messaging_api.FlexComponentInterface{
+		lineutil.NewFlexButton(&messaging_api.PostbackAction{
+			Label:       "查看詳情",
+			Data:        "course:" + course.UID,
+			DisplayText: "查看課程 " + course.UID,
+		}).WithStyle("primary").WithHeight("sm").WithColor(lineutil.ColorPrimary).FlexButton,
+	}
+
+	body := lineutil.NewFlexBox("vertical", bodyComponents...).WithSpacing("sm")
+	footer := lineutil.NewFlexBox("vertical", footerComponents...)
+
+	bubble := lineutil.NewFlexBubble(nil, nil, body, footer)
+	bubble.Size = messaging_api.FlexBubbleSIZE_KILO
+	return bubble
 }

@@ -29,8 +29,10 @@ docker compose up -d
 - `LINE_CHANNEL_SECRET`
 
 可選：
+- `GEMINI_API_KEY` - Gemini API Key，啟用課程語意搜尋（從 [Google AI Studio](https://aistudio.google.com/apikey) 取得）
 - `IMAGE_TAG` - 映像版本（預設：latest）
-- `WARMUP_MODULES` - 預熱模組（預設：id,contact,course,sticker，空字串跳過預熱）
+- `WARMUP_MODULES` - 預熱模組（預設：sticker,id,contact,course）
+  - 加入 `syllabus` 啟用課程大綱預熱（需設定 `GEMINI_API_KEY`）
 - `LOG_LEVEL` - 日誌層級（預設：info）
 - `GRAFANA_PASSWORD` - Grafana 密碼（預設：admin123）
 

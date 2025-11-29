@@ -36,7 +36,12 @@ func InitSchema(db *sql.DB) error {
 	}
 
 	// Create historical_courses table for on-demand historical course queries
-	return createHistoricalCoursesTable(db)
+	if err := createHistoricalCoursesTable(db); err != nil {
+		return err
+	}
+
+	// Create syllabi table for course syllabus semantic search
+	return createSyllabiTable(db)
 }
 
 func createStudentsTable(db *sql.DB) error {
@@ -167,6 +172,33 @@ func createHistoricalCoursesTable(db *sql.DB) error {
 
 	if _, err := db.ExecContext(context.Background(), query); err != nil {
 		return fmt.Errorf("failed to create historical_courses table: %w", err)
+	}
+
+	return nil
+}
+
+// createSyllabiTable creates table for course syllabus content
+// Stores merged content (教學目標 + 內容綱要 + 教學進度) for semantic search
+// Uses content_hash for incremental update detection
+func createSyllabiTable(db *sql.DB) error {
+	query := `
+	CREATE TABLE IF NOT EXISTS syllabi (
+		uid TEXT PRIMARY KEY,
+		year INTEGER NOT NULL,
+		term INTEGER NOT NULL,
+		title TEXT NOT NULL,
+		teachers TEXT,
+		content TEXT NOT NULL,
+		content_hash TEXT NOT NULL,
+		cached_at INTEGER NOT NULL
+	);
+	CREATE INDEX IF NOT EXISTS idx_syllabi_year_term ON syllabi(year, term);
+	CREATE INDEX IF NOT EXISTS idx_syllabi_content_hash ON syllabi(content_hash);
+	CREATE INDEX IF NOT EXISTS idx_syllabi_cached_at ON syllabi(cached_at);
+	`
+
+	if _, err := db.ExecContext(context.Background(), query); err != nil {
+		return fmt.Errorf("failed to create syllabi table: %w", err)
 	}
 
 	return nil

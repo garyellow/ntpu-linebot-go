@@ -34,6 +34,8 @@ LINE Webhook → Gin Handler (25s timeout) → Bot Module Dispatcher
 **ID Module**: Year validation (89-130, AD↔ROC), department selection flow, student search (max 500 results), Flex Message cards
 
 **Course Module**: Smart semester detection (`semester.go`), UID regex (`(?i)\d{3,4}[umnp]\d{4}`), max 40 results, Flex Message carousels
+- **Semantic search**: `找課` keyword triggers embedding-based search using syllabus content (requires `GEMINI_API_KEY`)
+- **Fallback**: Keyword search → semantic search (when no results and VectorDB enabled)
 
 **Contact Module**: Emergency phones (hardcoded), multilingual keywords, organization/individual contacts, Flex Message cards
 - **SQL LIKE fields**: name, title (fast path)
@@ -52,7 +54,12 @@ LINE Webhook → Gin Handler (25s timeout) → Bot Module Dispatcher
 - WAL mode, Hard TTL (7 days), pure Go (`modernc.org/sqlite`)
 - **Hard TTL (7 days)**: Data absolutely expired, must be deleted
 - TTL enforced at SQL level: `WHERE cached_at > ?`
+- **Syllabi table**: Stores syllabus content + SHA256 hash for incremental updates
 
+**Vector store** (`internal/rag/`):
+- chromem-go (Pure Go, gob persistence to `data/chromem/syllabi/`)
+- Gemini embedding API (`gemini-embedding-001`, 768 dimensions)
+- Optional: only enabled when `GEMINI_API_KEY` is set
 
 **Background Jobs** (`cmd/server/main.go`):
 - **Daily Warmup**: Every day at 3:00 AM, refreshes all data modules unconditionally
@@ -177,5 +184,7 @@ Multi-stage build (alpine builder + distroless runtime), init-data for permissio
 - **Bot module interface**: `internal/bot/handler.go`
 - **DB schema**: `internal/storage/schema.go`
 - **LINE utilities**: `internal/lineutil/builder.go` (use instead of raw SDK)
-
 - **Sticker manager**: `internal/sticker/sticker.go` (avatar URLs for messages)
+- **Semantic search**: `internal/rag/vectordb.go` (chromem-go wrapper)
+- **Embedding client**: `internal/genai/embedding.go` (Gemini API)
+- **Syllabus scraper**: `internal/syllabus/scraper.go` (course syllabus extraction)

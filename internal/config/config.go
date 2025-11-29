@@ -20,6 +20,9 @@ type Config struct {
 	LineChannelToken  string
 	LineChannelSecret string
 
+	// GenAI Configuration
+	GeminiAPIKey string // Gemini API key for embedding and RAG features
+
 	// Server Configuration
 	Port            string
 	LogLevel        string
@@ -35,7 +38,7 @@ type Config struct {
 
 	// Warmup Configuration
 	WarmupTimeout time.Duration
-	WarmupModules string // Comma-separated list of modules to warmup (default: "id,contact,course,sticker")
+	WarmupModules string // Comma-separated list of modules to warmup (default: "sticker,id,contact,course"). Add "syllabus" to enable syllabus warmup (requires GEMINI_API_KEY)
 
 	// Webhook Configuration
 	// See internal/timeouts/timeouts.go for detailed explanation of why 25s is used
@@ -56,6 +59,9 @@ func Load() (*Config, error) {
 		// LINE Bot Configuration
 		LineChannelToken:  getEnv("LINE_CHANNEL_ACCESS_TOKEN", ""),
 		LineChannelSecret: getEnv("LINE_CHANNEL_SECRET", ""),
+
+		// GenAI Configuration
+		GeminiAPIKey: getEnv("GEMINI_API_KEY", ""),
 
 		// Server Configuration
 		Port:            getEnv("PORT", "10000"),

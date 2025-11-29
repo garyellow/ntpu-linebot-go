@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/config"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
+	"github.com/garyellow/ntpu-linebot-go/internal/rag"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
@@ -74,16 +76,40 @@ func main() {
 	stickerManager := sticker.NewManager(db, scraperClient, log)
 	log.Info("Sticker manager created")
 
+	// Create vector database for semantic search (optional - requires Gemini API key)
+	var vectorDB *rag.VectorDB
+	if cfg.GeminiAPIKey != "" {
+		dataDir := filepath.Dir(cfg.SQLitePath)
+		var err error
+		vectorDB, err = rag.NewVectorDB(dataDir, cfg.GeminiAPIKey, log)
+		if err != nil {
+			log.WithError(err).Warn("Failed to create vector database, semantic search disabled")
+		} else if vectorDB != nil {
+			// Initialize vector store with existing syllabi from database
+			syllabi, err := db.GetAllSyllabi(context.Background())
+			if err != nil {
+				log.WithError(err).Warn("Failed to load syllabi for vector store initialization")
+			} else if err := vectorDB.Initialize(context.Background(), syllabi); err != nil {
+				log.WithError(err).Warn("Failed to initialize vector store")
+			} else {
+				log.WithField("syllabi_count", len(syllabi)).Info("Vector database initialized for semantic search")
+			}
+		}
+	} else {
+		log.Info("Gemini API key not configured, semantic search disabled")
+	}
+
 	// Start background cache warming (non-blocking)
 	// Warmup runs concurrently with server startup
 	warmupCtx, warmupCancel := context.WithTimeout(context.Background(), cfg.WarmupTimeout)
 	defer warmupCancel()
 
 	warmup.RunInBackground(warmupCtx, db, scraperClient, stickerManager, log, warmup.Options{
-		Modules: warmup.ParseModules(cfg.WarmupModules),
-		Timeout: cfg.WarmupTimeout,
-		Reset:   false, // Never reset in production
-		Metrics: m,     // Pass metrics for monitoring
+		Modules:  warmup.ParseModules(cfg.WarmupModules),
+		Timeout:  cfg.WarmupTimeout,
+		Reset:    false,    // Never reset in production
+		Metrics:  m,        // Pass metrics for monitoring
+		VectorDB: vectorDB, // Pass vector database for syllabus indexing
 	})
 	log.Info("Background cache warming started")
 
@@ -102,6 +128,12 @@ func main() {
 	)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to create webhook handler")
+	}
+
+	// Set vector database for course semantic search
+	if vectorDB != nil {
+		webhookHandler.GetCourseHandler().SetVectorDB(vectorDB)
+		log.Info("Semantic search enabled for course module")
 	}
 	log.Info("Webhook handler created")
 
@@ -159,7 +191,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		proactiveWarmup(ctx, db, scraperClient, stickerManager, log, cfg)
+		proactiveWarmup(ctx, db, scraperClient, stickerManager, log, cfg, vectorDB)
 	}()
 
 	// Cache size metrics updater goroutine (every 5 minutes)
@@ -455,6 +487,18 @@ func performCacheCleanup(ctx context.Context, db *storage.DB, ttl time.Duration,
 		}).Debug("Stickers cleanup complete")
 	}
 
+	// Cleanup syllabi
+	if deleted, err := db.DeleteExpiredSyllabi(ctx, ttl); err != nil {
+		log.WithError(err).Error("Failed to cleanup expired syllabi")
+	} else {
+		totalDeleted += deleted
+		count, _ := db.CountSyllabi(ctx)
+		log.WithFields(map[string]interface{}{
+			"deleted":   deleted,
+			"remaining": count,
+		}).Debug("Syllabi cleanup complete")
+	}
+
 	// Run SQLite VACUUM to reclaim space (optional, may be slow)
 	if _, err := db.Writer().Exec("VACUUM"); err != nil {
 		log.WithError(err).Warn("Failed to vacuum database")
@@ -508,7 +552,7 @@ func performStickerRefresh(ctx context.Context, stickerManager *sticker.Manager,
 // proactiveWarmup runs daily cache warmup to ensure data freshness
 // Refreshes all modules unconditionally every day at 3:00 AM
 // Data not updated within 7 days (Hard TTL) will be deleted by cleanup job
-func proactiveWarmup(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, cfg *config.Config) {
+func proactiveWarmup(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, cfg *config.Config, vectorDB *rag.VectorDB) {
 	const targetHour = 3 // 3:00 AM
 
 	for {
@@ -528,20 +572,32 @@ func proactiveWarmup(ctx context.Context, db *storage.DB, client *scraper.Client
 		case <-ctx.Done():
 			return
 		case <-time.After(waitDuration):
-			performProactiveWarmup(ctx, db, client, stickerMgr, log, cfg)
+			performProactiveWarmup(ctx, db, client, stickerMgr, log, cfg, vectorDB)
 		}
 	}
 }
 
 // performProactiveWarmup executes daily cache warmup for all modules
 // Runs unconditionally every day to ensure data freshness
-func performProactiveWarmup(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, cfg *config.Config) {
+// Uses configured modules from WARMUP_MODULES (excluding sticker, which is handled separately)
+func performProactiveWarmup(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, cfg *config.Config, vectorDB *rag.VectorDB) {
 	log.Info("Starting daily proactive cache warmup...")
 
-	// Warm up all data modules daily (sticker handled separately)
-	modules := []string{"id", "contact", "course"}
+	// Parse configured modules, but exclude sticker (handled separately by refreshStickers)
+	allModules := warmup.ParseModules(cfg.WarmupModules)
+	var modules []string
+	for _, m := range allModules {
+		if m != "sticker" {
+			modules = append(modules, m)
+		}
+	}
 
-	log.WithField("modules", modules).Info("Running daily warmup for all modules")
+	// If no modules configured (empty string), use default data modules
+	if len(modules) == 0 {
+		modules = []string{"id", "contact", "course"}
+	}
+
+	log.WithField("modules", modules).Info("Running daily warmup for configured modules")
 
 	// Create warmup context with timeout
 	warmupCtx, cancel := context.WithTimeout(ctx, cfg.WarmupTimeout)
@@ -549,9 +605,10 @@ func performProactiveWarmup(ctx context.Context, db *storage.DB, client *scraper
 
 	// Run warmup (non-blocking, logs progress internally)
 	stats, err := warmup.Run(warmupCtx, db, client, stickerMgr, log, warmup.Options{
-		Modules: modules,
-		Timeout: cfg.WarmupTimeout,
-		Reset:   false, // Never reset existing data
+		Modules:  modules,
+		Timeout:  cfg.WarmupTimeout,
+		Reset:    false,    // Never reset existing data
+		VectorDB: vectorDB, // Pass VectorDB for syllabus module
 	})
 
 	if err != nil {
@@ -561,6 +618,7 @@ func performProactiveWarmup(ctx context.Context, db *storage.DB, client *scraper
 			"students_refreshed": stats.Students.Load(),
 			"courses_refreshed":  stats.Courses.Load(),
 			"contacts_refreshed": stats.Contacts.Load(),
+			"syllabi_refreshed":  stats.Syllabi.Load(),
 		}).Info("Daily proactive warmup completed successfully")
 	}
 }
@@ -605,6 +663,11 @@ func performCacheSizeUpdate(ctx context.Context, db *storage.DB, stickerManager 
 		m.SetCacheSize("historical_courses", historicalCount)
 	} else {
 		log.WithError(err).Debug("Failed to count historical courses for metrics")
+	}
+	if syllabiCount, err := db.CountSyllabi(ctx); err == nil {
+		m.SetCacheSize("syllabi", syllabiCount)
+	} else {
+		log.WithError(err).Debug("Failed to count syllabi for metrics")
 	}
 	m.SetCacheSize("stickers", stickerManager.Count())
 }

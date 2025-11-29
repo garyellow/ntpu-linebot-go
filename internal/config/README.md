@@ -19,9 +19,15 @@
 - `SCRAPER_MAX_RETRIES=5` - 失敗時最大重試次數（指數退避）
 - `WARMUP_TIMEOUT=30m` - 預熱超時
 - `WARMUP_MODULES=sticker,id,contact,course` - 預熱模組列表（逗號分隔，空字串跳過，**並行執行無順序限制**）
+  - 加入 `syllabus` 啟用課程大綱預熱（需設定 `GEMINI_API_KEY`）
 - `SHUTDOWN_TIMEOUT=30s` - 優雅關閉超時
 - `USER_RATE_LIMIT_TOKENS=10` - 每個使用者的 Rate Limiter Token 數量
 - `USER_RATE_LIMIT_REFILL_RATE=0.333...` - 每秒補充的 Token 數（預設 1/3，即每 3 秒補充 1 個 Token）
+
+### 語意搜尋（可選）
+- `GEMINI_API_KEY` - Google Gemini API Key，啟用課程語意搜尋功能
+  - 取得方式：[Google AI Studio](https://aistudio.google.com/apikey)
+  - 設定後需將 `syllabus` 加入 `WARMUP_MODULES` 以預熱課程大綱
 
 ## 使用方式
 

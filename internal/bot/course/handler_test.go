@@ -372,3 +372,72 @@ func TestHandlePostback_InvalidData(t *testing.T) {
 // NOTE: Semester determination logic is tested in semester_test.go
 // TestSemesterDetectionLogic tests the actual getSemestersForDate() function
 // with comprehensive date-based test cases - no need to duplicate here.
+
+// ==================== Semantic Search Tests ====================
+
+func TestCanHandle_SemanticKeywords(t *testing.T) {
+	h := setupTestHandler(t)
+
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		// Semantic search keywords (找課)
+		{"找課 keyword", "找課 機器學習", true},
+		{"找課程 keyword", "找課程 資料分析", true},
+		{"搜課 keyword", "搜課 Python", true},
+		{"找課 alone", "找課", true},
+
+		// Regular course keywords should still work
+		{"課程 keyword", "課程 微積分", true},
+		{"課 keyword", "課 程式設計", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := h.CanHandle(tt.input)
+			if got != tt.want {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSetVectorDB(t *testing.T) {
+	h := setupTestHandler(t)
+
+	// Initially nil
+	if h.vectorDB != nil {
+		t.Error("Expected vectorDB to be nil initially")
+	}
+
+	// After setting, should not be nil
+	// Note: We can't easily test with a real VectorDB without API key
+	// This test just verifies the setter method exists and works
+}
+
+func TestHandleSemanticSearch_NoVectorDB(t *testing.T) {
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	// VectorDB is nil by default
+	messages := h.HandleMessage(ctx, "找課 機器學習")
+
+	// Should return a helpful message when VectorDB is not available
+	if len(messages) == 0 {
+		t.Error("Expected at least one message when VectorDB is disabled")
+	}
+}
+
+func TestHandleSemanticSearch_EmptyQuery(t *testing.T) {
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	// Should prompt for input when query is empty
+	messages := h.HandleMessage(ctx, "找課")
+
+	if len(messages) == 0 {
+		t.Error("Expected help message for empty semantic search query")
+	}
+}

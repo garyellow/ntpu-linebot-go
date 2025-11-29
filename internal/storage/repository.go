@@ -1230,3 +1230,226 @@ func (db *DB) CountHistoricalCourses(ctx context.Context) (int, error) {
 	}
 	return count, nil
 }
+
+// ==================== Syllabi Repository Methods ====================
+
+// SaveSyllabus inserts or updates a syllabus record
+func (db *DB) SaveSyllabus(ctx context.Context, syllabus *Syllabus) error {
+	query := `
+		INSERT INTO syllabi (uid, year, term, title, teachers, content, content_hash, cached_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(uid) DO UPDATE SET
+			year = excluded.year,
+			term = excluded.term,
+			title = excluded.title,
+			teachers = excluded.teachers,
+			content = excluded.content,
+			content_hash = excluded.content_hash,
+			cached_at = excluded.cached_at
+	`
+
+	teachersJSON, err := json.Marshal(syllabus.Teachers)
+	if err != nil {
+		return fmt.Errorf("failed to marshal teachers: %w", err)
+	}
+
+	_, err = db.writer.ExecContext(ctx, query,
+		syllabus.UID,
+		syllabus.Year,
+		syllabus.Term,
+		syllabus.Title,
+		string(teachersJSON),
+		syllabus.Content,
+		syllabus.ContentHash,
+		time.Now().Unix(),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to save syllabus: %w", err)
+	}
+	return nil
+}
+
+// SaveSyllabusBatch inserts or updates multiple syllabus records in a single transaction
+func (db *DB) SaveSyllabusBatch(ctx context.Context, syllabi []*Syllabus) error {
+	if len(syllabi) == 0 {
+		return nil
+	}
+
+	query := `
+		INSERT INTO syllabi (uid, year, term, title, teachers, content, content_hash, cached_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(uid) DO UPDATE SET
+			year = excluded.year,
+			term = excluded.term,
+			title = excluded.title,
+			teachers = excluded.teachers,
+			content = excluded.content,
+			content_hash = excluded.content_hash,
+			cached_at = excluded.cached_at
+	`
+
+	cachedAt := time.Now().Unix()
+	return db.ExecBatchContext(ctx, query, func(stmt *sql.Stmt) error {
+		for _, syllabus := range syllabi {
+			teachersJSON, err := json.Marshal(syllabus.Teachers)
+			if err != nil {
+				return fmt.Errorf("failed to marshal teachers for %s: %w", syllabus.UID, err)
+			}
+
+			if _, err := stmt.ExecContext(ctx, syllabus.UID, syllabus.Year, syllabus.Term, syllabus.Title, string(teachersJSON), syllabus.Content, syllabus.ContentHash, cachedAt); err != nil {
+				return fmt.Errorf("failed to save syllabus %s: %w", syllabus.UID, err)
+			}
+		}
+		return nil
+	})
+}
+
+// GetSyllabusContentHash retrieves the content hash for a syllabus
+// Used for incremental update detection - returns empty string if not found
+func (db *DB) GetSyllabusContentHash(ctx context.Context, uid string) (string, error) {
+	query := `SELECT content_hash FROM syllabi WHERE uid = ?`
+
+	var hash string
+	err := db.reader.QueryRowContext(ctx, query, uid).Scan(&hash)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("failed to get syllabus hash: %w", err)
+	}
+	return hash, nil
+}
+
+// GetSyllabusByUID retrieves a syllabus by its UID
+func (db *DB) GetSyllabusByUID(ctx context.Context, uid string) (*Syllabus, error) {
+	query := `SELECT uid, year, term, title, teachers, content, content_hash, cached_at FROM syllabi WHERE uid = ?`
+
+	var teachersJSON string
+	syllabus := &Syllabus{}
+	err := db.reader.QueryRowContext(ctx, query, uid).Scan(
+		&syllabus.UID,
+		&syllabus.Year,
+		&syllabus.Term,
+		&syllabus.Title,
+		&teachersJSON,
+		&syllabus.Content,
+		&syllabus.ContentHash,
+		&syllabus.CachedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get syllabus: %w", err)
+	}
+
+	if err := json.Unmarshal([]byte(teachersJSON), &syllabus.Teachers); err != nil {
+		syllabus.Teachers = []string{}
+	}
+
+	return syllabus, nil
+}
+
+// GetAllSyllabi retrieves all syllabi from the database
+// Used for loading into vector store on startup
+func (db *DB) GetAllSyllabi(ctx context.Context) ([]*Syllabus, error) {
+	query := `SELECT uid, year, term, title, teachers, content, content_hash, cached_at FROM syllabi`
+
+	rows, err := db.reader.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query syllabi: %w", err)
+	}
+	defer rows.Close()
+
+	var syllabi []*Syllabus
+	for rows.Next() {
+		var teachersJSON string
+		syllabus := &Syllabus{}
+		if err := rows.Scan(
+			&syllabus.UID,
+			&syllabus.Year,
+			&syllabus.Term,
+			&syllabus.Title,
+			&teachersJSON,
+			&syllabus.Content,
+			&syllabus.ContentHash,
+			&syllabus.CachedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan syllabus: %w", err)
+		}
+
+		if err := json.Unmarshal([]byte(teachersJSON), &syllabus.Teachers); err != nil {
+			syllabus.Teachers = []string{}
+		}
+
+		syllabi = append(syllabi, syllabus)
+	}
+
+	return syllabi, rows.Err()
+}
+
+// GetSyllabiByYearTerm retrieves all syllabi for a specific year and term
+func (db *DB) GetSyllabiByYearTerm(ctx context.Context, year, term int) ([]*Syllabus, error) {
+	query := `SELECT uid, year, term, title, teachers, content, content_hash, cached_at FROM syllabi WHERE year = ? AND term = ?`
+
+	rows, err := db.reader.QueryContext(ctx, query, year, term)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query syllabi: %w", err)
+	}
+	defer rows.Close()
+
+	var syllabi []*Syllabus
+	for rows.Next() {
+		var teachersJSON string
+		syllabus := &Syllabus{}
+		if err := rows.Scan(
+			&syllabus.UID,
+			&syllabus.Year,
+			&syllabus.Term,
+			&syllabus.Title,
+			&teachersJSON,
+			&syllabus.Content,
+			&syllabus.ContentHash,
+			&syllabus.CachedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan syllabus: %w", err)
+		}
+
+		if err := json.Unmarshal([]byte(teachersJSON), &syllabus.Teachers); err != nil {
+			syllabus.Teachers = []string{}
+		}
+
+		syllabi = append(syllabi, syllabus)
+	}
+
+	return syllabi, rows.Err()
+}
+
+// CountSyllabi returns the total number of syllabi
+func (db *DB) CountSyllabi(ctx context.Context) (int, error) {
+	query := `SELECT COUNT(*) FROM syllabi`
+
+	var count int
+	err := db.reader.QueryRowContext(ctx, query).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count syllabi: %w", err)
+	}
+	return count, nil
+}
+
+// DeleteExpiredSyllabi removes syllabi older than the specified TTL
+func (db *DB) DeleteExpiredSyllabi(ctx context.Context, ttl time.Duration) (int64, error) {
+	query := `DELETE FROM syllabi WHERE cached_at < ?`
+	expiryTime := time.Now().Add(-ttl).Unix()
+
+	result, err := db.writer.ExecContext(ctx, query, expiryTime)
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete expired syllabi: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get rows affected for syllabi: %w", err)
+	}
+	return rowsAffected, nil
+}

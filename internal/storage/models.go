@@ -58,3 +58,15 @@ type Sticker struct {
 	SuccessCount int    `json:"success_count"`
 	FailureCount int    `json:"failure_count"`
 }
+
+// Syllabus represents a course syllabus record for semantic search
+type Syllabus struct {
+	UID         string   `json:"uid"`          // Course unique identifier
+	Year        int      `json:"year"`         // Academic year
+	Term        int      `json:"term"`         // Semester (1 or 2)
+	Title       string   `json:"title"`        // Course title
+	Teachers    []string `json:"teachers"`     // Course instructors
+	Content     string   `json:"content"`      // Merged syllabus content for embedding
+	ContentHash string   `json:"content_hash"` // SHA256 hash for change detection
+	CachedAt    int64    `json:"cached_at"`    // Unix timestamp when cached
+}

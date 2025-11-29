@@ -101,6 +101,12 @@ func (h *Handler) Stop() {
 	}
 }
 
+// GetCourseHandler returns the course handler for external configuration
+// Used to set VectorDB for semantic search from main.go
+func (h *Handler) GetCourseHandler() *course.Handler {
+	return h.courseHandler
+}
+
 // Handle processes incoming webhook requests
 func (h *Handler) Handle(c *gin.Context) {
 	start := time.Now()
@@ -242,11 +248,21 @@ func (h *Handler) Handle(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
+// isPersonalChat checks if the event source is a personal (1-on-1) chat
+func (h *Handler) isPersonalChat(source webhook.SourceInterface) bool {
+	_, ok := source.(webhook.UserSource)
+	return ok
+}
+
 // handleMessageEvent processes text message events
 func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageEvent) ([]messaging_api.MessageInterface, error) {
-	// Handle sticker messages
+	// Handle sticker messages - only in personal chats
 	if event.Message.GetType() == "sticker" {
-		return h.handleStickerMessage(event), nil
+		if h.isPersonalChat(event.Source) {
+			return h.handleStickerMessage(event), nil
+		}
+		// Ignore sticker messages in group/room chats
+		return nil, nil
 	}
 
 	// Only handle text messages
@@ -476,21 +492,28 @@ func removePunctuation(s string) string {
 	return result.String()
 }
 
-// getChatID extracts chat ID from event
+// getChatID extracts chat ID from event (supports user, group, and room sources)
 func (h *Handler) getChatID(event webhook.EventInterface) string {
+	var source webhook.SourceInterface
+
 	switch e := event.(type) {
 	case webhook.MessageEvent:
-		if userSource, ok := e.Source.(webhook.UserSource); ok {
-			return userSource.UserId
-		}
+		source = e.Source
 	case webhook.PostbackEvent:
-		if userSource, ok := e.Source.(webhook.UserSource); ok {
-			return userSource.UserId
-		}
+		source = e.Source
 	case webhook.FollowEvent:
-		if userSource, ok := e.Source.(webhook.UserSource); ok {
-			return userSource.UserId
-		}
+		source = e.Source
+	default:
+		return ""
+	}
+
+	switch s := source.(type) {
+	case webhook.UserSource:
+		return s.UserId
+	case webhook.GroupSource:
+		return s.GroupId
+	case webhook.RoomSource:
+		return s.RoomId
 	}
 	return ""
 }
