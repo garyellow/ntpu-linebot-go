@@ -12,7 +12,7 @@ func TestBuildKeywordRegex(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "Single keyword",
+			name:     "Single keyword at start",
 			keywords: []string{"課程"},
 			input:    "課程 微積分",
 			expected: "課程",
@@ -30,16 +30,40 @@ func TestBuildKeywordRegex(t *testing.T) {
 			expected: "Course",
 		},
 		{
-			name:     "No match",
+			name:     "No match - keyword not present",
 			keywords: []string{"老師", "教師"},
 			input:    "課程 微積分",
 			expected: "",
+		},
+		{
+			name:     "No match - keyword not at start",
+			keywords: []string{"課程"},
+			input:    "微積分課程",
+			expected: "", // Should NOT match - keyword is at end, not start
+		},
+		{
+			name:     "No match - keyword in middle",
+			keywords: []string{"課"},
+			input:    "林老師的課很有趣",
+			expected: "", // Should NOT match - keyword is in middle
 		},
 		{
 			name:     "Chinese keywords sorted by length",
 			keywords: []string{"聯繫", "聯絡", "聯繫方式", "聯絡方式"},
 			input:    "聯絡方式 資工系",
 			expected: "聯絡方式", // Longest match first
+		},
+		{
+			name:     "No match - keyword at end of sentence",
+			keywords: []string{"電話"},
+			input:    "資工系電話",
+			expected: "", // Should NOT match - keyword is at end
+		},
+		{
+			name:     "Match short keyword at start",
+			keywords: []string{"課", "課程"},
+			input:    "課 微積分",
+			expected: "課", // Should match "課" at start
 		},
 	}
 

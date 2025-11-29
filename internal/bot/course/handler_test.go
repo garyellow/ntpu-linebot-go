@@ -61,24 +61,30 @@ func TestCanHandle(t *testing.T) {
 		{"Course no P", "P9999", true},
 		{"Course no lowercase", "u0001", true},
 
-		// Course keywords (English)
-		{"Class keyword", "class schedule", true},
-		{"Course keyword", "course info", true},
+		// Course keywords at START (English)
+		{"Class keyword at start", "class schedule", true},
+		{"Course keyword at start", "course info", true},
 
-		// Course keywords (Chinese)
-		{"課 keyword", "查詢課程", true},
-		{"課程 keyword", "課程資訊", true},
-		{"科目 keyword", "科目名稱", true},
-		{"課名 keyword", "課名查詢", true},
+		// Course keywords at START (Chinese)
+		{"課 keyword at start", "課 微積分", true},
+		{"課程 keyword at start", "課程 資訊", true},
+		{"科目 keyword at start", "科目 名稱", true},
+		{"課名 keyword at start", "課名 查詢", true},
 
-		// Teacher keywords (now unified with course keywords)
-		{"Professor keyword", "professor Wang", true},
-		{"Teacher keyword", "teacher info", true},
-		{"Dr keyword", "dr Chen", true},
-		{"老師 keyword", "王老師", true},
-		{"教授 keyword", "陳教授", true},
-		{"教師 keyword", "授課教師", true},
-		{"師 keyword", "師資", true},
+		// Teacher keywords at START (now unified with course keywords)
+		{"Professor keyword at start", "professor Wang", true},
+		{"Teacher keyword at start", "teacher info", true},
+		{"Dr keyword at start", "dr Chen", true},
+		{"老師 keyword at start", "老師 王小明", true},
+		{"教授 keyword at start", "教授 陳教授", true},
+		{"教師 keyword at start", "教師 資訊", true},
+		{"師 keyword at start", "師 資訊", true},
+
+		// Keywords NOT at start should NOT match
+		{"課 keyword not at start", "查詢課程", false},
+		{"老師 keyword not at start", "王老師", false},
+		{"教授 keyword not at start", "陳教授", false},
+		{"授課教師 not at start", "找授課教師", false},
 
 		// Invalid queries
 		{"Random text", "hello world", false},

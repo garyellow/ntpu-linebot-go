@@ -34,8 +34,8 @@ const (
 	//
 	// Note: We use asymmetric semantic search (short query vs chunked document)
 	// With chunking, similarity scores should be higher than whole-document embedding
-	// 0.3 is reasonable for filtering clearly irrelevant results
-	MinSimilarityThreshold float32 = 0.3
+	// 0.2 allows more results to pass through while still filtering noise
+	MinSimilarityThreshold float32 = 0.2
 )
 
 // VectorDB wraps chromem-go database for course syllabus semantic search

@@ -196,8 +196,8 @@ func TestConstants(t *testing.T) {
 	if MaxSearchResults != 20 {
 		t.Errorf("MaxSearchResults = %d, want 20", MaxSearchResults)
 	}
-	if MinSimilarityThreshold != 0.3 {
-		t.Errorf("MinSimilarityThreshold = %f, want 0.3", MinSimilarityThreshold)
+	if MinSimilarityThreshold != 0.2 {
+		t.Errorf("MinSimilarityThreshold = %f, want 0.2", MinSimilarityThreshold)
 	}
 }
 
