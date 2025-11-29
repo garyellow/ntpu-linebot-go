@@ -41,7 +41,7 @@ type Config struct {
 	WarmupModules string // Comma-separated list of modules to warmup (default: "sticker,id,contact,course"). Add "syllabus" to enable syllabus warmup (requires GEMINI_API_KEY)
 
 	// Webhook Configuration
-	// See internal/timeouts/timeouts.go for detailed explanation of why 25s is used
+	// See internal/timeouts/timeouts.go for detailed explanation of why 60s is used
 	WebhookTimeout time.Duration // Timeout for webhook bot processing
 
 	// Rate Limit Configuration

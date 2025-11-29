@@ -116,7 +116,7 @@ term := bot.ExtractSearchTerm("課程 微積分", "課程") // → "微積分"
 
 1. **使用 `lineutil`**：所有訊息建構透過 lineutil，不直接使用 LINE SDK
 2. **Sender 一致性**：每次回覆使用同一個 `GetSender()` 返回的 Sender
-3. **Context timeout**：25 秒（LINE webhook 限制）
+3. **Context timeout**：60 秒（LINE loading animation 上限）
 4. **訊息限制**：每次最多 5 則訊息（LINE API 限制）
 5. **Postback 前綴**：使用 `{module}:` 前綴便於 webhook dispatcher 路由
 6. **Table-driven tests**：所有測試使用 table-driven 模式

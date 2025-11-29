@@ -486,7 +486,7 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 	// WARNING: This is a heavy operation that scrapes all courses for each semester.
 	// It iterates through all education codes (U/M/N/P) since the school system
 	// doesn't support direct teacher search via URL parameters.
-	// This may take significant time and could approach the 25s webhook deadline.
+	// This may take significant time and could approach the 60s webhook deadline.
 	if len(foundCourses) == 0 {
 		for i := range searchYears {
 			year := searchYears[i]

@@ -12,10 +12,10 @@
 //   - Webhook response: LINE expects quick acknowledgment (200 OK)
 //   - Loading animation: Shows for up to 60 seconds, helps user wait
 //
-// We use 25s webhook timeout to balance:
-//   - User experience (not too long to wait)
+// We use 60s webhook timeout to maximize processing time:
+//   - LINE loading animation shows for up to 60s
 //   - Scraping time (NTPU websites can be slow)
-//   - Safety margin before LINE might retry
+//   - Allow sufficient time for semantic search operations
 package timeouts
 
 import "time"
@@ -25,12 +25,12 @@ const (
 	// WebhookProcessing is the timeout for processing a single webhook event.
 	// This includes bot message handling, database queries, and potential scraping.
 	//
-	// Set to 25s because:
+	// Set to 60s because:
 	//   - LINE loading animation shows for up to 60s
-	//   - User patience is typically 10-30 seconds
+	//   - Semantic search operations may take significant time
 	//   - Scraping + DB operations need ~5-15s in worst case
-	//   - Leaves margin for retries and error handling
-	WebhookProcessing = 25 * time.Second
+	//   - Maximizes available processing time within LINE's limits
+	WebhookProcessing = 60 * time.Second
 
 	// WebhookHTTPRead is the HTTP server read timeout for webhook requests.
 	// Should be short since LINE sends small JSON payloads.
@@ -38,7 +38,7 @@ const (
 
 	// WebhookHTTPWrite is the HTTP server write timeout.
 	// Should accommodate WebhookProcessing + response serialization.
-	WebhookHTTPWrite = 30 * time.Second
+	WebhookHTTPWrite = 65 * time.Second
 
 	// WebhookHTTPIdle is the HTTP server idle timeout for keep-alive connections.
 	WebhookHTTPIdle = 120 * time.Second

@@ -101,7 +101,7 @@ func New(registry *prometheus.Registry) *Metrics {
 			prometheus.HistogramOpts{
 				Name:    "ntpu_webhook_duration_seconds",
 				Help:    "Webhook processing duration in seconds by event type",
-				Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 25}, // Extended for webhook timeout (25s)
+				Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 25, 60}, // Extended for webhook timeout (60s)
 			},
 			[]string{"event_type"}, // event_type: message, postback, follow
 		),

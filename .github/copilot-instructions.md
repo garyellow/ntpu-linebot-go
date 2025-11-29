@@ -5,7 +5,7 @@ LINE chatbot for NTPU (National Taipei University) providing student ID lookup, 
 ## Architecture: 3-Layer Request Flow
 
 ```
-LINE Webhook → Gin Handler (25s timeout) → Bot Module Dispatcher
+LINE Webhook → Gin Handler (60s timeout) → Bot Module Dispatcher
                 ↓ (signature validation, rate limiting)
       Bot Handlers (id/contact/course)
                 ↓ (keyword matching via CanHandle())
@@ -17,7 +17,7 @@ LINE Webhook → Gin Handler (25s timeout) → Bot Module Dispatcher
 ```
 
 **Critical Flow Details:**
-- **Context timeout**: All bot operations inherit 25s deadline from webhook (`internal/webhook/handler.go:214`)
+- **Context timeout**: All bot operations inherit 60s deadline from webhook (`internal/webhook/handler.go:214`)
 - **Message batching**: LINE allows max 5 messages per reply; webhook auto-truncates to 4 + warning (`handler.go:159`)
 
 ## Bot Module Registration Pattern

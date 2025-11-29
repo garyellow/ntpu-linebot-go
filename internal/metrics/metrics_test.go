@@ -45,11 +45,30 @@ func TestNew(t *testing.T) {
 	if m.RateLimiterDropped == nil {
 		t.Error("RateLimiterDropped is nil")
 	}
+	if m.RateLimiterActiveUsers == nil {
+		t.Error("RateLimiterActiveUsers is nil")
+	}
+	if m.RateLimiterCleaned == nil {
+		t.Error("RateLimiterCleaned is nil")
+	}
 	if m.WarmupTasksTotal == nil {
 		t.Error("WarmupTasksTotal is nil")
 	}
 	if m.WarmupDuration == nil {
 		t.Error("WarmupDuration is nil")
+	}
+	// Semantic search metrics
+	if m.SemanticSearchTotal == nil {
+		t.Error("SemanticSearchTotal is nil")
+	}
+	if m.SemanticSearchDuration == nil {
+		t.Error("SemanticSearchDuration is nil")
+	}
+	if m.SemanticSearchResults == nil {
+		t.Error("SemanticSearchResults is nil")
+	}
+	if m.VectorDBSize == nil {
+		t.Error("VectorDBSize is nil")
 	}
 }
 
@@ -149,6 +168,57 @@ func TestSetCacheSize(t *testing.T) {
 	m.SetCacheSize("contacts", 500)
 	m.SetCacheSize("courses", 2000)
 	m.SetCacheSize("stickers", 50)
+}
+
+func TestRecordSemanticSearch(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	// Should not panic
+	m.RecordSemanticSearch("success", 1.5, 10, "direct")
+	m.RecordSemanticSearch("error", 0.5, 0, "direct")
+	m.RecordSemanticSearch("fallback", 2.0, 5, "fallback")
+	m.RecordSemanticSearch("disabled", 0.0, 0, "direct")
+}
+
+func TestRecordEmbeddingLatency(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	// Should not panic
+	m.RecordEmbeddingLatency(0.5)
+	m.RecordEmbeddingLatency(1.0)
+	m.RecordEmbeddingLatency(2.5)
+}
+
+func TestSetVectorDBSize(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	// Should not panic
+	m.SetVectorDBSize(0)
+	m.SetVectorDBSize(100)
+	m.SetVectorDBSize(5000)
+}
+
+func TestSetRateLimiterActiveUsers(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	// Should not panic
+	m.SetRateLimiterActiveUsers(0)
+	m.SetRateLimiterActiveUsers(10)
+	m.SetRateLimiterActiveUsers(100)
+}
+
+func TestRecordRateLimiterCleanup(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	// Should not panic
+	m.RecordRateLimiterCleanup(0)
+	m.RecordRateLimiterCleanup(5)
+	m.RecordRateLimiterCleanup(50)
 }
 
 func TestMetrics_WithDefaultRegistry(t *testing.T) {
