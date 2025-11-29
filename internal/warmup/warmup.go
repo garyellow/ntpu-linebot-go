@@ -34,7 +34,6 @@ type Stats struct {
 // Options configures cache warming behavior
 type Options struct {
 	Modules  []string         // Modules to warm (id, contact, course, sticker, syllabus)
-	Timeout  time.Duration    // Overall timeout
 	Reset    bool             // Whether to reset cache before warming
 	Metrics  *metrics.Metrics // Optional metrics recorder
 	VectorDB *rag.VectorDB    // Optional vector database for syllabus indexing
@@ -44,17 +43,6 @@ type Options struct {
 func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, opts Options) (*Stats, error) {
 	stats := &Stats{}
 	startTime := time.Now()
-
-	// Always create a cancel function for cleanup if timeout is set
-	if opts.Timeout > 0 {
-		var cancel context.CancelFunc
-		if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-			ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
-		} else {
-			ctx, cancel = context.WithCancel(ctx)
-		}
-		defer cancel()
-	}
 
 	// Reset cache if requested
 	if opts.Reset {
@@ -148,21 +136,15 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 
 // RunInBackground executes cache warming asynchronously
 // Returns immediately without blocking. Logs progress to the provided logger.
-// Creates an independent context with timeout to prevent goroutine leaks on server shutdown.
+// Uses context.Background() for independent operation that runs until completion.
 //
 //nolint:contextcheck // Intentionally using context.Background() for independent background operation
 func RunInBackground(_ context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, opts Options) {
-	// Create independent context with timeout for warmup
-	// This prevents the goroutine from leaking if server context is canceled
-	warmupCtx, cancel := context.WithTimeout(context.Background(), opts.Timeout)
-
 	go func() {
-		defer cancel() // Ensure cleanup
-
 		log.WithField("modules", opts.Modules).
 			Info("Starting background cache warming")
 
-		stats, err := Run(warmupCtx, db, client, stickerMgr, log, opts)
+		stats, err := Run(context.Background(), db, client, stickerMgr, log, opts)
 		if err != nil {
 			log.WithError(err).Warn("Background cache warming finished with errors")
 		} else {

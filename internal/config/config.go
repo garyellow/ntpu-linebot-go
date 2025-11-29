@@ -37,7 +37,6 @@ type Config struct {
 	ScraperMaxRetries int
 
 	// Warmup Configuration
-	WarmupTimeout time.Duration
 	WarmupModules string // Comma-separated list of modules to warmup (default: "sticker,id,contact,course"). Add "syllabus" to enable syllabus warmup (requires GEMINI_API_KEY)
 
 	// Webhook Configuration
@@ -77,7 +76,6 @@ func Load() (*Config, error) {
 		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 5),                        // Retry with exponential backoff
 
 		// Warmup Configuration
-		WarmupTimeout: getDurationEnv("WARMUP_TIMEOUT", timeouts.WarmupDefault),
 		WarmupModules: getEnv("WARMUP_MODULES", "sticker,id,contact,course"),
 
 		// Webhook Configuration

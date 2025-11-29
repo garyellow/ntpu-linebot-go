@@ -88,9 +88,6 @@ const (
 
 // Warmup timeouts
 const (
-	// WarmupDefault is the default timeout for the entire warmup process.
-	WarmupDefault = 30 * time.Minute
-
 	// WarmupStickerFetch is the timeout for fetching stickers from external sources.
 	WarmupStickerFetch = 5 * time.Second
 )

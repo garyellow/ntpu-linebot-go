@@ -100,13 +100,9 @@ func main() {
 	}
 
 	// Start background cache warming (non-blocking)
-	// Warmup runs concurrently with server startup
-	warmupCtx, warmupCancel := context.WithTimeout(context.Background(), cfg.WarmupTimeout)
-	defer warmupCancel()
-
-	warmup.RunInBackground(warmupCtx, db, scraperClient, stickerManager, log, warmup.Options{
+	// Warmup runs concurrently with server startup until completion
+	warmup.RunInBackground(context.Background(), db, scraperClient, stickerManager, log, warmup.Options{
 		Modules:  warmup.ParseModules(cfg.WarmupModules),
-		Timeout:  cfg.WarmupTimeout,
 		Reset:    false,    // Never reset in production
 		Metrics:  m,        // Pass metrics for monitoring
 		VectorDB: vectorDB, // Pass vector database for syllabus indexing
@@ -599,14 +595,9 @@ func performProactiveWarmup(ctx context.Context, db *storage.DB, client *scraper
 
 	log.WithField("modules", modules).Info("Running daily warmup for configured modules")
 
-	// Create warmup context with timeout
-	warmupCtx, cancel := context.WithTimeout(ctx, cfg.WarmupTimeout)
-	defer cancel()
-
-	// Run warmup (non-blocking, logs progress internally)
-	stats, err := warmup.Run(warmupCtx, db, client, stickerMgr, log, warmup.Options{
+	// Run warmup (logs progress internally, runs until completion)
+	stats, err := warmup.Run(ctx, db, client, stickerMgr, log, warmup.Options{
 		Modules:  modules,
-		Timeout:  cfg.WarmupTimeout,
 		Reset:    false,    // Never reset existing data
 		VectorDB: vectorDB, // Pass VectorDB for syllabus module
 	})

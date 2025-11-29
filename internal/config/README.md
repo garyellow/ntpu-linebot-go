@@ -17,7 +17,6 @@
 - `CACHE_TTL=168h` - Hard TTL：快取絕對過期時間（7 天）
 - `SCRAPER_TIMEOUT=60s` - 每次 HTTP 請求超時
 - `SCRAPER_MAX_RETRIES=5` - 失敗時最大重試次數（指數退避）
-- `WARMUP_TIMEOUT=30m` - 預熱超時
 - `WARMUP_MODULES=sticker,id,contact,course` - 預熱模組列表（逗號分隔，空字串跳過，**並行執行無順序限制**）
   - 加入 `syllabus` 啟用課程大綱預熱（需設定 `GEMINI_API_KEY`）
 - `SHUTDOWN_TIMEOUT=30s` - 優雅關閉超時
