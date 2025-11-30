@@ -63,6 +63,9 @@ func (p *IntentParser) Parse(ctx context.Context, text string) (*ParseResult, er
 	}
 
 	// Create timeout context
+	// Note: If parent context has less time remaining than IntentParserTimeout,
+	// the child context will be limited by the parent's deadline.
+	// This is expected behavior as we inherit the webhook timeout constraint.
 	ctx, cancel := context.WithTimeout(ctx, IntentParserTimeout)
 	defer cancel()
 
@@ -131,11 +134,17 @@ func (p *IntentParser) parseFunctionCall(fc *genai.FunctionCall) (*ParseResult, 
 	// Extract parameters
 	params := make(map[string]string)
 	if paramKey, hasParam := ParamKeyMap[funcName]; hasParam {
-		if value, exists := fc.Args[paramKey]; exists {
-			if strVal, ok := value.(string); ok {
-				params[paramKey] = strVal
-			}
+		value, exists := fc.Args[paramKey]
+		if !exists {
+			// Required parameter is missing from function call
+			return nil, fmt.Errorf("missing required parameter %q for function %q", paramKey, funcName)
 		}
+		strVal, ok := value.(string)
+		if !ok {
+			// Parameter exists but is not a string type
+			return nil, fmt.Errorf("parameter %q for function %q is not a string (got %T)", paramKey, funcName, value)
+		}
+		params[paramKey] = strVal
 	}
 
 	return &ParseResult{

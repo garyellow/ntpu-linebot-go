@@ -617,12 +617,22 @@ func (h *Handler) handleUnmatchedMessage(ctx context.Context, source webhook.Sou
 			// No @Bot mention in group - silently ignore
 			return nil, nil
 		}
-		// Remove @Bot mentions from text for NLU processing
+		// Remove @Bot mentions from ORIGINAL text for NLU processing
+		// Note: Must use textMsg.Text (not sanitizedText) because mention.Index/Length
+		// refer to character positions in the original message, not the sanitized version
 		if textMsg.Mention != nil {
-			sanitizedText = removeBotMentions(sanitizedText, textMsg.Mention)
-			sanitizedText = normalizeWhitespaceForMention(sanitizedText)
-			if sanitizedText == "" {
+			mentionlessText := removeBotMentions(textMsg.Text, textMsg.Mention)
+			mentionlessText = normalizeWhitespaceForMention(mentionlessText)
+			if mentionlessText == "" {
 				// Only @Bot mention, no actual content - return help
+				return h.getHelpMessage(), nil
+			}
+			// Apply same sanitization as original text processing
+			sanitizedText = strings.TrimSpace(mentionlessText)
+			sanitizedText = normalizeWhitespace(sanitizedText)
+			sanitizedText = removePunctuation(sanitizedText)
+			sanitizedText = normalizeWhitespace(sanitizedText)
+			if sanitizedText == "" {
 				return h.getHelpMessage(), nil
 			}
 		}
