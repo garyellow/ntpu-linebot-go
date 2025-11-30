@@ -61,7 +61,7 @@ if err != nil {
 
 ### 技術規格
 
-- 模型: `gemini-2.0-flash-lite`
+- 模型: `gemini-2.5-flash-lite`
 - 超時: 10 秒
 - Temperature: 0.1 (低變異性)
 - Max Tokens: 256

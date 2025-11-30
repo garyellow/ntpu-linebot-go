@@ -194,7 +194,7 @@ handleUnmatchedMessage()
 │ mention & process│                   │
 └─────────────────┴───────────────────┘
      ↓
-IntentParser.Parse() (Gemini 2.0 Flash Lite)
+IntentParser.Parse() (Gemini 2.5 Flash Lite)
      ↓
 dispatchIntent() → Route to Handler
      ↓ (failure)

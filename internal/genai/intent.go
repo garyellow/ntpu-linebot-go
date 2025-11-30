@@ -12,8 +12,8 @@ import (
 
 const (
 	// IntentParserModel is the model used for intent parsing
-	// Using gemini-2.0-flash-lite for fast, cost-effective intent classification
-	IntentParserModel = "gemini-2.0-flash-lite"
+	// Using gemini-2.5-flash-lite for fast, cost-effective intent classification
+	IntentParserModel = "gemini-2.5-flash-lite"
 
 	// IntentParserTimeout is the timeout for intent parsing requests
 	IntentParserTimeout = 10 * time.Second
