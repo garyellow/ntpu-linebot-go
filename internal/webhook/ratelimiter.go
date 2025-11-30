@@ -26,12 +26,12 @@ func NewRateLimiter(maxTokens, refillRate float64) *RateLimiter {
 // WaitForToken waits until a token is available
 // Returns immediately if a token is available, otherwise blocks
 func (rl *RateLimiter) WaitForToken() {
-	rl.Limiter.WaitSimple()
+	rl.WaitSimple()
 }
 
 // GetAvailableTokens returns the current number of available tokens
 func (rl *RateLimiter) GetAvailableTokens() float64 {
-	return rl.Limiter.Available()
+	return rl.Available()
 }
 
 // UserRateLimiter tracks rate limits per user

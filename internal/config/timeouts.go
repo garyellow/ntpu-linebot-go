@@ -16,7 +16,6 @@
 //   - LINE loading animation shows for up to 60s
 //   - Scraping time (NTPU websites can be slow)
 //   - Allow sufficient time for semantic search operations
-
 package config
 
 import "time"
