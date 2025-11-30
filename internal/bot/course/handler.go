@@ -244,7 +244,14 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		if searchTerm == "" {
 			// If no search term provided, give helpful message
 			sender := lineutil.GetSender(senderName, h.stickerManager)
-			msg := lineutil.NewTextMessageWithConsistentSender("📚 請輸入課程關鍵字\n\n例如：\n• 課 程式設計\n• 課程 微積分\n• 課 王小明（搜尋教師）\n• 課 線代 王（搜尋課名+教師）\n\n💡 也可直接輸入課程編號（如：3141U0001）", sender)
+			var helpText string
+			if h.vectorDB != nil && h.vectorDB.IsEnabled() {
+				// Semantic search enabled - mention it as an option
+				helpText = "📚 請輸入課程關鍵字\n\n例如：\n• 課 程式設計\n• 課程 微積分\n• 課 王小明（搜尋教師）\n\n🔮 或使用「找課」進行語意搜尋\n• 找課 想學程式設計\n\n💡 也可直接輸入課程編號（如：1131U0001）"
+			} else {
+				helpText = "📚 請輸入課程關鍵字\n\n例如：\n• 課 程式設計\n• 課程 微積分\n• 課 王小明（搜尋教師）\n• 課 線代 王（搜尋課名+教師）\n\n💡 也可直接輸入課程編號（如：1131U0001）"
+			}
+			msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
 			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 				{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
 			})

@@ -578,19 +578,37 @@ func (h *Handler) getChatIDFromSource(source webhook.SourceInterface) string {
 }
 
 // getHelpMessage returns a simplified help message (fallback when no handler matches)
+// The message content varies based on whether NLU is enabled.
 func (h *Handler) getHelpMessage() []messaging_api.MessageInterface {
-	helpText := "🔍 NTPU 查詢小工具\n\n" +
-		"📚 課程查詢\n" +
-		"   • 課程/教師：「課程 微積分」、「課 王小明」\n" +
-		"   • 課程編號：「3141U0001」\n\n" +
-		"🎓 學號查詢\n" +
-		"   • 直接輸入：「412345678」\n" +
-		"   • 姓名查詢：「學生 王小明」\n" +
-		"   • 按學年查：「學年 112」\n\n" +
-		"📞 聯絡資訊\n" +
-		"   • 單位查詢：「聯絡 資工系」\n" +
-		"   • 緊急電話：「緊急」\n\n" +
-		"💡 輸入「使用說明」查看完整說明"
+	var helpText string
+
+	if h.intentParser != nil && h.intentParser.IsEnabled() {
+		// NLU enabled - emphasize natural language capability
+		helpText = "🔍 NTPU 查詢小工具\n\n" +
+			"💬 直接用自然語言問我，例如：\n" +
+			"   • 「微積分的課有哪些」\n" +
+			"   • 「王小明的學號」\n" +
+			"   • 「資工系電話」\n\n" +
+			"📖 或使用關鍵字查詢：\n" +
+			"   • 課程：「課程 微積分」\n" +
+			"   • 學號：「學生 王小明」\n" +
+			"   • 聯絡：「聯絡 資工系」\n\n" +
+			"💡 輸入「使用說明」查看完整說明"
+	} else {
+		// NLU disabled - emphasize keyword format
+		helpText = "🔍 NTPU 查詢小工具\n\n" +
+			"📚 課程查詢\n" +
+			"   • 課程/教師：「課程 微積分」、「課 王小明」\n" +
+			"   • 課程編號：「1131U0001」\n\n" +
+			"🎓 學號查詢\n" +
+			"   • 直接輸入：「412345678」\n" +
+			"   • 姓名查詢：「學生 王小明」\n" +
+			"   • 按學年查：「學年 112」\n\n" +
+			"📞 聯絡資訊\n" +
+			"   • 單位查詢：「聯絡 資工系」\n" +
+			"   • 緊急電話：「緊急」\n\n" +
+			"💡 輸入「使用說明」查看完整說明"
+	}
 
 	sender := lineutil.GetSender("幫助小幫手", h.stickerManager)
 	msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
