@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/garyellow/ntpu-linebot-go/internal/timeouts"
+	"github.com/garyellow/ntpu-linebot-go/internal/config"
 	_ "modernc.org/sqlite" // SQLite driver for database/sql
 )
 
@@ -78,7 +78,7 @@ func New(dbPath string, cacheTTL time.Duration) (*DB, error) {
 	// CRITICAL: Writer must have MaxOpenConns=1 to prevent SQLITE_BUSY
 	writer.SetMaxOpenConns(1)
 	writer.SetMaxIdleConns(1)
-	writer.SetConnMaxLifetime(timeouts.DatabaseConnMaxLifetime)
+	writer.SetConnMaxLifetime(config.DatabaseConnMaxLifetime)
 
 	// Configure writer connection
 	if err := configureConnection(writer, false); err != nil {
@@ -117,7 +117,7 @@ func New(dbPath string, cacheTTL time.Duration) (*DB, error) {
 	// Reader can have multiple connections for parallel queries
 	reader.SetMaxOpenConns(10)
 	reader.SetMaxIdleConns(5)
-	reader.SetConnMaxLifetime(timeouts.DatabaseConnMaxLifetime)
+	reader.SetConnMaxLifetime(config.DatabaseConnMaxLifetime)
 
 	// Configure reader connection
 	if err := configureConnection(reader, true); err != nil {
@@ -153,7 +153,7 @@ func configureConnection(conn *sql.DB, readOnly bool) error {
 	}
 
 	// Set busy timeout to handle concurrent access during warmup
-	busyTimeoutMs := int(timeouts.DatabaseBusyTimeout.Milliseconds())
+	busyTimeoutMs := int(config.DatabaseBusyTimeout.Milliseconds())
 	if _, err := conn.ExecContext(ctx, fmt.Sprintf("PRAGMA busy_timeout=%d", busyTimeoutMs)); err != nil {
 		return fmt.Errorf("failed to set busy timeout: %w", err)
 	}

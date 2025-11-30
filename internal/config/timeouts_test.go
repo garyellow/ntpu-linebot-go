@@ -1,4 +1,4 @@
-package timeouts
+package config
 
 import (
 	"testing"

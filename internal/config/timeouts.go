@@ -1,4 +1,4 @@
-// Package timeouts provides centralized timeout constants for the application.
+// Package config provides centralized timeout constants for the application.
 //
 // These values are carefully tuned based on:
 //   - LINE Messaging API constraints (reply token expiration, webhook timeouts)
@@ -16,7 +16,7 @@
 //   - LINE loading animation shows for up to 60s
 //   - Scraping time (NTPU websites can be slow)
 //   - Allow sufficient time for semantic search operations
-package timeouts
+package config
 
 import "time"
 

@@ -111,12 +111,50 @@ LINE Platform → Gin Handler → Signature Verify → Parse Event
 Rate Limit Check (Global + Per-User)
     ↓
 Dispatch to Bot Module (based on keywords)
+    ↓ (no match)
+NLU Intent Parser (if enabled)
     ↓
 Process Message
     ↓
 Reply to LINE (max 5 messages)
     ↓
 Record Metrics
+```
+
+#### 1.1 NLU 意圖解析流程（可選）
+```
+User Input → Keyword Matching (existing handlers)
+                  ↓ (no match)
+         handleUnmatchedMessage()
+                  ↓
+    ┌─────────────┴─────────────┐
+    │                           │
+Personal Chat              Group Chat
+    │                           │
+    │                     @Bot mentioned?
+    │                       ↓     ↓
+    │                     Yes     No → Silent ignore
+    │                       │
+    │                  Remove @Bot mentions
+    │                       │
+    └───────────────────────┘
+                  ↓
+         NLU Parser enabled?
+              ↓        ↓
+            Yes        No → Help message
+              │
+    IntentParser.Parse()
+    (Gemini Function Calling)
+              │
+    ┌─────────┴─────────┐
+    │                   │
+Function Call      Text Response
+    │              (Clarification)
+    │                   │
+dispatchIntent()   Return text
+    │
+Route to Handler
+(course/id/contact/help)
 ```
 
 #### 2. 資料查詢流程（Cache-First）

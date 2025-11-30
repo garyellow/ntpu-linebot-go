@@ -8,10 +8,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sync"
 	"time"
 
 	chromem "github.com/philippgille/chromem-go"
+
+	"github.com/garyellow/ntpu-linebot-go/internal/ratelimit"
 )
 
 const (
@@ -38,61 +39,7 @@ const (
 type EmbeddingClient struct {
 	apiKey      string
 	httpClient  *http.Client
-	rateLimiter *rateLimiter
-}
-
-// rateLimiter implements a simple token bucket rate limiter
-type rateLimiter struct {
-	mu         sync.Mutex
-	tokens     float64
-	maxTokens  float64
-	refillRate float64 // tokens per second
-	lastRefill time.Time
-}
-
-// newRateLimiter creates a new rate limiter with given rate (requests per minute)
-func newRateLimiter(requestsPerMinute float64) *rateLimiter {
-	return &rateLimiter{
-		tokens:     requestsPerMinute / 60,     // Start with some tokens
-		maxTokens:  requestsPerMinute / 60 * 2, // Allow small burst
-		refillRate: requestsPerMinute / 60,     // Convert to per-second
-		lastRefill: time.Now(),
-	}
-}
-
-// wait blocks until a token is available
-func (r *rateLimiter) wait(ctx context.Context) error {
-	for {
-		r.mu.Lock()
-
-		// Refill tokens based on time elapsed
-		now := time.Now()
-		elapsed := now.Sub(r.lastRefill).Seconds()
-		r.tokens += elapsed * r.refillRate
-		if r.tokens > r.maxTokens {
-			r.tokens = r.maxTokens
-		}
-		r.lastRefill = now
-
-		// Check if we have a token
-		if r.tokens >= 1 {
-			r.tokens--
-			r.mu.Unlock()
-			return nil
-		}
-
-		// Calculate wait time
-		waitTime := time.Duration((1 - r.tokens) / r.refillRate * float64(time.Second))
-		r.mu.Unlock()
-
-		// Wait outside the lock
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(waitTime):
-			// Retry the loop to acquire token
-		}
-	}
+	rateLimiter *ratelimit.Limiter
 }
 
 // NewEmbeddingClient creates a new Gemini embedding client
@@ -102,7 +49,7 @@ func NewEmbeddingClient(apiKey string) *EmbeddingClient {
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		rateLimiter: newRateLimiter(GeminiAPIRateLimit),
+		rateLimiter: ratelimit.NewPerMinute(GeminiAPIRateLimit),
 	}
 }
 
@@ -148,7 +95,7 @@ func (c *EmbeddingClient) Embed(ctx context.Context, text string) ([]float32, er
 
 	for attempt := 0; attempt <= defaultMaxRetries; attempt++ {
 		// Wait for rate limit
-		if err := c.rateLimiter.wait(ctx); err != nil {
+		if err := c.rateLimiter.Wait(ctx); err != nil {
 			return nil, fmt.Errorf("rate limit wait: %w", err)
 		}
 

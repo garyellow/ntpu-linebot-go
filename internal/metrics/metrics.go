@@ -45,6 +45,11 @@ type Metrics struct {
 	SemanticSearchDuration *prometheus.HistogramVec // Search latency
 	SemanticSearchResults  *prometheus.HistogramVec // Number of results returned
 	VectorDBSize           prometheus.Gauge         // Current document count in vector store
+
+	// NLU intent parser metrics
+	NLURequestsTotal   *prometheus.CounterVec   // Total NLU requests by status and intent
+	NLUDurationSeconds *prometheus.HistogramVec // NLU parse latency
+	NLUFallbackTotal   prometheus.Counter       // API error fallback count
 }
 
 // New creates a new Metrics instance with all metrics registered
@@ -205,6 +210,31 @@ func New(registry *prometheus.Registry) *Metrics {
 				Help: "Current number of documents in vector database",
 			},
 		),
+
+		// NLU intent parser metrics
+		NLURequestsTotal: promauto.With(registry).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "ntpu_nlu_requests_total",
+				Help: "Total number of NLU intent parsing requests by status and intent",
+			},
+			[]string{"status", "intent"}, // status: success, error, clarification; intent: function name
+		),
+
+		NLUDurationSeconds: promauto.With(registry).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "ntpu_nlu_duration_seconds",
+				Help:    "NLU intent parsing latency in seconds",
+				Buckets: []float64{0.1, 0.25, 0.5, 1, 2, 5, 10}, // 100ms to 10s
+			},
+			[]string{"status"}, // status: success, error, clarification
+		),
+
+		NLUFallbackTotal: promauto.With(registry).NewCounter(
+			prometheus.CounterOpts{
+				Name: "ntpu_nlu_fallback_total",
+				Help: "Total number of NLU fallbacks due to API errors",
+			},
+		),
 	}
 
 	return m
@@ -287,6 +317,17 @@ func (m *Metrics) RecordEmbeddingLatency(duration float64) {
 // SetVectorDBSize sets the current vector database document count
 func (m *Metrics) SetVectorDBSize(count int) {
 	m.VectorDBSize.Set(float64(count))
+}
+
+// RecordNLURequest records an NLU intent parsing request
+func (m *Metrics) RecordNLURequest(status, intent string, duration float64) {
+	m.NLURequestsTotal.WithLabelValues(status, intent).Inc()
+	m.NLUDurationSeconds.WithLabelValues(status).Observe(duration)
+}
+
+// RecordNLUFallback records an NLU fallback due to API error
+func (m *Metrics) RecordNLUFallback() {
+	m.NLUFallbackTotal.Inc()
 }
 
 // Registry returns the custom Prometheus registry
