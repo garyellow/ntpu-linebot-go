@@ -87,42 +87,45 @@ func TestEmbeddingClient_Embed_ContextCanceled(t *testing.T) {
 	}
 }
 
-func TestNewRateLimiter(t *testing.T) {
-	rl := newRateLimiter(1000) // 1000 RPM
-	if rl == nil {
-		t.Fatal("newRateLimiter returned nil")
+func TestRateLimiter_Integration(t *testing.T) {
+	// Create an embedding client and verify rate limiter is set up
+	client := NewEmbeddingClient("test-key")
+	if client.rateLimiter == nil {
+		t.Fatal("rateLimiter is nil")
 	}
 
-	// Check initial state
-	expectedRefillRate := 1000.0 / 60.0 // ~16.67 tokens/sec
-	if rl.refillRate != expectedRefillRate {
-		t.Errorf("refillRate = %v, want %v", rl.refillRate, expectedRefillRate)
+	// Verify rate limiter works - should allow first request
+	if !client.rateLimiter.Allow() {
+		t.Error("First Allow() should return true")
 	}
 }
 
-func TestRateLimiter_Wait(t *testing.T) {
-	// Create a rate limiter with high rate so it doesn't block
-	rl := newRateLimiter(6000) // 100 tokens/sec
+func TestRateLimiter_Wait_WithContext(t *testing.T) {
+	// Create an embedding client
+	client := NewEmbeddingClient("test-key")
 	ctx := context.Background()
 
 	// First call should succeed immediately
 	start := time.Now()
-	err := rl.wait(ctx)
+	err := client.rateLimiter.Wait(ctx)
 	elapsed := time.Since(start)
 
 	if err != nil {
-		t.Errorf("wait() error = %v", err)
+		t.Errorf("Wait() error = %v", err)
 	}
 	// Should be nearly instant (less than 100ms)
 	if elapsed > 100*time.Millisecond {
-		t.Errorf("wait() took too long: %v", elapsed)
+		t.Errorf("Wait() took too long: %v", elapsed)
 	}
 }
 
 func TestRateLimiter_Wait_ContextCanceled(t *testing.T) {
-	// Create a rate limiter with very low rate
-	rl := newRateLimiter(1) // 1 request per minute
-	rl.tokens = 0           // Exhaust tokens
+	// Create an embedding client with exhausted tokens
+	client := NewEmbeddingClient("test-key")
+	// Consume available tokens
+	for client.rateLimiter.Allow() {
+		// Keep consuming until rate limited
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -132,7 +135,7 @@ func TestRateLimiter_Wait_ContextCanceled(t *testing.T) {
 		cancel()
 	}()
 
-	err := rl.wait(ctx)
+	err := client.rateLimiter.Wait(ctx)
 	if err == nil {
 		t.Error("Expected error for canceled context, got nil")
 	}

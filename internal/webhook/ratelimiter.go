@@ -5,16 +5,13 @@ import (
 	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
+	"github.com/garyellow/ntpu-linebot-go/internal/ratelimit"
 )
 
-// RateLimiter implements a token bucket rate limiter for LINE API calls
+// RateLimiter wraps the shared ratelimit.Limiter for LINE API calls.
 // LINE API has rate limits: https://developers.line.biz/en/reference/messaging-api/#rate-limits
 type RateLimiter struct {
-	mu         sync.Mutex
-	tokens     float64
-	maxTokens  float64
-	refillRate float64 // tokens per second
-	lastRefill time.Time
+	*ratelimit.Limiter
 }
 
 // NewRateLimiter creates a new rate limiter
@@ -22,60 +19,19 @@ type RateLimiter struct {
 // refillRate: number of tokens to add per second
 func NewRateLimiter(maxTokens, refillRate float64) *RateLimiter {
 	return &RateLimiter{
-		tokens:     maxTokens,
-		maxTokens:  maxTokens,
-		refillRate: refillRate,
-		lastRefill: time.Now(),
+		Limiter: ratelimit.New(maxTokens, refillRate),
 	}
-}
-
-// Allow checks if a request is allowed based on rate limit
-// Returns true if the request is allowed, false otherwise
-func (rl *RateLimiter) Allow() bool {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-
-	now := time.Now()
-	elapsed := now.Sub(rl.lastRefill).Seconds()
-
-	// Refill tokens
-	rl.tokens += elapsed * rl.refillRate
-	if rl.tokens > rl.maxTokens {
-		rl.tokens = rl.maxTokens
-	}
-	rl.lastRefill = now
-
-	// Check if we have tokens available
-	if rl.tokens >= 1.0 {
-		rl.tokens -= 1.0
-		return true
-	}
-
-	return false
 }
 
 // WaitForToken waits until a token is available
 // Returns immediately if a token is available, otherwise blocks
 func (rl *RateLimiter) WaitForToken() {
-	for !rl.Allow() {
-		time.Sleep(100 * time.Millisecond)
-	}
+	rl.Limiter.WaitSimple()
 }
 
 // GetAvailableTokens returns the current number of available tokens
 func (rl *RateLimiter) GetAvailableTokens() float64 {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-
-	now := time.Now()
-	elapsed := now.Sub(rl.lastRefill).Seconds()
-
-	tokens := rl.tokens + (elapsed * rl.refillRate)
-	if tokens > rl.maxTokens {
-		tokens = rl.maxTokens
-	}
-
-	return tokens
+	return rl.Limiter.Available()
 }
 
 // UserRateLimiter tracks rate limits per user
@@ -142,7 +98,7 @@ func (url *UserRateLimiter) cleanupLoop() {
 			cleanedCount := 0
 			// Remove limiters that are at maximum capacity (inactive users)
 			for userID, limiter := range url.limiters {
-				if limiter.GetAvailableTokens() >= limiter.maxTokens {
+				if limiter.IsFull() {
 					delete(url.limiters, userID)
 					cleanedCount++
 				}
