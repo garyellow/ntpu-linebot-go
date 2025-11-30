@@ -226,3 +226,4 @@ Fallback → getHelpMessage() + Warning Log
 - **Embedding client**: `internal/genai/embedding.go` (Gemini API)
 - **NLU intent parser**: `internal/genai/intent.go` (Function Calling)
 - **Syllabus scraper**: `internal/syllabus/scraper.go` (course syllabus extraction)
+- **Timeout constants**: `internal/config/timeouts.go` (all timeout/interval constants)

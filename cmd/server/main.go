@@ -19,7 +19,6 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
-	"github.com/garyellow/ntpu-linebot-go/internal/timeouts"
 	"github.com/garyellow/ntpu-linebot-go/internal/warmup"
 	"github.com/garyellow/ntpu-linebot-go/internal/webhook"
 	"github.com/gin-gonic/gin"
@@ -162,13 +161,13 @@ func main() {
 	setupRoutes(router, webhookHandler, db, registry, scraperClient, stickerManager)
 
 	// Create HTTP server with timeouts optimized for LINE webhook handling
-	// See internal/timeouts/timeouts.go for detailed explanations
+	// See internal/config/timeouts.go for detailed explanations
 	server := &http.Server{
 		Addr:         ":" + cfg.Port,
 		Handler:      router,
-		ReadTimeout:  timeouts.WebhookHTTPRead,
-		WriteTimeout: timeouts.WebhookHTTPWrite,
-		IdleTimeout:  timeouts.WebhookHTTPIdle,
+		ReadTimeout:  config.WebhookHTTPRead,
+		WriteTimeout: config.WebhookHTTPWrite,
+		IdleTimeout:  config.WebhookHTTPIdle,
 	}
 
 	// Start background goroutines
