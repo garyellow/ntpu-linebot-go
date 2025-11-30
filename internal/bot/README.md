@@ -23,6 +23,19 @@ type Handler interface {
 }
 ```
 
+### NLU DispatchIntent（可選）
+
+各模組額外實作 `DispatchIntent` 方法支援 NLU 意圖分發（需設定 `GEMINI_API_KEY`）：
+
+```go
+// DispatchIntent 處理 NLU 解析後的意圖
+// intent: 意圖名稱（如 "search", "semantic", "uid"）
+// params: 解析出的參數（如 {"keyword": "微積分"}）
+func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[string]string) ([]messaging_api.MessageInterface, error)
+```
+
+此方法不在 `Handler` 介面中定義（NLU 為可選功能），但所有模組都有實作。詳見 `internal/genai/README.md`。
+
 ## 模組概覽
 
 ### id/ - 學號查詢
