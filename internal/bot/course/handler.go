@@ -104,6 +104,11 @@ func (h *Handler) SetVectorDB(vectorDB *rag.VectorDB) {
 	h.vectorDB = vectorDB
 }
 
+// IsSemanticSearchEnabled returns true if semantic search is enabled
+func (h *Handler) IsSemanticSearchEnabled() bool {
+	return h.vectorDB != nil && h.vectorDB.IsEnabled()
+}
+
 // Intent names for NLU dispatcher
 const (
 	IntentSearch   = "search"   // Unified course/teacher search

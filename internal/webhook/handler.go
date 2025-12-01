@@ -459,11 +459,23 @@ func (h *Handler) handleStickerMessage(_ webhook.MessageEvent) []messaging_api.M
 func (h *Handler) handleFollowEvent(_ webhook.FollowEvent) ([]messaging_api.MessageInterface, error) {
 	h.logger.Info("New user followed the bot")
 
+	// Check feature availability
+	nluEnabled := h.intentParser != nil && h.intentParser.IsEnabled()
+
 	// Send welcome message
 	sender := lineutil.GetSender("初階小幫手", h.stickerManager)
+
+	// Build welcome messages based on features
+	var featureHint string
+	if nluEnabled {
+		featureHint = "💬 直接用自然語言問我！\n或輸入「使用說明」查看詳細功能"
+	} else {
+		featureHint = "使用說明請點選下方選單\n或輸入「使用說明」查看"
+	}
+
 	messages := []messaging_api.MessageInterface{
 		lineutil.NewTextMessageWithConsistentSender("泥好~~我是北大查詢小工具🔍", sender),
-		lineutil.NewTextMessageWithConsistentSender("使用說明請點選下方選單\n或輸入「使用說明」查看", sender),
+		lineutil.NewTextMessageWithConsistentSender(featureHint, sender),
 		lineutil.NewTextMessageWithConsistentSender("有疑問可以先去看常見問題\n若無法解決或有發現 Bug\n歡迎到 GitHub 提出", sender),
 		lineutil.NewTextMessageWithConsistentSender("部分內容是由相關資料推斷\n不一定為正確資訊", sender),
 		lineutil.NewTextMessageWithConsistentSender("資料來源：國立臺北大學\n數位學苑2.0(已無新資料)\n校園聯絡簿\n課程查詢系統", sender),
@@ -586,27 +598,26 @@ func (h *Handler) getHelpMessage() []messaging_api.MessageInterface {
 		// NLU enabled - emphasize natural language capability
 		helpText = "🔍 NTPU 查詢小工具\n\n" +
 			"💬 直接用自然語言問我，例如：\n" +
-			"   • 「微積分的課有哪些」\n" +
-			"   • 「王小明的學號」\n" +
-			"   • 「資工系電話」\n\n" +
+			"• 「微積分的課有哪些」\n" +
+			"• 「王小明的學號」\n" +
+			"• 「資工系電話」\n\n" +
 			"📖 或使用關鍵字查詢：\n" +
-			"   • 課程：「課程 微積分」\n" +
-			"   • 學號：「學生 王小明」\n" +
-			"   • 聯絡：「聯絡 資工系」\n\n" +
+			"• 課程：「課程 微積分」\n" +
+			"• 學生：「學生 王小明」\n" +
+			"• 聯繫：「聯繫 資工系」\n\n" +
 			"💡 輸入「使用說明」查看完整說明"
 	} else {
 		// NLU disabled - emphasize keyword format
 		helpText = "🔍 NTPU 查詢小工具\n\n" +
 			"📚 課程查詢\n" +
-			"   • 課程/教師：「課程 微積分」、「課 王小明」\n" +
-			"   • 課程編號：「1131U0001」\n\n" +
-			"🎓 學號查詢\n" +
-			"   • 直接輸入：「412345678」\n" +
-			"   • 姓名查詢：「學生 王小明」\n" +
-			"   • 按學年查：「學年 112」\n\n" +
+			"• 課程/教師：「課程 微積分」\n" +
+			"• 課程編號：直接輸入編號\n\n" +
+			"🎓 學生查詢\n" +
+			"• 學號/姓名：「學生 王小明」\n" +
+			"• 按學年查：「學年 112」\n\n" +
 			"📞 聯絡資訊\n" +
-			"   • 單位查詢：「聯絡 資工系」\n" +
-			"   • 緊急電話：「緊急」\n\n" +
+			"• 單位查詢：「聯繫 資工系」\n" +
+			"• 緊急電話：「緊急」\n\n" +
 			"💡 輸入「使用說明」查看完整說明"
 	}
 
@@ -743,38 +754,73 @@ func (h *Handler) dispatchIntent(ctx context.Context, result *genai.ParseResult)
 }
 
 // getDetailedInstructionMessages returns detailed instruction messages
+// Content varies based on whether NLU and semantic search are enabled
 func (h *Handler) getDetailedInstructionMessages() []messaging_api.MessageInterface {
 	senderName := "小幫手"
 
+	// Check feature availability
+	nluEnabled := h.intentParser != nil && h.intentParser.IsEnabled()
+	semanticEnabled := h.courseHandler != nil && h.courseHandler.IsSemanticSearchEnabled()
+
 	// Message 1: Main instruction text
-	instructionText := "使用說明：\n\n" +
-		"輸入「學生 {學號}」查詢學生\n" +
-		"輸入「學生 {姓名}」查詢學生\n" +
-		"輸入「科系 {系名}」查詢系代碼\n" +
-		"輸入「系代碼 {系代碼}」查詢系名\n" +
-		"輸入「學年 {入學年份}」後選科系查學生名單\n\n" +
-		"輸入「課程 {課程名/教師名}」搜尋課程\n" +
-		"輸入「課程 {學年} {課程名}」查詢歷史課程\n\n" +
-		"輸入「聯繫 {單位/姓名}」尋找聯繫方式\n\n" +
-		"PS 符號{}中的部分要換成實際值\n" +
-		"PPS 學生相關功能已無113學年後的資料"
+	// Common content for both NLU enabled/disabled
+	baseInstructions := "• 學生：「學生 {學號/姓名}」\n" +
+		"• 科系：「科系 {系名}」「系代碼 {代碼}」\n" +
+		"• 學年：「學年 {入學年}」選科系查名單\n" +
+		"• 課程：「課程 {課名/教師}」\n" +
+		"• 歷史：「課程 {學年} {課名}」\n" +
+		"• 聯繫：「聯繫 {單位/姓名}」\n" +
+		"• 緊急：「緊急」查看緊急電話"
+	if semanticEnabled {
+		baseInstructions += "\n• 找課：「找課 {描述}」語意搜尋"
+	}
+
+	var instructionText string
+	if nluEnabled {
+		// NLU enabled - emphasize natural language first
+		instructionText = "使用說明：\n\n" +
+			"💬 直接用自然語言問我！\n" +
+			"例如「微積分的課」、「王小明學號」\n\n" +
+			"📖 或使用關鍵字查詢：\n" +
+			baseInstructions +
+			"\n\n⚠️ 學生功能已無113學年後的資料"
+	} else {
+		// NLU disabled - keyword format only
+		instructionText = "使用說明：\n\n" +
+			baseInstructions +
+			"\n\nPS 符號{}請換成實際值\n" +
+			"⚠️ 學生功能已無113學年後的資料"
+	}
 
 	// Message 2: Examples
-	currentYear := time.Now().Year()
-	lastYear := currentYear - 1
-	rocYear := lastYear - 1911
+	// Common keyword examples for both versions
+	rocYear := time.Now().Year() - 1 - 1911 // Last year in ROC format
+	baseExamples := "• `學生 412345678`、`學生 林小明`\n" +
+		"• `科系 資工系`、`系代碼 85`\n" +
+		fmt.Sprintf("• `學年 %d`\n", rocYear) +
+		"• `課程 程式設計`、`課程 110 微積分`\n" +
+		"• `聯繫 資工系`、`緊急`"
+	if semanticEnabled {
+		baseExamples += "\n• `找課 想學程式設計`"
+	}
 
-	exampleText := "範例：\n\n" +
-		"學號：`學生 412345678`\n" +
-		"姓名：`學生 小明` or `學生 林小明`\n" +
-		"系名：`科系 資工系` or `科系 資訊工程學系`\n" +
-		"系代碼：`系代碼 85`\n" +
-		fmt.Sprintf("入學年：`學年 %d` or `學年 %d`\n\n", rocYear, lastYear) +
-		"課程：`課程 程式設計`\n" +
-		"歷史課程：`課程 110 微積分`\n" +
-		"教師：`課 李小美`、`課程 王`\n\n" +
-		"聯繫：`聯繫 資工系`\n\n" +
-		"PS 符號``中的部分是實際要輸入的"
+	var exampleText string
+	if nluEnabled {
+		// NLU enabled - show natural language examples first
+		exampleText = "範例：\n\n" +
+			"💬 自然語言：\n" +
+			"• 「微積分有哪些課」\n" +
+			"• 「王小明老師的課表」\n" +
+			"• 「資工系辦公室電話」\n" +
+			"• 「圖書館怎麼聯絡」\n\n" +
+			"📖 關鍵字：\n" +
+			baseExamples
+	} else {
+		// NLU disabled - keyword examples only
+		exampleText = "範例：\n\n" +
+			baseExamples +
+			"\n\nPS 符號``中的部分是實際輸入值"
+	}
 
 	// Message 3: Disclaimer
 	disclaimerText := "部分內容是由相關資料推斷\n不一定為正確資訊"
