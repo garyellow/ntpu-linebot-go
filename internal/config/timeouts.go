@@ -76,8 +76,16 @@ const (
 	// CacheCleanupInterval is how often expired cache entries are deleted.
 	CacheCleanupInterval = 12 * time.Hour
 
+	// CacheCleanupInitialDelay is the delay before first cache cleanup.
+	// Allows server to stabilize before running cleanup.
+	CacheCleanupInitialDelay = 5 * time.Minute
+
 	// StickerRefreshInterval is how often sticker URLs are refreshed.
 	StickerRefreshInterval = 24 * time.Hour
+
+	// StickerRefreshInitialDelay is the delay before first sticker refresh.
+	// Allows server to stabilize before running refresh.
+	StickerRefreshInitialDelay = 1 * time.Hour
 
 	// MetricsUpdateInterval is how often cache size metrics are updated.
 	MetricsUpdateInterval = 5 * time.Minute

@@ -2,23 +2,35 @@
 
 LINE chatbot for NTPU (National Taipei University) providing student ID lookup, contact directory, and course queries. Built with Go, emphasizing anti-scraping measures, persistent caching, and observability.
 
-## Architecture: 3-Layer Request Flow
+## Architecture: Async Webhook Processing (2025 Best Practice)
 
 ```
-LINE Webhook → Gin Handler (60s timeout) → Bot Module Dispatcher
-                ↓ (signature validation, rate limiting)
-      Bot Handlers (id/contact/course)
+LINE Webhook → Gin Handler
+                ↓ (signature validation - synchronous)
+          HTTP 200 OK (< 2s)
+                ↓
+          [Goroutine] Async Event Processing
+                ↓ (Loading Animation + rate limiting)
+      Bot Module Dispatcher
                 ↓ (keyword matching via CanHandle())
+      Bot Handlers (id/contact/course)
+                ↓ (detached context with 60s timeout)
       Storage Repository (cache-first)
                 ↓ (7-day TTL check)
       Scraper Client (rate-limited)
                 ↓ (exponential backoff, failover URLs)
           NTPU Websites (lms/sea)
+                ↓
+      Reply via Reply Token (< 30s)
 ```
 
 **Critical Flow Details:**
-- **Context timeout**: All bot operations inherit 60s deadline from webhook (`internal/webhook/handler.go:processCtx`)
+- **Async processing**: HTTP 200 returned immediately after signature verification (< 2s), events processed in goroutine
+- **LINE Best Practice**: Responds within 2s to prevent request_timeout errors, processes asynchronously to handle long operations
+- **Context handling**: Bot operations use detached context (`context.WithoutCancel`) with 60s timeout, independent from HTTP request lifecycle
+- **Detached context rationale**: LINE may close connection before processing completes; detached context ensures DB queries and scraping finish, reply token remains valid (~20 min)
 - **Message batching**: LINE allows max 5 messages per reply; webhook auto-truncates to 4 + warning
+- **Reference**: https://developers.line.biz/en/docs/partner-docs/development-guidelines/
 
 ## Bot Module Registration Pattern
 
@@ -64,10 +76,11 @@ LINE Webhook → Gin Handler (60s timeout) → Bot Module Dispatcher
 
 **Background Jobs** (`cmd/server/main.go`):
 - **Daily Warmup**: Every day at 3:00 AM, refreshes all data modules unconditionally
-  - **Concurrent**: id, contact, sticker, course - no dependencies between them
+  - **Concurrent**: id, contact, course - no dependencies between them
   - **Dependency**: syllabus waits for course to complete (needs course data), runs in parallel with others
+  - **Sticker**: Handled separately by `refreshStickers` (every 24h, not included in daily warmup)
 - **Cache Cleanup**: Every 12 hours, deletes data past Hard TTL (7 days) + VACUUM
-- **Sticker Refresh**: Every 24 hours
+- **Sticker Refresh**: Every 24 hours (separate from daily warmup)
 
 **Data availability**:
 - Student: 101-112 學年度 (≥113 shows deprecation notice)
@@ -217,14 +230,19 @@ Fallback → getHelpMessage() + Warning Log
 ## Key File Locations
 
 - **Entry points**: `cmd/server/main.go`, `cmd/healthcheck/main.go`
+- **Server organization**:
+  - `cmd/server/main.go` - Entry point and initialization
+  - `cmd/server/routes.go` - HTTP routes configuration
+  - `cmd/server/middleware.go` - Security and logging middleware
+  - `cmd/server/jobs.go` - Background jobs (cleanup, warmup, metrics)
+- **Webhook handler**: `internal/webhook/handler.go:Handle()` (async processing)
 - **Warmup module**: `internal/warmup/warmup.go` (background cache warming)
-- **Webhook router**: `internal/webhook/handler.go:handleMessageEvent()`
 - **Bot module interface**: `internal/bot/handler.go`
 - **DB schema**: `internal/storage/schema.go`
 - **LINE utilities**: `internal/lineutil/builder.go` (use instead of raw SDK)
 - **Sticker manager**: `internal/sticker/sticker.go` (avatar URLs for messages)
 - **Semantic search**: `internal/rag/vectordb.go` (chromem-go wrapper)
 - **Embedding client**: `internal/genai/embedding.go` (Gemini API)
-- **NLU intent parser**: `internal/genai/intent.go` (Function Calling)
+- **NLU intent parser**: `internal/genai/intent.go` (Function Calling with Close method)
 - **Syllabus scraper**: `internal/syllabus/scraper.go` (course syllabus extraction)
 - **Timeout constants**: `internal/config/timeouts.go` (all timeout/interval constants)

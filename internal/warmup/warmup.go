@@ -89,6 +89,12 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 		moduleName := module // Capture for goroutine
 		go func() {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					log.WithField("panic", r).WithField("module", moduleName).Error("Panic in warmup module")
+					errChan <- fmt.Errorf("%s module: panic: %v", moduleName, r)
+				}
+			}()
 
 			switch moduleName {
 			case "id":
@@ -118,6 +124,12 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 		go func() {
 			defer wg.Done()
 			defer close(courseDone) // Signal course completion
+			defer func() {
+				if r := recover(); r != nil {
+					log.WithField("panic", r).WithField("module", "course").Error("Panic in warmup module")
+					errChan <- fmt.Errorf("course module: panic: %v", r)
+				}
+			}()
 
 			if err := warmupCourseModule(ctx, db, client, log, stats, opts.Metrics); err != nil {
 				log.WithError(err).Error("Course module warmup failed")
@@ -134,6 +146,12 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					log.WithField("panic", r).WithField("module", "syllabus").Error("Panic in warmup module")
+					errChan <- fmt.Errorf("syllabus module: panic: %v", r)
+				}
+			}()
 
 			// Wait for course module to complete (syllabus needs course data)
 			if hasCourse {
@@ -169,10 +187,6 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 		errs = append(errs, err)
 	}
 
-	if len(errs) > 0 {
-		log.WithField("error_count", len(errs)).Warn("Some modules failed during warmup")
-	}
-
 	duration := time.Since(startTime)
 	log.WithField("duration", duration).
 		WithField("students", stats.Students.Load()).
@@ -187,6 +201,13 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 		opts.Metrics.RecordWarmupDuration(duration.Seconds())
 	}
 
+	// Return combined error if any modules failed
+	// Note: We still return stats to allow partial success usage
+	if len(errs) > 0 {
+		log.WithField("error_count", len(errs)).Warn("Some modules failed during warmup")
+		return stats, errors.Join(errs...)
+	}
+
 	return stats, nil
 }
 
@@ -197,6 +218,14 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 //nolint:contextcheck // Intentionally using context.Background() for independent background operation
 func RunInBackground(_ context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, opts Options) {
 	go func() {
+		// Recover from panics to prevent server crash
+		// Goroutine runs independently from HTTP request lifecycle
+		defer func() {
+			if r := recover(); r != nil {
+				log.WithField("panic", r).Error("Panic in background cache warming")
+			}
+		}()
+
 		log.WithField("modules", opts.Modules).
 			Info("Starting background cache warming")
 

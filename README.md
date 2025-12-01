@@ -74,7 +74,7 @@ docker compose up -d
 
 ```bash
 # 1. Clone 專案
-gt clone https://github.com/garyellow/ntpu-linebot-go.git
+git clone https://github.com/garyellow/ntpu-linebot-go.git
 cd ntpu-linebot-go
 
 # 2. 安裝依賴

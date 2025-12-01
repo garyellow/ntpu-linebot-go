@@ -5,6 +5,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -174,7 +175,8 @@ func configureConnection(conn *sql.DB, readOnly bool) error {
 	return nil
 }
 
-// Close closes both reader and writer database connections
+// Close closes both reader and writer database connections.
+// Returns all errors joined together (Go 1.20+).
 func (db *DB) Close() error {
 	var errs []error
 	if db.reader != nil {
@@ -187,10 +189,7 @@ func (db *DB) Close() error {
 			errs = append(errs, fmt.Errorf("failed to close writer: %w", err))
 		}
 	}
-	if len(errs) > 0 {
-		return errs[0] // Return first error
-	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // Writer returns the writer connection for write operations.

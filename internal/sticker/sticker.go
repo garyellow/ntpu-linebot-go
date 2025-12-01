@@ -92,6 +92,12 @@ func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
 	// Fetch Spy Family stickers concurrently with retry
 	for _, url := range spyFamilyURLs {
 		go func(u string) {
+			defer func() {
+				if r := recover(); r != nil {
+					m.logger.WithField("panic", r).WithField("url", u).Error("Panic in sticker fetch")
+					results <- result{source: "spy_family", err: fmt.Errorf("panic: %v", r)}
+				}
+			}()
 			stickers, err := m.fetchWithRetry(ctx, u, "spy_family", m.fetchSpyFamilyStickers, 3)
 			results <- result{stickers: stickers, source: "spy_family", err: err}
 		}(url)
@@ -99,6 +105,12 @@ func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
 
 	// Fetch Ichigo Production stickers with retry
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				m.logger.WithField("panic", r).Error("Panic in ichigo sticker fetch")
+				results <- result{source: "ichigo", err: fmt.Errorf("panic: %v", r)}
+			}
+		}()
 		stickers, err := m.fetchWithRetry(ctx, ichigoURL, "ichigo", m.fetchIchigoStickers, 3)
 		results <- result{stickers: stickers, source: "ichigo", err: err}
 	}()
