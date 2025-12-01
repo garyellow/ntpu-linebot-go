@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
+	"github.com/garyellow/ntpu-linebot-go/internal/config"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
@@ -101,6 +102,11 @@ func NewHandler(db *storage.DB, scraper *scraper.Client, metrics *metrics.Metric
 // This is optional - if not set, semantic search is disabled
 func (h *Handler) SetVectorDB(vectorDB *rag.VectorDB) {
 	h.vectorDB = vectorDB
+}
+
+// IsSemanticSearchEnabled returns true if semantic search is enabled
+func (h *Handler) IsSemanticSearchEnabled() bool {
+	return h.vectorDB != nil && h.vectorDB.IsEnabled()
 }
 
 // Intent names for NLU dispatcher
@@ -600,7 +606,11 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 	if h.vectorDB != nil && h.vectorDB.IsEnabled() {
 		log.Infof("No keyword results for %s, trying semantic search...", searchTerm)
 
-		semanticResults, err := h.vectorDB.Search(ctx, searchTerm, 5)
+		// Use detached context to prevent cancellation from request context
+		searchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), config.SemanticSearchTimeout)
+		defer cancel()
+		semanticResults, err := h.vectorDB.Search(searchCtx, searchTerm, 5)
+
 		if err == nil && len(semanticResults) > 0 {
 			// Convert semantic results to courses
 			var semanticCourses []storage.Course
@@ -1046,8 +1056,13 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 
 	log.Infof("Performing semantic search for: %s", query)
 
+	// Use a detached context for embedding API calls to prevent cancellation
+	// when the HTTP request context is canceled (e.g., LINE server closes connection)
+	searchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), config.SemanticSearchTimeout)
+	defer cancel()
+
 	// Perform semantic search
-	results, err := h.vectorDB.Search(ctx, query, 10)
+	results, err := h.vectorDB.Search(searchCtx, query, 10)
 	if err != nil {
 		log.WithError(err).Warn("Semantic search failed")
 		h.metrics.RecordSemanticSearch("error", time.Since(startTime).Seconds(), 0, "direct")

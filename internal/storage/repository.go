@@ -113,6 +113,10 @@ func (db *DB) SearchStudentsByName(ctx context.Context, name string) ([]Student,
 		students = append(students, student)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating student rows: %w", err)
+	}
+
 	return students, nil
 }
 
@@ -136,6 +140,10 @@ func (db *DB) GetStudentsByYearDept(ctx context.Context, year int, dept string) 
 			return nil, fmt.Errorf("failed to scan student row: %w", err)
 		}
 		students = append(students, student)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating student rows: %w", err)
 	}
 
 	return students, nil
@@ -195,6 +203,10 @@ func (db *DB) GetAllStudents(ctx context.Context) ([]Student, error) {
 			return nil, fmt.Errorf("failed to scan student row: %w", err)
 		}
 		students = append(students, student)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating student rows: %w", err)
 	}
 
 	return students, nil

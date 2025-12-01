@@ -56,7 +56,11 @@ func RetryWithBackoff(ctx context.Context, maxRetries int, initialDelay time.Dur
 		if jitterValue < 0 {
 			jitterValue = -jitterValue
 		}
-		jitter := time.Duration(jitterValue % (int64(delay) / 2))
+		halfDelay := int64(delay) / 2
+		if halfDelay == 0 {
+			halfDelay = 1 // Prevent division by zero
+		}
+		jitter := time.Duration(jitterValue % halfDelay)
 		delay = delay - delay/4 + jitter
 
 		// Wait for delay or context cancellation

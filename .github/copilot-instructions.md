@@ -35,6 +35,7 @@ LINE Webhook → Gin Handler (60s timeout) → Bot Module Dispatcher
 
 **Course Module**: Smart semester detection (`semester.go`), UID regex (`(?i)\d{3,4}[umnp]\d{4}`), max 40 results, Flex Message carousels
 - **Semantic search**: `找課` keyword triggers embedding-based search using syllabus content (requires `GEMINI_API_KEY`)
+- **Detached context**: Uses `context.WithoutCancel()` to prevent request context cancellation from aborting embedding API calls
 - **Fallback**: Keyword search → semantic search (when no results and VectorDB enabled)
 
 **Contact Module**: Emergency phones (hardcoded), multilingual keywords, organization/individual contacts, Flex Message cards
@@ -77,7 +78,7 @@ LINE Webhook → Gin Handler (60s timeout) → Bot Module Dispatcher
 
 **Scraper** (`internal/scraper/ratelimiter.go`): Fixed 2s delay after success, exponential backoff on failure (4s initial, max 5 retries, ±25% jitter), 60s HTTP timeout per request
 
-**Webhook**: Per-user (10 tokens, 1 token/3s refill), global (80 rps), silently drops excess requests
+**Webhook**: Per-user (6 tokens, 1 token/5s refill), global (80 rps), silently drops excess requests
 
 **LINE SDK Conventions**
 

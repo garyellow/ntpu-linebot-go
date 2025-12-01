@@ -156,7 +156,7 @@ X-Line-Signature: {signature}
 
 **限制**:
 - Request body < 1MB
-- 處理超時: 25 秒
+- 處理超時: 60 秒
 - Global rate limit: 80 rps
 - Per-user rate limit: 10 rps
 
