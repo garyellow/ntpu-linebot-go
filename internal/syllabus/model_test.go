@@ -130,6 +130,24 @@ func TestFields_IsEmpty(t *testing.T) {
 			},
 			want: false,
 		},
+		{
+			name: "all whitespace only",
+			fields: Fields{
+				Objectives: "   ",
+				Outline:    "\n\n",
+				Schedule:   "\t\t",
+			},
+			want: true,
+		},
+		{
+			name: "mixed whitespace and content",
+			fields: Fields{
+				Objectives: "   ",
+				Outline:    "Valid content",
+				Schedule:   "\t\t",
+			},
+			want: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -183,6 +201,28 @@ func TestFields_ChunksForEmbedding(t *testing.T) {
 				Objectives: "培養能力",
 			},
 			courseTitle: "",
+			wantCount:   1,
+			wantTypes:   []ChunkType{ChunkTypeObjectives},
+		},
+		{
+			name: "whitespace only fields are skipped",
+			fields: Fields{
+				Objectives: "   ",    // whitespace only - should be skipped
+				Outline:    "\n\t\n", // whitespace only - should be skipped
+				Schedule:   "第1週導論",  // valid content
+			},
+			courseTitle: "測試課程",
+			wantCount:   1,
+			wantTypes:   []ChunkType{ChunkTypeSchedule},
+		},
+		{
+			name: "mixed whitespace and content",
+			fields: Fields{
+				Objectives: "   有效的教學目標   ", // has content with leading/trailing whitespace
+				Outline:    "",              // empty - should be skipped
+				Schedule:   "\t",            // whitespace only - should be skipped
+			},
+			courseTitle: "測試課程",
 			wantCount:   1,
 			wantTypes:   []ChunkType{ChunkTypeObjectives},
 		},

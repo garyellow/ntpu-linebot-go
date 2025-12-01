@@ -1171,64 +1171,85 @@ func (h *Handler) formatSemanticSearchResponse(courses []storage.Course, results
 
 // buildSemanticCourseBubble creates a Flex Message bubble for a course with similarity badge
 func (h *Handler) buildSemanticCourseBubble(course storage.Course, similarity float32) *lineutil.FlexBubble {
-	// Similarity badge text and color based on similarity score
-	similarityBadge := fmt.Sprintf("🎯 %.0f%% 相關", similarity*100)
-	similarityColor := getSimilarityColor(similarity)
+	// Similarity badge text based on similarity score (user-friendly labels)
+	similarityBadge, similarityColor := getSimilarityBadge(similarity)
 
-	// Build body components
-	bodyComponents := []messaging_api.FlexComponentInterface{
-		// Course title
-		lineutil.NewFlexText(course.Title).
-			WithWeight("bold").
-			WithSize("lg").
-			WithWrap(true).FlexText,
-		// Similarity badge with dynamic color
-		lineutil.NewFlexText(similarityBadge).
-			WithSize("sm").
-			WithColor(similarityColor).FlexText,
-		// Semester info
-		lineutil.NewFlexText(fmt.Sprintf("%d 學年度 第 %d 學期", course.Year, course.Term)).
-			WithSize("sm").
-			WithColor(lineutil.ColorLabel).FlexText,
+	// Hero: Course title with course code
+	heroTitle := lineutil.FormatCourseTitleWithUID(course.Title, course.UID)
+	hero := lineutil.NewCompactHeroBox(heroTitle)
+
+	// Build body contents with improved layout (matching regular course carousel)
+	// 第一列：相關度 badge
+	contents := []messaging_api.FlexComponentInterface{
+		lineutil.NewFlexBox("horizontal",
+			lineutil.NewFlexText(similarityBadge).WithSize("xs").WithColor(similarityColor).WithFlex(0).FlexText,
+		).WithMargin("none").FlexBox,
+		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 	}
 
-	// Add teachers
+	// 第二列：學期資訊
+	semesterText := lineutil.FormatSemester(course.Year, course.Term)
+	contents = append(contents,
+		lineutil.NewFlexBox("horizontal",
+			lineutil.NewFlexText("📅 開課學期：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
+			lineutil.NewFlexText(semesterText).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).FlexText,
+		).WithMargin("sm").WithSpacing("sm").FlexBox,
+	)
+
+	// 第三列：授課教師
 	if len(course.Teachers) > 0 {
-		teacherText := "👨‍🏫 " + strings.Join(course.Teachers, "、")
-		bodyComponents = append(bodyComponents,
-			lineutil.NewFlexText(teacherText).
-				WithSize("sm").
-				WithColor(lineutil.ColorSubtext).
-				WithWrap(true).FlexText,
+		carouselTeachers := lineutil.FormatTeachers(course.Teachers, 5)
+		contents = append(contents,
+			lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
+			lineutil.NewFlexBox("horizontal",
+				lineutil.NewFlexText("👨‍🏫 授課教師：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
+				lineutil.NewFlexText(carouselTeachers).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).WithWrap(true).FlexText,
+			).WithMargin("sm").WithSpacing("sm").FlexBox,
 		)
 	}
 
-	// Footer with action button
-	footerComponents := []messaging_api.FlexComponentInterface{
-		lineutil.NewFlexButton(&messaging_api.PostbackAction{
-			Label:       "查看詳情",
-			Data:        "course:" + course.UID,
-			DisplayText: "查看課程 " + course.UID,
-		}).WithStyle("primary").WithHeight("sm").WithColor(lineutil.ColorPrimary).FlexButton,
+	// 第四列：上課時間
+	if len(course.Times) > 0 {
+		formattedTimes := lineutil.FormatCourseTimes(course.Times)
+		carouselTimes := lineutil.FormatTimes(formattedTimes, 4)
+		contents = append(contents,
+			lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
+			lineutil.NewFlexBox("horizontal",
+				lineutil.NewFlexText("⏰ 上課時間：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
+				lineutil.NewFlexText(carouselTimes).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).WithWrap(true).FlexText,
+			).WithMargin("sm").WithSpacing("sm").FlexBox,
+		)
 	}
 
-	body := lineutil.NewFlexBox("vertical", bodyComponents...).WithSpacing("sm")
-	footer := lineutil.NewFlexBox("vertical", footerComponents...)
+	// Footer with "View Detail" button
+	displayText := fmt.Sprintf("查詢「%s」課程資訊", lineutil.TruncateRunes(course.Title, 30))
+	footer := lineutil.NewFlexBox("vertical",
+		lineutil.NewFlexButton(
+			lineutil.NewPostbackActionWithDisplayText("📝 查看詳細", displayText, "course:"+course.UID),
+		).WithStyle("primary").WithColor(lineutil.ColorButtonPrimary).WithHeight("sm").FlexButton,
+	).WithSpacing("sm")
 
-	bubble := lineutil.NewFlexBubble(nil, nil, body, footer)
-	bubble.Size = messaging_api.FlexBubbleSIZE_KILO
+	bubble := lineutil.NewFlexBubble(
+		nil,
+		hero.FlexBox,
+		lineutil.NewFlexBox("vertical", contents...).WithSpacing("sm"),
+		footer,
+	)
 	return bubble
 }
 
-// getSimilarityColor returns a color based on similarity score
-// High (>=70%): Primary green, Medium (>=50%): Subtext gray, Low (<50%): Label gray
-func getSimilarityColor(similarity float32) string {
+// getSimilarityBadge returns a user-friendly badge text and color based on similarity score
+// Combines descriptive labels with percentage for transparency
+func getSimilarityBadge(similarity float32) (string, string) {
+	percent := int(similarity * 100)
 	switch {
 	case similarity >= 0.70:
-		return lineutil.ColorPrimary // LINE Green - high relevance
+		return fmt.Sprintf("🎯 高度相關 %d%%", percent), lineutil.ColorPrimary // LINE Green - high relevance
 	case similarity >= 0.50:
-		return lineutil.ColorSubtext // Gray - medium relevance
+		return fmt.Sprintf("✨ 相關 %d%%", percent), lineutil.ColorSubtext // Gray - medium relevance
+	case similarity >= 0.40:
+		return fmt.Sprintf("💡 可能相關 %d%%", percent), lineutil.ColorLabel // Darker gray - low relevance
 	default:
-		return lineutil.ColorLabel // Darker gray - low relevance
+		return fmt.Sprintf("🔍 參考 %d%%", percent), lineutil.ColorNote // Light gray - very low relevance (threshold: 30%)
 	}
 }
