@@ -181,6 +181,11 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				log.WithField("panic", r).Error("Panic in cache cleanup goroutine")
+			}
+		}()
 		cleanupExpiredCache(ctx, db, cfg.CacheTTL, log)
 	}()
 
@@ -188,6 +193,11 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				log.WithField("panic", r).Error("Panic in sticker refresh goroutine")
+			}
+		}()
 		refreshStickers(ctx, stickerManager, log)
 	}()
 
@@ -197,6 +207,11 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				log.WithField("panic", r).Error("Panic in proactive warmup goroutine")
+			}
+		}()
 		proactiveWarmup(ctx, db, scraperClient, stickerManager, log, cfg, vectorDB)
 	}()
 
@@ -205,6 +220,11 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				log.WithField("panic", r).Error("Panic in cache metrics goroutine")
+			}
+		}()
 		updateCacheSizeMetrics(ctx, db, stickerManager, vectorDB, m, log)
 	}()
 

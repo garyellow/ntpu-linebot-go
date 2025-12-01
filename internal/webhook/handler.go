@@ -166,10 +166,22 @@ func (h *Handler) Handle(c *gin.Context) {
 		cb.Events = cb.Events[:MaxEventsPerWebhook] // Limit to prevent DoS
 	}
 
+	// Copy events to avoid race condition after HTTP response completes
+	// The cb variable may be garbage collected after handler returns
+	events := make([]webhook.EventInterface, len(cb.Events))
+	copy(events, cb.Events)
+
 	// Process events asynchronously in goroutine
 	// Each event is processed independently to avoid blocking
 	go func() {
-		for _, event := range cb.Events {
+		// Recover from panics to prevent server crash
+		// Goroutine is outside Gin middleware chain, so gin.Recovery() won't catch panics here
+		defer func() {
+			if r := recover(); r != nil {
+				h.logger.WithField("panic", r).Error("Panic in async event processing")
+			}
+		}()
+		for _, event := range events {
 			h.processEvent(processingCtx, event, start)
 		}
 	}()
@@ -608,15 +620,7 @@ func (h *Handler) getChatID(event webhook.EventInterface) string {
 		return ""
 	}
 
-	switch s := source.(type) {
-	case webhook.UserSource:
-		return s.UserId
-	case webhook.GroupSource:
-		return s.GroupId
-	case webhook.RoomSource:
-		return s.RoomId
-	}
-	return ""
+	return h.getChatIDFromSource(source)
 }
 
 // getChatIDFromSource extracts chat ID directly from a source interface
