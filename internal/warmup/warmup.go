@@ -169,10 +169,6 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 		errs = append(errs, err)
 	}
 
-	if len(errs) > 0 {
-		log.WithField("error_count", len(errs)).Warn("Some modules failed during warmup")
-	}
-
 	duration := time.Since(startTime)
 	log.WithField("duration", duration).
 		WithField("students", stats.Students.Load()).
@@ -185,6 +181,13 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 	// Record warmup metrics if available
 	if opts.Metrics != nil {
 		opts.Metrics.RecordWarmupDuration(duration.Seconds())
+	}
+
+	// Return combined error if any modules failed
+	// Note: We still return stats to allow partial success usage
+	if len(errs) > 0 {
+		log.WithField("error_count", len(errs)).Warn("Some modules failed during warmup")
+		return stats, errors.Join(errs...)
 	}
 
 	return stats, nil

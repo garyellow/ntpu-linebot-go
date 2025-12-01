@@ -76,7 +76,11 @@ func TestBackgroundJobIntervals(t *testing.T) {
 		expected time.Duration
 	}{
 		{"CacheCleanupInterval", CacheCleanupInterval, 12 * time.Hour},
+		{"CacheCleanupInitialDelay", CacheCleanupInitialDelay, 5 * time.Minute},
 		{"StickerRefreshInterval", StickerRefreshInterval, 24 * time.Hour},
+		{"StickerRefreshInitialDelay", StickerRefreshInitialDelay, 1 * time.Hour},
+		{"MetricsUpdateInterval", MetricsUpdateInterval, 5 * time.Minute},
+		{"RateLimiterCleanupInterval", RateLimiterCleanupInterval, 5 * time.Minute},
 	}
 
 	for _, tt := range tests {

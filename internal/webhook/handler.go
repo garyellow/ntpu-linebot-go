@@ -120,7 +120,12 @@ func (h *Handler) SetIntentParser(parser genai.IntentParserInterface) {
 	h.intentParser = parser
 }
 
-// Handle processes incoming webhook requests
+// Handle processes incoming webhook requests following LINE Best Practice:
+// 1. Respond with HTTP 200 within 2 seconds (immediately after signature verification)
+// 2. Process events asynchronously in background goroutines
+// 3. Use reply token within 30 seconds (still valid after HTTP response)
+//
+// Reference: https://developers.line.biz/en/docs/partner-docs/development-guidelines/
 func (h *Handler) Handle(c *gin.Context) {
 	start := time.Now()
 
@@ -132,7 +137,7 @@ func (h *Handler) Handle(c *gin.Context) {
 		return
 	}
 
-	// Parse webhook request with signature verification
+	// Parse webhook request with signature verification (SYNCHRONOUS - must complete before HTTP response)
 	cb, err := webhook.ParseRequest(h.channelSecret, c.Request)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to parse webhook request")
@@ -148,111 +153,126 @@ func (h *Handler) Handle(c *gin.Context) {
 		return
 	}
 
-	// Process each event (max events per webhook per LINE API spec)
+	// Immediately return HTTP 200 OK (LINE Best Practice: respond within 2 seconds)
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+
+	// Capture context for async processing (detached from HTTP request lifecycle)
+	// Use background context to ensure processing completes even if client disconnects
+	processingCtx := context.Background()
+
+	// Validate event count (max events per webhook per LINE API spec)
 	if len(cb.Events) > MaxEventsPerWebhook {
 		h.logger.Warnf("Too many events in single webhook: %d", len(cb.Events))
 		cb.Events = cb.Events[:MaxEventsPerWebhook] // Limit to prevent DoS
 	}
 
-	for _, event := range cb.Events {
-		eventStart := time.Now()
-		var messages []messaging_api.MessageInterface
-		var eventType string
-		var err error
+	// Process events asynchronously in goroutine
+	// Each event is processed independently to avoid blocking
+	go func() {
+		for _, event := range cb.Events {
+			h.processEvent(processingCtx, event, start)
+		}
+	}()
+}
 
-		// Show loading animation BEFORE processing (best effort, non-blocking)
-		// LINE Best Practice: Display loading indicator immediately to
-		// inform users the bot is processing their request.
-		// Note: Only works for 1-on-1 chats; group/room chats are not supported.
-		if loadErr := h.showLoadingAnimation(event); loadErr != nil {
-			h.logger.WithError(loadErr).Debug("Failed to show loading animation")
+// processEvent handles a single webhook event asynchronously
+func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface, webhookStart time.Time) {
+	eventStart := time.Now()
+	var messages []messaging_api.MessageInterface
+	var eventType string
+	var err error
+
+	// Show loading animation BEFORE processing (best effort, non-blocking)
+	// LINE Best Practice: Display loading indicator immediately to
+	// inform users the bot is processing their request.
+	// Note: Only works for 1-on-1 chats; group/room chats are not supported.
+	if loadErr := h.showLoadingAnimation(event); loadErr != nil {
+		h.logger.WithError(loadErr).Debug("Failed to show loading animation")
+	}
+
+	switch e := event.(type) {
+	case webhook.MessageEvent:
+		eventType = "message"
+		messages, err = h.handleMessageEvent(ctx, e)
+	case webhook.PostbackEvent:
+		eventType = "postback"
+		messages, err = h.handlePostbackEvent(ctx, e)
+	case webhook.FollowEvent:
+		eventType = "follow"
+		messages, err = h.handleFollowEvent(e)
+	default:
+		// Unsupported event type, skip
+		h.logger.WithField("event_type", fmt.Sprintf("%T", e)).Debug("Unsupported event type")
+		return
+	}
+
+	// Record metrics
+	duration := time.Since(eventStart).Seconds()
+	status := "success"
+	if err != nil {
+		status = "error"
+		h.logger.WithError(err).WithField("event_type", eventType).Error("Failed to handle event")
+	}
+	h.metrics.RecordWebhook(eventType, status, duration)
+
+	// Send reply if we have messages
+	if len(messages) > 0 && err == nil {
+		// LINE API restriction: max messages per reply
+		if len(messages) > MaxMessagesPerReply {
+			h.logger.Warnf("Message count %d exceeds limit, truncating to %d", len(messages), MaxMessagesPerReply)
+			// Add a warning message at the end (keep room for warning)
+			messages = messages[:MaxMessagesPerReply-1]
+			sender := lineutil.GetSender("系統小幫手", h.stickerManager)
+			messages = append(messages, lineutil.NewTextMessageWithConsistentSender(
+				"ℹ️ 由於訊息數量限制,部分內容未完全顯示。\n請使用更具體的關鍵字縮小搜尋範圍。",
+				sender,
+			))
 		}
 
-		switch e := event.(type) {
-		case webhook.MessageEvent:
-			eventType = "message"
-			messages, err = h.handleMessageEvent(c.Request.Context(), e)
-		case webhook.PostbackEvent:
-			eventType = "postback"
-			messages, err = h.handlePostbackEvent(c.Request.Context(), e)
-		case webhook.FollowEvent:
-			eventType = "follow"
-			messages, err = h.handleFollowEvent(e)
-		default:
-			// Unsupported event type, skip
-			h.logger.WithField("event_type", fmt.Sprintf("%T", e)).Debug("Unsupported event type")
-			continue
+		// Reply to the event
+		replyToken := h.getReplyToken(event)
+		if replyToken == "" {
+			h.logger.Warn("Empty reply token, skipping reply")
+			return
 		}
 
-		// Record metrics
-		duration := time.Since(eventStart).Seconds()
-		status := "success"
-		if err != nil {
-			status = "error"
-			h.logger.WithError(err).WithField("event_type", eventType).Error("Failed to handle event")
+		// Validate reply token format (should not be empty or too short)
+		if len(replyToken) < MinReplyTokenLength {
+			h.logger.WithField("token_length", len(replyToken)).Warn("Invalid reply token format")
+			return
 		}
-		h.metrics.RecordWebhook(eventType, status, duration)
 
-		// Send reply if we have messages
-		if len(messages) > 0 && err == nil {
-			// LINE API restriction: max messages per reply
-			if len(messages) > MaxMessagesPerReply {
-				h.logger.Warnf("Message count %d exceeds limit, truncating to %d", len(messages), MaxMessagesPerReply)
-				// Add a warning message at the end (keep room for warning)
-				messages = messages[:MaxMessagesPerReply-1]
-				sender := lineutil.GetSender("系統小幫手", h.stickerManager)
-				messages = append(messages, lineutil.NewTextMessageWithConsistentSender(
-					"ℹ️ 由於訊息數量限制，部分內容未完全顯示。\n請使用更具體的關鍵字縮小搜尋範圍。",
-					sender,
-				))
-			}
+		// Check global rate limit (user rate limit is checked in handleMessageEvent)
+		if !h.rateLimiter.Allow() {
+			h.logger.Warn("Global rate limit exceeded, waiting...")
+			h.metrics.RecordHTTPError("rate_limit_global", "webhook")
+			h.metrics.RecordRateLimiterDrop("global")
+			h.rateLimiter.WaitForToken()
+		}
 
-			// Reply to the event
-			replyToken := h.getReplyToken(event)
-			if replyToken == "" {
-				h.logger.Warn("Empty reply token, skipping reply")
-				continue
+		// Send reply with error handling
+		if _, err := h.client.ReplyMessage(
+			&messaging_api.ReplyMessageRequest{
+				ReplyToken: replyToken,
+				Messages:   messages,
+			},
+		); err != nil {
+			// Check for specific error types
+			errMsg := err.Error()
+			if strings.Contains(errMsg, "Invalid reply token") {
+				h.logger.WithError(err).Warn("Reply token already used or invalid")
+			} else if strings.Contains(errMsg, "rate limit") {
+				h.logger.WithError(err).Error("Rate limit exceeded")
+			} else {
+				h.logger.WithError(err).WithField("reply_token", replyToken[:8]+"...").Error("Failed to send reply")
 			}
-
-			// Validate reply token format (should not be empty or too short)
-			if len(replyToken) < MinReplyTokenLength {
-				h.logger.WithField("token_length", len(replyToken)).Warn("Invalid reply token format")
-				continue
-			}
-
-			// Check global rate limit (user rate limit is checked in handleMessageEvent)
-			if !h.rateLimiter.Allow() {
-				h.logger.Warn("Global rate limit exceeded, waiting...")
-				h.metrics.RecordHTTPError("rate_limit_global", "webhook")
-				h.metrics.RecordRateLimiterDrop("global")
-				h.rateLimiter.WaitForToken()
-			}
-
-			// Send reply with error handling
-			if _, err := h.client.ReplyMessage(
-				&messaging_api.ReplyMessageRequest{
-					ReplyToken: replyToken,
-					Messages:   messages,
-				},
-			); err != nil {
-				// Check for specific error types
-				errMsg := err.Error()
-				if strings.Contains(errMsg, "Invalid reply token") {
-					h.logger.WithError(err).Warn("Reply token already used or invalid")
-				} else if strings.Contains(errMsg, "rate limit") {
-					h.logger.WithError(err).Error("Rate limit exceeded")
-				} else {
-					h.logger.WithError(err).WithField("reply_token", replyToken[:8]+"...").Error("Failed to send reply")
-				}
-				h.metrics.RecordWebhook(eventType, "reply_error", time.Since(eventStart).Seconds())
-			}
+			h.metrics.RecordWebhook(eventType, "reply_error", time.Since(eventStart).Seconds())
 		}
 	}
 
-	// Return success response
-	duration := time.Since(start).Seconds()
-	h.logger.WithField("duration", duration).Debug("Webhook processed")
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	// Log overall processing duration
+	totalDuration := time.Since(webhookStart).Seconds()
+	h.logger.WithField("total_duration", totalDuration).WithField("event_type", eventType).Debug("Event processed")
 }
 
 // isPersonalChat checks if the event source is a personal (1-on-1) chat
@@ -360,8 +380,15 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 		}
 	}
 
-	// Create context with timeout for bot processing (derived from request context)
-	processCtx, cancel := context.WithTimeout(ctx, h.webhookTimeout)
+	// Create context with timeout for bot processing.
+	// Use WithoutCancel to detach from HTTP request context, preventing
+	// cancellation when client disconnects (e.g., LINE server closes connection).
+	// This ensures database queries and scraping operations complete even if
+	// the original request is canceled, which is important because:
+	// 1. LINE may close the connection before we finish processing
+	// 2. We still want to send the reply via the reply token
+	// 3. Partial work (started DB queries) shouldn't be wasted
+	processCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), h.webhookTimeout)
 	defer cancel()
 
 	// Dispatch to appropriate bot module based on CanHandle
@@ -413,8 +440,9 @@ func (h *Handler) handlePostbackEvent(ctx context.Context, event webhook.Postbac
 		}
 	}
 
-	// Create context with timeout (derived from request context)
-	processCtx, cancel := context.WithTimeout(ctx, h.webhookTimeout)
+	// Create context with timeout for postback processing.
+	// Use WithoutCancel to detach from HTTP request context (same reason as handleMessageEvent).
+	processCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), h.webhookTimeout)
 	defer cancel()
 
 	// Check module prefix or dispatch to all handlers

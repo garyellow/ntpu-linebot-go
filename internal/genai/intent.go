@@ -159,3 +159,10 @@ func (p *IntentParser) parseFunctionCall(fc *genai.FunctionCall) (*ParseResult, 
 func (p *IntentParser) IsEnabled() bool {
 	return p != nil && p.client != nil
 }
+
+// Close releases resources held by the IntentParser.
+// It's safe to call Close multiple times or on nil pointer.
+// Note: genai.Client doesn't require explicit closing in current SDK version.
+func (p *IntentParser) Close() error {
+	return nil
+}

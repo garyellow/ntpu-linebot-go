@@ -296,8 +296,9 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 
 **背景任務排程**:
 - **主動 Warmup**: 每日凌晨 3:00，刷新所有資料模組（含課程大綱）
-  - **並行執行**：id, contact, sticker, course - 彼此無依賴
+  - **並行執行**：id, contact, course - 彼此無依賴
   - **依賴關係**：syllabus 等待 course 完成後開始（需要課程資料），與其他模組並行
+  - **Sticker**：由 `refreshStickers` 獨立處理（每 24 小時），不包含在每日 warmup 中
 - **Cache Cleanup**: 每 12 小時，刪除超過 Hard TTL 的資料 + VACUUM
 - **Sticker Refresh**: 每 24 小時，更新貼圖快取
 
