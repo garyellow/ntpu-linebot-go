@@ -608,8 +608,8 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 
 		// Use detached context to prevent cancellation from request context
 		searchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), config.SemanticSearchTimeout)
+		defer cancel()
 		semanticResults, err := h.vectorDB.Search(searchCtx, searchTerm, 5)
-		cancel()
 
 		if err == nil && len(semanticResults) > 0 {
 			// Convert semantic results to courses
