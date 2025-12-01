@@ -44,8 +44,8 @@ type Config struct {
 	WebhookTimeout time.Duration // Timeout for webhook bot processing
 
 	// Rate Limit Configuration
-	UserRateLimitTokens     float64 // Maximum tokens per user (default: 10)
-	UserRateLimitRefillRate float64 // Tokens refill rate per second (default: 1/3, i.e., 1 token per 3 seconds)
+	UserRateLimitTokens     float64 // Maximum tokens per user (default: 6)
+	UserRateLimitRefillRate float64 // Tokens refill rate per second (default: 1/5, i.e., 1 token per 5 seconds)
 }
 
 // Load reads configuration from environment variables
@@ -82,8 +82,8 @@ func Load() (*Config, error) {
 		WebhookTimeout: getDurationEnv("WEBHOOK_TIMEOUT", WebhookProcessing),
 
 		// Rate Limit Configuration
-		UserRateLimitTokens:     getFloatEnv("USER_RATE_LIMIT_TOKENS", 10.0),
-		UserRateLimitRefillRate: getFloatEnv("USER_RATE_LIMIT_REFILL_RATE", 1.0/3.0),
+		UserRateLimitTokens:     getFloatEnv("USER_RATE_LIMIT_TOKENS", 6.0),
+		UserRateLimitRefillRate: getFloatEnv("USER_RATE_LIMIT_REFILL_RATE", 1.0/5.0),
 	}
 
 	// Validate configuration

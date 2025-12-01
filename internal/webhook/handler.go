@@ -160,6 +160,14 @@ func (h *Handler) Handle(c *gin.Context) {
 		var eventType string
 		var err error
 
+		// Show loading animation BEFORE processing (best effort, non-blocking)
+		// LINE Best Practice: Display loading indicator immediately to
+		// inform users the bot is processing their request.
+		// Note: Only works for 1-on-1 chats; group/room chats are not supported.
+		if loadErr := h.showLoadingAnimation(event); loadErr != nil {
+			h.logger.WithError(loadErr).Debug("Failed to show loading animation")
+		}
+
 		switch e := event.(type) {
 		case webhook.MessageEvent:
 			eventType = "message"
@@ -187,11 +195,6 @@ func (h *Handler) Handle(c *gin.Context) {
 
 		// Send reply if we have messages
 		if len(messages) > 0 && err == nil {
-			// Show loading animation (non-blocking, best effort)
-			if err := h.showLoadingAnimation(event); err != nil {
-				h.logger.WithError(err).Debug("Failed to show loading animation")
-			}
-
 			// LINE API restriction: max messages per reply
 			if len(messages) > MaxMessagesPerReply {
 				h.logger.Warnf("Message count %d exceeds limit, truncating to %d", len(messages), MaxMessagesPerReply)
@@ -484,16 +487,28 @@ func (h *Handler) handleFollowEvent(_ webhook.FollowEvent) ([]messaging_api.Mess
 	return messages, nil
 }
 
-// showLoadingAnimation shows a loading circle animation
+// showLoadingAnimation shows a loading circle animation to inform users
+// the bot is processing their request. This is a LINE 2024 best practice.
+//
+// Important notes:
+//   - Only works for 1-on-1 chats (personal chats); not supported for groups/rooms
+//   - Animation auto-dismisses when a message is sent or after LoadingSeconds
+//   - If called multiple times, the timer resets to the new LoadingSeconds value
+//   - Non-blocking: if the user isn't viewing the chat, no notification is shown
 func (h *Handler) showLoadingAnimation(event webhook.EventInterface) error {
 	chatID := h.getChatID(event)
 	if chatID == "" {
 		return nil
 	}
 
-	// Use ShowLoadingAnimation API
+	// LINE allows 5-60 seconds; we use 20s as a reasonable default
+	// that covers most operations without being excessive.
+	// The animation will auto-dismiss when we send the reply.
+	var loadingSeconds int32 = 20
+
 	req := &messaging_api.ShowLoadingAnimationRequest{
-		ChatId: chatID,
+		ChatId:         chatID,
+		LoadingSeconds: loadingSeconds,
 	}
 
 	if _, err := h.client.ShowLoadingAnimation(req); err != nil {

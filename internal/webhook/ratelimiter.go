@@ -62,8 +62,8 @@ func NewUserRateLimiter(cleanup time.Duration, m *metrics.Metrics) *UserRateLimi
 
 // Allow checks if a request from a specific user is allowed
 // userID: the LINE user ID
-// maxTokens: maximum tokens per user (e.g., 10)
-// refillRate: refill rate per second (e.g., 1.0/3.0 = 1 request per 3 seconds)
+// maxTokens: maximum tokens per user (e.g., 6)
+// refillRate: refill rate per second (e.g., 1.0/5.0 = 1 request per 5 seconds)
 func (url *UserRateLimiter) Allow(userID string, maxTokens, refillRate float64) bool {
 	url.mu.RLock()
 	limiter, exists := url.limiters[userID]

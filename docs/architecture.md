@@ -207,7 +207,7 @@ User Query → Bot Module → Repository Layer
 
 2. **Webhook Level（API 層）**
    - Global: 80 rps（LINE API limit）
-   - Per-User: 10 tokens, refill 1 token/3s
+   - Per-User: 6 tokens, refill 1 token/5s
    - 防止濫用
 
 ### 3. Strategy Pattern（策略模式）
