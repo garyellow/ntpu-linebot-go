@@ -51,9 +51,11 @@ func NewClient(timeout time.Duration, maxRetries int) *Client {
 		httpClient: &http.Client{
 			Timeout: timeout,
 			Transport: &http.Transport{
-				MaxIdleConns:        100,
-				MaxIdleConnsPerHost: 10,
-				IdleConnTimeout:     90 * time.Second,
+				MaxIdleConns:          100,
+				MaxIdleConnsPerHost:   10,
+				IdleConnTimeout:       90 * time.Second,
+				TLSHandshakeTimeout:   10 * time.Second,
+				ResponseHeaderTimeout: 30 * time.Second,
 			},
 		},
 		maxRetries: maxRetries,

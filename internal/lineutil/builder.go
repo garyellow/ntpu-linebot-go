@@ -41,9 +41,10 @@ func NewImageMessage(originalContentURL, previewImageURL string) messaging_api.M
 // The text parameter is the message content.
 // LINE API limits: max 5000 characters per text message
 func NewTextMessage(text string) *messaging_api.TextMessage {
-	// Validate and truncate if necessary (LINE API limit: 5000 chars)
-	if len(text) > 5000 {
-		text = TruncateRunes(text, 4997) + "..."
+	// Validate and truncate if necessary (LINE API limit: 5000 characters, not bytes)
+	runes := []rune(text)
+	if len(runes) > 5000 {
+		text = TruncateRunes(text, 4997)
 	}
 
 	return &messaging_api.TextMessage{
@@ -62,8 +63,8 @@ func NewCarouselTemplate(altText string, columns []CarouselColumn) messaging_api
 	}
 
 	// Validate altText length (max 400 characters)
-	if len(altText) > 400 {
-		altText = TruncateRunes(altText, 397) + "..."
+	if len([]rune(altText)) > 400 {
+		altText = TruncateRunes(altText, 400)
 	}
 
 	templateColumns := make([]messaging_api.CarouselColumn, len(columns))
@@ -118,18 +119,18 @@ func NewButtonsTemplateWithImage(altText, title, text, thumbnailImageURL string,
 	if thumbnailImageURL != "" {
 		maxTextLen = 60
 	}
-	if len(text) > maxTextLen {
-		text = TruncateRunes(text, maxTextLen-3) + "..."
+	if len([]rune(text)) > maxTextLen {
+		text = TruncateRunes(text, maxTextLen)
 	}
 
 	// Validate title length (max 40 characters)
-	if len(title) > 40 {
-		title = TruncateRunes(title, 37) + "..."
+	if len([]rune(title)) > 40 {
+		title = TruncateRunes(title, 40)
 	}
 
 	// Validate altText length (max 400 characters)
-	if len(altText) > 400 {
-		altText = TruncateRunes(altText, 397) + "..."
+	if len([]rune(altText)) > 400 {
+		altText = TruncateRunes(altText, 400)
 	}
 
 	template := &messaging_api.ButtonsTemplate{

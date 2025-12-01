@@ -1057,7 +1057,7 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 	log.Infof("Performing semantic search for: %s", query)
 
 	// Use a detached context for embedding API calls to prevent cancellation
-	// when the HTTP request context is cancelled (e.g., LINE server closes connection)
+	// when the HTTP request context is canceled (e.g., LINE server closes connection)
 	searchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), config.SemanticSearchTimeout)
 	defer cancel()
 

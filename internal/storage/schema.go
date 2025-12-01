@@ -6,15 +6,9 @@ import (
 	"fmt"
 )
 
-// InitSchema creates all necessary tables and indexes
+// InitSchema creates all necessary tables and indexes.
+// Note: WAL mode is configured in db.go's configureConnection function.
 func InitSchema(db *sql.DB) error {
-	ctx := context.Background()
-
-	// Enable WAL mode for better concurrency
-	if _, err := db.ExecContext(ctx, "PRAGMA journal_mode=WAL"); err != nil {
-		return fmt.Errorf("failed to enable WAL mode: %w", err)
-	}
-
 	// Create students table
 	if err := createStudentsTable(db); err != nil {
 		return err

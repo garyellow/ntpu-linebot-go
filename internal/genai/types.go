@@ -32,4 +32,7 @@ type IntentParserInterface interface {
 
 	// IsEnabled returns true if the parser is enabled.
 	IsEnabled() bool
+
+	// Close releases resources held by the parser.
+	Close() error
 }
