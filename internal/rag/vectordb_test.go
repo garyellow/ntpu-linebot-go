@@ -8,6 +8,7 @@ import (
 
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
+	"github.com/garyellow/ntpu-linebot-go/internal/syllabus"
 )
 
 func TestNewVectorDB_DisabledWithoutAPIKey(t *testing.T) {
@@ -105,6 +106,107 @@ func TestVectorDB_AddSyllabi_Empty(t *testing.T) {
 	}
 }
 
+// TestAddSyllabusInternal_WhitespaceOnlyFields tests that syllabi with
+// whitespace-only fields are properly skipped during embedding
+func TestAddSyllabusInternal_WhitespaceOnlyFields(t *testing.T) {
+	tests := []struct {
+		name           string
+		syllabus       *storage.Syllabus
+		wantChunkCount int
+	}{
+		{
+			name: "all empty fields - should skip",
+			syllabus: &storage.Syllabus{
+				UID:        "1131U0001",
+				Title:      "測試課程",
+				Objectives: "",
+				Outline:    "",
+				Schedule:   "",
+			},
+			wantChunkCount: 0,
+		},
+		{
+			name: "all whitespace-only fields - should skip",
+			syllabus: &storage.Syllabus{
+				UID:        "1131U0002",
+				Title:      "測試課程",
+				Objectives: "   ",
+				Outline:    "\n\t\n",
+				Schedule:   "\t\t",
+			},
+			wantChunkCount: 0,
+		},
+		{
+			name: "one valid field - should create 1 chunk",
+			syllabus: &storage.Syllabus{
+				UID:        "1131U0003",
+				Title:      "測試課程",
+				Objectives: "有效的教學目標",
+				Outline:    "   ", // whitespace only
+				Schedule:   "",    // empty
+			},
+			wantChunkCount: 1,
+		},
+		{
+			name: "two valid fields - should create 2 chunks",
+			syllabus: &storage.Syllabus{
+				UID:        "1131U0004",
+				Title:      "測試課程",
+				Objectives: "教學目標內容",
+				Outline:    "課程內容綱要",
+				Schedule:   "\t", // whitespace only
+			},
+			wantChunkCount: 2,
+		},
+		{
+			name: "all valid fields - should create 3 chunks",
+			syllabus: &storage.Syllabus{
+				UID:        "1131U0005",
+				Title:      "測試課程",
+				Objectives: "教學目標",
+				Outline:    "內容綱要",
+				Schedule:   "教學進度",
+			},
+			wantChunkCount: 3,
+		},
+		{
+			name: "field with leading/trailing whitespace - should keep content",
+			syllabus: &storage.Syllabus{
+				UID:        "1131U0006",
+				Title:      "測試課程",
+				Objectives: "   有效內容前後有空格   ",
+				Outline:    "",
+				Schedule:   "",
+			},
+			wantChunkCount: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Use syllabus.Fields.ChunksForEmbedding to verify chunk generation
+			// This tests the same logic used by addSyllabusInternal
+			fields := &syllabus.Fields{
+				Objectives: tt.syllabus.Objectives,
+				Outline:    tt.syllabus.Outline,
+				Schedule:   tt.syllabus.Schedule,
+			}
+			chunks := fields.ChunksForEmbedding(tt.syllabus.Title)
+
+			if len(chunks) != tt.wantChunkCount {
+				t.Errorf("ChunksForEmbedding() returned %d chunks, want %d", len(chunks), tt.wantChunkCount)
+			}
+
+			// Also verify each chunk has content (not just prefix)
+			for i, chunk := range chunks {
+				if len(chunk.Content) == 0 {
+					t.Errorf("Chunk %d has empty content", i)
+				}
+			}
+		})
+	}
+}
+
 func TestVectorDB_UpdateSyllabus_Nil(t *testing.T) {
 	var vdb *VectorDB
 	ctx := context.Background()
@@ -196,8 +298,8 @@ func TestConstants(t *testing.T) {
 	if MaxSearchResults != 20 {
 		t.Errorf("MaxSearchResults = %d, want 20", MaxSearchResults)
 	}
-	if MinSimilarityThreshold != 0.2 {
-		t.Errorf("MinSimilarityThreshold = %f, want 0.2", MinSimilarityThreshold)
+	if MinSimilarityThreshold != 0.3 {
+		t.Errorf("MinSimilarityThreshold = %f, want 0.3", MinSimilarityThreshold)
 	}
 }
 

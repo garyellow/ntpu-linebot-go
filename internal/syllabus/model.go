@@ -5,6 +5,7 @@ package syllabus
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"strings"
 )
 
 // ChunkType identifies the type of content in a chunk
@@ -46,6 +47,7 @@ type Fields struct {
 // - Each syllabus field is already a semantically coherent unit
 // - No truncation needed as Gemini embedding supports 2048 tokens (~8000 chars)
 // - Full content preserved for maximum retrieval accuracy
+// - Whitespace-only fields are skipped (no value for embedding)
 func (f *Fields) ChunksForEmbedding(courseTitle string) []Chunk {
 	var chunks []Chunk
 	prefix := ""
@@ -54,7 +56,8 @@ func (f *Fields) ChunksForEmbedding(courseTitle string) []Chunk {
 	}
 
 	// Chunk 1: Objectives (most important for "what will I learn" queries)
-	if f.Objectives != "" {
+	// Use strings.TrimSpace to skip whitespace-only content
+	if strings.TrimSpace(f.Objectives) != "" {
 		chunks = append(chunks, Chunk{
 			Type:    ChunkTypeObjectives,
 			Content: prefix + "教學目標：" + f.Objectives,
@@ -62,7 +65,7 @@ func (f *Fields) ChunksForEmbedding(courseTitle string) []Chunk {
 	}
 
 	// Chunk 2: Outline (important for topic/content queries)
-	if f.Outline != "" {
+	if strings.TrimSpace(f.Outline) != "" {
 		chunks = append(chunks, Chunk{
 			Type:    ChunkTypeOutline,
 			Content: prefix + "內容綱要：" + f.Outline,
@@ -70,7 +73,7 @@ func (f *Fields) ChunksForEmbedding(courseTitle string) []Chunk {
 	}
 
 	// Chunk 3: Schedule (full content, may contain useful info like exam weeks)
-	if f.Schedule != "" {
+	if strings.TrimSpace(f.Schedule) != "" {
 		chunks = append(chunks, Chunk{
 			Type:    ChunkTypeSchedule,
 			Content: prefix + "教學進度：" + f.Schedule,
@@ -80,7 +83,7 @@ func (f *Fields) ChunksForEmbedding(courseTitle string) []Chunk {
 	return chunks
 }
 
-// IsEmpty returns true if all fields are empty
+// IsEmpty returns true if all fields are empty or whitespace-only
 func (f *Fields) IsEmpty() bool {
-	return f.Objectives == "" && f.Outline == "" && f.Schedule == ""
+	return strings.TrimSpace(f.Objectives) == "" && strings.TrimSpace(f.Outline) == "" && strings.TrimSpace(f.Schedule) == ""
 }

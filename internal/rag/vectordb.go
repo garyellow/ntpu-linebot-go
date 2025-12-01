@@ -34,8 +34,8 @@ const (
 	//
 	// Note: We use asymmetric semantic search (short query vs chunked document)
 	// With chunking, similarity scores should be higher than whole-document embedding
-	// 0.2 allows more results to pass through while still filtering noise
-	MinSimilarityThreshold float32 = 0.2
+	// 0.3 filters out low-quality matches while keeping reasonably relevant results
+	MinSimilarityThreshold float32 = 0.3
 )
 
 // VectorDB wraps chromem-go database for course syllabus semantic search
@@ -155,8 +155,8 @@ func (v *VectorDB) AddSyllabi(ctx context.Context, syllabi []*storage.Syllabus) 
 // Uses chunking strategy: each syllabus field becomes a separate document
 // Document IDs are formatted as "{UID}_{chunk_type}" for deduplication during search
 func (v *VectorDB) addSyllabusInternal(ctx context.Context, syl *storage.Syllabus) error {
-	// Skip if all fields are empty
-	if syl.Objectives == "" && syl.Outline == "" && syl.Schedule == "" {
+	// Skip if all fields are empty or whitespace-only
+	if strings.TrimSpace(syl.Objectives) == "" && strings.TrimSpace(syl.Outline) == "" && strings.TrimSpace(syl.Schedule) == "" {
 		return nil
 	}
 
@@ -202,8 +202,8 @@ func (v *VectorDB) addSyllabiInternal(ctx context.Context, syllabi []*storage.Sy
 	docs := make([]chromem.Document, 0, len(syllabi)*3) // Estimate 3 chunks per syllabus
 
 	for _, syl := range syllabi {
-		// Skip if all fields are empty
-		if syl.Objectives == "" && syl.Outline == "" && syl.Schedule == "" {
+		// Skip if all fields are empty or whitespace-only
+		if strings.TrimSpace(syl.Objectives) == "" && strings.TrimSpace(syl.Outline) == "" && strings.TrimSpace(syl.Schedule) == "" {
 			continue
 		}
 

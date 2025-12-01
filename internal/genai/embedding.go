@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	chromem "github.com/philippgille/chromem-go"
@@ -86,8 +87,9 @@ func (c *EmbeddingClient) Embed(ctx context.Context, text string) ([]float32, er
 		return nil, fmt.Errorf("gemini API key not configured")
 	}
 
-	if text == "" {
-		return nil, fmt.Errorf("empty text cannot be embedded")
+	// Skip empty or whitespace-only text
+	if strings.TrimSpace(text) == "" {
+		return nil, fmt.Errorf("empty or whitespace-only text cannot be embedded")
 	}
 
 	var lastErr error

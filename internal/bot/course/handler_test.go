@@ -447,3 +447,89 @@ func TestHandleSemanticSearch_EmptyQuery(t *testing.T) {
 		t.Error("Expected help message for empty semantic search query")
 	}
 }
+
+func TestGetSimilarityBadge(t *testing.T) {
+	tests := []struct {
+		name           string
+		similarity     float32
+		wantBadge      string
+		wantColorCheck func(color string) bool
+	}{
+		{
+			name:       "very high similarity (95%)",
+			similarity: 0.95,
+			wantBadge:  "🎯 高度相關 95%",
+			wantColorCheck: func(c string) bool {
+				return c != "" // Should have color
+			},
+		},
+		{
+			name:       "high similarity (70%)",
+			similarity: 0.70,
+			wantBadge:  "🎯 高度相關 70%",
+			wantColorCheck: func(c string) bool {
+				return c != ""
+			},
+		},
+		{
+			name:       "medium similarity (55%)",
+			similarity: 0.55,
+			wantBadge:  "✨ 相關 55%",
+			wantColorCheck: func(c string) bool {
+				return c != ""
+			},
+		},
+		{
+			name:       "medium-low similarity (50%)",
+			similarity: 0.50,
+			wantBadge:  "✨ 相關 50%",
+			wantColorCheck: func(c string) bool {
+				return c != ""
+			},
+		},
+		{
+			name:       "low similarity (45%)",
+			similarity: 0.45,
+			wantBadge:  "💡 可能相關 45%",
+			wantColorCheck: func(c string) bool {
+				return c != ""
+			},
+		},
+		{
+			name:       "low similarity (40%)",
+			similarity: 0.40,
+			wantBadge:  "💡 可能相關 40%",
+			wantColorCheck: func(c string) bool {
+				return c != ""
+			},
+		},
+		{
+			name:       "very low similarity (35%)",
+			similarity: 0.35,
+			wantBadge:  "🔍 參考 35%",
+			wantColorCheck: func(c string) bool {
+				return c != ""
+			},
+		},
+		{
+			name:       "minimum threshold (30%)",
+			similarity: 0.30,
+			wantBadge:  "🔍 參考 30%",
+			wantColorCheck: func(c string) bool {
+				return c != ""
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			badge, color := getSimilarityBadge(tt.similarity)
+			if badge != tt.wantBadge {
+				t.Errorf("getSimilarityBadge(%f) badge = %q, want %q", tt.similarity, badge, tt.wantBadge)
+			}
+			if !tt.wantColorCheck(color) {
+				t.Errorf("getSimilarityBadge(%f) color = %q, check failed", tt.similarity, color)
+			}
+		})
+	}
+}

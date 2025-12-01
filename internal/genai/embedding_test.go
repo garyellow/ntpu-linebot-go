@@ -67,12 +67,27 @@ func TestEmbeddingClient_Embed_EmptyText(t *testing.T) {
 	client := NewEmbeddingClient("test-key")
 	ctx := context.Background()
 
-	_, err := client.Embed(ctx, "")
-	if err == nil {
-		t.Error("Expected error for empty text, got nil")
+	tests := []struct {
+		name string
+		text string
+	}{
+		{"empty string", ""},
+		{"whitespace only", "   "},
+		{"newlines only", "\n\n\n"},
+		{"tabs only", "\t\t\t"},
+		{"mixed whitespace", "  \n\t  "},
 	}
-	if err.Error() != "empty text cannot be embedded" {
-		t.Errorf("Unexpected error message: %v", err)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := client.Embed(ctx, tt.text)
+			if err == nil {
+				t.Error("Expected error for empty/whitespace text, got nil")
+			}
+			if err.Error() != "empty or whitespace-only text cannot be embedded" {
+				t.Errorf("Unexpected error message: %v", err)
+			}
+		})
 	}
 }
 
