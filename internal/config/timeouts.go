@@ -92,6 +92,20 @@ const (
 	WarmupStickerFetch = 5 * time.Second
 )
 
+// Semantic search timeouts
+const (
+	// SemanticSearchTimeout is the timeout for semantic search operations.
+	// This includes embedding API calls (Gemini) and vector similarity search.
+	// Uses a detached context to prevent cancellation from request context
+	// (e.g., when LINE server closes connection after receiving 200 OK).
+	//
+	// Set to 30s because:
+	//   - Gemini embedding API typically responds in 1-5s
+	//   - Includes retry logic with exponential backoff
+	//   - Should complete well within the 60s webhook timeout
+	SemanticSearchTimeout = 30 * time.Second
+)
+
 // Graceful shutdown
 const (
 	// GracefulShutdown is the timeout for graceful server shutdown.

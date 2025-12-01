@@ -107,4 +107,11 @@ func TestTimeoutRelationships(t *testing.T) {
 		t.Errorf("ScraperRequest (%v) should be > ScraperRetryInitial (%v)",
 			ScraperRequest, ScraperRetryInitial)
 	}
+
+	// SemanticSearchTimeout should be less than WebhookProcessing
+	// to allow time for other operations after semantic search
+	if SemanticSearchTimeout >= WebhookProcessing {
+		t.Errorf("SemanticSearchTimeout (%v) should be < WebhookProcessing (%v)",
+			SemanticSearchTimeout, WebhookProcessing)
+	}
 }
