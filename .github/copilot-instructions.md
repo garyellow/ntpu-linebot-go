@@ -28,7 +28,7 @@ LINE Webhook → Gin Handler
 - **Async processing**: HTTP 200 returned immediately after signature verification (< 2s), events processed in goroutine
 - **LINE Best Practice**: Responds within 2s to prevent request_timeout errors, processes asynchronously to handle long operations
 - **Context handling**: Bot operations use detached context (`context.WithoutCancel`) with 60s timeout, independent from HTTP request lifecycle
-- **Detached context rationale**: LINE may close connection before processing completes; detached context ensures DB queries and scraping finish, reply token remains valid (30s TTL)
+- **Detached context rationale**: LINE may close connection before processing completes; detached context ensures DB queries and scraping finish, reply token remains valid (~20 min)
 - **Message batching**: LINE allows max 5 messages per reply; webhook auto-truncates to 4 + warning
 - **Reference**: https://developers.line.biz/en/docs/partner-docs/development-guidelines/
 

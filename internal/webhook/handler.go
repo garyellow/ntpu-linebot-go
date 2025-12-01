@@ -123,7 +123,7 @@ func (h *Handler) SetIntentParser(parser genai.IntentParserInterface) {
 // Handle processes incoming webhook requests following LINE Best Practice:
 // 1. Respond with HTTP 200 within 2 seconds (immediately after signature verification)
 // 2. Process events asynchronously in background goroutines
-// 3. Use reply token within 30 seconds (still valid after HTTP response)
+// 3. Reply ASAP for good UX (reply token valid ~20 min, but should reply within 60s)
 //
 // Reference: https://developers.line.biz/en/docs/partner-docs/development-guidelines/
 func (h *Handler) Handle(c *gin.Context) {
