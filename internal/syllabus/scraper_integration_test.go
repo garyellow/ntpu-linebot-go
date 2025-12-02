@@ -35,26 +35,31 @@ func TestScrapeSyllabus_RealPage(t *testing.T) {
 	}
 
 	t.Logf("=== Scraped Syllabus Fields ===")
-	t.Logf("Objectives (%d chars): %s", len(fields.Objectives), truncateForLog(fields.Objectives, 200))
-	t.Logf("Outline (%d chars): %s", len(fields.Outline), truncateForLog(fields.Outline, 200))
+	t.Logf("ObjectivesCN (%d chars): %s", len(fields.ObjectivesCN), truncateForLog(fields.ObjectivesCN, 200))
+	t.Logf("ObjectivesEN (%d chars): %s", len(fields.ObjectivesEN), truncateForLog(fields.ObjectivesEN, 200))
+	t.Logf("OutlineCN (%d chars): %s", len(fields.OutlineCN), truncateForLog(fields.OutlineCN, 200))
+	t.Logf("OutlineEN (%d chars): %s", len(fields.OutlineEN), truncateForLog(fields.OutlineEN, 200))
 	t.Logf("Schedule (%d chars): %s", len(fields.Schedule), truncateForLog(fields.Schedule, 200))
 
-	// Validate that we got content for each field
-	if fields.Objectives == "" {
-		t.Error("Expected non-empty Objectives (教學目標)")
+	// Validate that we got content for at least CN or EN objectives
+	if fields.ObjectivesCN == "" && fields.ObjectivesEN == "" {
+		t.Error("Expected non-empty Objectives (教學目標 or Course Objectives)")
 	} else {
 		// Verify it contains expected content for 演算法 course
-		if !containsAny(fields.Objectives, []string{"演算法", "程式", "複雜度", "algorithm"}) {
-			t.Errorf("Objectives doesn't seem to contain expected content: %s", truncateForLog(fields.Objectives, 100))
+		combinedObjectives := fields.ObjectivesCN + " " + fields.ObjectivesEN
+		if !containsAny(combinedObjectives, []string{"演算法", "程式", "複雜度", "algorithm"}) {
+			t.Errorf("Objectives doesn't seem to contain expected content: CN=%s EN=%s", truncateForLog(fields.ObjectivesCN, 100), truncateForLog(fields.ObjectivesEN, 100))
 		}
 	}
 
-	if fields.Outline == "" {
-		t.Error("Expected non-empty Outline (內容綱要)")
+	// Validate outline
+	if fields.OutlineCN == "" && fields.OutlineEN == "" {
+		t.Error("Expected non-empty Outline (內容綱要 or Course Outline)")
 	} else {
 		// Verify it contains expected content
-		if !containsAny(fields.Outline, []string{"Algorithm", "Dynamic", "Sorting", "Greedy", "NP"}) {
-			t.Errorf("Outline doesn't seem to contain expected content: %s", truncateForLog(fields.Outline, 100))
+		combinedOutline := fields.OutlineCN + " " + fields.OutlineEN
+		if !containsAny(combinedOutline, []string{"Algorithm", "Dynamic", "Sorting", "Greedy", "NP"}) {
+			t.Errorf("Outline doesn't seem to contain expected content: CN=%s EN=%s", truncateForLog(fields.OutlineCN, 100), truncateForLog(fields.OutlineEN, 100))
 		}
 	}
 
@@ -70,10 +75,10 @@ func TestScrapeSyllabus_RealPage(t *testing.T) {
 	}
 	t.Logf("Generated %d chunks", len(chunks))
 
-	// Verify the three sections are distinct (not duplicated)
-	if fields.Objectives != "" && fields.Outline != "" {
-		if fields.Objectives == fields.Outline {
-			t.Error("Objectives and Outline are identical - possible parsing issue")
+	// Verify the CN and EN sections are distinct (not duplicated)
+	if fields.ObjectivesCN != "" && fields.ObjectivesEN != "" {
+		if fields.ObjectivesCN == fields.ObjectivesEN {
+			t.Error("ObjectivesCN and ObjectivesEN are identical - possible parsing issue")
 		}
 	}
 }
@@ -103,9 +108,11 @@ func TestScrapeSyllabus_DistinctSections(t *testing.T) {
 
 	// Create a map to check for duplicates
 	sections := map[string]string{
-		"Objectives": fields.Objectives,
-		"Outline":    fields.Outline,
-		"Schedule":   fields.Schedule,
+		"ObjectivesCN": fields.ObjectivesCN,
+		"ObjectivesEN": fields.ObjectivesEN,
+		"OutlineCN":    fields.OutlineCN,
+		"OutlineEN":    fields.OutlineEN,
+		"Schedule":     fields.Schedule,
 	}
 
 	// Check that non-empty sections are distinct
@@ -130,8 +137,10 @@ func TestScrapeSyllabus_DistinctSections(t *testing.T) {
 	}
 
 	t.Logf("Distinct sections verified:")
-	t.Logf("  - Objectives: %d chars", len(fields.Objectives))
-	t.Logf("  - Outline: %d chars", len(fields.Outline))
+	t.Logf("  - ObjectivesCN: %d chars", len(fields.ObjectivesCN))
+	t.Logf("  - ObjectivesEN: %d chars", len(fields.ObjectivesEN))
+	t.Logf("  - OutlineCN: %d chars", len(fields.OutlineCN))
+	t.Logf("  - OutlineEN: %d chars", len(fields.OutlineEN))
 	t.Logf("  - Schedule: %d chars", len(fields.Schedule))
 }
 

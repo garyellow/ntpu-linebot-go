@@ -60,15 +60,20 @@ type Sticker struct {
 }
 
 // Syllabus represents a course syllabus record for semantic search
+// Supports both separated (5 fields) and merged (3 fields) formats:
+// - Separated: ObjectivesCN, ObjectivesEN, OutlineCN, OutlineEN, Schedule
+// - Merged: ObjectivesCN contains merged content, *EN fields are empty
 type Syllabus struct {
-	UID         string   `json:"uid"`          // Course unique identifier
-	Year        int      `json:"year"`         // Academic year
-	Term        int      `json:"term"`         // Semester (1 or 2)
-	Title       string   `json:"title"`        // Course title
-	Teachers    []string `json:"teachers"`     // Course instructors
-	Objectives  string   `json:"objectives"`   // 教學目標
-	Outline     string   `json:"outline"`      // 內容綱要
-	Schedule    string   `json:"schedule"`     // 教學進度
-	ContentHash string   `json:"content_hash"` // SHA256 hash for change detection
-	CachedAt    int64    `json:"cached_at"`    // Unix timestamp when cached
+	UID          string   `json:"uid"`           // Course unique identifier
+	Year         int      `json:"year"`          // Academic year
+	Term         int      `json:"term"`          // Semester (1 or 2)
+	Title        string   `json:"title"`         // Course title
+	Teachers     []string `json:"teachers"`      // Course instructors
+	ObjectivesCN string   `json:"objectives_cn"` // 教學目標 (Chinese)
+	ObjectivesEN string   `json:"objectives_en"` // Course Objectives (English, may be empty)
+	OutlineCN    string   `json:"outline_cn"`    // 內容綱要 (Chinese)
+	OutlineEN    string   `json:"outline_en"`    // Course Outline (English, may be empty)
+	Schedule     string   `json:"schedule"`      // 教學進度 (schedule content only)
+	ContentHash  string   `json:"content_hash"`  // SHA256 hash for change detection
+	CachedAt     int64    `json:"cached_at"`     // Unix timestamp when cached
 }

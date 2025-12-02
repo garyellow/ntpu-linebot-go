@@ -71,8 +71,8 @@ func TestVectorDB_AddSyllabus_Nil(t *testing.T) {
 	ctx := context.Background()
 
 	err := vdb.AddSyllabus(ctx, &storage.Syllabus{
-		UID:        "1131U0001",
-		Objectives: "test objectives",
+		UID:          "1131U0001",
+		ObjectivesCN: "test objectives",
 	})
 	if err != nil {
 		t.Errorf("AddSyllabus() on nil VectorDB error = %v", err)
@@ -84,7 +84,7 @@ func TestVectorDB_AddSyllabi_Nil(t *testing.T) {
 	ctx := context.Background()
 
 	err := vdb.AddSyllabi(ctx, []*storage.Syllabus{
-		{UID: "1131U0001", Objectives: "test"},
+		{UID: "1131U0001", ObjectivesCN: "test"},
 	})
 	if err != nil {
 		t.Errorf("AddSyllabi() on nil VectorDB error = %v", err)
@@ -117,66 +117,91 @@ func TestAddSyllabusInternal_WhitespaceOnlyFields(t *testing.T) {
 		{
 			name: "all empty fields - should skip",
 			syllabus: &storage.Syllabus{
-				UID:        "1131U0001",
-				Title:      "測試課程",
-				Objectives: "",
-				Outline:    "",
-				Schedule:   "",
+				UID:          "1131U0001",
+				Title:        "測試課程",
+				ObjectivesCN: "",
+				ObjectivesEN: "",
+				OutlineCN:    "",
+				OutlineEN:    "",
+				Schedule:     "",
 			},
 			wantChunkCount: 0,
 		},
 		{
 			name: "all whitespace-only fields - should skip",
 			syllabus: &storage.Syllabus{
-				UID:        "1131U0002",
-				Title:      "測試課程",
-				Objectives: "   ",
-				Outline:    "\n\t\n",
-				Schedule:   "\t\t",
+				UID:          "1131U0002",
+				Title:        "測試課程",
+				ObjectivesCN: "   ",
+				ObjectivesEN: "   ",
+				OutlineCN:    "\n\t\n",
+				OutlineEN:    "\n\t\n",
+				Schedule:     "\t\t",
 			},
 			wantChunkCount: 0,
 		},
 		{
-			name: "one valid field - should create 1 chunk",
+			name: "one valid field (CN only) - should create 1 chunk",
 			syllabus: &storage.Syllabus{
-				UID:        "1131U0003",
-				Title:      "測試課程",
-				Objectives: "有效的教學目標",
-				Outline:    "   ", // whitespace only
-				Schedule:   "",    // empty
+				UID:          "1131U0003",
+				Title:        "測試課程",
+				ObjectivesCN: "有效的教學目標",
+				ObjectivesEN: "",
+				OutlineCN:    "   ", // whitespace only
+				OutlineEN:    "",
+				Schedule:     "", // empty
 			},
 			wantChunkCount: 1,
 		},
 		{
-			name: "two valid fields - should create 2 chunks",
+			name: "CN + EN objectives - should create 1 merged chunk",
 			syllabus: &storage.Syllabus{
-				UID:        "1131U0004",
-				Title:      "測試課程",
-				Objectives: "教學目標內容",
-				Outline:    "課程內容綱要",
-				Schedule:   "\t", // whitespace only
+				UID:          "1131U0003b",
+				Title:        "測試課程",
+				ObjectivesCN: "有效的教學目標",
+				ObjectivesEN: "Valid objectives",
+				OutlineCN:    "",
+				OutlineEN:    "",
+				Schedule:     "",
+			},
+			wantChunkCount: 1,
+		},
+		{
+			name: "two valid fields (CN only) - should create 2 chunks",
+			syllabus: &storage.Syllabus{
+				UID:          "1131U0004",
+				Title:        "測試課程",
+				ObjectivesCN: "教學目標內容",
+				ObjectivesEN: "",
+				OutlineCN:    "課程內容綱要",
+				OutlineEN:    "",
+				Schedule:     "\t", // whitespace only
 			},
 			wantChunkCount: 2,
 		},
 		{
-			name: "all valid fields - should create 3 chunks",
+			name: "all valid fields (CN only) - should create 3 chunks",
 			syllabus: &storage.Syllabus{
-				UID:        "1131U0005",
-				Title:      "測試課程",
-				Objectives: "教學目標",
-				Outline:    "內容綱要",
-				Schedule:   "教學進度",
+				UID:          "1131U0005",
+				Title:        "測試課程",
+				ObjectivesCN: "教學目標",
+				ObjectivesEN: "",
+				OutlineCN:    "內容綱要",
+				OutlineEN:    "",
+				Schedule:     "教學進度",
 			},
 			wantChunkCount: 3,
 		},
 		{
 			name: "field with leading/trailing whitespace - should keep content",
 			syllabus: &storage.Syllabus{
-				UID:        "1131U0006",
-				Title:      "測試課程",
-				Objectives: "   有效內容前後有空格   ",
-				Outline:    "",
-				Schedule:   "",
+				UID:          "1131U0006",
+				Title:        "測試課程",
+				ObjectivesCN: "   有效內容前後有空格   ",
+				ObjectivesEN: "",
+				OutlineCN:    "",
+				OutlineEN:    "",
+				Schedule:     "",
 			},
 			wantChunkCount: 1,
 		},
@@ -187,9 +212,11 @@ func TestAddSyllabusInternal_WhitespaceOnlyFields(t *testing.T) {
 			// Use syllabus.Fields.ChunksForEmbedding to verify chunk generation
 			// This tests the same logic used by addSyllabusInternal
 			fields := &syllabus.Fields{
-				Objectives: tt.syllabus.Objectives,
-				Outline:    tt.syllabus.Outline,
-				Schedule:   tt.syllabus.Schedule,
+				ObjectivesCN: tt.syllabus.ObjectivesCN,
+				ObjectivesEN: tt.syllabus.ObjectivesEN,
+				OutlineCN:    tt.syllabus.OutlineCN,
+				OutlineEN:    tt.syllabus.OutlineEN,
+				Schedule:     tt.syllabus.Schedule,
 			}
 			chunks := fields.ChunksForEmbedding(tt.syllabus.Title)
 
@@ -212,8 +239,8 @@ func TestVectorDB_UpdateSyllabus_Nil(t *testing.T) {
 	ctx := context.Background()
 
 	err := vdb.UpdateSyllabus(ctx, &storage.Syllabus{
-		UID:        "1131U0001",
-		Objectives: "updated objectives",
+		UID:          "1131U0001",
+		ObjectivesCN: "updated objectives",
 	})
 	if err != nil {
 		t.Errorf("UpdateSyllabus() on nil VectorDB error = %v", err)
@@ -295,11 +322,14 @@ func TestConstants(t *testing.T) {
 	if DefaultSearchResults != 10 {
 		t.Errorf("DefaultSearchResults = %d, want 10", DefaultSearchResults)
 	}
-	if MaxSearchResults != 20 {
-		t.Errorf("MaxSearchResults = %d, want 20", MaxSearchResults)
+	if MaxSearchResults != 100 {
+		t.Errorf("MaxSearchResults = %d, want 100", MaxSearchResults)
 	}
 	if MinSimilarityThreshold != 0.3 {
 		t.Errorf("MinSimilarityThreshold = %f, want 0.3", MinSimilarityThreshold)
+	}
+	if HighRelevanceThreshold != 0.7 {
+		t.Errorf("HighRelevanceThreshold = %f, want 0.7", HighRelevanceThreshold)
 	}
 }
 

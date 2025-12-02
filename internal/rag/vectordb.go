@@ -26,7 +26,8 @@ const (
 	DefaultSearchResults = 10
 
 	// MaxSearchResults is the maximum number of results for semantic search
-	MaxSearchResults = 20
+	// With the new 10-multiple logic, we may return more than this
+	MaxSearchResults = 100
 
 	// MinSimilarityThreshold is the minimum cosine similarity score to include a result
 	// Results below this threshold are considered not relevant enough
@@ -36,6 +37,11 @@ const (
 	// With chunking, similarity scores should be higher than whole-document embedding
 	// 0.3 filters out low-quality matches while keeping reasonably relevant results
 	MinSimilarityThreshold float32 = 0.3
+
+	// HighRelevanceThreshold is the similarity score threshold for highly relevant results
+	// Results with similarity >= 0.7 (70%) are considered highly relevant
+	// All highly relevant results are returned, then padded to next multiple of 10
+	HighRelevanceThreshold float32 = 0.7
 )
 
 // VectorDB wraps chromem-go database for course syllabus semantic search
@@ -156,15 +162,21 @@ func (v *VectorDB) AddSyllabi(ctx context.Context, syllabi []*storage.Syllabus) 
 // Document IDs are formatted as "{UID}_{chunk_type}" for deduplication during search
 func (v *VectorDB) addSyllabusInternal(ctx context.Context, syl *storage.Syllabus) error {
 	// Skip if all fields are empty or whitespace-only
-	if strings.TrimSpace(syl.Objectives) == "" && strings.TrimSpace(syl.Outline) == "" && strings.TrimSpace(syl.Schedule) == "" {
+	if strings.TrimSpace(syl.ObjectivesCN) == "" &&
+		strings.TrimSpace(syl.ObjectivesEN) == "" &&
+		strings.TrimSpace(syl.OutlineCN) == "" &&
+		strings.TrimSpace(syl.OutlineEN) == "" &&
+		strings.TrimSpace(syl.Schedule) == "" {
 		return nil
 	}
 
 	// Create Fields from Syllabus and generate chunks
 	fields := &syllabus.Fields{
-		Objectives: syl.Objectives,
-		Outline:    syl.Outline,
-		Schedule:   syl.Schedule,
+		ObjectivesCN: syl.ObjectivesCN,
+		ObjectivesEN: syl.ObjectivesEN,
+		OutlineCN:    syl.OutlineCN,
+		OutlineEN:    syl.OutlineEN,
+		Schedule:     syl.Schedule,
 	}
 	chunks := fields.ChunksForEmbedding(syl.Title)
 
@@ -203,15 +215,21 @@ func (v *VectorDB) addSyllabiInternal(ctx context.Context, syllabi []*storage.Sy
 
 	for _, syl := range syllabi {
 		// Skip if all fields are empty or whitespace-only
-		if strings.TrimSpace(syl.Objectives) == "" && strings.TrimSpace(syl.Outline) == "" && strings.TrimSpace(syl.Schedule) == "" {
+		if strings.TrimSpace(syl.ObjectivesCN) == "" &&
+			strings.TrimSpace(syl.ObjectivesEN) == "" &&
+			strings.TrimSpace(syl.OutlineCN) == "" &&
+			strings.TrimSpace(syl.OutlineEN) == "" &&
+			strings.TrimSpace(syl.Schedule) == "" {
 			continue
 		}
 
 		// Create Fields from Syllabus and generate chunks
 		fields := &syllabus.Fields{
-			Objectives: syl.Objectives,
-			Outline:    syl.Outline,
-			Schedule:   syl.Schedule,
+			ObjectivesCN: syl.ObjectivesCN,
+			ObjectivesEN: syl.ObjectivesEN,
+			OutlineCN:    syl.OutlineCN,
+			OutlineEN:    syl.OutlineEN,
+			Schedule:     syl.Schedule,
 		}
 		chunks := fields.ChunksForEmbedding(syl.Title)
 
@@ -243,9 +261,19 @@ func (v *VectorDB) addSyllabiInternal(ctx context.Context, syllabi []*storage.Sy
 	return nil
 }
 
-// Search performs semantic search for courses matching the query
-// Returns up to nResults courses sorted by similarity
-// Chunks from the same course are deduplicated, keeping the highest similarity
+// Search performs semantic search for courses matching the query.
+//
+// The nResults parameter serves as a fallback count when no highly relevant results exist.
+// When highly relevant results (>= 70% similarity) are found, they take priority:
+//
+//   - If highRelevanceCount > 0: Returns ceil(highRelevanceCount / 10) * 10 results
+//     (e.g., 3 high relevance → 10, 13 high relevance → 20)
+//   - If highRelevanceCount == 0: Returns up to nResults (the requested count)
+//
+// This ensures users always see all highly relevant matches, while nResults
+// controls the fallback behavior for queries with no strong matches.
+//
+// Results are deduplicated by course UID, keeping the highest similarity chunk.
 func (v *VectorDB) Search(ctx context.Context, query string, nResults int) ([]SearchResult, error) {
 	if v == nil || v.collection == nil {
 		return nil, nil
@@ -274,7 +302,8 @@ func (v *VectorDB) Search(ctx context.Context, query string, nResults int) ([]Se
 
 	// Request more results than needed to account for deduplication
 	// With chunking, we may get multiple chunks from the same course
-	queryLimit := nResults * 3
+	// Request enough to find all high-relevance results
+	queryLimit := MaxSearchResults * 3
 	if queryLimit > docCount {
 		queryLimit = docCount
 	}
@@ -341,9 +370,43 @@ func (v *VectorDB) Search(ctx context.Context, query string, nResults int) ([]Se
 		return searchResults[i].Similarity > searchResults[j].Similarity
 	})
 
-	// Limit to requested number of results
-	if len(searchResults) > nResults {
-		searchResults = searchResults[:nResults]
+	// Apply the new relevance-based logic:
+	// 1. Count highly relevant results (>= 70% similarity)
+	// 2. All highly relevant results are always included
+	// 3. Pad to next multiple of 10 (min 10 results)
+	highRelevanceCount := 0
+	for _, sr := range searchResults {
+		if sr.Similarity >= HighRelevanceThreshold {
+			highRelevanceCount++
+		} else {
+			break // Since sorted, no more high relevance after this
+		}
+	}
+
+	// Calculate final result count
+	finalCount := nResults // Default to requested count
+
+	if highRelevanceCount > 0 {
+		// Pad to next multiple of 10
+		finalCount = ((highRelevanceCount + 9) / 10) * 10
+		// Ensure at least 10 results
+		if finalCount < 10 {
+			finalCount = 10
+		}
+		// Don't exceed available results or max limit
+		if finalCount > len(searchResults) {
+			finalCount = len(searchResults)
+		}
+		if finalCount > MaxSearchResults {
+			finalCount = MaxSearchResults
+		}
+	} else if finalCount > len(searchResults) {
+		// No highly relevant results, just use default
+		finalCount = len(searchResults)
+	}
+
+	if len(searchResults) > finalCount {
+		searchResults = searchResults[:finalCount]
 	}
 
 	return searchResults, nil

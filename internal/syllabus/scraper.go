@@ -54,17 +54,24 @@ func (s *Scraper) ScrapeSyllabus(ctx context.Context, course *storage.Course) (*
 }
 
 // parseSyllabusPage extracts syllabus fields from HTML document
-// The page structure has TD cells like:
+// Handles two format types:
+// 1. Separated format (5 fields): 教學目標, Course Objectives, 內容綱要, Course Outline, 教學進度
+// 2. Merged format (3 fields): 教學目標 Course Objectives, 內容綱要/Course Outline, 教學進度
 //
-//	<td>教學目標 Course Objectives：<span class="font-c13">內容...</span></td>
-//	<td>內容綱要/Course Outline：<span class="font-c13">內容...</span></td>
-//	<td>教學進度(Teaching Schedule)：<table>...</table></td>
+// The page structure has TD cells like:
+// Separated: <td>教學目標：<div class="font-c13">內容...</div></td>
+//
+//	<td>Course Objectives：<div class="font-c13">內容...</div></td>
+//
+// Merged:    <td>教學目標 Course Objectives：<span class="font-c13">內容...</span></td>
 func parseSyllabusPage(doc *goquery.Document) *Fields {
 	fields := &Fields{}
 
 	// Helper to find content in TD cells containing a specific label
-	findContent := func(label string) string {
+	// Returns (content, hasBothLanguages) where hasBothLanguages indicates if the TD contains both CN and EN labels
+	findContent := func(label string) (string, bool) {
 		var content string
+		var hasBothLanguages bool
 
 		doc.Find("td").Each(func(i int, td *goquery.Selection) {
 			text := td.Text()
@@ -72,8 +79,23 @@ func parseSyllabusPage(doc *goquery.Document) *Fields {
 				return
 			}
 
+			// Check if this TD contains both Chinese and English labels (merged format)
+			// e.g., "教學目標 Course Objectives：" in the same cell
+			if label == "教學目標" && strings.Contains(text, "Course Objectives") {
+				hasBothLanguages = true
+			} else if label == "內容綱要" && strings.Contains(text, "Course Outline") {
+				hasBothLanguages = true
+			}
+
 			// Found the TD with our label
-			// Try to extract content from span.font-c13 first (primary method)
+			// Try to extract content from div.font-c13 first (newer format)
+			div := td.Find("div.font-c13")
+			if div.Length() > 0 {
+				content = strings.TrimSpace(div.Text())
+				return
+			}
+
+			// Try span.font-c13 (older format)
 			span := td.Find("span.font-c13")
 			if span.Length() > 0 {
 				content = strings.TrimSpace(span.Text())
@@ -92,16 +114,136 @@ func parseSyllabusPage(doc *goquery.Document) *Fields {
 			content = extractContentAfterLabel(html, label)
 		})
 
-		return strings.TrimSpace(content)
+		return strings.TrimSpace(content), hasBothLanguages
 	}
 
-	fields.Objectives = findContent("教學目標")
-	fields.Outline = findContent("內容綱要")
-	fields.Schedule = findContent("教學進度")
+	// Helper to find teaching schedule content (only the schedule column)
+	// The table structure is:
+	// - Row 0 (header): 週別 | 日期 | 教學預定進度 | 教學方法與教學活動
+	// - Row 1+: Week 1 | 20250911 | Content | Methods
+	// We only extract the 3rd column (教學預定進度) with Week prefix
+	findScheduleContent := func() string {
+		var scheduleItems []string
+		found := false
+
+		// Find TD cells that contain "教學進度" label (not just any text)
+		// The structure is: <td>教學進度...<table>...</table></td>
+		doc.Find("td").Each(func(i int, td *goquery.Selection) {
+			if found {
+				return // Already found, skip remaining
+			}
+
+			// Get the direct text of this TD (not including nested elements)
+			// We need to check if this TD is the label cell for 教學進度
+			tdHTML, _ := td.Html()
+
+			// Check if this TD starts with 教學進度 label (various formats)
+			// Patterns: "教學進度(Teaching Contents)：" or "教學進度(Teaching Schedule)："
+			if !strings.Contains(tdHTML, "教學進度") {
+				return
+			}
+
+			// Find the direct child table (not nested tables within)
+			table := td.ChildrenFiltered("table").First()
+			if table.Length() == 0 {
+				// Try finding first nested table
+				table = td.Find("table").First()
+			}
+			if table.Length() == 0 {
+				return
+			}
+
+			// Validate this is the correct table by checking header row
+			// Header should contain: 週別, 日期, 教學預定進度
+			headerRow := table.Find("tr").First()
+			headerText := headerRow.Text()
+			if !strings.Contains(headerText, "週別") && !strings.Contains(headerText, "Weekly") {
+				return // Not the schedule table
+			}
+
+			found = true
+
+			// Extract only the schedule content from each row
+			// Skip row 0 (header), start from row 1
+			table.Find("tr").Each(func(rowIdx int, tr *goquery.Selection) {
+				// Skip header row
+				if rowIdx == 0 {
+					return
+				}
+
+				// Find all td cells in this row
+				tds := tr.Find("td")
+				if tds.Length() >= 3 {
+					// Get the 1st column (週別) for context
+					weekCell := tds.Eq(0)
+					weekText := strings.TrimSpace(weekCell.Text())
+
+					// Get the 3rd column (教學預定進度)
+					scheduleCell := tds.Eq(2)
+					scheduleText := strings.TrimSpace(scheduleCell.Text())
+
+					// Skip empty or special rows
+					if scheduleText == "" || scheduleText == "彈性補充教學" {
+						return
+					}
+
+					// Format: "Week X: Content" or just content if no week
+					if weekText != "" && strings.HasPrefix(weekText, "Week") {
+						scheduleItems = append(scheduleItems, weekText+": "+scheduleText)
+					} else if scheduleText != "" {
+						scheduleItems = append(scheduleItems, scheduleText)
+					}
+				}
+			})
+		})
+
+		if len(scheduleItems) == 0 {
+			return ""
+		}
+
+		return strings.Join(scheduleItems, "\n")
+	}
+
+	// Parse objectives
+	objectivesCN, hasBothLanguages := findContent("教學目標")
+	if hasBothLanguages {
+		// Combined format: CN label already contains EN content (e.g., "教學目標 Course Objectives：...")
+		fields.ObjectivesCN = objectivesCN
+		// No separate EN field needed
+	} else {
+		fields.ObjectivesCN = objectivesCN
+		// Separate format: look for English objectives in a different TD
+		objectivesEN, _ := findContent("Course Objectives")
+		fields.ObjectivesEN = objectivesEN
+	}
+
+	// Parse outline
+	outlineCN, hasBothLanguages := findContent("內容綱要")
+	if hasBothLanguages {
+		// Combined format: CN label already contains EN content
+		fields.OutlineCN = outlineCN
+		// No separate EN field needed
+	} else {
+		fields.OutlineCN = outlineCN
+		// Separate format: look for English outline in a different TD
+		outlineEN, _ := findContent("Course Outline")
+		fields.OutlineEN = outlineEN
+	}
+
+	// Parse schedule (special handling for table format)
+	fields.Schedule = findScheduleContent()
+
+	// If schedule extraction failed, try the old method as fallback
+	if fields.Schedule == "" {
+		scheduleContent, _ := findContent("教學進度")
+		fields.Schedule = scheduleContent
+	}
 
 	// Clean up the content
-	fields.Objectives = cleanContent(fields.Objectives)
-	fields.Outline = cleanContent(fields.Outline)
+	fields.ObjectivesCN = cleanContent(fields.ObjectivesCN)
+	fields.ObjectivesEN = cleanContent(fields.ObjectivesEN)
+	fields.OutlineCN = cleanContent(fields.OutlineCN)
+	fields.OutlineEN = cleanContent(fields.OutlineEN)
 	fields.Schedule = cleanContent(fields.Schedule)
 
 	return fields

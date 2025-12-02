@@ -32,11 +32,15 @@ func ComputeContentHash(content string) string {
 }
 
 // Fields represents parsed syllabus fields from the course detail page
-// Only includes fields used for RAG embedding: 教學目標, 內容綱要, 教學進度
+// Supports both separated (5 fields) and merged (3 fields) formats:
+// - Separated: 教學目標, Course Objectives, 內容綱要, Course Outline, 教學進度
+// - Merged: 教學目標 Course Objectives, 內容綱要/Course Outline, 教學進度
 type Fields struct {
-	Objectives string // 教學目標
-	Outline    string // 內容綱要
-	Schedule   string // 教學進度
+	ObjectivesCN string // 教學目標 (Chinese)
+	ObjectivesEN string // Course Objectives (English, may be empty if merged)
+	OutlineCN    string // 內容綱要 (Chinese)
+	OutlineEN    string // Course Outline (English, may be empty if merged)
+	Schedule     string // 教學進度 (only the schedule content, not metadata)
 }
 
 // ChunksForEmbedding returns separate chunks for better asymmetric semantic search.
@@ -48,6 +52,7 @@ type Fields struct {
 // - No truncation needed as Gemini embedding supports 2048 tokens (~8000 chars)
 // - Full content preserved for maximum retrieval accuracy
 // - Whitespace-only fields are skipped (no value for embedding)
+// - Chinese and English content are merged when both exist for better semantic coverage
 func (f *Fields) ChunksForEmbedding(courseTitle string) []Chunk {
 	var chunks []Chunk
 	prefix := ""
@@ -55,20 +60,23 @@ func (f *Fields) ChunksForEmbedding(courseTitle string) []Chunk {
 		prefix = "【" + courseTitle + "】\n"
 	}
 
-	// Chunk 1: Objectives (most important for "what will I learn" queries)
-	// Use strings.TrimSpace to skip whitespace-only content
-	if strings.TrimSpace(f.Objectives) != "" {
+	// Chunk 1: Objectives (merge CN + EN if both exist)
+	// Most important for "what will I learn" queries
+	objectives := mergeContent(f.ObjectivesCN, f.ObjectivesEN)
+	if strings.TrimSpace(objectives) != "" {
 		chunks = append(chunks, Chunk{
 			Type:    ChunkTypeObjectives,
-			Content: prefix + "教學目標：" + f.Objectives,
+			Content: prefix + "教學目標：" + objectives,
 		})
 	}
 
-	// Chunk 2: Outline (important for topic/content queries)
-	if strings.TrimSpace(f.Outline) != "" {
+	// Chunk 2: Outline (merge CN + EN if both exist)
+	// Important for topic/content queries
+	outline := mergeContent(f.OutlineCN, f.OutlineEN)
+	if strings.TrimSpace(outline) != "" {
 		chunks = append(chunks, Chunk{
 			Type:    ChunkTypeOutline,
-			Content: prefix + "內容綱要：" + f.Outline,
+			Content: prefix + "內容綱要：" + outline,
 		})
 	}
 
@@ -83,7 +91,30 @@ func (f *Fields) ChunksForEmbedding(courseTitle string) []Chunk {
 	return chunks
 }
 
+// mergeContent merges Chinese and English content with proper formatting.
+// If only one exists, return that one. If both exist, combine with newline separator.
+func mergeContent(cn, en string) string {
+	cn = strings.TrimSpace(cn)
+	en = strings.TrimSpace(en)
+
+	if cn == "" && en == "" {
+		return ""
+	}
+	if cn == "" {
+		return en
+	}
+	if en == "" {
+		return cn
+	}
+	// Both exist - combine them
+	return cn + "\n" + en
+}
+
 // IsEmpty returns true if all fields are empty or whitespace-only
 func (f *Fields) IsEmpty() bool {
-	return strings.TrimSpace(f.Objectives) == "" && strings.TrimSpace(f.Outline) == "" && strings.TrimSpace(f.Schedule) == ""
+	return strings.TrimSpace(f.ObjectivesCN) == "" &&
+		strings.TrimSpace(f.ObjectivesEN) == "" &&
+		strings.TrimSpace(f.OutlineCN) == "" &&
+		strings.TrimSpace(f.OutlineEN) == "" &&
+		strings.TrimSpace(f.Schedule) == ""
 }
