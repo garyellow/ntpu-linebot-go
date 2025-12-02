@@ -74,7 +74,7 @@ return handler.HandleMessage(ctx, rawText)
 - **關鍵字**：聯繫、聯絡、電話、分機、緊急
 - **功能**：
   - 單位/人員搜尋（2-tier 並行搜尋）
-  - 緊急聯絡電話（三峽/台北校區）
+  - 緊急聯絡電話（三峽/臺北校區）
   - 組織成員查詢
 - **搜尋策略**：SQL LIKE (name, title) + 模糊 ContainsAllRunes (name, title, organization, superior)
 - **Postback 前綴**：`contact:`

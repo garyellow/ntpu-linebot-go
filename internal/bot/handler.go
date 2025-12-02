@@ -25,8 +25,8 @@ type Handler interface {
 	// The data parameter contains the postback payload string (max 300 bytes per LINE API)
 	//
 	// Postback Format Convention:
-	//   - Format: "module$action$param1$param2..." using $ as delimiter
-	//   - Example: "course$detail$1131U1001" or "id$year$113"
+	//   - Format: "module:action$param1$param2..." (colon separates module from action, $ separates params)
+	//   - Example: "course:detail$1131U1001" or "id:人文學院$113"
 	//   - Max 300 bytes per LINE API limit
 	//   - No escaping mechanism for $ character (avoid in parameter values)
 	//
