@@ -355,7 +355,7 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 		code string
 	}
 	for fullName, code := range ntpu.FullDepartmentCodes {
-		if lineutil.ContainsAllRunes(fullName, deptName) {
+		if bot.ContainsAllRunes(fullName, deptName) {
 			matches = append(matches, struct {
 				name string
 				code string
@@ -590,7 +590,7 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	allStudents, err := h.db.GetAllStudents(ctx)
 	if err == nil && len(allStudents) > 0 {
 		for _, s := range allStudents {
-			if lineutil.ContainsAllRunes(s.Name, name) {
+			if bot.ContainsAllRunes(s.Name, name) {
 				students = append(students, s)
 			}
 		}

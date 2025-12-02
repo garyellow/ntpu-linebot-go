@@ -263,7 +263,7 @@ LOG_LEVEL=debug go run ./cmd/server
 
 - 📐 [架構設計](docs/architecture.md) - 系統設計與實作細節
 - 📊 [監控設定](deployments/README.md) - Prometheus/Grafana 配置
-- 🔧 [配置說明](internal/config/README.md) - 環境變數完整清單
+- 🔧 [環境變數](.env.example) - 完整環境變數清單
 
 ## 📄 授權條款
 

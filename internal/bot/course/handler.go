@@ -491,10 +491,10 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 	if err == nil && len(allCourses) > 0 {
 		for _, c := range allCourses {
 			// Check if searchTerm matches title OR any teacher using fuzzy matching
-			titleMatch := lineutil.ContainsAllRunes(c.Title, searchTerm)
+			titleMatch := bot.ContainsAllRunes(c.Title, searchTerm)
 			teacherMatch := false
 			for _, teacher := range c.Teachers {
-				if lineutil.ContainsAllRunes(teacher, searchTerm) {
+				if bot.ContainsAllRunes(teacher, searchTerm) {
 					teacherMatch = true
 					break
 				}
@@ -575,10 +575,10 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 				}
 
 				// Check if matches title or teacher
-				titleMatch := lineutil.ContainsAllRunes(course.Title, searchTerm)
+				titleMatch := bot.ContainsAllRunes(course.Title, searchTerm)
 				teacherMatch := false
 				for _, teacher := range course.Teachers {
-					if lineutil.ContainsAllRunes(teacher, searchTerm) {
+					if bot.ContainsAllRunes(teacher, searchTerm) {
 						teacherMatch = true
 						break
 					}

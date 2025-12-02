@@ -240,44 +240,6 @@ func NewClipboardAction(label, clipboardText string) Action {
 	}
 }
 
-// ContainsAllRunes checks if string s contains all runes from string chars,
-// counting character occurrences (e.g., "aa" requires at least 2 'a's in s).
-// Example: ContainsAllRunes("資訊工程學系", "資工系") returns true
-// because all characters in "資工系" exist in "資訊工程學系".
-// This is case-insensitive for ASCII characters.
-func ContainsAllRunes(s, chars string) bool {
-	if chars == "" {
-		return true
-	}
-	if s == "" {
-		return false
-	}
-
-	// Convert to lowercase for case-insensitive matching (for ASCII)
-	sLower := strings.ToLower(s)
-	charsLower := strings.ToLower(chars)
-
-	// Build a map counting rune occurrences in s
-	runeCount := make(map[rune]int)
-	for _, r := range sLower {
-		runeCount[r]++
-	}
-
-	// Build a map counting required rune occurrences in chars
-	requiredCount := make(map[rune]int)
-	for _, r := range charsLower {
-		requiredCount[r]++
-	}
-
-	// Check if s has at least as many of each rune as required
-	for r, required := range requiredCount {
-		if runeCount[r] < required {
-			return false
-		}
-	}
-	return true
-}
-
 // NewFlexMessage creates a flex message with the given alt text and flex container.
 // Flex messages allow for rich, customizable layouts.
 func NewFlexMessage(altText string, contents messaging_api.FlexContainerInterface) *messaging_api.FlexMessage {

@@ -300,59 +300,6 @@ func TestRemoveBotMentions(t *testing.T) {
 	}
 }
 
-func TestNormalizeWhitespaceForMention(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "multiple spaces",
-			input:    "hello    world",
-			expected: "hello world",
-		},
-		{
-			name:     "leading spaces",
-			input:    "   hello",
-			expected: "hello",
-		},
-		{
-			name:     "trailing spaces",
-			input:    "hello   ",
-			expected: "hello",
-		},
-		{
-			name:     "mixed whitespace",
-			input:    "  hello \t world  \n test  ",
-			expected: "hello world test",
-		},
-		{
-			name:     "normal text",
-			input:    "hello world",
-			expected: "hello world",
-		},
-		{
-			name:     "empty string",
-			input:    "",
-			expected: "",
-		},
-		{
-			name:     "only spaces",
-			input:    "     ",
-			expected: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := normalizeWhitespaceForMention(tt.input)
-			if result != tt.expected {
-				t.Errorf("normalizeWhitespaceForMention(%q) = %q, expected %q", tt.input, result, tt.expected)
-			}
-		})
-	}
-}
-
 func TestRemoveBotMentions_BoundaryConditions(t *testing.T) {
 	tests := []struct {
 		name     string

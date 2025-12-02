@@ -46,12 +46,11 @@ const (
 	//
 	// Emergency phone numbers (without hyphens for clipboard copy)
 	// 三峽校區
-	sanxiaNormalPhone    = "0286741111"       // 總機
-	sanxia24HPhone       = "0226731949"       // 24H緊急行政電話
-	sanxiaEmergencyPhone = "0226711234"       // 24H急難救助電話(校安中心)
-	sanxiaGatePhone      = "0226733920"       // 大門哨所
-	sanxiaDormPhone      = "0286716784"       // 宿舍夜間緊急電話
-	sanxiaLostFound      = "0286741111,66223" // 遺失物諮詢(分機66223)
+	sanxiaNormalPhone    = "0286741111" // 總機
+	sanxia24HPhone       = "0226731949" // 24H緊急行政電話
+	sanxiaEmergencyPhone = "0226711234" // 24H急難救助電話(校安中心)
+	sanxiaGatePhone      = "0226733920" // 大門哨所
+	sanxiaDormPhone      = "0286716784" // 宿舍夜間緊急電話
 
 	// 臺北校區
 	taipeiNormalPhone    = "0225024654" // 總機
@@ -366,10 +365,10 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 		for _, c := range allContacts {
 			// Fuzzy character-set matching: check if all runes in searchTerm exist in target
 			// Search in: name, title, organization, superior
-			if lineutil.ContainsAllRunes(c.Name, searchTerm) ||
-				lineutil.ContainsAllRunes(c.Title, searchTerm) ||
-				lineutil.ContainsAllRunes(c.Organization, searchTerm) ||
-				lineutil.ContainsAllRunes(c.Superior, searchTerm) {
+			if bot.ContainsAllRunes(c.Name, searchTerm) ||
+				bot.ContainsAllRunes(c.Title, searchTerm) ||
+				bot.ContainsAllRunes(c.Organization, searchTerm) ||
+				bot.ContainsAllRunes(c.Superior, searchTerm) {
 				contacts = append(contacts, c)
 			}
 		}
