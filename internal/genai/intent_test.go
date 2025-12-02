@@ -103,20 +103,20 @@ func TestNewIntentParser_NilWithEmptyKey(t *testing.T) {
 
 func TestIntentParser_IsEnabled(t *testing.T) {
 	// nil parser
-	var nilParser *IntentParser
+	var nilParser *GeminiIntentParser
 	if nilParser.IsEnabled() {
 		t.Error("nil parser should return false for IsEnabled")
 	}
 
 	// parser with nil client
-	parserWithNilClient := &IntentParser{client: nil}
+	parserWithNilClient := &GeminiIntentParser{client: nil}
 	if parserWithNilClient.IsEnabled() {
 		t.Error("parser with nil client should return false for IsEnabled")
 	}
 }
 
 func TestIntentParser_ParseNil(t *testing.T) {
-	var nilParser *IntentParser
+	var nilParser *GeminiIntentParser
 	_, err := nilParser.Parse(context.Background(), "test")
 	if err == nil {
 		t.Error("Expected error for nil parser")

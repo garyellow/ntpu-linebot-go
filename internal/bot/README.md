@@ -23,7 +23,7 @@ type Handler interface {
 }
 ```
 
-### NLU DispatchIntent（可選）
+### NLU DispatchIntent（可選功能）
 
 各模組額外實作 `DispatchIntent` 方法支援 NLU 意圖分發（需設定 `GEMINI_API_KEY`）：
 
@@ -34,7 +34,28 @@ type Handler interface {
 func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[string]string) ([]messaging_api.MessageInterface, error)
 ```
 
-此方法不在 `Handler` 介面中定義（NLU 為可選功能），但所有模組都有實作。詳見 `internal/genai/README.md`。
+**為何不在 `Handler` 介面中定義？**
+
+NLU 是**可選功能**（需要 `GEMINI_API_KEY`），不是所有部署環境都啟用。遵循 Go 的介面設計原則：
+
+1. **介面最小化**：`Handler` 介面只包含必要方法（`CanHandle`, `HandleMessage`, `HandlePostback`）
+2. **可選性檢測**：Webhook 使用類型斷言 `.(interface{ DispatchIntent(...) })` 動態檢測支援
+3. **零依賴原則**：未啟用 NLU 時，模組完全獨立運作，不依賴 `genai` 套件
+
+**實作模式**：
+```go
+// webhook/handler.go - 動態檢測
+if dispatcher, ok := handler.(interface{
+    DispatchIntent(context.Context, string, map[string]string) ([]messaging_api.MessageInterface, error)
+}); ok {
+    // 支援 NLU，使用 DispatchIntent
+    return dispatcher.DispatchIntent(ctx, intent, params)
+}
+// 不支援 NLU，fallback 到 HandleMessage
+return handler.HandleMessage(ctx, rawText)
+```
+
+詳見 `internal/genai/README.md` 了解 NLU 架構。
 
 ## 模組概覽
 

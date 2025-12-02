@@ -130,7 +130,7 @@ func main() {
 	}
 
 	// Create NLU intent parser (optional - requires Gemini API key)
-	var intentParser genai.IntentParserInterface
+	var intentParser genai.IntentParser
 	if cfg.GeminiAPIKey != "" {
 		parser, err := genai.NewIntentParser(context.Background(), cfg.GeminiAPIKey)
 		if err != nil {

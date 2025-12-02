@@ -36,11 +36,19 @@ const (
 	// MaxContactsPerSearch is the maximum contacts to return from database search (matches DB LIMIT 500)
 	MaxContactsPerSearch = 500
 
+	// Emergency phone numbers are hard-coded as constants for three critical reasons:
+	//   1. Availability: No external dependency (database, scraper) - instant access
+	//   2. Performance: Zero latency lookup for time-sensitive emergency situations
+	//   3. Reliability: Infrequent changes managed through code review process
+	//
+	// Design decision: Hard-coded constants over database/config for critical data
+	// Trade-off: Requires code deployment to update vs. runtime flexibility
+	//
 	// Emergency phone numbers (without hyphens for clipboard copy)
 	// 三峽校區
 	sanxiaNormalPhone    = "0286741111" // 總機
 	sanxia24HPhone       = "0226731949" // 24H緊急行政電話
-	sanxiaEmergencyPhone = "0226711234" // 24H急難救助電話（校安中心）
+	sanxiaEmergencyPhone = "0226711234" // 24H急難救助電話(校安中心)
 	sanxiaGatePhone      = "0226733920" // 大門哨所
 	sanxiaDormPhone      = "0286716784" // 宿舍夜間緊急電話
 
