@@ -272,25 +272,6 @@ func SetSender(msg messaging_api.MessageInterface, sender *messaging_api.Sender)
 	return msg
 }
 
-// ValidationError represents an input validation error.
-type ValidationError struct {
-	Field   string
-	Message string
-}
-
-// Error implements the error interface for ValidationError.
-func (e *ValidationError) Error() string {
-	return fmt.Sprintf("%s: %s", e.Field, e.Message)
-}
-
-// NewValidationError creates a validation error message.
-func NewValidationError(field, message string) error {
-	return &ValidationError{
-		Field:   field,
-		Message: message,
-	}
-}
-
 // BuildTelURI creates a tel: URI for phone dialing with optional extension.
 // Format: tel:+886286741111,12345 (E.164 format without dashes, comma for pause dial)
 //
@@ -490,29 +471,6 @@ func QuickReplyRetryAction(retryText string) QuickReplyItem {
 // ================================================
 // Message Helper Functions
 // ================================================
-
-// NewTextMessageWithQuickReply creates a text message with quick reply items.
-// This is a convenience function for the common pattern of creating a text message
-// and attaching quick replies.
-func NewTextMessageWithQuickReply(text string, sender *messaging_api.Sender, items ...QuickReplyItem) *messaging_api.TextMessage {
-	msg := NewTextMessageWithConsistentSender(text, sender)
-	if len(items) > 0 {
-		msg.QuickReply = NewQuickReply(items)
-	}
-	return msg
-}
-
-// NewFlexMessageWithQuickReply creates a flex message with quick reply items and sender.
-// This is a convenience function for the common pattern of creating a flex message
-// with sender and quick replies.
-func NewFlexMessageWithQuickReply(altText string, contents messaging_api.FlexContainerInterface, sender *messaging_api.Sender, items ...QuickReplyItem) *messaging_api.FlexMessage {
-	msg := NewFlexMessage(altText, contents)
-	msg.Sender = sender
-	if len(items) > 0 {
-		msg.QuickReply = NewQuickReply(items)
-	}
-	return msg
-}
 
 // AddQuickReplyToMessages attaches quick reply items to the last message in a slice.
 // If the slice is empty or the last message doesn't support quick replies, it's a no-op.
