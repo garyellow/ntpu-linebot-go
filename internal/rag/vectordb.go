@@ -393,11 +393,9 @@ func (v *VectorDB) Search(ctx context.Context, query string, nResults int) ([]Se
 		if finalCount > MaxSearchResults {
 			finalCount = MaxSearchResults
 		}
-	} else {
+	} else if finalCount > len(searchResults) {
 		// No highly relevant results, just use default
-		if finalCount > len(searchResults) {
-			finalCount = len(searchResults)
-		}
+		finalCount = len(searchResults)
 	}
 
 	if len(searchResults) > finalCount {
