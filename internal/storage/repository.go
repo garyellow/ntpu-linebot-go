@@ -1248,15 +1248,17 @@ func (db *DB) CountHistoricalCourses(ctx context.Context) (int, error) {
 // SaveSyllabus inserts or updates a syllabus record
 func (db *DB) SaveSyllabus(ctx context.Context, syllabus *Syllabus) error {
 	query := `
-		INSERT INTO syllabi (uid, year, term, title, teachers, objectives, outline, schedule, content_hash, cached_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO syllabi (uid, year, term, title, teachers, objectives_cn, objectives_en, outline_cn, outline_en, schedule, content_hash, cached_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(uid) DO UPDATE SET
 			year = excluded.year,
 			term = excluded.term,
 			title = excluded.title,
 			teachers = excluded.teachers,
-			objectives = excluded.objectives,
-			outline = excluded.outline,
+			objectives_cn = excluded.objectives_cn,
+			objectives_en = excluded.objectives_en,
+			outline_cn = excluded.outline_cn,
+			outline_en = excluded.outline_en,
 			schedule = excluded.schedule,
 			content_hash = excluded.content_hash,
 			cached_at = excluded.cached_at
@@ -1273,8 +1275,10 @@ func (db *DB) SaveSyllabus(ctx context.Context, syllabus *Syllabus) error {
 		syllabus.Term,
 		syllabus.Title,
 		string(teachersJSON),
-		syllabus.Objectives,
-		syllabus.Outline,
+		syllabus.ObjectivesCN,
+		syllabus.ObjectivesEN,
+		syllabus.OutlineCN,
+		syllabus.OutlineEN,
 		syllabus.Schedule,
 		syllabus.ContentHash,
 		time.Now().Unix(),
@@ -1292,15 +1296,17 @@ func (db *DB) SaveSyllabusBatch(ctx context.Context, syllabi []*Syllabus) error 
 	}
 
 	query := `
-		INSERT INTO syllabi (uid, year, term, title, teachers, objectives, outline, schedule, content_hash, cached_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO syllabi (uid, year, term, title, teachers, objectives_cn, objectives_en, outline_cn, outline_en, schedule, content_hash, cached_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(uid) DO UPDATE SET
 			year = excluded.year,
 			term = excluded.term,
 			title = excluded.title,
 			teachers = excluded.teachers,
-			objectives = excluded.objectives,
-			outline = excluded.outline,
+			objectives_cn = excluded.objectives_cn,
+			objectives_en = excluded.objectives_en,
+			outline_cn = excluded.outline_cn,
+			outline_en = excluded.outline_en,
 			schedule = excluded.schedule,
 			content_hash = excluded.content_hash,
 			cached_at = excluded.cached_at
@@ -1314,7 +1320,7 @@ func (db *DB) SaveSyllabusBatch(ctx context.Context, syllabi []*Syllabus) error 
 				return fmt.Errorf("failed to marshal teachers for %s: %w", syllabus.UID, err)
 			}
 
-			if _, err := stmt.ExecContext(ctx, syllabus.UID, syllabus.Year, syllabus.Term, syllabus.Title, string(teachersJSON), syllabus.Objectives, syllabus.Outline, syllabus.Schedule, syllabus.ContentHash, cachedAt); err != nil {
+			if _, err := stmt.ExecContext(ctx, syllabus.UID, syllabus.Year, syllabus.Term, syllabus.Title, string(teachersJSON), syllabus.ObjectivesCN, syllabus.ObjectivesEN, syllabus.OutlineCN, syllabus.OutlineEN, syllabus.Schedule, syllabus.ContentHash, cachedAt); err != nil {
 				return fmt.Errorf("failed to save syllabus %s: %w", syllabus.UID, err)
 			}
 		}
@@ -1340,10 +1346,10 @@ func (db *DB) GetSyllabusContentHash(ctx context.Context, uid string) (string, e
 
 // GetSyllabusByUID retrieves a syllabus by its UID
 func (db *DB) GetSyllabusByUID(ctx context.Context, uid string) (*Syllabus, error) {
-	query := `SELECT uid, year, term, title, teachers, objectives, outline, schedule, content_hash, cached_at FROM syllabi WHERE uid = ?`
+	query := `SELECT uid, year, term, title, teachers, objectives_cn, objectives_en, outline_cn, outline_en, schedule, content_hash, cached_at FROM syllabi WHERE uid = ?`
 
 	var teachersJSON string
-	var objectives, outline, schedule sql.NullString
+	var objectivesCN, objectivesEN, outlineCN, outlineEN, schedule sql.NullString
 	syllabus := &Syllabus{}
 	err := db.reader.QueryRowContext(ctx, query, uid).Scan(
 		&syllabus.UID,
@@ -1351,8 +1357,10 @@ func (db *DB) GetSyllabusByUID(ctx context.Context, uid string) (*Syllabus, erro
 		&syllabus.Term,
 		&syllabus.Title,
 		&teachersJSON,
-		&objectives,
-		&outline,
+		&objectivesCN,
+		&objectivesEN,
+		&outlineCN,
+		&outlineEN,
 		&schedule,
 		&syllabus.ContentHash,
 		&syllabus.CachedAt,
@@ -1367,8 +1375,10 @@ func (db *DB) GetSyllabusByUID(ctx context.Context, uid string) (*Syllabus, erro
 	if err := json.Unmarshal([]byte(teachersJSON), &syllabus.Teachers); err != nil {
 		syllabus.Teachers = []string{}
 	}
-	syllabus.Objectives = objectives.String
-	syllabus.Outline = outline.String
+	syllabus.ObjectivesCN = objectivesCN.String
+	syllabus.ObjectivesEN = objectivesEN.String
+	syllabus.OutlineCN = outlineCN.String
+	syllabus.OutlineEN = outlineEN.String
 	syllabus.Schedule = schedule.String
 
 	return syllabus, nil
@@ -1377,7 +1387,7 @@ func (db *DB) GetSyllabusByUID(ctx context.Context, uid string) (*Syllabus, erro
 // GetAllSyllabi retrieves all syllabi from the database
 // Used for loading into vector store on startup
 func (db *DB) GetAllSyllabi(ctx context.Context) ([]*Syllabus, error) {
-	query := `SELECT uid, year, term, title, teachers, objectives, outline, schedule, content_hash, cached_at FROM syllabi`
+	query := `SELECT uid, year, term, title, teachers, objectives_cn, objectives_en, outline_cn, outline_en, schedule, content_hash, cached_at FROM syllabi`
 
 	rows, err := db.reader.QueryContext(ctx, query)
 	if err != nil {
@@ -1388,7 +1398,7 @@ func (db *DB) GetAllSyllabi(ctx context.Context) ([]*Syllabus, error) {
 	var syllabi []*Syllabus
 	for rows.Next() {
 		var teachersJSON string
-		var objectives, outline, schedule sql.NullString
+		var objectivesCN, objectivesEN, outlineCN, outlineEN, schedule sql.NullString
 		syllabus := &Syllabus{}
 		if err := rows.Scan(
 			&syllabus.UID,
@@ -1396,8 +1406,10 @@ func (db *DB) GetAllSyllabi(ctx context.Context) ([]*Syllabus, error) {
 			&syllabus.Term,
 			&syllabus.Title,
 			&teachersJSON,
-			&objectives,
-			&outline,
+			&objectivesCN,
+			&objectivesEN,
+			&outlineCN,
+			&outlineEN,
 			&schedule,
 			&syllabus.ContentHash,
 			&syllabus.CachedAt,
@@ -1408,8 +1420,10 @@ func (db *DB) GetAllSyllabi(ctx context.Context) ([]*Syllabus, error) {
 		if err := json.Unmarshal([]byte(teachersJSON), &syllabus.Teachers); err != nil {
 			syllabus.Teachers = []string{}
 		}
-		syllabus.Objectives = objectives.String
-		syllabus.Outline = outline.String
+		syllabus.ObjectivesCN = objectivesCN.String
+		syllabus.ObjectivesEN = objectivesEN.String
+		syllabus.OutlineCN = outlineCN.String
+		syllabus.OutlineEN = outlineEN.String
 		syllabus.Schedule = schedule.String
 
 		syllabi = append(syllabi, syllabus)
@@ -1420,7 +1434,7 @@ func (db *DB) GetAllSyllabi(ctx context.Context) ([]*Syllabus, error) {
 
 // GetSyllabiByYearTerm retrieves all syllabi for a specific year and term
 func (db *DB) GetSyllabiByYearTerm(ctx context.Context, year, term int) ([]*Syllabus, error) {
-	query := `SELECT uid, year, term, title, teachers, objectives, outline, schedule, content_hash, cached_at FROM syllabi WHERE year = ? AND term = ?`
+	query := `SELECT uid, year, term, title, teachers, objectives_cn, objectives_en, outline_cn, outline_en, schedule, content_hash, cached_at FROM syllabi WHERE year = ? AND term = ?`
 
 	rows, err := db.reader.QueryContext(ctx, query, year, term)
 	if err != nil {
@@ -1431,7 +1445,7 @@ func (db *DB) GetSyllabiByYearTerm(ctx context.Context, year, term int) ([]*Syll
 	var syllabi []*Syllabus
 	for rows.Next() {
 		var teachersJSON string
-		var objectives, outline, schedule sql.NullString
+		var objectivesCN, objectivesEN, outlineCN, outlineEN, schedule sql.NullString
 		syllabus := &Syllabus{}
 		if err := rows.Scan(
 			&syllabus.UID,
@@ -1439,8 +1453,10 @@ func (db *DB) GetSyllabiByYearTerm(ctx context.Context, year, term int) ([]*Syll
 			&syllabus.Term,
 			&syllabus.Title,
 			&teachersJSON,
-			&objectives,
-			&outline,
+			&objectivesCN,
+			&objectivesEN,
+			&outlineCN,
+			&outlineEN,
 			&schedule,
 			&syllabus.ContentHash,
 			&syllabus.CachedAt,
@@ -1451,8 +1467,10 @@ func (db *DB) GetSyllabiByYearTerm(ctx context.Context, year, term int) ([]*Syll
 		if err := json.Unmarshal([]byte(teachersJSON), &syllabus.Teachers); err != nil {
 			syllabus.Teachers = []string{}
 		}
-		syllabus.Objectives = objectives.String
-		syllabus.Outline = outline.String
+		syllabus.ObjectivesCN = objectivesCN.String
+		syllabus.ObjectivesEN = objectivesEN.String
+		syllabus.OutlineCN = outlineCN.String
+		syllabus.OutlineEN = outlineEN.String
 		syllabus.Schedule = schedule.String
 
 		syllabi = append(syllabi, syllabus)

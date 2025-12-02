@@ -579,7 +579,9 @@ processLoop:
 		}
 
 		// Compute content hash from all fields for change detection
-		contentForHash := fields.Objectives + "\n" + fields.Outline + "\n" + fields.Schedule
+		// Include all CN/EN fields for comprehensive change detection
+		contentForHash := fields.ObjectivesCN + "\n" + fields.ObjectivesEN + "\n" +
+			fields.OutlineCN + "\n" + fields.OutlineEN + "\n" + fields.Schedule
 		contentHash := syllabus.ComputeContentHash(contentForHash)
 
 		// Check if content has changed (incremental update)
@@ -596,15 +598,17 @@ processLoop:
 
 		// Create syllabus record with separate fields
 		syl := &storage.Syllabus{
-			UID:         course.UID,
-			Year:        course.Year,
-			Term:        course.Term,
-			Title:       course.Title,
-			Teachers:    course.Teachers,
-			Objectives:  fields.Objectives,
-			Outline:     fields.Outline,
-			Schedule:    fields.Schedule,
-			ContentHash: contentHash,
+			UID:          course.UID,
+			Year:         course.Year,
+			Term:         course.Term,
+			Title:        course.Title,
+			Teachers:     course.Teachers,
+			ObjectivesCN: fields.ObjectivesCN,
+			ObjectivesEN: fields.ObjectivesEN,
+			OutlineCN:    fields.OutlineCN,
+			OutlineEN:    fields.OutlineEN,
+			Schedule:     fields.Schedule,
+			ContentHash:  contentHash,
 		}
 
 		newSyllabi = append(newSyllabi, syl)

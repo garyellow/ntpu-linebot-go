@@ -110,16 +110,30 @@ func TestFields_IsEmpty(t *testing.T) {
 			want:   true,
 		},
 		{
-			name: "objectives set",
+			name: "objectives_cn set",
 			fields: Fields{
-				Objectives: "培養能力",
+				ObjectivesCN: "培養能力",
 			},
 			want: false,
 		},
 		{
-			name: "outline set",
+			name: "objectives_en set",
 			fields: Fields{
-				Outline: "課程內容",
+				ObjectivesEN: "Learn skills",
+			},
+			want: false,
+		},
+		{
+			name: "outline_cn set",
+			fields: Fields{
+				OutlineCN: "課程內容",
+			},
+			want: false,
+		},
+		{
+			name: "outline_en set",
+			fields: Fields{
+				OutlineEN: "Course content",
 			},
 			want: false,
 		},
@@ -133,18 +147,22 @@ func TestFields_IsEmpty(t *testing.T) {
 		{
 			name: "all whitespace only",
 			fields: Fields{
-				Objectives: "   ",
-				Outline:    "\n\n",
-				Schedule:   "\t\t",
+				ObjectivesCN: "   ",
+				ObjectivesEN: "   ",
+				OutlineCN:    "\n\n",
+				OutlineEN:    "\n\n",
+				Schedule:     "\t\t",
 			},
 			want: true,
 		},
 		{
 			name: "mixed whitespace and content",
 			fields: Fields{
-				Objectives: "   ",
-				Outline:    "Valid content",
-				Schedule:   "\t\t",
+				ObjectivesCN: "   ",
+				ObjectivesEN: "   ",
+				OutlineCN:    "Valid content",
+				OutlineEN:    "",
+				Schedule:     "\t\t",
 			},
 			want: false,
 		},
@@ -176,20 +194,43 @@ func TestFields_ChunksForEmbedding(t *testing.T) {
 			wantTypes:   nil,
 		},
 		{
-			name: "objectives only",
+			name: "objectives_cn only",
 			fields: Fields{
-				Objectives: "培養程式設計能力",
+				ObjectivesCN: "培養程式設計能力",
 			},
 			courseTitle: "程式設計",
 			wantCount:   1,
 			wantTypes:   []ChunkType{ChunkTypeObjectives},
 		},
 		{
-			name: "all fields",
+			name: "objectives_cn and objectives_en (merged)",
 			fields: Fields{
-				Objectives: "培養程式設計能力",
-				Outline:    "變數、迴圈、函數",
-				Schedule:   "第1週：課程介紹",
+				ObjectivesCN: "培養程式設計能力",
+				ObjectivesEN: "Develop programming skills",
+			},
+			courseTitle: "程式設計",
+			wantCount:   1,
+			wantTypes:   []ChunkType{ChunkTypeObjectives},
+		},
+		{
+			name: "all fields (CN only)",
+			fields: Fields{
+				ObjectivesCN: "培養程式設計能力",
+				OutlineCN:    "變數、迴圈、函數",
+				Schedule:     "第1週：課程介紹",
+			},
+			courseTitle: "程式設計",
+			wantCount:   3,
+			wantTypes:   []ChunkType{ChunkTypeObjectives, ChunkTypeOutline, ChunkTypeSchedule},
+		},
+		{
+			name: "all fields (CN + EN)",
+			fields: Fields{
+				ObjectivesCN: "培養程式設計能力",
+				ObjectivesEN: "Develop programming skills",
+				OutlineCN:    "變數、迴圈、函數",
+				OutlineEN:    "Variables, loops, functions",
+				Schedule:     "第1週：課程介紹",
 			},
 			courseTitle: "程式設計",
 			wantCount:   3,
@@ -198,7 +239,7 @@ func TestFields_ChunksForEmbedding(t *testing.T) {
 		{
 			name: "empty course title",
 			fields: Fields{
-				Objectives: "培養能力",
+				ObjectivesCN: "培養能力",
 			},
 			courseTitle: "",
 			wantCount:   1,
@@ -207,9 +248,11 @@ func TestFields_ChunksForEmbedding(t *testing.T) {
 		{
 			name: "whitespace only fields are skipped",
 			fields: Fields{
-				Objectives: "   ",    // whitespace only - should be skipped
-				Outline:    "\n\t\n", // whitespace only - should be skipped
-				Schedule:   "第1週導論",  // valid content
+				ObjectivesCN: "   ",    // whitespace only - should be skipped
+				ObjectivesEN: "   ",    // whitespace only - should be skipped
+				OutlineCN:    "\n\t\n", // whitespace only - should be skipped
+				OutlineEN:    "\n\t\n", // whitespace only - should be skipped
+				Schedule:     "第1週導論",  // valid content
 			},
 			courseTitle: "測試課程",
 			wantCount:   1,
@@ -218,9 +261,11 @@ func TestFields_ChunksForEmbedding(t *testing.T) {
 		{
 			name: "mixed whitespace and content",
 			fields: Fields{
-				Objectives: "   有效的教學目標   ", // has content with leading/trailing whitespace
-				Outline:    "",              // empty - should be skipped
-				Schedule:   "\t",            // whitespace only - should be skipped
+				ObjectivesCN: "   有效的教學目標   ", // has content with leading/trailing whitespace
+				ObjectivesEN: "",              // empty - should be merged with CN
+				OutlineCN:    "",              // empty - should be skipped
+				OutlineEN:    "",              // empty - should be skipped
+				Schedule:     "\t",            // whitespace only - should be skipped
 			},
 			courseTitle: "測試課程",
 			wantCount:   1,
@@ -257,8 +302,8 @@ func TestFields_ChunksForEmbedding_FullContent(t *testing.T) {
 	}
 
 	fields := Fields{
-		Objectives: "目標",
-		Schedule:   longSchedule,
+		ObjectivesCN: "目標",
+		Schedule:     longSchedule,
 	}
 
 	chunks := fields.ChunksForEmbedding("測試課程")
@@ -286,6 +331,40 @@ func TestFields_ChunksForEmbedding_FullContent(t *testing.T) {
 	// Should NOT end with "..." (no truncation)
 	if containsStr(scheduleChunk.Content, "...") {
 		t.Error("Schedule should not be truncated")
+	}
+}
+
+func TestFields_ChunksForEmbedding_MergeContent(t *testing.T) {
+	// Test that CN and EN content are properly merged
+	fields := Fields{
+		ObjectivesCN: "培養程式設計能力",
+		ObjectivesEN: "Develop programming skills",
+		OutlineCN:    "變數、迴圈、函數",
+		OutlineEN:    "Variables, loops, functions",
+	}
+
+	chunks := fields.ChunksForEmbedding("測試課程")
+
+	if len(chunks) != 2 {
+		t.Fatalf("Expected 2 chunks (objectives, outline), got %d", len(chunks))
+	}
+
+	// Check objectives chunk contains both CN and EN
+	objChunk := chunks[0]
+	if !containsStr(objChunk.Content, "培養程式設計能力") {
+		t.Error("Objectives chunk should contain Chinese content")
+	}
+	if !containsStr(objChunk.Content, "Develop programming skills") {
+		t.Error("Objectives chunk should contain English content")
+	}
+
+	// Check outline chunk contains both CN and EN
+	outChunk := chunks[1]
+	if !containsStr(outChunk.Content, "變數、迴圈、函數") {
+		t.Error("Outline chunk should contain Chinese content")
+	}
+	if !containsStr(outChunk.Content, "Variables, loops, functions") {
+		t.Error("Outline chunk should contain English content")
 	}
 }
 

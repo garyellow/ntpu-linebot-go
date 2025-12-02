@@ -1,0 +1,465 @@
+<html>
+<head>
+<meta name="robots" content="noindex,nofollow">
+<meta http-equiv="Pragma"  content="no-cache">
+<meta http-equiv="Expires" content="Mon, 01 JUN 2000 00:00:00 GMT">
+<meta http-equiv="Content-Language" content="zh-tw">
+<meta http-equiv="Content-Type" content="text/html; charset=big5">
+<title>國立臺北大學．課程查詢系統 -- 課程大綱</title>
+<link href="../../student_files/cssStyle/student_1.css" rel="stylesheet" type="text/css">
+<style type="text/css">
+<!--
+td  { word-break: keep-all; word-wrap: break-word }
+.wordwrap { word-wrap: break-word; -moz-binding: url('course_query.wordwrap_xml#wordwrap'); display: block; overflow: auto; z-index: 1; } 
+-->
+</style>
+<script type="text/javascript" src="../../jquery-oLoader-v0.1/js/jquery.min.js"></script>
+<script type="text/javascript" src="../../jquery-oLoader-v0.1/js/jquery.oLoader.js"></script>
+<script type="text/javascript" src="../../jquery-oLoader-v0.1/js/jquery.oLoader.min.js"></script>
+<script type="text/javascript">
+    $(function() {
+        //取得載入內容的container
+        var $div_schedule = $('#div_schedule');
+        var $div_studAbility = $('#div_studAbility');
+        
+        $('#nav_schedule').click(function(e) {
+            e.preventDefault();
+            var src = $(this).attr('href');
+            $div_schedule.height('40px');
+            $('#span_schedule').html('');
+            $div_schedule.oLoader();
+            $.get(src, function(data) {
+                $div_schedule.html(data);
+            });
+            
+        })
+        
+        $('#nav_studAbility').click(function(e) {
+            e.preventDefault();
+            var src = $(this).attr('href');
+            $div_studAbility.height('40px');
+            $('#span_studAbility').html('');
+            $div_studAbility.oLoader();
+            $.get(src, function(data) {
+                $div_studAbility.html(data);
+            });
+            
+        })
+    })
+</script>
+<script type="text/javascript">
+	<!-- 
+	function printout() {
+		if (!window.print){alert("列印功能暫時停用，請按 Ctrl-P 來列印"); return;}
+		window.print();}
+	function MM_openBrWindow(theURL,winName,features) {
+		window.open(theURL,winName,features);}
+	 
+function show_hiddendivCM78(){
+document.getElementById("hidden_divCM78").style.display='block';
+document.getElementById("_strHrefCM78").href='javascript:hidden_showdivCM78();';
+document.getElementById("_strSpanCM78").innerHTML="-";
+}
+function hidden_showdivCM78(){
+document.getElementById("hidden_divCM78").style.display='none';
+document.getElementById("_strHrefCM78").href='javascript:show_hiddendivCM78();';
+document.getElementById("_strSpanCM78").innerHTML="+";
+}//-->
+</script>
+</head>
+<body>
+<table width="718" align="center" border="0" cellpadding="0" cellspacing="0" style="padding: 20px;" style="word-break: break-all;"><tr><td>
+<p class="font-b15"><b class="font-c15">114</b> 學年度 第 <b class="font-c15">1</b> 學期 <b class="font-c15">雲端運算</b> 課程大綱
+　　　<input type="button" value="結束" onClick="javascript: window.close()" class="btn">
+　　　<input type="button" value="列印本頁" onClick="javascript:printout()" class="btn">
+</p>
+<table width="100%" border="1" cellpadding="5" cellspacing="0">
+<tr bgcolor="#ffffff"><td class="font-g13">
+課程中文名稱 Title of Course in Chinese：<b class="font-c15">雲端運算</b><br>
+課程英文名稱 Title of Course in English：<b class="font-c15">Cloud Computing</b><br>
+應修系級 Major：<b class="font-c15">資訊管理研究所1 &nbsp;,商業人工智慧學士微學程 &nbsp;,</b><br>
+授課教師 Instructor：<b class="font-c15">黃懷陞</b><br>
+選修類別 Required/Elective：<b class="font-c15">選</b><br>
+全半學年 Whole or Half of the Academic Year：<b class="font-c15">半</b>學年<br>
+學　　分 Credit(s) ：<b class="font-c15">3</b> 學分<br>
+時　　數 Hour(s)：<b class="font-c15">3</b> 小時<br>
+</td></tr>
+<tr class="font-g13"><td>教師網址 Instructor's Website ：<a href="http://web.ntpu.edu.tw/~hshuang" class="font-c13" target="_blank">http://web.ntpu.edu.tw/~hshuang</a></td></tr>
+<tr class="font-g13"><td>教師專長 Instructor's Specialty ：<span class="font-c13"></span></td></tr>
+<tr class="font-g13" valign="top"><td>課綱附檔 Attachments ：
+				</td></tr>
+<tr class="font-g13"><td>先修科目：<span class="font-c13">(1)任一程式語言(必需)&nbsp;(2)資料通訊與網路或任何網路相關基礎課程(建議)</span></td></tr>
+<tr class="font-g13"><td>Prerequisites：<span class="font-c13">(1).&nbsp;Programming&nbsp;in&nbsp;any&nbsp;language&nbsp;(2).&nbsp;Data&nbsp;Communications&nbsp;and&nbsp;Computer&nbsp;Networks,&nbsp;etc.&nbsp;(Preferred)</span></td></td></tr>
+<tr class="font-g13"><td>教學目標：<div class="font-c13">This course is intended for students who seek an overall understanding of cloud computing concepts, independent of specific technical roles. It provides a detailed overview of cloud concepts, AWS core services, security, architecture, pricing, and support.</div></td></tr>
+<tr class="font-g13"><td>Course Objectives：<div class="font-c13">Upon completion of this course, students will be able to:<br />&#8226; Define the AWS Cloud<br />&#8226; Explain the AWS pricing philosophy<br />&#8226; Identify the global infrastructure components of AWS<br />&#8226; Describe the security and compliance measures of the AWS Cloud, including AWS Identity and Access Management (IAM)<br />&#8226; Create a virtual private cloud (VPC) by using Amazon Virtual Private Cloud (Amazon VPC)<br />&#8226; Demonstrate when to use Amazon Elastic Compute Cloud (Amazon EC2), AWS Lambda, and AWS Elastic Beanstalk<br />&#8226; Differentiate between Amazon Simple Storage Service (Amazon S3), Amazon Elastic Block Store (Amazon EBS), Amazon Elastic File System (Amazon EFS), and Amazon Simple Storage Service Glacier (Amazon S3 Glacier)<br />&#8226; Demonstrate when to use AWS database services, including Amazon Relational Database Service (Amazon RDS), Amazon DynamoDB, Amazon Redshift, and Amazon Aurora<br />&#8226; Explain the architectural principles of the AWS Cloud<br />&#8226; Explore key concepts related to Elastic Load Balancing, Amazon CloudWatch, and Amazon EC2Auto Scaling</div></td></tr>
+<tr class="font-g13"><td>本課程包含永續發展(SDGs)目標(→<a href="https://esdg.ntpu.edu.tw/sustainable/sdgs-intro" target="_blabk">點此瞭解永續相關目標</a>←)：<div class="font-c13">
+SDG4｜優質教育 (Quality Education)<br />
+</div></td></tr>
+<tr class="font-g13"><td>內容綱要：<div class="font-c13">This course covers the fundamentals of building IT infrastructure on cloud. The course teaches students how to optimize use of the cloud by understanding cloud services and how they fit into cloud-based solutions.</div></td></tr>
+<tr class="font-g13"><td>Course Outline：<div class="font-c13">9/11<br />1. Syllabus<br />2. Apply for AWS Academy<br />3. Module 1: Cloud Concepts Overview<br /><br />9/18<br />Module 2: Cloud Economics and Billing<br /><br />9/25<br />Module 3: AWS Global Infrastructure Overview<br /><br />10/2<br />Module 4: AWS Cloud Security<br />Lab 1: Introduction to IAM<br /><br />10/09<br />Module 5: Networking and Content Delivery (Part 1)<br />Lab 2: Build Your VPC and Launch a Web Server<br /><br />10/16<br />Module 5: Networking and Content Delivery (Part 2)<br />Module 6: Compute (Part 1)<br /><br />10/23<br />Module 6: Compute (Part 2)<br /><br />10/30 <br />Enterprise Visiting<br /><br />11/6<br />Midterm Presentation<br /><br />11/13<br />Activity: AWS Lambda<br />Activity: AWS Elastic Beanstalk<br /><br />11/20<br />Module 7: Storage<br />Lab 4 – Working with EBS<br /><br />11/27<br />Module 8: Databases<br />Lab 5 – Build a Database Server<br /><br />12/4<br />Module 9: Cloud Architecture<br /><br />12/11<br />Module 10: Automatic Scaling and Monitoring<br />Lab 6 – Scale & Load Balance your Architecture<br /><br />12/18<br />Certification Resources<br /><br />12/25<br />Final Presentation</div></td></tr>
+<tr class="font-g13" valign="top"><td>學生核心能力關連(Student's Core Competence)：<br>(八大核心能力為百分比；合計100%；Total 100%)
+<table width="100%" border="2" cellspacing="0" cellpadding="0" bordercolor="#420627" style="border-collapse: collapse">
+<tr class="font-g13"><td>
+<b>資訊管理研究所</b> 114年 系核心能力：
+<SPAN style="DISPLAY: block" id="hidden_divCM78">
+資訊科技新知探索與系統開發應用<font color="#2389C3">&nbsp;	80 %</font>
+<br>
+網路行銷企劃能力<font color="#2389C3">&nbsp;	0 %</font>
+<br>
+論文寫作與獨立研究能力新知<font color="#2389C3">&nbsp;	20 %</font>
+<br>
+</SPAN>[<A 
+					id="_strHrefCM78" href="javascript:hidden_showdivCM78();"><SPAN 
+					id="_strSpanCM78">-</SPAN></A>]
+					
+<hr>
+</td></tr>
+</table>
+<table width="100%" border="2" cellspacing="0" cellpadding="0" bordercolor="#420627" style="border-collapse: collapse">
+<tr class="font-b15" align=center colspan=8><td colspan=8 align=center bgcolor="#F79646"><br><b>校四大基本素養<br>Four Fundamental Qualities</b><p></td></tr>
+<tr class="font-b13" bgcolor="#9DBA75">
+<td width="25%" colspan=2 align=center  class="font-b15">專業<br>Professionalism</td>
+<td width="25%" colspan=2 align=center  class="font-b15">人際<br><font size=2>Interpersonal Relationship</font></td>
+<td width="25%" colspan=2 align=center  class="font-b15">倫理<br>Ethics</td>
+<td width="25%" colspan=2 align=center  class="font-b15">國際觀<br><font size=2>International Vision</font></td>
+</tr>
+<tr class="font-b13">
+<td width="100" style="word-break:normal">
+創意思考與問題解決(Creative thinking and Problem-solving)<div class="font-c15" align="center">50 %</div>
+</td>
+<td width="100" style="word-break:normal">
+綜合統整(Comprehensive Integration)<div class="font-c15" align="center">30 %</div>
+</td>
+<td width="100" style="word-break:normal">
+溝通協調(Communication and Coordination)<div class="font-c15" align="center">0 %</div>
+</td>
+<td width="100" style="word-break:normal">
+團隊合作(Teamwork)<div class="font-c15" align="center">0 %</div>
+</td>
+<td width="100" style="word-break:normal">
+誠信正直(Honesty and Integrity)<div class="font-c15" align="center">0 %</div>
+</td>
+<td width="100" style="word-break:normal">
+尊重自省(Self-Esteem and Self-reflection)<div class="font-c15" align="center">0 %</div>
+</td>
+<td width="100" style="word-break:normal">
+多元關懷(Caring for Diversity)<div class="font-c15" align="center">0 %</div>
+</td>
+<td width="100" style="word-break:normal">
+跨界宏觀(Interdisciplinary Vision)<div class="font-c15" align="center">20 %</div>
+</td>
+</tr>
+</table>
+</td></tr>
+<tr class="font-g13"><td>商學院院核心素養目標 (College Competency Goals)：<div class="font-c13">
+Fundamental Skill<br>
+Professionalism<br>
+</div></td></tr>
+<tr class="font-g13" valign="top"><td>教學進度(Teaching Contents)：
+<table width="100%" border="2" cellspacing="0" cellpadding="0" bordercolor="#420627" style="border-collapse: collapse">
+<th width="70" align=center bgcolor="#9DBA75" class="font-b11"><b>週別<br>(Weekly Schedule)</th>
+<th width="70" align=center bgcolor="#9DBA75" class="font-b11"><b>日期<br>(Date)</th>
+<th width="500" align=center bgcolor="#9DBA75" class="font-b11"><b>教學預定進度<br>(Tentative teaching schedule)<br>(若有調整，依教師實際授課為準;Adjustments are made according <br>to instructor's actual teaching schedule)</th>
+<th width="100" align=center bgcolor="#9DBA75" class="font-b11" colspan=4><b>教學方法與教學活動<br>(Teaching<br>methods<br>and<br>activities)</th>
+<tr class="font-b13" id="schedule_w1">
+<td align=center width="70">Week 1</td>
+<input type="hidden" name="eva_week" value="1">
+<td align=center>
+20250911
+</td>
+<td class="font-c15">
+&nbsp;1. Syllabus<br />2. Apply for AWS Academy<br />3. Module 1: Cloud Concepts Overview&nbsp;
+</td>
+<td align=center width="100">
+講授Lecture<br>
+實習Practicum<br>
+</td>
+</tr>
+<tr class="font-b13" id="schedule_w2">
+<td align=center width="70">Week 2</td>
+<input type="hidden" name="eva_week" value="2">
+<td align=center>
+20250918
+</td>
+<td class="font-c15">
+&nbsp;Module 2: Cloud Economics and Billing&nbsp;
+</td>
+<td align=center width="100">
+講授Lecture<br>
+</td>
+</tr>
+<tr class="font-b13" id="schedule_w3">
+<td align=center width="70">Week 3</td>
+<input type="hidden" name="eva_week" value="3">
+<td align=center>
+20250925
+</td>
+<td class="font-c15">
+&nbsp;Module 3: AWS Global Infrastructure Overview&nbsp;
+</td>
+<td align=center width="100">
+講授Lecture<br>
+</td>
+</tr>
+<tr class="font-b13" id="schedule_w4">
+<td align=center width="70">Week 4</td>
+<input type="hidden" name="eva_week" value="4">
+<td align=center>
+20251002
+</td>
+<td class="font-c15">
+&nbsp;Module 4: AWS Cloud Security<br />Lab 1: Introduction to IAM&nbsp;
+</td>
+<td align=center width="100">
+講授Lecture<br>
+實習Practicum<br>
+</td>
+</tr>
+<tr class="font-b13" id="schedule_w5">
+<td align=center width="70">Week 5</td>
+<input type="hidden" name="eva_week" value="5">
+<td align=center>
+20251009
+</td>
+<td class="font-c15">
+&nbsp;Module 5: Networking and Content Delivery (Part 1)<br />Lab 2: Build Your VPC and Launch a Web Server&nbsp;
+</td>
+<td align=center width="100">
+講授Lecture<br>
+實習Practicum<br>
+</td>
+</tr>
+<tr class="font-b13" id="schedule_w6">
+<td align=center width="70">Week 6</td>
+<input type="hidden" name="eva_week" value="6">
+<td align=center>
+20251016
+</td>
+<td class="font-c15">
+&nbsp;Module 5: Networking and Content Delivery (Part 2)<br />Module 6: Compute (Part 1)&nbsp;
+</td>
+<td align=center width="100">
+講授Lecture<br>
+</td>
+</tr>
+<tr class="font-b13" id="schedule_w7">
+<td align=center width="70">Week 7</td>
+<input type="hidden" name="eva_week" value="7">
+<td align=center>
+20251023
+</td>
+<td class="font-c15">
+&nbsp;Module 6: Compute (Part 2)&nbsp;
+</td>
+<td align=center width="100">
+講授Lecture<br>
+</td>
+</tr>
+<tr class="font-b13" id="schedule_w8">
+<td align=center width="70">Week 8</td>
+<input type="hidden" name="eva_week" value="8">
+<td align=center>
+20251030
+</td>
+<td class="font-c15">
+&nbsp;Enterprise Visiting&nbsp;
+</td>
+<td align=center width="100">
+其他Others<br>
+</td>
+</tr>
+<tr class="font-b13" id="schedule_w9">
+<td align=center width="70">Week 9</td>
+<input type="hidden" name="eva_week" value="9">
+<td align=center>
+20251106
+</td>
+<td class="font-c15">
+&nbsp;Midterm Presentation&nbsp;
+</td>
+<td align=center width="100">
+其他Others<br>
+</td>
+</tr>
+<tr class="font-b13" id="schedule_w10">
+<td align=center width="70">Week 10</td>
+<input type="hidden" name="eva_week" value="10">
+<td align=center>
+20251113
+</td>
+<td class="font-c15">
+&nbsp;Activity: AWS Lambda<br />Activity: AWS Elastic Beanstalk&nbsp;
+</td>
+<td align=center width="100">
+講授Lecture<br>
+實習Practicum<br>
+</td>
+</tr>
+<tr class="font-b13" id="schedule_w11">
+<td align=center width="70">Week 11</td>
+<input type="hidden" name="eva_week" value="11">
+<td align=center>
+20251120
+</td>
+<td class="font-c15">
+&nbsp;Module 7: Storage<br />Lab 4 – Working with EBS&nbsp;
+</td>
+<td align=center width="100">
+講授Lecture<br>
+實習Practicum<br>
+</td>
+</tr>
+<tr class="font-b13" id="schedule_w12">
+<td align=center width="70">Week 12</td>
+<input type="hidden" name="eva_week" value="12">
+<td align=center>
+20251127
+</td>
+<td class="font-c15">
+&nbsp;Module 8: Databases<br />Lab 5 – Build a Database Server&nbsp;
+</td>
+<td align=center width="100">
+講授Lecture<br>
+實習Practicum<br>
+</td>
+</tr>
+<tr class="font-b13" id="schedule_w13">
+<td align=center width="70">Week 13</td>
+<input type="hidden" name="eva_week" value="13">
+<td align=center>
+20251204
+</td>
+<td class="font-c15">
+&nbsp;Module 9: Cloud Architecture&nbsp;
+</td>
+<td align=center width="100">
+講授Lecture<br>
+</td>
+</tr>
+<tr class="font-b13" id="schedule_w14">
+<td align=center width="70">Week 14</td>
+<input type="hidden" name="eva_week" value="14">
+<td align=center>
+20251211
+</td>
+<td class="font-c15">
+&nbsp;Module 10: Automatic Scaling and Monitoring<br />Lab 6 – Scale & Load Balance your Architecture&nbsp;
+</td>
+<td align=center width="100">
+講授Lecture<br>
+實習Practicum<br>
+</td>
+</tr>
+<tr class="font-b13" id="schedule_w15">
+<td align=center width="70">Week 15</td>
+<input type="hidden" name="eva_week" value="15">
+<td align=center>
+20251218
+</td>
+<td class="font-c15">
+&nbsp;Certification Resources&nbsp;
+</td>
+<td align=center width="100">
+講授Lecture<br>
+</td>
+</tr>
+<tr class="font-b13" id="schedule_w16">
+<td align=center width="70">Week 16</td>
+<input type="hidden" name="eva_week" value="16">
+<td align=center>
+20251225
+</td>
+<td class="font-c15">
+&nbsp;Final Presentation&nbsp;
+</td>
+<td align=center width="100">
+其他Others<br>
+</td>
+</tr>
+<tr class="font-b13" id="schedule_w17">
+<td align=center width="70">Week 17</td>
+<input type="hidden" name="eva_week" value="17">
+<td align=center>
+20260101
+</td>
+<td class="font-c15">
+&nbsp;Appendix: Prepare for the AWS Certified Cloud Practitioner exam&nbsp;
+</td>
+<td align=center width="100">
+其他Others<br>
+</td>
+</tr>
+<tr class="font-b13" id="schedule_w18">
+<td align=center width="70">Week 18</td>
+<input type="hidden" name="eva_week" value="18">
+<td align=center>
+20260108
+</td>
+<td class="font-c15">
+&nbsp;&nbsp;
+</td>
+<td align=center width="100">
+其他Others<br>
+</td>
+</tr>
+<tr class="font-b13" id="extra_teaching">
+<td colspan="2" align="center">彈性補充教學</td>
+<td colspan="2" class="font-c15">
+課程於16週內上完，彈性補充教學規劃如下：<br />
+<input type="checkbox" id="CB1" name="CB" value="plan1" disabled="disabled" />問題討論 <input type="checkbox" id="CB2" name="CB" value="plan2" disabled="disabled" />翻轉教學 <input type="checkbox" id="CB3" name="CB" value="plan3" disabled="disabled" />展演實作 <input type="checkbox" id="CB4" name="CB" value="plan4" disabled="disabled" />校外參訪<br /><input type="checkbox" id="CB5" name="CB" value="plan5" disabled="disabled" />校內外各類演講/講座 <input type="checkbox" id="CB6" name="CB" value="plan6" disabled="disabled" />線上作業 <input type="checkbox" id="CB7" name="CB" value="plan7" checked="checked" disabled="disabled" />數位自學 <input type="checkbox" id="CB8" name="CB" value="plan8" disabled="disabled" />課業輔導<br />
+<input type="checkbox" id="CB9" name="CB" value="plan9" disabled="disabled" />遠距教學(同步) <input type="checkbox" id="CB10" name="CB" value="plan10" disabled="disabled" />遠距教學(非同步) <input type="checkbox" id="CB11" name="CB" value="plan11" disabled="disabled" />學生自主學習 <input type="checkbox" id="CB12" name="CB" value="plan12" onclick="if(!this.checked) document.getElementById('eva_schedule17_new').value = '';" checked="checked" disabled="disabled" />其他<br />
+<textarea style="width: 100%" rows="5" readonly="readonly">
+&nbsp;Appendix: Prepare for the AWS Certified Cloud Practitioner exam&nbsp;
+</textarea>
+</td>
+</tr>
+</table>
+</td></tr>
+<tr class="font-g13"><td>評量方式(Evaluation Methods)：
+<table width="100%" border="0" cellpadding="0" cellspacing="0">
+<td><div class="font-c13">
+課堂之前測(Pre-test) 0 %
+</td>
+<td><div class="font-c13">
+課堂之隨堂測驗(Quiz) 50 %
+</td>
+</TR><TR>
+<td><div class="font-c13">
+期中考-筆試(Mid-Term Exam) 0 %
+</td>
+<td><div class="font-c13">
+期末考-筆試(Final Exam) 0 %
+</td>
+</TR><TR>
+<td><div class="font-c13">
+個案分析報告(Case Report) 0 %
+</td>
+<td><div class="font-c13">
+課堂參與(Class Participation) 10 %
+</td>
+</TR><TR>
+<td><div class="font-c13">
+個人報告(Individual Presentation) 40 %
+</td>
+<td><div class="font-c13">
+團體報告(Group Presentation) 0 %
+</td>
+</TR><TR>
+<td><div class="font-c13">
+作業(Assignment) 0 %
+</td>
+<tr class="font-g13"><td>其他評量方式(Other Evaluation Methods)<div class="font-c13"></div></td></tr>
+</table>
+</div></td></tr>
+<tr class="font-g13"><td>指定用書(Required Texts)：<div class="font-c13">1. “AWS Academy Cloud Foundations”, AWS Academy<br />2. Slides in course<br /></div></td></tr>
+<tr class="font-g13"><td>參考書目(Reference Books)：<div class="font-c13">1. Aws Certified Cloud Practitioner Study Guide with 500 Practice Test Questions: Foundational (Clf-C02) Exam, <br />Sybex<br />2. 大話AWS 雲端架構：雲端應用架構圖解輕鬆學, 2/e<br />3. 使用AWS在雲端建置Linux伺服器的20堂課</div></td></tr>
+<tr class="font-g13"><td>其他參考資料(Other References)：<div class="font-c13"></div></td></tr>
+<tr class="font-b15" align="center"><td><br><u>『請遵守智慧財產權』及『不得非法複製及影印』<br>Please respect intellectual property rights and do not illegally copy or print materials.</u></td></tr>
+</table>
+</td></tr></table>
+<script type="text/javascript">
+document.getElementById('schedule_w17').style.display = 'none'; document.getElementById('schedule_w18').style.display = 'none';
+</script>
+</body>
+</html>
+
