@@ -220,7 +220,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		if searchTerm == "" {
 			// If no search term provided, give helpful message
 			sender := lineutil.GetSender(senderName, h.stickerManager)
-			msg := lineutil.NewTextMessageWithConsistentSender("🔢 請在關鍵字後輸入查詢內容\n\n例如：\n• 學號 小明\n• 學號 412345678\n\n💡 也可直接輸入 8-9 位學號", sender)
+			msg := lineutil.NewTextMessageWithConsistentSender("🎓 請在關鍵字後輸入查詢內容\n\n例如：\n• 學號 小明\n• 學號 412345678\n\n💡 也可直接輸入 8-9 位學號", sender)
 			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 				lineutil.QuickReplyYearAction(),
 				lineutil.QuickReplyHelpAction(),
@@ -305,7 +305,7 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 // handleAllDepartmentCodes returns all department codes
 func (h *Handler) handleAllDepartmentCodes() []messaging_api.MessageInterface {
 	var builder strings.Builder
-	builder.WriteString("📚 所有系代碼：\n")
+	builder.WriteString("📋 所有系代碼：\n")
 
 	// Group by department
 	for name, code := range ntpu.DepartmentCodes {
@@ -461,17 +461,17 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 		msg := lineutil.NewTextMessageWithConsistentSender("🏫 學校都還沒蓋好啦\n\n臺北大學於民國 89 年成立", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			{Action: lineutil.NewMessageAction("📅 查詢 95 學年度", "學年 95")},
-			{Action: lineutil.NewMessageAction("🔢 查詢學號", "學號")},
+			{Action: lineutil.NewMessageAction("🎓 查詢學號", "學號")},
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
 
 	// 4. Check if year is before LMS was launched (ROC 95)
 	if year >= 90 && year < 95 {
-		msg := lineutil.NewTextMessageWithConsistentSender("📒 數位學苑還沒出生喔\n\n請輸入 95 學年度以後的年份", sender)
+		msg := lineutil.NewTextMessageWithConsistentSender("📚 數位學苑還沒出生喔\n\n請輸入 95 學年度以後的年份", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			{Action: lineutil.NewMessageAction("📅 查詢 95 學年度", "學年 95")},
-			{Action: lineutil.NewMessageAction("🔢 查詢學號", "學號")},
+			{Action: lineutil.NewMessageAction("🎓 查詢學號", "學號")},
 		})
 		return []messaging_api.MessageInterface{msg}
 	}

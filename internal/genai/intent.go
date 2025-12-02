@@ -19,18 +19,18 @@ const (
 	IntentParserTimeout = 10 * time.Second
 )
 
-// IntentParser provides NLU intent parsing using Gemini function calling.
-// It implements IntentParserInterface defined in types.go.
-type IntentParser struct {
+// GeminiIntentParser provides NLU intent parsing using Gemini function calling.
+// It implements the IntentParser interface defined in types.go.
+type GeminiIntentParser struct {
 	client     *genai.Client
 	model      string
 	tools      []*genai.Tool
 	systemInst string
 }
 
-// NewIntentParser creates a new intent parser.
+// NewIntentParser creates a new Gemini-based intent parser.
 // Returns nil if apiKey is empty (NLU disabled).
-func NewIntentParser(ctx context.Context, apiKey string) (*IntentParser, error) {
+func NewIntentParser(ctx context.Context, apiKey string) (*GeminiIntentParser, error) {
 	if apiKey == "" {
 		return nil, nil // NLU disabled
 	}
@@ -45,7 +45,7 @@ func NewIntentParser(ctx context.Context, apiKey string) (*IntentParser, error) 
 	// Build function declarations
 	funcDecls := BuildIntentFunctions()
 
-	return &IntentParser{
+	return &GeminiIntentParser{
 		client: client,
 		model:  IntentParserModel,
 		tools: []*genai.Tool{{
@@ -57,7 +57,7 @@ func NewIntentParser(ctx context.Context, apiKey string) (*IntentParser, error) 
 
 // Parse analyzes the user input and returns a parsed intent or clarification text.
 // The model uses AUTO mode (default), allowing it to either call a function or return text.
-func (p *IntentParser) Parse(ctx context.Context, text string) (*ParseResult, error) {
+func (p *GeminiIntentParser) Parse(ctx context.Context, text string) (*ParseResult, error) {
 	if p == nil {
 		return nil, fmt.Errorf("intent parser is nil")
 	}
@@ -93,7 +93,7 @@ func (p *IntentParser) Parse(ctx context.Context, text string) (*ParseResult, er
 }
 
 // parseResult extracts intent information from the generation result.
-func (p *IntentParser) parseResult(result *genai.GenerateContentResponse) (*ParseResult, error) {
+func (p *GeminiIntentParser) parseResult(result *genai.GenerateContentResponse) (*ParseResult, error) {
 	if result == nil || len(result.Candidates) == 0 {
 		return nil, fmt.Errorf("empty response from model")
 	}
@@ -122,7 +122,7 @@ func (p *IntentParser) parseResult(result *genai.GenerateContentResponse) (*Pars
 }
 
 // parseFunctionCall extracts intent and parameters from a function call.
-func (p *IntentParser) parseFunctionCall(fc *genai.FunctionCall) (*ParseResult, error) {
+func (p *GeminiIntentParser) parseFunctionCall(fc *genai.FunctionCall) (*ParseResult, error) {
 	funcName := fc.Name
 
 	// Look up module and intent
@@ -156,13 +156,13 @@ func (p *IntentParser) parseFunctionCall(fc *genai.FunctionCall) (*ParseResult, 
 }
 
 // IsEnabled returns true if the intent parser is enabled.
-func (p *IntentParser) IsEnabled() bool {
+func (p *GeminiIntentParser) IsEnabled() bool {
 	return p != nil && p.client != nil
 }
 
-// Close releases resources held by the IntentParser.
+// Close releases resources held by the GeminiIntentParser.
 // It's safe to call Close multiple times or on nil pointer.
 // Note: genai.Client doesn't require explicit closing in current SDK version.
-func (p *IntentParser) Close() error {
+func (p *GeminiIntentParser) Close() error {
 	return nil
 }

@@ -5,15 +5,16 @@
 ## 功能
 
 - **EmbeddingClient**: Gemini embedding API 客戶端（向量生成）
-- **IntentParser**: NLU 意圖解析器（Function Calling）
+- **IntentParser** (interface): NLU 意圖解析器介面
+- **GeminiIntentParser** (implementation): Gemini Function Calling 實作
 - **NewEmbeddingFunc**: chromem-go 相容的嵌入函數
 
 ## 檔案結構
 
 ```
 internal/genai/
-├── types.go          # 共享類型定義 (ParseResult, IntentParserInterface)
-├── intent.go         # IntentParser 實作
+├── types.go          # 共享類型定義 (ParseResult, IntentParser interface)
+├── intent.go         # GeminiIntentParser 實作 (Gemini Function Calling)
 ├── functions.go      # Function Calling 函數定義
 ├── prompts.go        # 系統提示詞
 ├── embedding.go      # Embedding 客戶端

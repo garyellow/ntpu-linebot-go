@@ -231,7 +231,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			if h.vectorDB != nil && h.vectorDB.IsEnabled() {
 				helpText = "🔮 請輸入想找的課程描述\n\n例如：\n• 找課 想學習資料分析\n• 找課 Python 機器學習\n• 找課 商業管理相關課程\n\n💡 語意搜尋會根據課程大綱內容智慧匹配"
 			} else {
-				helpText = "🔮 語意搜尋目前未啟用\n\n請使用「課程 關鍵字」進行搜尋\n例如：課程 微積分、課程 王小明"
+				helpText = "⚠️ 語意搜尋目前未啟用\n\n請使用「課程 關鍵字」進行搜尋\n例如：課程 微積分、課程 王小明"
 			}
 			msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
 			return []messaging_api.MessageInterface{msg}
@@ -833,7 +833,7 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 		displayText := lineutil.TruncateRunes(fmt.Sprintf("搜尋 %s 的近期課程", teacherName), 40)
 		row2 = append(row2, lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText(
-				"👤 教師課程",
+				"👨‍🏫 教師課程",
 				displayText,
 				fmt.Sprintf("course:授課課程%s%s", bot.PostbackSplitChar, teacherName),
 			),
@@ -1050,7 +1050,7 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		return []messaging_api.MessageInterface{
 			lineutil.NewTextMessageWithConsistentSender(
-				"🔍 語意搜尋功能尚未啟用\n\n請使用「課程 關鍵字」進行一般搜尋", sender),
+				"⚠️ 語意搜尋功能尚未啟用\n\n請使用「課程 關鍵字」進行一般搜尋", sender),
 		}
 	}
 
@@ -1069,7 +1069,7 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		return []messaging_api.MessageInterface{
 			lineutil.NewTextMessageWithConsistentSender(
-				"🔍 語意搜尋暫時無法使用\n\n請稍後再試，或使用「課程 關鍵字」進行一般搜尋", sender),
+				"⚠️ 語意搜尋暫時無法使用\n\n請稍後再試，或使用「課程 關鍵字」進行一般搜尋", sender),
 		}
 	}
 

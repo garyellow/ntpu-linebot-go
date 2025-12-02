@@ -22,7 +22,20 @@ type Handler interface {
 	HandleMessage(ctx context.Context, text string) []messaging_api.MessageInterface
 
 	// HandlePostback processes a postback event (button clicks, carousel actions)
-	// The data parameter contains the postback payload string
+	// The data parameter contains the postback payload string (max 300 bytes per LINE API)
+	//
+	// Postback Format Convention:
+	//   - Format: "module:action$param1$param2..." (colon separates module from action, $ separates params)
+	//   - Example: "course:detail$1131U1001" or "id:人文學院$113"
+	//   - Max 300 bytes per LINE API limit
+	//   - No escaping mechanism for $ character (avoid in parameter values)
+	//
+	// Design Trade-off:
+	//   Simple string concatenation vs JSON encoding
+	//   - Current: Fast, simple, works for controlled data
+	//   - Alternative: JSON (safer but adds overhead)
+	//   For structured data with special characters, consider JSON encoding
+	//
 	// Returns a slice of LINE messages (max 5 messages per reply)
 	HandlePostback(ctx context.Context, data string) []messaging_api.MessageInterface
 }

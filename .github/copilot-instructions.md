@@ -89,7 +89,7 @@ LINE Webhook → Gin Handler
 
 ## Rate Limiting
 
-**Scraper** (`internal/scraper/ratelimiter.go`): Fixed 2s delay after success, exponential backoff on failure (4s initial, max 5 retries, ±25% jitter), 60s HTTP timeout per request
+**Scraper** (`internal/scraper/retry.go`): Fixed 2s delay after success, exponential backoff on failure (4s initial, max 5 retries, ±25% jitter), 60s HTTP timeout per request
 
 **Webhook**: Per-user (6 tokens, 1 token/5s refill), global (80 rps), silently drops excess requests
 
@@ -223,7 +223,8 @@ Fallback → getHelpMessage() + Warning Log
 - Metrics: `NLURequestsTotal`, `NLUDurationSeconds`, `NLUFallbackTotal`
 
 **Interface Pattern**:
-- `genai.IntentParserInterface`: Defines Parse() and IsEnabled()
+- `genai.IntentParser`: Interface defining Parse(), IsEnabled(), Close()
+- `genai.GeminiIntentParser`: Gemini-based implementation of IntentParser
 - `genai.ParseResult`: Module, Intent, Params, ClarificationText, FunctionName
 - webhook imports genai package directly (no adapter needed)
 

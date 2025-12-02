@@ -59,7 +59,7 @@ type Handler struct {
 	userRateLimitRefillRate float64
 
 	// NLU intent parser (optional - requires Gemini API key)
-	intentParser genai.IntentParserInterface
+	intentParser genai.IntentParser
 }
 
 // NewHandler creates a new webhook handler
@@ -116,7 +116,7 @@ func (h *Handler) GetCourseHandler() *course.Handler {
 
 // SetIntentParser sets the NLU intent parser for the handler.
 // This is optional - if not set, the handler falls back to keyword matching only.
-func (h *Handler) SetIntentParser(parser genai.IntentParserInterface) {
+func (h *Handler) SetIntentParser(parser genai.IntentParser) {
 	h.intentParser = parser
 }
 

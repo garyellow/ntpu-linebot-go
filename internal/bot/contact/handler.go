@@ -36,21 +36,28 @@ const (
 	// MaxContactsPerSearch is the maximum contacts to return from database search (matches DB LIMIT 500)
 	MaxContactsPerSearch = 500
 
+	// Emergency phone numbers are hard-coded as constants for three critical reasons:
+	//   1. Availability: No external dependency (database, scraper) - instant access
+	//   2. Performance: Zero latency lookup for time-sensitive emergency situations
+	//   3. Reliability: Infrequent changes managed through code review process
+	//
+	// Design decision: Hard-coded constants over database/config for critical data
+	// Trade-off: Requires code deployment to update vs. runtime flexibility
+	//
 	// Emergency phone numbers (without hyphens for clipboard copy)
 	// 三峽校區
-	sanxiaNormalPhone    = "0286741111" // 總機
-	sanxia24HPhone       = "0226731949" // 24H緊急行政電話
-	sanxiaEmergencyPhone = "0226711234" // 24H急難救助電話（校安中心）
-	sanxiaGatePhone      = "0226733920" // 大門哨所
-	sanxiaDormPhone      = "0286716784" // 宿舍夜間緊急電話
+	sanxiaNormalPhone    = "0286741111"       // 總機
+	sanxia24HPhone       = "0226731949"       // 24H緊急行政電話
+	sanxiaEmergencyPhone = "0226711234"       // 24H急難救助電話(校安中心)
+	sanxiaGatePhone      = "0226733920"       // 大門哨所
+	sanxiaDormPhone      = "0286716784"       // 宿舍夜間緊急電話
+	sanxiaLostFound      = "0286741111,66223" // 遺失物諮詢(分機66223)
 
 	// 臺北校區
 	taipeiNormalPhone    = "0225024654" // 總機
 	taipeiEmergencyPhone = "0225023671" // 24H急難救助電話
 
 	// 其他常用電話
-	policePhone   = "110"        // 警察局24H緊急救助
-	firePhone     = "119"        // 消防局(含救護車)24H緊急救助
 	policeStation = "0226730561" // 北大派出所
 	homHospital   = "0226723456" // 恩主公醫院
 )
@@ -256,26 +263,28 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 		createRow("📞", "總機", sanxiaNormalPhone, ""),
 		createRow("🏢", "24H緊急行政電話", sanxia24HPhone, ""),
-		createRow("🚨", "24H急難救助電話", sanxiaEmergencyPhone, lineutil.ColorDanger), // Highlight emergency
+		createRow("🚨", "24H急難救助專線", sanxiaEmergencyPhone, lineutil.ColorDanger), // Highlight emergency
 		createRow("🚪", "大門哨所", sanxiaGatePhone, ""),
-		createRow("🏠", "宿舍夜間", sanxiaDormPhone, ""),
+		createRow("🏠", "宿舍夜間緊急電話", sanxiaDormPhone, ""),
+		createRow("📱", "遺失物諮詢(分機66223)", sanxiaNormalPhone, ""),
 	).WithSpacing("sm").WithMargin("sm").FlexBox
 
 	// Taipei Campus Box
 	taipeiBox := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexText("📍 台北校區").WithWeight("bold").WithSize("md").WithColor(lineutil.ColorPrimary).WithMargin("lg").FlexText,
+		lineutil.NewFlexText("📍 臺北校區").WithWeight("bold").WithSize("md").WithColor(lineutil.ColorPrimary).WithMargin("lg").FlexText,
 		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 		createRow("📞", "總機", taipeiNormalPhone, ""),
-		createRow("🚨", "24H急難救助電話", taipeiEmergencyPhone, lineutil.ColorDanger),
+		createRow("🚨", "24H急難救助專線", taipeiEmergencyPhone, lineutil.ColorDanger),
 	).WithSpacing("sm").WithMargin("sm").FlexBox
 
 	// External Emergency Box
 	externalBox := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexText("🚨 校外緊急").WithWeight("bold").WithSize("md").WithColor(lineutil.ColorDanger).WithMargin("lg").FlexText,
+		lineutil.NewFlexText("🚨 社會安全").WithWeight("bold").WithSize("md").WithColor(lineutil.ColorDanger).WithMargin("lg").FlexText,
 		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 		createRow("👮", "警察局", "110", lineutil.ColorDanger),
 		createRow("🚒", "消防/救護", "119", lineutil.ColorDanger),
-		createRow("🏢", "北大派出所", policeStation, ""),
+		createRow("📱", "緊急救難專線", "112", lineutil.ColorDanger),
+		createRow("🚔", "北大派出所", policeStation, ""),
 		createRow("🏥", "恩主公醫院", homHospital, ""),
 	).WithSpacing("sm").WithMargin("sm").FlexBox
 
@@ -488,7 +497,7 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 		log.WithError(err).Errorf("Failed to scrape members for: %s", orgName)
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("🔍 無法取得「%s」的成員資料\n\n💡 可能原因：\n• 網路問題\n• 該單位尚無成員資料", orgName),
+			fmt.Sprintf("⚠️ 無法取得「%s」的成員資料\n\n💡 可能原因：\n• 網路問題\n• 該單位尚無成員資料", orgName),
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -517,7 +526,7 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("🔍 重新搜尋", "聯絡")},
+			{Action: lineutil.NewMessageAction("🔄 重新搜尋", "聯絡")},
 			{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
 		})
 		return []messaging_api.MessageInterface{msg}
