@@ -65,7 +65,7 @@ hash := syllabus.ComputeContentHash(contentForHash)
 - **CN/EN 合併**: 同類型的中英文內容合併為一個 chunk，提升多語言搜尋效果
 - **不截斷內容**: Gemini embedding 支援 2048 tokens (~8000 字元)
 - **課程名稱前綴**: 每個 chunk 包含 `【課程名稱】` 前綴，提升檢索準確度
-- **Schedule 過濾**: 僅保留教學預定進度內容，排除週次、日期、教學方法等 metadata
+- **Schedule 過濾**: 僅保留教學預定進度內容，包含週次(如 "Week X: 內容")作為上下文，排除日期、教學方法等 metadata
 
 ## 增量更新
 
