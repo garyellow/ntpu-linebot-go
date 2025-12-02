@@ -698,7 +698,7 @@ func (h *Handler) handleUnmatchedMessage(ctx context.Context, source webhook.Sou
 		// refer to character positions in the original message, not the sanitized version
 		if textMsg.Mention != nil {
 			mentionlessText := removeBotMentions(textMsg.Text, textMsg.Mention)
-			mentionlessText = normalizeWhitespaceForMention(mentionlessText)
+			// removeBotMentions already normalizes whitespace internally
 			if mentionlessText == "" {
 				// Only @Bot mention, no actual content - return help
 				return h.getHelpMessage(), nil

@@ -58,9 +58,38 @@ tasks:
       - golangci-lint run --timeout=5m ./...
 
   fmt:
-    desc: Format all Go code
+    desc: Format and organize imports
     cmds:
-      - gofmt -w .
+      - go run golang.org/x/tools/cmd/goimports@latest -w .
+
+  # Build
+  build:
+    desc: Build all binaries
+    cmds:
+      - go build -o bin/ ./cmd/...
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - cmd: if exist bin rd /s /q bin
+        platforms: [windows]
+      - cmd: if exist coverage.out del coverage.out
+        platforms: [windows]
+      - cmd: if exist coverage.html del coverage.html
+        platforms: [windows]
+      - cmd: rm -rf bin/ coverage.out coverage.html
+        platforms: [linux, darwin]
+
+  mod:
+    desc: Tidy and verify dependencies
+    cmds:
+      - go mod tidy
+      - go mod verify
+
+  vuln:
+    desc: Run vulnerability check
+    cmds:
+      - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   # Docker Compose
   compose:up:
@@ -117,4 +146,4 @@ tasks:
       - task: fmt
       - task: lint
       - task: test
-      - go build -o bin/ ./cmd/...
+      - task: build

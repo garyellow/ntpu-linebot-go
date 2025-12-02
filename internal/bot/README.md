@@ -84,7 +84,7 @@ return handler.HandleMessage(ctx, rawText)
 - **關鍵字**：課程、課、教師、老師（統一查詢）
 - **語意關鍵字**：找課、找課程、搜課（直接觸發語意搜尋）
 - **功能**：
-  - 課程名稱搜尋（最多 50 門）
+  - 課程名稱搜尋（最多 40 門）
   - 課程編號查詢（UID 格式）
   - 統一查詢（2-tier 並行搜尋：同時搜尋課程名稱和教師姓名）
   - 歷史課程查詢（`課程 {年度} {關鍵字}`）
@@ -144,7 +144,7 @@ term := bot.ExtractSearchTerm("課程 微積分", "課程") // → "微積分"
 - 「線性代數」→ SQL LIKE 有結果 → 跳過 fuzzy → 漏掉其他匹配 ❌
 
 **函數位置**：
-- `lineutil.ContainsAllRunes(text, search)` - 判斷 text 是否包含 search 的所有字元（rune）
+- `bot.ContainsAllRunes(text, search)` - 判斷 text 是否包含 search 的所有字元（rune）
 
 ## 開發規範
 

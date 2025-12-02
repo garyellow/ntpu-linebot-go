@@ -158,7 +158,7 @@ X-Line-Signature: {signature}
 - Request body < 1MB
 - 處理超時: 60 秒
 - Global rate limit: 80 rps
-- Per-user rate limit: 10 rps
+- Per-user rate limit: 6 tokens, 1 token/5s refill (Token Bucket)
 
 ---
 
@@ -199,8 +199,10 @@ ntpu_scraper_duration_seconds_count{module="id"} 1000
 | `ntpu_scraper_duration_seconds` | Histogram | 爬蟲請求耗時 | `module` |
 | `ntpu_cache_hits_total` | Counter | 快取命中次數 | `module` |
 | `ntpu_cache_misses_total` | Counter | 快取未命中次數 | `module` |
-| `ntpu_rate_limiter_wait_duration_seconds` | Histogram | 限流等待時間 | `limiter_type` |
+| `ntpu_cache_entries` | Gauge | 快取項目數量 | `module` |
 | `ntpu_rate_limiter_dropped_total` | Counter | 因限流被丟棄的請求數 | `limiter_type` |
+| `ntpu_rate_limiter_active_users` | Gauge | 活動用戶限流器數量 | - |
+| `ntpu_rate_limiter_cleaned` | Counter | 清理的限流器數量 | - |
 | `ntpu_warmup_tasks_total` | Counter | Warmup 任務次數 | `module`, `status` |
 | `ntpu_warmup_duration_seconds` | Histogram | Warmup 總耗時 | - |
 | `ntpu_http_errors_total` | Counter | HTTP 錯誤次數 | `error_type`, `module` |

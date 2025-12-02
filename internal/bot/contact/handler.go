@@ -46,12 +46,11 @@ const (
 	//
 	// Emergency phone numbers (without hyphens for clipboard copy)
 	// 三峽校區
-	sanxiaNormalPhone    = "0286741111"       // 總機
-	sanxia24HPhone       = "0226731949"       // 24H緊急行政電話
-	sanxiaEmergencyPhone = "0226711234"       // 24H急難救助電話(校安中心)
-	sanxiaGatePhone      = "0226733920"       // 大門哨所
-	sanxiaDormPhone      = "0286716784"       // 宿舍夜間緊急電話
-	sanxiaLostFound      = "0286741111,66223" // 遺失物諮詢(分機66223)
+	sanxiaNormalPhone    = "0286741111" // 總機
+	sanxia24HPhone       = "0226731949" // 24H緊急行政電話
+	sanxiaEmergencyPhone = "0226711234" // 24H急難救助電話(校安中心)
+	sanxiaGatePhone      = "0226733920" // 大門哨所
+	sanxiaDormPhone      = "0286716784" // 宿舍夜間緊急電話
 
 	// 臺北校區
 	taipeiNormalPhone    = "0225024654" // 總機
@@ -166,8 +165,9 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			sender := lineutil.GetSender(senderName, h.stickerManager)
 			msg := lineutil.NewTextMessageWithConsistentSender("📞 請輸入查詢內容\n\n例如：\n• 聯絡 資工系\n• 電話 圖書館\n• 分機 學務處\n\n💡 也可直接輸入「緊急」查看緊急聯絡電話", sender)
 			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
-				{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
+				lineutil.QuickReplyEmergencyAction(),
+				lineutil.QuickReplyContactAction(),
+				lineutil.QuickReplyHelpAction(),
 			})
 			return []messaging_api.MessageInterface{msg}
 		}
@@ -189,8 +189,9 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender("📞 請輸入要查詢的單位或人員\n\n例如：\n• 電話 資工系\n• 分機 圖書館", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
-			{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
+			lineutil.QuickReplyEmergencyAction(),
+			lineutil.QuickReplyContactAction(),
+			lineutil.QuickReplyHelpAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
@@ -310,6 +311,12 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 	msg := lineutil.NewFlexMessage("緊急聯絡電話", bubble.FlexBubble)
 	msg.Sender = sender
 
+	// Add Quick Reply for related actions after viewing emergency phones
+	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+		lineutil.QuickReplyContactAction(),
+		lineutil.QuickReplyHelpAction(),
+	})
+
 	return []messaging_api.MessageInterface{msg}
 }
 
@@ -366,10 +373,10 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 		for _, c := range allContacts {
 			// Fuzzy character-set matching: check if all runes in searchTerm exist in target
 			// Search in: name, title, organization, superior
-			if lineutil.ContainsAllRunes(c.Name, searchTerm) ||
-				lineutil.ContainsAllRunes(c.Title, searchTerm) ||
-				lineutil.ContainsAllRunes(c.Organization, searchTerm) ||
-				lineutil.ContainsAllRunes(c.Superior, searchTerm) {
+			if bot.ContainsAllRunes(c.Name, searchTerm) ||
+				bot.ContainsAllRunes(c.Title, searchTerm) ||
+				bot.ContainsAllRunes(c.Organization, searchTerm) ||
+				bot.ContainsAllRunes(c.Superior, searchTerm) {
 				contacts = append(contacts, c)
 			}
 		}
@@ -416,8 +423,9 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 			msg := lineutil.ErrorMessageWithDetailAndSender("無法取得聯絡資料，可能是網路問題或資料來源暫時無法使用", sender)
 			if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
 				textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-					{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
-					{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
+					lineutil.QuickReplyRetryAction("聯絡 " + searchTerm),
+					lineutil.QuickReplyEmergencyAction(),
+					lineutil.QuickReplyHelpAction(),
 				})
 			}
 			return []messaging_api.MessageInterface{msg}
@@ -438,8 +446,9 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 			searchTerm,
 		), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("🔄 重新搜尋", "聯絡")},
-			{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
+			lineutil.QuickReplyContactAction(),
+			lineutil.QuickReplyEmergencyAction(),
+			lineutil.QuickReplyHelpAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
@@ -501,8 +510,9 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("🔄 重試", "聯絡 "+orgName)},
-			{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
+			lineutil.QuickReplyRetryAction("聯絡 " + orgName),
+			lineutil.QuickReplyEmergencyAction(),
+			lineutil.QuickReplyHelpAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
@@ -526,8 +536,9 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("🔄 重新搜尋", "聯絡")},
-			{Action: lineutil.NewMessageAction("🚨 緊急電話", "緊急")},
+			lineutil.QuickReplyContactAction(),
+			lineutil.QuickReplyEmergencyAction(),
+			lineutil.QuickReplyHelpAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
 	}

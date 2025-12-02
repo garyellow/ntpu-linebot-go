@@ -89,37 +89,6 @@ func removeBotMentions(text string, mention *webhook.Mention) string {
 	}
 
 	// Convert back to string and normalize whitespace
-	result := string(runes)
-	result = normalizeWhitespaceForMention(result)
-
-	return result
-}
-
-// normalizeWhitespaceForMention collapses multiple whitespace characters into single spaces
-// and trims leading/trailing whitespace. This is used after removing mentions.
-func normalizeWhitespaceForMention(s string) string {
-	// Replace multiple spaces with single space
-	var builder strings.Builder
-	builder.Grow(len(s))
-
-	prevWasSpace := true // Start true to trim leading spaces
-	for _, r := range s {
-		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
-			if !prevWasSpace {
-				builder.WriteRune(' ')
-				prevWasSpace = true
-			}
-		} else {
-			builder.WriteRune(r)
-			prevWasSpace = false
-		}
-	}
-
-	result := builder.String()
-	// Trim trailing space if present
-	if len(result) > 0 && result[len(result)-1] == ' ' {
-		result = result[:len(result)-1]
-	}
-
-	return result
+	// strings.Fields splits on any whitespace and Join with single space
+	return strings.Join(strings.Fields(string(runes)), " ")
 }
