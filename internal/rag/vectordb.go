@@ -261,12 +261,19 @@ func (v *VectorDB) addSyllabiInternal(ctx context.Context, syllabi []*storage.Sy
 	return nil
 }
 
-// Search performs semantic search for courses matching the query
-// Returns courses sorted by similarity with the following logic:
-// 1. All results with similarity >= 70% are considered highly relevant and always returned
-// 2. Results are padded to the next multiple of 10 (e.g., 13 high relevance → return 20)
-// 3. Minimum 10 results are returned if available
-// Chunks from the same course are deduplicated, keeping the highest similarity
+// Search performs semantic search for courses matching the query.
+//
+// The nResults parameter serves as a fallback count when no highly relevant results exist.
+// When highly relevant results (>= 70% similarity) are found, they take priority:
+//
+//   - If highRelevanceCount > 0: Returns ceil(highRelevanceCount / 10) * 10 results
+//     (e.g., 3 high relevance → 10, 13 high relevance → 20)
+//   - If highRelevanceCount == 0: Returns up to nResults (the requested count)
+//
+// This ensures users always see all highly relevant matches, while nResults
+// controls the fallback behavior for queries with no strong matches.
+//
+// Results are deduplicated by course UID, keeping the highest similarity chunk.
 func (v *VectorDB) Search(ctx context.Context, query string, nResults int) ([]SearchResult, error) {
 	if v == nil || v.collection == nil {
 		return nil, nil

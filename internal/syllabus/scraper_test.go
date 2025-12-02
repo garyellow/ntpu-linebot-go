@@ -221,6 +221,130 @@ func TestParseSyllabusPage(t *testing.T) {
 			wantOutlineEN:    "Variables and data types",
 			wantSchedule:     "第1週 課程介紹",
 		},
+		{
+			name: "realistic schedule table with 4 columns",
+			html: `<html><body>
+				<table>
+					<tr><td>教學目標：<span class="font-c13">學習演算法</span></td></tr>
+					<tr><td>教學進度(Teaching Schedule)：
+						<table>
+							<tr>
+								<td>週別/Weekly</td>
+								<td>日期</td>
+								<td>教學預定進度</td>
+								<td>教學方法與教學活動</td>
+							</tr>
+							<tr>
+								<td>Week 1</td>
+								<td>20250911</td>
+								<td>課程介紹與環境設定</td>
+								<td>講授</td>
+							</tr>
+							<tr>
+								<td>Week 2</td>
+								<td>20250918</td>
+								<td>基礎資料結構複習</td>
+								<td>講授、實作</td>
+							</tr>
+							<tr>
+								<td>Week 3</td>
+								<td>20250925</td>
+								<td>排序演算法分析</td>
+								<td>講授、討論</td>
+							</tr>
+						</table>
+					</td></tr>
+				</table>
+			</body></html>`,
+			wantObjectivesCN: "學習演算法",
+			wantSchedule:     "Week 1: 課程介紹與環境設定",
+		},
+		{
+			name: "schedule table filters 彈性補充教學 rows",
+			html: `<html><body>
+				<table>
+					<tr><td>教學進度(Teaching Schedule)：
+						<table>
+							<tr>
+								<td>週別/Weekly</td>
+								<td>日期</td>
+								<td>教學預定進度</td>
+								<td>教學方法</td>
+							</tr>
+							<tr>
+								<td>Week 1</td>
+								<td>20250911</td>
+								<td>課程介紹</td>
+								<td>講授</td>
+							</tr>
+							<tr>
+								<td>Week 2</td>
+								<td>20250918</td>
+								<td>彈性補充教學</td>
+								<td>-</td>
+							</tr>
+							<tr>
+								<td>Week 3</td>
+								<td>20250925</td>
+								<td>期中考</td>
+								<td>考試</td>
+							</tr>
+						</table>
+					</td></tr>
+				</table>
+			</body></html>`,
+			wantSchedule: "Week 1: 課程介紹",
+		},
+		{
+			name: "schedule table with empty cells",
+			html: `<html><body>
+				<table>
+					<tr><td>教學進度(Teaching Schedule)：
+						<table>
+							<tr>
+								<td>週別/Weekly</td>
+								<td>日期</td>
+								<td>教學預定進度</td>
+								<td>教學方法</td>
+							</tr>
+							<tr>
+								<td>Week 1</td>
+								<td>20250911</td>
+								<td>課程介紹</td>
+								<td>講授</td>
+							</tr>
+							<tr>
+								<td>Week 2</td>
+								<td>20250918</td>
+								<td></td>
+								<td></td>
+							</tr>
+							<tr>
+								<td>Week 3</td>
+								<td>20250925</td>
+								<td>實作練習</td>
+								<td>實作</td>
+							</tr>
+						</table>
+					</td></tr>
+				</table>
+			</body></html>`,
+			wantSchedule: "Week 1: 課程介紹",
+		},
+		{
+			name: "schedule fallback when table validation fails (no 週別 header)",
+			html: `<html><body>
+				<table>
+					<tr><td>教學進度(Teaching Schedule)：
+						<table>
+							<tr><td>第一週 課程介紹</td></tr>
+							<tr><td>第二週 基礎概念</td></tr>
+						</table>
+					</td></tr>
+				</table>
+			</body></html>`,
+			wantSchedule: "第一週 課程介紹",
+		},
 	}
 
 	for _, tt := range tests {

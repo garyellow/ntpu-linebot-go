@@ -68,10 +68,10 @@ func parseSyllabusPage(doc *goquery.Document) *Fields {
 	fields := &Fields{}
 
 	// Helper to find content in TD cells containing a specific label
-	// Returns (content, isMerged) where isMerged indicates if the label was merged format
+	// Returns (content, hasBothLanguages) where hasBothLanguages indicates if the TD contains both CN and EN labels
 	findContent := func(label string) (string, bool) {
 		var content string
-		var isMerged bool
+		var hasBothLanguages bool
 
 		doc.Find("td").Each(func(i int, td *goquery.Selection) {
 			text := td.Text()
@@ -79,11 +79,12 @@ func parseSyllabusPage(doc *goquery.Document) *Fields {
 				return
 			}
 
-			// Check if this is a merged format (contains both Chinese and English labels)
+			// Check if this TD contains both Chinese and English labels (merged format)
+			// e.g., "教學目標 Course Objectives：" in the same cell
 			if label == "教學目標" && strings.Contains(text, "Course Objectives") {
-				isMerged = true
+				hasBothLanguages = true
 			} else if label == "內容綱要" && strings.Contains(text, "Course Outline") {
-				isMerged = true
+				hasBothLanguages = true
 			}
 
 			// Found the TD with our label
@@ -113,7 +114,7 @@ func parseSyllabusPage(doc *goquery.Document) *Fields {
 			content = extractContentAfterLabel(html, label)
 		})
 
-		return strings.TrimSpace(content), isMerged
+		return strings.TrimSpace(content), hasBothLanguages
 	}
 
 	// Helper to find teaching schedule content (only the schedule column)
@@ -204,27 +205,27 @@ func parseSyllabusPage(doc *goquery.Document) *Fields {
 	}
 
 	// Parse objectives
-	objectivesCN, isMerged := findContent("教學目標")
-	if isMerged {
-		// Merged format: both CN and EN are in the same field
+	objectivesCN, hasBothLanguages := findContent("教學目標")
+	if hasBothLanguages {
+		// Combined format: CN label already contains EN content (e.g., "教學目標 Course Objectives：...")
 		fields.ObjectivesCN = objectivesCN
-		// No separate EN field
+		// No separate EN field needed
 	} else {
 		fields.ObjectivesCN = objectivesCN
-		// Look for separate English objectives
+		// Separate format: look for English objectives in a different TD
 		objectivesEN, _ := findContent("Course Objectives")
 		fields.ObjectivesEN = objectivesEN
 	}
 
 	// Parse outline
-	outlineCN, isMerged := findContent("內容綱要")
-	if isMerged {
-		// Merged format: both CN and EN are in the same field
+	outlineCN, hasBothLanguages := findContent("內容綱要")
+	if hasBothLanguages {
+		// Combined format: CN label already contains EN content
 		fields.OutlineCN = outlineCN
-		// No separate EN field
+		// No separate EN field needed
 	} else {
 		fields.OutlineCN = outlineCN
-		// Look for separate English outline
+		// Separate format: look for English outline in a different TD
 		outlineEN, _ := findContent("Course Outline")
 		fields.OutlineEN = outlineEN
 	}
