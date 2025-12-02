@@ -317,6 +317,7 @@ func (h *Handler) handleAllDepartmentCodes() []messaging_api.MessageInterface {
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 		lineutil.QuickReplyStudentAction(),
 		lineutil.QuickReplyYearAction(),
+		lineutil.QuickReplyHelpAction(),
 	})
 	return []messaging_api.MessageInterface{msg}
 }
@@ -547,6 +548,7 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyStudentAction(),
 			lineutil.QuickReplyDeptCodeAction(),
+			lineutil.QuickReplyHelpAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
@@ -605,8 +607,9 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 			name,
 		), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("🔄 重新搜尋", "學號")},
-			{Action: lineutil.NewMessageAction("📅 按學年查詢", "學年")},
+			lineutil.QuickReplyStudentAction(),
+			lineutil.QuickReplyYearAction(),
+			lineutil.QuickReplyHelpAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
@@ -1023,8 +1026,9 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 		}
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🤔 %d 學年度%s%s好像沒有人耶", year, deptName, departmentType), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("🔄 重新選擇", fmt.Sprintf("學年 %d", year))},
+			lineutil.QuickReplyYearAction(),
 			lineutil.QuickReplyStudentAction(),
+			lineutil.QuickReplyHelpAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
@@ -1059,6 +1063,7 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 		lineutil.QuickReplyYearAction(),
 		lineutil.QuickReplyDeptCodeAction(),
+		lineutil.QuickReplyHelpAction(),
 	})
 	return []messaging_api.MessageInterface{msg}
 }

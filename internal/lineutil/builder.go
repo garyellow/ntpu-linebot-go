@@ -468,6 +468,11 @@ func QuickReplyRetryAction(retryText string) QuickReplyItem {
 	return QuickReplyItem{Action: NewMessageAction("🔄 重試", retryText)}
 }
 
+// QuickReplySemanticSearchAction returns a "找課" semantic search quick reply item
+func QuickReplySemanticSearchAction() QuickReplyItem {
+	return QuickReplyItem{Action: NewMessageAction("🔮 找課", "找課")}
+}
+
 // ================================================
 // Message Helper Functions
 // ================================================

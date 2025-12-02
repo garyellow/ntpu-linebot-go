@@ -251,16 +251,22 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			// If no search term provided, give helpful message
 			sender := lineutil.GetSender(senderName, h.stickerManager)
 			var helpText string
+			var quickReplyItems []lineutil.QuickReplyItem
 			if h.vectorDB != nil && h.vectorDB.IsEnabled() {
 				// Semantic search enabled - mention it as an option
 				helpText = "📚 請輸入課程關鍵字\n\n例如：\n• 課 程式設計\n• 課程 微積分\n• 課 王小明（搜尋教師）\n\n🔮 或使用「找課」進行語意搜尋\n• 找課 想學程式設計\n\n💡 也可直接輸入課程編號（如：1131U0001）"
+				quickReplyItems = []lineutil.QuickReplyItem{
+					lineutil.QuickReplySemanticSearchAction(),
+					lineutil.QuickReplyHelpAction(),
+				}
 			} else {
 				helpText = "📚 請輸入課程關鍵字\n\n例如：\n• 課 程式設計\n• 課程 微積分\n• 課 王小明（搜尋教師）\n• 課 線代 王（搜尋課名+教師）\n\n💡 也可直接輸入課程編號（如：1131U0001）"
+				quickReplyItems = []lineutil.QuickReplyItem{
+					lineutil.QuickReplyHelpAction(),
+				}
 			}
 			msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
-			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
-			})
+			msg.QuickReply = lineutil.NewQuickReply(quickReplyItems)
 			return []messaging_api.MessageInterface{msg}
 		}
 		return h.handleUnifiedCourseSearch(ctx, searchTerm)
@@ -328,8 +334,8 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🔍 查無課程編號 %s\n\n請確認課程編號是否正確", uid), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("📚 搜尋課程", "課程")},
-			{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
+			lineutil.QuickReplyCourseAction(),
+			lineutil.QuickReplyHelpAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
@@ -343,8 +349,8 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("📚 搜尋課程", "課程")},
-			{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
+			lineutil.QuickReplyCourseAction(),
+			lineutil.QuickReplyHelpAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
@@ -429,8 +435,8 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 		sender,
 	)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		{Action: lineutil.NewMessageAction("📚 搜尋課程", "課程")},
-		{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
+		lineutil.QuickReplyCourseAction(),
+		lineutil.QuickReplyHelpAction(),
 	})
 	return []messaging_api.MessageInterface{msg}
 }
@@ -643,16 +649,14 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 
 	// Build quick reply items
 	quickReplyItems := []lineutil.QuickReplyItem{
-		{Action: lineutil.NewMessageAction("🔄 重新查詢", "課程")},
+		lineutil.QuickReplyCourseAction(),
 	}
 	if h.vectorDB != nil && h.vectorDB.IsEnabled() {
 		quickReplyItems = append(quickReplyItems,
 			lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("🔮 語意搜尋", "找課 "+searchTerm)},
 		)
 	}
-	quickReplyItems = append(quickReplyItems,
-		lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
-	)
+	quickReplyItems = append(quickReplyItems, lineutil.QuickReplyHelpAction())
 	msg.QuickReply = lineutil.NewQuickReply(quickReplyItems)
 	return []messaging_api.MessageInterface{msg}
 }
@@ -714,7 +718,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			{Action: lineutil.NewMessageAction("📚 查詢近期課程", "課程 "+keyword)},
-			{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
+			lineutil.QuickReplyHelpAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
@@ -745,7 +749,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 		{Action: lineutil.NewMessageAction("📚 查詢近期課程", "課程 "+keyword)},
-		{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
+		lineutil.QuickReplyHelpAction(),
 	})
 	return []messaging_api.MessageInterface{msg}
 }
@@ -884,10 +888,19 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 	msg.Sender = sender
 
 	// Add Quick Reply for related actions
-	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		{Action: lineutil.NewMessageAction("📚 查詢其他課程", "課程")},
-		{Action: lineutil.NewMessageAction("📖 使用說明", "使用說明")},
-	})
+	// Include teacher-specific search if teacher info is available
+	quickReplyItems := []lineutil.QuickReplyItem{
+		lineutil.QuickReplyCourseAction(),
+	}
+	if len(course.Teachers) > 0 {
+		// Add option to search for more courses by the same teacher
+		teacherName := course.Teachers[0]
+		quickReplyItems = append(quickReplyItems,
+			lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("👨‍🏫 "+teacherName+"的課程", "課程 "+teacherName)},
+		)
+	}
+	quickReplyItems = append(quickReplyItems, lineutil.QuickReplyHelpAction())
+	msg.QuickReply = lineutil.NewQuickReply(quickReplyItems)
 
 	return []messaging_api.MessageInterface{msg}
 }
@@ -1017,7 +1030,7 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 
 	// Add Quick Reply to the last message
 	lineutil.AddQuickReplyToMessages(messages,
-		lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("🔄 重新查詢", "課程")},
+		lineutil.QuickReplyCourseAction(),
 		lineutil.QuickReplyHelpAction(),
 	)
 
@@ -1162,7 +1175,8 @@ func (h *Handler) formatSemanticSearchResponse(courses []storage.Course, results
 
 	// Add Quick Reply
 	lineutil.AddQuickReplyToMessages(messages,
-		lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("🔄 重新搜尋", "找課")},
+		lineutil.QuickReplySemanticSearchAction(),
+		lineutil.QuickReplyCourseAction(),
 		lineutil.QuickReplyHelpAction(),
 	)
 
