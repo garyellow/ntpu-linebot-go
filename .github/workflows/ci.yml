@@ -27,6 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      security-events: write
 
     steps:
       - name: Checkout code
@@ -42,6 +43,26 @@ jobs:
       - name: Verify dependencies
         run: go mod verify
 
+      - name: Check go mod tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Check formatting (gofmt)
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "The following files are not formatted correctly:"
+            gofmt -l .
+            echo ""
+            echo "Run 'gofmt -w .' to fix formatting."
+            exit 1
+          fi
+
+      - name: Build binaries
+        run: |
+          go build -o /dev/null ./cmd/server
+          go build -o /dev/null ./cmd/healthcheck
+
       - name: Run tests
         run: go test -short -v -race -coverprofile=coverage.out -covermode=atomic ./...
 
@@ -51,13 +72,24 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
           args: --timeout=5m
 
       - name: Run govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           $HOME/go/bin/govulncheck ./...
+
+      - name: Run gosec security scanner
+        uses: securego/gosec@master
+        with:
+          args: -exclude-generated -fmt sarif -out gosec-results.sarif ./...
+        continue-on-error: true
+
+      - name: Upload gosec results
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: gosec-results.sarif
 
   # Build and scan Docker image
   build:
