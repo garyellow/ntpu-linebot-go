@@ -273,10 +273,11 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 
 ### 4. 並發模型選擇
 
-**Goroutine + Channel vs Worker Pool**:
-- ✅ 使用 **Worker Pool**（`SCRAPER_WORKERS=5`）
-- ✅ 限制並發數避免資源耗盡
+**Goroutine + WaitGroup**:
+- ✅ Warmup 模組並行執行（id, contact, course 同時進行）
+- ✅ 使用 `sync.WaitGroup` 等待所有模組完成
 - ✅ 使用 `context.Context` 優雅取消
+- ✅ Scraper 層使用固定延遲（2s）避免過度請求
 
 ## 效能優化
 
@@ -381,17 +382,18 @@ go func() {
 }()
 ```
 
-**限制並發數**:
+**並行執行模組**:
 ```go
-// Worker Pool 避免 goroutine 爆炸
-sem := make(chan struct{}, maxWorkers)
-for _, task := range tasks {
-    sem <- struct{}{} // acquire
-    go func(t Task) {
-        defer func() { <-sem }() // release
-        processTask(t)
-    }(task)
+// Warmup 模組使用 WaitGroup 並行執行
+var wg sync.WaitGroup
+for _, module := range modules {
+    wg.Add(1)
+    go func(m string) {
+        defer wg.Done()
+        warmupModule(ctx, m)
+    }(module)
 }
+wg.Wait()
 ```
 
 ## 安全性

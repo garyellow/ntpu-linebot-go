@@ -43,7 +43,7 @@ LINE Webhook → Gin Handler
 
 **Module-specific features**:
 
-**ID Module**: Year validation (89-130, AD↔ROC), department selection flow, student search (max 500 results), Flex Message cards
+**ID Module**: Year query range (95-112, name search 101-112), department selection flow, student search (max 500 results), Flex Message cards
 
 **Course Module**: Smart semester detection (`semester.go`), UID regex (`(?i)\d{3,4}[umnp]\d{4}`), max 40 results, Flex Message carousels
 - **Semantic search**: `找課` keyword triggers embedding-based search using syllabus content (requires `GEMINI_API_KEY`)
@@ -84,7 +84,7 @@ LINE Webhook → Gin Handler
 
 **Data availability**:
 - Student: 101-112 學年度 (≥113 shows deprecation notice)
-- Course: Current + previous semester (auto-detect based on month)
+- Course: Cache: 2 years (4 semesters) | Query: 2 most recent semesters (auto-detect based on month)
 - Contact: Real-time scraping
 
 ## Rate Limiting
