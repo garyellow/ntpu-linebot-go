@@ -84,7 +84,7 @@ LINE Webhook → Gin Handler
 
 **Data availability**:
 - Student: 101-112 學年度 (≥113 shows deprecation notice)
-- Course: Current + previous year (2 years, auto-detect based on month)
+- Course: Cache: 2 years (4 semesters) | Query: 2 most recent semesters (auto-detect based on month)
 - Contact: Real-time scraping
 
 ## Rate Limiting
