@@ -261,3 +261,34 @@ func TestRecordJob(t *testing.T) {
 		m.RecordJob(tc.job, tc.module, tc.duration)
 	}
 }
+
+// ============================================
+// Alias methods tests
+// ============================================
+
+func TestRecordScraperRequest(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	// RecordScraperRequest is an alias for RecordScraper
+	m.RecordScraperRequest("id", "success", 1.5)
+	m.RecordScraperRequest("course", "error", 2.0)
+}
+
+func TestRecordLLMRequest(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	// RecordLLMRequest is an alias for RecordLLM
+	m.RecordLLMRequest("nlu", "success", 0.5)
+	m.RecordLLMRequest("embedding", "error", 1.0)
+}
+
+func TestRecordLLMFallback(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	// RecordLLMFallback records with "fallback" status
+	m.RecordLLMFallback("nlu")
+	m.RecordLLMFallback("embedding")
+}
