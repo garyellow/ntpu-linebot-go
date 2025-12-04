@@ -174,60 +174,63 @@ GET /metrics
 
 **Response** (200 OK):
 ```prometheus
-# HELP ntpu_webhook_requests_total Total webhook requests
-# TYPE ntpu_webhook_requests_total counter
-ntpu_webhook_requests_total{event_type="message",status="success"} 1234
+# HELP ntpu_webhook_total Total webhook events processed
+# TYPE ntpu_webhook_total counter
+ntpu_webhook_total{event_type="message",status="success"} 1234
 
-# HELP ntpu_scraper_duration_seconds Scraper request duration
-# TYPE ntpu_scraper_duration_seconds histogram
-ntpu_scraper_duration_seconds_bucket{module="id",le="0.1"} 100
-ntpu_scraper_duration_seconds_bucket{module="id",le="0.5"} 450
-ntpu_scraper_duration_seconds_bucket{module="id",le="1"} 890
-ntpu_scraper_duration_seconds_sum{module="id"} 234.56
-ntpu_scraper_duration_seconds_count{module="id"} 1000
+# HELP ntpu_webhook_duration_seconds Webhook processing duration in seconds
+# TYPE ntpu_webhook_duration_seconds histogram
+ntpu_webhook_duration_seconds_bucket{event_type="message",le="0.1"} 100
+ntpu_webhook_duration_seconds_bucket{event_type="message",le="2"} 900
+ntpu_webhook_duration_seconds_sum{event_type="message"} 234.56
+ntpu_webhook_duration_seconds_count{event_type="message"} 1000
 
 # ... 更多指標
 ```
 
 **指標列表**:
 
+採用 RED (Rate, Errors, Duration) 和 USE (Utilization, Saturation, Errors) 方法論設計。
+
 | 指標名稱 | 類型 | 說明 | Labels |
 |---------|------|------|--------|
-| `ntpu_webhook_requests_total` | Counter | Webhook 請求總數 | `event_type`, `status` |
+| **Webhook (RED)** | | | |
+| `ntpu_webhook_total` | Counter | Webhook 事件總數 | `event_type`, `status` |
 | `ntpu_webhook_duration_seconds` | Histogram | Webhook 處理耗時 | `event_type` |
-| `ntpu_scraper_requests_total` | Counter | 爬蟲請求總數 | `module`, `status` |
+| **Scraper (RED)** | | | |
+| `ntpu_scraper_total` | Counter | 爬蟲請求總數 | `module`, `status` |
 | `ntpu_scraper_duration_seconds` | Histogram | 爬蟲請求耗時 | `module` |
-| `ntpu_cache_hits_total` | Counter | 快取命中次數 | `module` |
-| `ntpu_cache_misses_total` | Counter | 快取未命中次數 | `module` |
-| `ntpu_cache_entries` | Gauge | 快取項目數量 | `module` |
-| `ntpu_rate_limiter_dropped_total` | Counter | 因限流被丟棄的請求數 | `limiter_type` |
-| `ntpu_rate_limiter_active_users` | Gauge | 活動用戶限流器數量 | - |
-| `ntpu_rate_limiter_cleaned` | Counter | 清理的限流器數量 | - |
-| `ntpu_warmup_tasks_total` | Counter | Warmup 任務次數 | `module`, `status` |
-| `ntpu_warmup_duration_seconds` | Histogram | Warmup 總耗時 | - |
-| `ntpu_http_errors_total` | Counter | HTTP 錯誤次數 | `error_type`, `module` |
-| `ntpu_course_data_integrity_issues_total` | Counter | 課程資料完整性問題 | `issue_type` |
+| **Cache (USE)** | | | |
+| `ntpu_cache_operations_total` | Counter | 快取操作總數 | `module`, `result` |
+| `ntpu_cache_size` | Gauge | 快取項目數量 | `module` |
+| **LLM (RED)** | | | |
+| `ntpu_llm_total` | Counter | LLM API 請求總數 | `operation`, `status` |
+| `ntpu_llm_duration_seconds` | Histogram | LLM API 請求耗時 | `operation` |
+| **Search (RED)** | | | |
+| `ntpu_search_total` | Counter | 語意搜尋請求總數 | `type`, `status` |
+| `ntpu_search_duration_seconds` | Histogram | 搜尋耗時 | `component` |
+| `ntpu_search_results` | Histogram | 搜尋結果數量分布 | `type` |
+| `ntpu_index_size` | Gauge | 索引文件數量 | `index` |
+| **Rate Limiter (USE)** | | | |
+| `ntpu_rate_limiter_dropped_total` | Counter | 被丟棄的請求數 | `limiter` |
+| `ntpu_rate_limiter_users` | Gauge | 活動用戶限流器數量 | - |
+| **Background Jobs** | | | |
+| `ntpu_job_duration_seconds` | Histogram | 背景任務耗時 | `job`, `module` |
 
 **PromQL 查詢範例**:
 
 ```promql
-# Webhook 成功率
-sum(rate(ntpu_webhook_requests_total{status="success"}[5m]))
-/
-sum(rate(ntpu_webhook_requests_total[5m]))
+# Webhook 成功率 (使用 recording rule)
+ntpu:webhook_success_rate:5m
 
-# P95 延遲
-histogram_quantile(0.95,
-  sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le, event_type)
-)
+# P95 延遲 (使用 recording rule)
+ntpu:webhook_latency_p95:5m
 
-# 快取命中率
-sum(rate(ntpu_cache_hits_total[5m])) by (module)
-/
-(sum(rate(ntpu_cache_hits_total[5m])) + sum(rate(ntpu_cache_misses_total[5m]))) by (module)
+# 快取命中率 (使用 recording rule)
+ntpu:cache_hit_rate:5m
 
-# 每秒請求數 (QPS)
-sum(rate(ntpu_webhook_requests_total[1m]))
+# 每秒請求數 (RPS)
+sum(rate(ntpu_webhook_total[5m]))
 ```
 
 ---

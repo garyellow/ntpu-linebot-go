@@ -6,6 +6,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// TestNew verifies that all metrics are properly initialized
 func TestNew(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := New(registry)
@@ -15,252 +16,279 @@ func TestNew(t *testing.T) {
 	}
 
 	// Verify all metric fields are initialized
-	if m.ScraperRequestsTotal == nil {
-		t.Error("ScraperRequestsTotal is nil")
+	tests := []struct {
+		name  string
+		check func() bool
+	}{
+		// Webhook metrics
+		{"WebhookTotal", func() bool { return m.WebhookTotal != nil }},
+		{"WebhookDuration", func() bool { return m.WebhookDuration != nil }},
+
+		// Scraper metrics
+		{"ScraperTotal", func() bool { return m.ScraperTotal != nil }},
+		{"ScraperDuration", func() bool { return m.ScraperDuration != nil }},
+
+		// Cache metrics
+		{"CacheOperations", func() bool { return m.CacheOperations != nil }},
+		{"CacheSize", func() bool { return m.CacheSize != nil }},
+
+		// LLM metrics
+		{"LLMTotal", func() bool { return m.LLMTotal != nil }},
+		{"LLMDuration", func() bool { return m.LLMDuration != nil }},
+
+		// Search metrics
+		{"SearchTotal", func() bool { return m.SearchTotal != nil }},
+		{"SearchDuration", func() bool { return m.SearchDuration != nil }},
+		{"SearchResults", func() bool { return m.SearchResults != nil }},
+		{"IndexSize", func() bool { return m.IndexSize != nil }},
+
+		// Rate limiter metrics
+		{"RateLimiterDropped", func() bool { return m.RateLimiterDropped != nil }},
+		{"RateLimiterUsers", func() bool { return m.RateLimiterUsers != nil }},
+
+		// Job metrics
+		{"JobDuration", func() bool { return m.JobDuration != nil }},
 	}
-	if m.ScraperDurationSeconds == nil {
-		t.Error("ScraperDurationSeconds is nil")
-	}
-	if m.CacheHitsTotal == nil {
-		t.Error("CacheHitsTotal is nil")
-	}
-	if m.CacheMissesTotal == nil {
-		t.Error("CacheMissesTotal is nil")
-	}
-	if m.CacheSize == nil {
-		t.Error("CacheSize is nil")
-	}
-	if m.WebhookDurationSeconds == nil {
-		t.Error("WebhookDurationSeconds is nil")
-	}
-	if m.WebhookRequestsTotal == nil {
-		t.Error("WebhookRequestsTotal is nil")
-	}
-	if m.HTTPErrorsTotal == nil {
-		t.Error("HTTPErrorsTotal is nil")
-	}
-	if m.CourseDataIntegrity == nil {
-		t.Error("CourseDataIntegrity is nil")
-	}
-	if m.RateLimiterDropped == nil {
-		t.Error("RateLimiterDropped is nil")
-	}
-	if m.RateLimiterActiveUsers == nil {
-		t.Error("RateLimiterActiveUsers is nil")
-	}
-	if m.RateLimiterCleaned == nil {
-		t.Error("RateLimiterCleaned is nil")
-	}
-	if m.WarmupTasksTotal == nil {
-		t.Error("WarmupTasksTotal is nil")
-	}
-	if m.WarmupDuration == nil {
-		t.Error("WarmupDuration is nil")
-	}
-	// Semantic search metrics
-	if m.SemanticSearchTotal == nil {
-		t.Error("SemanticSearchTotal is nil")
-	}
-	if m.SemanticSearchDuration == nil {
-		t.Error("SemanticSearchDuration is nil")
-	}
-	if m.SemanticSearchResults == nil {
-		t.Error("SemanticSearchResults is nil")
-	}
-	if m.VectorDBSize == nil {
-		t.Error("VectorDBSize is nil")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if !tt.check() {
+				t.Errorf("%s is nil", tt.name)
+			}
+		})
 	}
 }
 
-func TestRecordScraperRequest(t *testing.T) {
+// TestRegistry verifies registry is accessible
+func TestRegistry(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 
-	// Should not panic
-	m.RecordScraperRequest("id", "success", 1.5)
-	m.RecordScraperRequest("course", "error", 2.0)
-	m.RecordScraperRequest("contact", "timeout", 120.0)
+	if m.Registry() != registry {
+		t.Error("Registry() should return the same registry")
+	}
 }
+
+// ============================================
+// Webhook metrics tests
+// ============================================
+
+func TestRecordWebhook(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	testCases := []struct {
+		eventType string
+		status    string
+		duration  float64
+	}{
+		{"message", "success", 0.5},
+		{"postback", "error", 1.0},
+		{"follow", "rate_limited", 0.1},
+	}
+
+	for _, tc := range testCases {
+		m.RecordWebhook(tc.eventType, tc.status, tc.duration)
+	}
+}
+
+// ============================================
+// Scraper metrics tests
+// ============================================
+
+func TestRecordScraper(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	testCases := []struct {
+		module   string
+		status   string
+		duration float64
+	}{
+		{"id", "success", 1.5},
+		{"course", "error", 2.0},
+		{"contact", "timeout", 120.0},
+		{"syllabus", "success", 5.0},
+	}
+
+	for _, tc := range testCases {
+		m.RecordScraper(tc.module, tc.status, tc.duration)
+	}
+}
+
+// ============================================
+// Cache metrics tests
+// ============================================
 
 func TestRecordCacheHit(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 
-	// Should not panic
-	m.RecordCacheHit("id")
-	m.RecordCacheHit("course")
-	m.RecordCacheHit("contact")
+	modules := []string{"students", "courses", "contacts", "syllabi", "stickers"}
+	for _, module := range modules {
+		m.RecordCacheHit(module)
+	}
 }
 
 func TestRecordCacheMiss(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 
-	// Should not panic
-	m.RecordCacheMiss("id")
-	m.RecordCacheMiss("course")
-	m.RecordCacheMiss("contact")
-}
-
-func TestRecordWebhook(t *testing.T) {
-	registry := prometheus.NewRegistry()
-	m := New(registry)
-
-	// Should not panic
-	m.RecordWebhook("message", "success", 0.5)
-	m.RecordWebhook("postback", "error", 1.0)
-	m.RecordWebhook("follow", "success", 0.1)
-}
-
-func TestRecordHTTPError(t *testing.T) {
-	registry := prometheus.NewRegistry()
-	m := New(registry)
-
-	// Should not panic
-	m.RecordHTTPError("timeout", "webhook")
-	m.RecordHTTPError("rate_limit", "scraper")
-	m.RecordHTTPError("invalid_signature", "webhook")
-}
-
-func TestRecordCourseIntegrityIssue(t *testing.T) {
-	registry := prometheus.NewRegistry()
-	m := New(registry)
-
-	// Should not panic
-	m.RecordCourseIntegrityIssue("missing_no")
-	m.RecordCourseIntegrityIssue("empty_title")
-}
-
-func TestRecordRateLimiterDrop(t *testing.T) {
-	registry := prometheus.NewRegistry()
-	m := New(registry)
-
-	// Should not panic
-	m.RecordRateLimiterDrop("user")
-	m.RecordRateLimiterDrop("global")
-}
-
-func TestRecordWarmupTask(t *testing.T) {
-	registry := prometheus.NewRegistry()
-	m := New(registry)
-
-	// Should not panic
-	m.RecordWarmupTask("id", "success")
-	m.RecordWarmupTask("course", "error")
-	m.RecordWarmupTask("contact", "success")
-}
-
-func TestRecordWarmupDuration(t *testing.T) {
-	registry := prometheus.NewRegistry()
-	m := New(registry)
-
-	// Should not panic
-	m.RecordWarmupDuration(60.0)
-	m.RecordWarmupDuration(300.0)
+	modules := []string{"students", "courses", "contacts", "syllabi", "stickers"}
+	for _, module := range modules {
+		m.RecordCacheMiss(module)
+	}
 }
 
 func TestSetCacheSize(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 
-	// Should not panic
-	m.SetCacheSize("students", 1000)
-	m.SetCacheSize("contacts", 500)
-	m.SetCacheSize("courses", 2000)
-	m.SetCacheSize("stickers", 50)
-}
-
-func TestRecordSemanticSearch(t *testing.T) {
-	registry := prometheus.NewRegistry()
-	m := New(registry)
-
-	// Should not panic
-	m.RecordSemanticSearch("success", 1.5, 10, "direct")
-	m.RecordSemanticSearch("error", 0.5, 0, "direct")
-	m.RecordSemanticSearch("fallback", 2.0, 5, "fallback")
-	m.RecordSemanticSearch("disabled", 0.0, 0, "direct")
-}
-
-func TestRecordEmbeddingLatency(t *testing.T) {
-	registry := prometheus.NewRegistry()
-	m := New(registry)
-
-	// Should not panic
-	m.RecordEmbeddingLatency(0.5)
-	m.RecordEmbeddingLatency(1.0)
-	m.RecordEmbeddingLatency(2.5)
-}
-
-func TestSetVectorDBSize(t *testing.T) {
-	registry := prometheus.NewRegistry()
-	m := New(registry)
-
-	// Should not panic
-	m.SetVectorDBSize(0)
-	m.SetVectorDBSize(100)
-	m.SetVectorDBSize(5000)
-}
-
-func TestSetRateLimiterActiveUsers(t *testing.T) {
-	registry := prometheus.NewRegistry()
-	m := New(registry)
-
-	// Should not panic
-	m.SetRateLimiterActiveUsers(0)
-	m.SetRateLimiterActiveUsers(10)
-	m.SetRateLimiterActiveUsers(100)
-}
-
-func TestRecordRateLimiterCleanup(t *testing.T) {
-	registry := prometheus.NewRegistry()
-	m := New(registry)
-
-	// Should not panic
-	m.RecordRateLimiterCleanup(0)
-	m.RecordRateLimiterCleanup(5)
-	m.RecordRateLimiterCleanup(50)
-}
-
-func TestMetrics_WithDefaultRegistry(t *testing.T) {
-	// Test that metrics can be created with a new registry
-	// without conflicting with default registry
-	registry := prometheus.NewRegistry()
-	m := New(registry)
-
-	// Record some metrics
-	m.RecordScraperRequest("test", "success", 1.0)
-	m.RecordCacheHit("test")
-	m.RecordWebhook("message", "success", 0.5)
-
-	// Gather metrics to verify they were recorded
-	metricFamilies, err := registry.Gather()
-	if err != nil {
-		t.Fatalf("Failed to gather metrics: %v", err)
+	testCases := []struct {
+		module string
+		size   int
+	}{
+		{"students", 1000},
+		{"contacts", 500},
+		{"courses", 2000},
+		{"stickers", 50},
+		{"syllabi", 3000},
 	}
 
-	// Should have metrics registered
-	if len(metricFamilies) == 0 {
-		t.Error("No metrics were gathered")
+	for _, tc := range testCases {
+		m.SetCacheSize(tc.module, tc.size)
+	}
+}
+
+// ============================================
+// LLM metrics tests
+// ============================================
+
+func TestRecordLLM(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	testCases := []struct {
+		operation string
+		status    string
+		duration  float64
+	}{
+		{"nlu", "success", 0.5},
+		{"nlu", "error", 1.0},
+		{"nlu", "fallback", 2.0},
+		{"nlu", "clarification", 0.8},
 	}
 
-	// Check for specific metric names
-	expectedMetrics := map[string]bool{
-		"ntpu_scraper_requests_total":   false,
-		"ntpu_scraper_duration_seconds": false,
-		"ntpu_cache_hits_total":         false,
-		"ntpu_webhook_requests_total":   false,
-		"ntpu_webhook_duration_seconds": false,
+	for _, tc := range testCases {
+		m.RecordLLM(tc.operation, tc.status, tc.duration)
+	}
+}
+
+// ============================================
+// Search metrics tests
+// ============================================
+
+func TestRecordSearch(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	testCases := []struct {
+		searchType  string
+		status      string
+		duration    float64
+		resultCount int
+	}{
+		{"hybrid", "success", 0.5, 10},
+		{"bm25", "success", 0.05, 20},
+		{"vector", "error", 1.0, 0},
+		{"hybrid", "no_results", 0.3, 0},
 	}
 
-	for _, mf := range metricFamilies {
-		if _, ok := expectedMetrics[mf.GetName()]; ok {
-			expectedMetrics[mf.GetName()] = true
-		}
+	for _, tc := range testCases {
+		m.RecordSearch(tc.searchType, tc.status, tc.duration, tc.resultCount)
+	}
+}
+
+func TestSetIndexSize(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	m.SetIndexSize("bm25", 1000)
+	m.SetIndexSize("vector", 1000)
+}
+
+// ============================================
+// Rate Limiter metrics tests
+// ============================================
+
+func TestRecordRateLimiterDrop(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	m.RecordRateLimiterDrop("user")
+	m.RecordRateLimiterDrop("global")
+}
+
+func TestSetRateLimiterUsers(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	m.SetRateLimiterUsers(100)
+	m.SetRateLimiterUsers(0)
+}
+
+// ============================================
+// Job metrics tests
+// ============================================
+
+func TestRecordJob(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	testCases := []struct {
+		job      string
+		module   string
+		duration float64
+	}{
+		{"warmup", "id", 60.0},
+		{"warmup", "course", 120.0},
+		{"warmup", "total", 300.0},
+		{"cleanup", "all", 10.0},
+		{"sticker_refresh", "all", 30.0},
 	}
 
-	for name, found := range expectedMetrics {
-		if !found {
-			t.Errorf("Expected metric %q not found", name)
-		}
+	for _, tc := range testCases {
+		m.RecordJob(tc.job, tc.module, tc.duration)
 	}
+}
+
+// ============================================
+// Alias methods tests
+// ============================================
+
+func TestRecordScraperRequest(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	// RecordScraperRequest is an alias for RecordScraper
+	m.RecordScraperRequest("id", "success", 1.5)
+	m.RecordScraperRequest("course", "error", 2.0)
+}
+
+func TestRecordLLMRequest(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	// RecordLLMRequest is an alias for RecordLLM
+	m.RecordLLMRequest("nlu", "success", 0.5)
+	m.RecordLLMRequest("embedding", "error", 1.0)
+}
+
+func TestRecordLLMFallback(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	// RecordLLMFallback records with "fallback" status
+	m.RecordLLMFallback("nlu")
+	m.RecordLLMFallback("embedding")
 }

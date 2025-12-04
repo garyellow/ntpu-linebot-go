@@ -25,16 +25,10 @@ import (
 // This pattern is recommended for Go applications using database/sql with SQLite.
 // See: https://github.com/mattn/go-sqlite3/issues/274
 type DB struct {
-	writer   *sql.DB         // Single connection for writes (MaxOpenConns=1)
-	reader   *sql.DB         // Multiple connections for reads
-	path     string          // Database file path
-	cacheTTL time.Duration   // Cache time-to-live for all data
-	metrics  MetricsRecorder // Optional metrics recorder for data integrity checks
-}
-
-// MetricsRecorder defines the interface for recording data integrity metrics
-type MetricsRecorder interface {
-	RecordCourseIntegrityIssue(issueType string)
+	writer   *sql.DB       // Single connection for writes (MaxOpenConns=1)
+	reader   *sql.DB       // Multiple connections for reads
+	path     string        // Database file path
+	cacheTTL time.Duration // Cache time-to-live for all data
 }
 
 // New creates a new database with read/write separation and initializes the schema.
@@ -232,11 +226,6 @@ func (db *DB) Query(query string, args ...interface{}) (*sql.Rows, error) {
 // QueryRow executes a read query that returns at most one row on the reader connection
 func (db *DB) QueryRow(query string, args ...interface{}) *sql.Row {
 	return db.reader.QueryRowContext(context.Background(), query, args...)
-}
-
-// SetMetrics sets the metrics recorder for data integrity monitoring
-func (db *DB) SetMetrics(recorder MetricsRecorder) {
-	db.metrics = recorder
 }
 
 // GetCacheTTL returns the configured cache TTL

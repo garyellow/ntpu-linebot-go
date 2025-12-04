@@ -12,6 +12,7 @@
       }
     ]
   },
+  "description": "NTPU LINE Bot Observability Dashboard - RED/USE Method",
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
@@ -21,8 +22,8 @@
     {
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
-      "id": 100,
-      "title": "Overview",
+      "id": 1,
+      "title": "📊 Service Overview (SLI)",
       "type": "row"
     },
     {
@@ -34,11 +35,11 @@
           "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
         }
       },
-      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
-      "id": 101,
+      "gridPos": { "h": 4, "w": 3, "x": 0, "y": 1 },
+      "id": 2,
       "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
       "targets": [{ "expr": "up{job=\"ntpu-linebot\"}", "refId": "A" }],
-      "title": "Service Status",
+      "title": "Health",
       "type": "stat"
     },
     {
@@ -50,11 +51,11 @@
           "unit": "reqps"
         }
       },
-      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
-      "id": 102,
+      "gridPos": { "h": 4, "w": 3, "x": 3, "y": 1 },
+      "id": 3,
       "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
-      "targets": [{ "expr": "sum(rate(ntpu_webhook_requests_total[5m]))", "refId": "A" }],
-      "title": "Webhook RPS",
+      "targets": [{ "expr": "ntpu:webhook_rps:5m or sum(rate(ntpu_webhook_total[5m]))", "refId": "A" }],
+      "title": "Request Rate",
       "type": "stat"
     },
     {
@@ -62,15 +63,15 @@
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 3 }] },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 2 }] },
           "unit": "s"
         }
       },
-      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
-      "id": 103,
+      "gridPos": { "h": 4, "w": 3, "x": 6, "y": 1 },
+      "id": 4,
       "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
-      "targets": [{ "expr": "histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le))", "refId": "A" }],
-      "title": "Webhook P95 Latency",
+      "targets": [{ "expr": "ntpu:webhook_latency_p95:5m or histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le))", "refId": "A" }],
+      "title": "Latency P95",
       "type": "stat"
     },
     {
@@ -78,15 +79,15 @@
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 0.6 }, { "color": "green", "value": 0.8 }] },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 0.01 }, { "color": "red", "value": 0.05 }] },
           "unit": "percentunit"
         }
       },
-      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
-      "id": 104,
+      "gridPos": { "h": 4, "w": 3, "x": 9, "y": 1 },
+      "id": 5,
       "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
-      "targets": [{ "expr": "sum(rate(ntpu_cache_hits_total[5m])) / (sum(rate(ntpu_cache_hits_total[5m])) + sum(rate(ntpu_cache_misses_total[5m])))", "refId": "A" }],
-      "title": "Cache Hit Rate",
+      "targets": [{ "expr": "1 - (ntpu:webhook_success_rate:5m or (sum(rate(ntpu_webhook_total{status=\"success\"}[5m])) / sum(rate(ntpu_webhook_total[5m]))))", "refId": "A" }],
+      "title": "Error Rate",
       "type": "stat"
     },
     {
@@ -94,12 +95,28 @@
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 500 }, { "color": "red", "value": 1000 }] },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 0.5 }, { "color": "green", "value": 0.8 }] },
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": { "h": 4, "w": 3, "x": 12, "y": 1 },
+      "id": 6,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "expr": "ntpu:cache_hit_rate_total:5m or (sum(rate(ntpu_cache_operations_total{result=\"hit\"}[5m])) / sum(rate(ntpu_cache_operations_total[5m])))", "refId": "A" }],
+      "title": "Cache Hit",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 300 }, { "color": "red", "value": 500 }] },
           "unit": "short"
         }
       },
-      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
-      "id": 105,
+      "gridPos": { "h": 4, "w": 3, "x": 15, "y": 1 },
+      "id": 7,
       "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
       "targets": [{ "expr": "go_goroutines{job=\"ntpu-linebot\"}", "refId": "A" }],
       "title": "Goroutines",
@@ -110,22 +127,83 @@
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 419430400 }, { "color": "red", "value": 471859200 }] },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 314572800 }, { "color": "red", "value": 419430400 }] },
           "unit": "bytes"
         }
       },
-      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
-      "id": 106,
+      "gridPos": { "h": 4, "w": 3, "x": 18, "y": 1 },
+      "id": 8,
       "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
       "targets": [{ "expr": "go_memstats_alloc_bytes{job=\"ntpu-linebot\"}", "refId": "A" }],
-      "title": "Memory Usage",
+      "title": "Memory",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 0.8 }, { "color": "green", "value": 0.95 }] },
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": { "h": 4, "w": 3, "x": 21, "y": 1 },
+      "id": 9,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "expr": "sum(rate(ntpu_llm_total{status=\"success\"}[5m])) / sum(rate(ntpu_llm_total[5m]))", "refId": "A" }],
+      "title": "LLM Success",
       "type": "stat"
     },
     {
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
-      "id": 110,
-      "title": "Cache",
+      "id": 10,
+      "title": "📨 Webhook (RED)",
+      "type": "row"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisLabel": "Requests/sec", "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" },
+          "unit": "reqps"
+        }
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 6 },
+      "id": 11,
+      "options": { "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "sum(rate(ntpu_webhook_total[1m])) by (event_type)", "legendFormat": "{{event_type}}", "refId": "A" }
+      ],
+      "title": "Request Rate by Event Type",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisLabel": "Seconds", "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 6 },
+      "id": 12,
+      "options": { "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "ntpu:webhook_latency_p50:5m or histogram_quantile(0.50, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le))", "legendFormat": "P50", "refId": "A" },
+        { "expr": "ntpu:webhook_latency_p95:5m or histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le))", "legendFormat": "P95", "refId": "B" },
+        { "expr": "ntpu:webhook_latency_p99:5m or histogram_quantile(0.99, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le))", "legendFormat": "P99", "refId": "C" }
+      ],
+      "title": "Latency Percentiles",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 },
+      "id": 20,
+      "title": "💾 Cache (USE)",
       "type": "row"
     },
     {
@@ -137,10 +215,10 @@
           "unit": "short"
         }
       },
-      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 6 },
-      "id": 111,
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 14 },
+      "id": 21,
       "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "right" }, "tooltip": { "mode": "multi" } },
-      "targets": [{ "expr": "ntpu_cache_entries", "legendFormat": "{{module}}", "refId": "A" }],
+      "targets": [{ "expr": "ntpu_cache_size", "legendFormat": "{{module}}", "refId": "A" }],
       "title": "Cache Size by Module",
       "type": "timeseries"
     },
@@ -148,856 +226,64 @@
       "datasource": "Prometheus",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0.6
-              },
-              {
-                "color": "green",
-                "value": 0.8
-              }
-            ]
-          },
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 0.5 }, { "color": "green", "value": 0.8 }] },
           "unit": "percentunit"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 12,
-        "x": 12,
-        "y": 6
-      },
-      "id": 5,
-      "options": {
-        "orientation": "auto",
-        "reduceOptions": {
-          "values": false,
-          "calcs": ["lastNotNull"],
-          "fields": ""
-        },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(ntpu_cache_hits_total[5m])) by (module) / (sum(rate(ntpu_cache_hits_total[5m])) + sum(rate(ntpu_cache_misses_total[5m]))) by (module)",
-          "legendFormat": "{{module}}",
-          "refId": "A"
         }
-      ],
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 14 },
+      "id": 22,
+      "options": { "orientation": "auto", "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" }, "showThresholdLabels": false, "showThresholdMarkers": true },
+      "targets": [{ "expr": "ntpu:cache_hit_rate:5m or (sum(rate(ntpu_cache_operations_total{result=\"hit\"}[5m])) by (module) / sum(rate(ntpu_cache_operations_total[5m])) by (module))", "legendFormat": "{{module}}", "refId": "A" }],
       "title": "Cache Hit Rate by Module",
       "type": "gauge"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 12 },
-      "id": 120,
-      "title": "Webhook",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 20 },
+      "id": 30,
+      "title": "🕷️ Scraper (RED)",
       "type": "row"
     },
     {
       "datasource": "Prometheus",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "Requests/sec",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "reqps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 13
-      },
-      "id": 1,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "lastNotNull"],
-          "displayMode": "table",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(ntpu_webhook_requests_total[1m])) by (event_type)",
-          "legendFormat": "{{event_type}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Webhook QPS by Event Type",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "Latency (seconds)",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 5
-              }
-            ]
-          },
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 13
-      },
-      "id": 2,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.50, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le, event_type))",
-          "legendFormat": "P50 - {{event_type}}",
-          "refId": "A"
-        },
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le, event_type))",
-          "legendFormat": "P95 - {{event_type}}",
-          "refId": "B"
-        },
-        {
-          "expr": "histogram_quantile(0.99, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le, event_type))",
-          "legendFormat": "P99 - {{event_type}}",
-          "refId": "C"
-        }
-      ],
-      "title": "Webhook Latency (P50/P95/P99)",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 21 },
-      "id": 130,
-      "title": "Scraper",
-      "type": "row"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "Rate",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "max": 1,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisLabel": "Success Rate", "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" },
+          "max": 1, "min": 0,
           "unit": "percentunit"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Error"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "red",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Success"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "green",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 22
-      },
-      "id": 3,
-      "options": {
-        "legend": {
-          "calcs": ["mean"],
-          "displayMode": "table",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
         }
       },
-      "targets": [
-        {
-          "expr": "sum(rate(ntpu_scraper_requests_total{status=\"success\"}[5m])) by (module) / sum(rate(ntpu_scraper_requests_total[5m])) by (module)",
-          "legendFormat": "Success - {{module}}",
-          "refId": "A"
-        },
-        {
-          "expr": "sum(rate(ntpu_scraper_requests_total{status=~\"error|timeout\"}[5m])) by (module) / sum(rate(ntpu_scraper_requests_total[5m])) by (module)",
-          "legendFormat": "Error - {{module}}",
-          "refId": "B"
-        }
-      ],
-      "title": "Scraper Success Rate by Module",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 21 },
+      "id": 31,
+      "options": { "legend": { "calcs": ["mean"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [{ "expr": "ntpu:scraper_success_rate:5m or (sum(rate(ntpu_scraper_total{status=\"success\"}[5m])) by (module) / sum(rate(ntpu_scraper_total[5m])) by (module))", "legendFormat": "{{module}}", "refId": "A" }],
+      "title": "Scraper Success Rate",
       "type": "timeseries"
     },
     {
       "datasource": "Prometheus",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "Duration (seconds)",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 10
-              },
-              {
-                "color": "red",
-                "value": 30
-              }
-            ]
-          },
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisLabel": "Seconds", "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" },
           "unit": "s"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 22
-      },
-      "id": 4,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
         }
       },
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(ntpu_scraper_duration_seconds_bucket[5m])) by (le, module))",
-          "legendFormat": "P95 - {{module}}",
-          "refId": "A"
-        },
-        {
-          "expr": "histogram_quantile(0.99, sum(rate(ntpu_scraper_duration_seconds_bucket[5m])) by (le, module))",
-          "legendFormat": "P99 - {{module}}",
-          "refId": "B"
-        }
-      ],
-      "title": "Scraper Duration (P95/P99) by Module",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 21 },
+      "id": 32,
+      "options": { "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [{ "expr": "ntpu:scraper_latency_p95:5m or histogram_quantile(0.95, sum(rate(ntpu_scraper_duration_seconds_bucket[5m])) by (le, module))", "legendFormat": "P95 {{module}}", "refId": "A" }],
+      "title": "Scraper Latency P95",
       "type": "timeseries"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 30 },
-      "id": 140,
-      "title": "System",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 },
+      "id": 40,
+      "title": "🧠 LLM (RED + Cost)",
       "type": "row"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Goroutines"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "short"
-              },
-              {
-                "id": "custom.axisLabel",
-                "value": "Count"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "blue"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Memory"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "bytes"
-              },
-              {
-                "id": "custom.axisLabel",
-                "value": "Bytes"
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "purple"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 31
-      },
-      "id": 6,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max", "last"],
-          "displayMode": "table",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "expr": "go_goroutines{job=\"ntpu-linebot\"}",
-          "legendFormat": "Goroutines",
-          "refId": "A"
-        },
-        {
-          "expr": "go_memstats_alloc_bytes{job=\"ntpu-linebot\"}",
-          "legendFormat": "Memory",
-          "refId": "B"
-        }
-      ],
-      "title": "Go Runtime Metrics",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "Requests/sec",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 1
-              }
-            ]
-          },
-          "unit": "ops"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 31
-      },
-      "id": 8,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max", "sum"],
-          "displayMode": "table",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(ntpu_rate_limiter_dropped_total[1m])) by (limiter_type)",
-          "legendFormat": "Dropped - {{limiter_type}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Rate Limiter Dropped Requests",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 39 },
-      "id": 150,
-      "title": "Errors & Issues",
-      "type": "row"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "Errors/sec",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 1
-              }
-            ]
-          },
-          "unit": "ops"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 40
-      },
-      "id": 10,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max", "sum"],
-          "displayMode": "table",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(ntpu_http_errors_total[1m])) by (error_type, module)",
-          "legendFormat": "{{error_type}} - {{module}}",
-          "refId": "A"
-        }
-      ],
-      "title": "HTTP Errors by Type",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "Issues/sec",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0.1
-              },
-              {
-                "color": "red",
-                "value": 1
-              }
-            ]
-          },
-          "unit": "ops"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 40
-      },
-      "id": 11,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "sum"],
-          "displayMode": "table",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(ntpu_course_data_integrity_issues_total[5m])) by (issue_type)",
-          "legendFormat": "{{issue_type}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Data Integrity Issues",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 48 },
-      "id": 160,
-      "title": "Semantic Search",
-      "type": "row"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
-          "unit": "short"
-        }
-      },
-      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 49 },
-      "id": 161,
-      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
-      "targets": [{ "expr": "ntpu_vectordb_documents", "refId": "A" }],
-      "title": "VectorDB Documents",
-      "type": "stat"
     },
     {
       "datasource": "Prometheus",
@@ -1008,11 +294,11 @@
           "unit": "reqps"
         }
       },
-      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 49 },
-      "id": 162,
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 28 },
+      "id": 41,
       "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
-      "targets": [{ "expr": "sum(rate(ntpu_semantic_search_total[5m]))", "refId": "A" }],
-      "title": "Semantic Search RPS",
+      "targets": [{ "expr": "ntpu:llm_rps:5m or sum(rate(ntpu_llm_total[5m]))", "refId": "A" }],
+      "title": "LLM RPS",
       "type": "stat"
     },
     {
@@ -1024,11 +310,11 @@
           "unit": "s"
         }
       },
-      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 49 },
-      "id": 163,
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 28 },
+      "id": 42,
       "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
-      "targets": [{ "expr": "histogram_quantile(0.95, sum(rate(ntpu_semantic_search_duration_seconds_bucket{type=\"query\"}[5m])) by (le))", "refId": "A" }],
-      "title": "Semantic P95 Latency",
+      "targets": [{ "expr": "histogram_quantile(0.95, sum(rate(ntpu_llm_duration_seconds_bucket[5m])) by (le))", "refId": "A" }],
+      "title": "LLM P95",
       "type": "stat"
     },
     {
@@ -1036,15 +322,15 @@
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 0.7 }, { "color": "green", "value": 0.9 }] },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 0.8 }, { "color": "green", "value": 0.95 }] },
           "unit": "percentunit"
         }
       },
-      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 49 },
-      "id": 164,
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 28 },
+      "id": 43,
       "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
-      "targets": [{ "expr": "sum(rate(ntpu_semantic_search_total{status=\"success\"}[5m])) / sum(rate(ntpu_semantic_search_total{status!=\"disabled\"}[5m]))", "refId": "A" }],
-      "title": "Semantic Success Rate",
+      "targets": [{ "expr": "ntpu:llm_success_rate:5m{operation=\"nlu\"} or (sum(rate(ntpu_llm_total{status=\"success\"}[5m])) / sum(rate(ntpu_llm_total[5m])))", "refId": "A" }],
+      "title": "Success Rate",
       "type": "stat"
     },
     {
@@ -1054,19 +340,13 @@
           "color": { "mode": "palette-classic" },
           "custom": { "axisLabel": "Requests/sec", "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1, "showPoints": "never", "stacking": { "group": "A", "mode": "normal" } },
           "unit": "reqps"
-        },
-        "overrides": [
-          { "matcher": { "id": "byName", "options": "success" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
-          { "matcher": { "id": "byName", "options": "fallback" }, "properties": [{ "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }] },
-          { "matcher": { "id": "byName", "options": "error" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] },
-          { "matcher": { "id": "byName", "options": "disabled" }, "properties": [{ "id": "color", "value": { "fixedColor": "gray", "mode": "fixed" } }] }
-        ]
+        }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 53 },
-      "id": 165,
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 28 },
+      "id": 44,
       "options": { "legend": { "calcs": ["mean", "sum"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "targets": [{ "expr": "sum(rate(ntpu_semantic_search_total[1m])) by (status)", "legendFormat": "{{status}}", "refId": "A" }],
-      "title": "Semantic Search by Status",
+      "targets": [{ "expr": "sum(rate(ntpu_llm_total[1m])) by (operation, status)", "legendFormat": "{{operation}} {{status}}", "refId": "A" }],
+      "title": "LLM Requests by Operation",
       "type": "timeseries"
     },
     {
@@ -1074,20 +354,89 @@
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
-          "custom": { "axisLabel": "Latency (seconds)", "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" },
+          "custom": { "axisLabel": "Seconds", "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" },
           "unit": "s"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 53 },
-      "id": 166,
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 35 },
+      "id": 45,
       "options": { "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
-        { "expr": "histogram_quantile(0.50, sum(rate(ntpu_semantic_search_duration_seconds_bucket{type=\"query\"}[5m])) by (le))", "legendFormat": "P50 Query", "refId": "A" },
-        { "expr": "histogram_quantile(0.95, sum(rate(ntpu_semantic_search_duration_seconds_bucket{type=\"query\"}[5m])) by (le))", "legendFormat": "P95 Query", "refId": "B" },
-        { "expr": "histogram_quantile(0.50, sum(rate(ntpu_semantic_search_duration_seconds_bucket{type=\"embedding\"}[5m])) by (le))", "legendFormat": "P50 Embedding", "refId": "C" },
-        { "expr": "histogram_quantile(0.95, sum(rate(ntpu_semantic_search_duration_seconds_bucket{type=\"embedding\"}[5m])) by (le))", "legendFormat": "P95 Embedding", "refId": "D" }
+        { "expr": "histogram_quantile(0.50, sum(rate(ntpu_llm_duration_seconds_bucket[5m])) by (le, operation))", "legendFormat": "P50 {{operation}}", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, sum(rate(ntpu_llm_duration_seconds_bucket[5m])) by (le, operation))", "legendFormat": "P95 {{operation}}", "refId": "B" }
       ],
-      "title": "Semantic Search Latency (P50/P95)",
+      "title": "LLM Latency by Operation",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 42 },
+      "id": 50,
+      "title": "🔍 Search (RED)",
+      "type": "row"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 43 },
+      "id": 51,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "expr": "sum(ntpu_index_size)", "refId": "A" }],
+      "title": "Index Docs",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "reqps"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 43 },
+      "id": 52,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "expr": "ntpu:search_rps:5m or sum(rate(ntpu_search_total[5m]))", "refId": "A" }],
+      "title": "Search RPS",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 3 }] },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 43 },
+      "id": 53,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "expr": "ntpu:search_latency_p95:5m or histogram_quantile(0.95, sum(rate(ntpu_search_duration_seconds_bucket[5m])) by (le))", "refId": "A" }],
+      "title": "Search P95",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisLabel": "Seconds", "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 43 },
+      "id": 54,
+      "options": { "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [{ "expr": "histogram_quantile(0.95, sum(rate(ntpu_search_duration_seconds_bucket[5m])) by (le, type))", "legendFormat": "P95 {{type}}", "refId": "A" }],
+      "title": "Search Latency by Type",
       "type": "timeseries"
     },
     {
@@ -1095,18 +444,44 @@
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
-          "custom": { "axisLabel": "Results", "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" },
-          "unit": "short"
+          "custom": { "axisLabel": "Requests/sec", "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1, "showPoints": "never", "stacking": { "group": "A", "mode": "normal" } },
+          "unit": "reqps"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 61 },
-      "id": 167,
-      "options": { "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 47 },
+      "id": 55,
+      "options": { "legend": { "calcs": ["mean", "sum"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [{ "expr": "sum(rate(ntpu_search_total[1m])) by (type, status)", "legendFormat": "{{type}} {{status}}", "refId": "A" }],
+      "title": "Search by Type",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 54 },
+      "id": 60,
+      "title": "⚙️ System (USE)",
+      "type": "row"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisLabel": "", "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Goroutines" }, "properties": [{ "id": "unit", "value": "short" }, { "id": "custom.axisLabel", "value": "Count" }, { "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } }] },
+          { "matcher": { "id": "byName", "options": "Memory" }, "properties": [{ "id": "unit", "value": "bytes" }, { "id": "custom.axisLabel", "value": "Bytes" }, { "id": "custom.axisPlacement", "value": "right" }, { "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } }] }
+        ]
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 55 },
+      "id": 61,
+      "options": { "legend": { "calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
-        { "expr": "histogram_quantile(0.50, sum(rate(ntpu_semantic_search_results_bucket[5m])) by (le, source))", "legendFormat": "P50 - {{source}}", "refId": "A" },
-        { "expr": "histogram_quantile(0.95, sum(rate(ntpu_semantic_search_results_bucket[5m])) by (le, source))", "legendFormat": "P95 - {{source}}", "refId": "B" }
+        { "expr": "go_goroutines{job=\"ntpu-linebot\"}", "legendFormat": "Goroutines", "refId": "A" },
+        { "expr": "go_memstats_alloc_bytes{job=\"ntpu-linebot\"}", "legendFormat": "Memory", "refId": "B" }
       ],
-      "title": "Semantic Search Results Count",
+      "title": "Go Runtime",
       "type": "timeseries"
     },
     {
@@ -1114,47 +489,29 @@
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
-          "custom": { "axisLabel": "Documents", "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" },
-          "unit": "short"
+          "custom": { "axisLabel": "Requests/sec", "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" },
+          "unit": "ops"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 61 },
-      "id": 168,
-      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "targets": [{ "expr": "ntpu_vectordb_documents", "legendFormat": "Documents", "refId": "A" }],
-      "title": "VectorDB Document Count",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 55 },
+      "id": 62,
+      "options": { "legend": { "calcs": ["mean", "max", "sum"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [{ "expr": "sum(rate(ntpu_rate_limiter_dropped_total[1m])) by (limiter)", "legendFormat": "Dropped {{limiter}}", "refId": "A" }],
+      "title": "Rate Limiter Dropped",
       "type": "timeseries"
     }
   ],
   "refresh": "10s",
   "schemaVersion": 30,
   "style": "dark",
-  "tags": [
-    "ntpu",
-    "linebot",
-    "monitoring"
-  ],
-  "templating": {
-    "list": []
-  },
-  "time": {
-    "from": "now-1h",
-    "to": "now"
-  },
+  "tags": ["ntpu", "linebot", "red-method", "use-method"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
   "timepicker": {
-    "refresh_intervals": [
-      "5s",
-      "10s",
-      "30s",
-      "1m",
-      "5m",
-      "15m",
-      "30m",
-      "1h"
-    ]
+    "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h"]
   },
   "timezone": "browser",
-  "title": "NTPU LINE Bot Monitoring Dashboard",
+  "title": "NTPU LINE Bot",
   "uid": "ntpu-linebot-dashboard",
-  "version": 2
+  "version": 5
 }

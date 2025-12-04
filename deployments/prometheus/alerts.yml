@@ -1,181 +1,280 @@
+# Prometheus Alert Rules for NTPU LINE Bot
+#
+# Design Philosophy:
+# - Focus on user-impacting issues (SLI-based alerts)
+# - Avoid alert fatigue with appropriate thresholds
+# - Use recording rules to pre-compute expensive queries
+# - Tiered severity: info (low), warning (medium), critical (high)
+
 groups:
-  - name: ntpu_linebot_alerts
+  # ============================================
+  # Alert Rules
+  # ============================================
+  - name: ntpu_alerts
     interval: 30s
     rules:
-      # Scraper high failure rate (adjusted to 30% threshold)
-      - alert: ScraperHighFailureRate
-        expr: |
-          (
-            sum(rate(ntpu_scraper_requests_total{status="error"}[5m])) by (module)
-            /
-            sum(rate(ntpu_scraper_requests_total[5m])) by (module)
-          ) > 0.3
-        for: 3m
-        labels:
-          severity: warning
-          component: scraper
-        annotations:
-          summary: "High scraper failure rate for {{ $labels.module }}"
-          description: "Scraper error rate for {{ $labels.module }} is {{ $value | humanizePercentage }} (threshold: 30%)"
-
-      # Webhook high latency (adjusted to 3s threshold)
-      - alert: WebhookHighLatency
-        expr: |
-          histogram_quantile(0.95,
-            sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le, event_type)
-          ) > 3
-        for: 5m
-        labels:
-          severity: warning
-          component: webhook
-        annotations:
-          summary: "High webhook latency for {{ $labels.event_type }}"
-          description: "Webhook P95 latency for {{ $labels.event_type }} is {{ $value }}s (threshold: 3s)"
-
-      # Service down
+      # ----------------------------------------
+      # Service Health (Critical)
+      # ----------------------------------------
       - alert: ServiceDown
         expr: up{job="ntpu-linebot"} == 0
         for: 2m
         labels:
           severity: critical
-          component: service
         annotations:
-          summary: "NTPU LINE bot service is down"
-          description: "The NTPU LINE bot service has been unreachable for more than 2 minutes"
+          summary: "NTPU LINE Bot is down"
+          description: "Service has been unreachable for more than 2 minutes"
 
-      # High memory usage (80% of container limit 512MB = 410MB)
-      - alert: HighMemoryUsage
-        expr: go_memstats_alloc_bytes{job="ntpu-linebot"} > 410 * 1024 * 1024
+      # ----------------------------------------
+      # Webhook SLO Alerts
+      # Target: 95% of requests < 2s (LINE best practice)
+      # ----------------------------------------
+      - alert: WebhookLatencyHigh
+        expr: ntpu:webhook_latency_p95:5m > 2
         for: 5m
         labels:
           severity: warning
-          component: system
         annotations:
-          summary: "High memory usage detected"
-          description: "Memory usage is {{ $value | humanize1024 }}B (threshold: 410MB)"
+          summary: "Webhook P95 latency is high"
+          description: "P95 latency is {{ $value | printf \"%.2f\" }}s (target: <2s)"
 
-      # Critical memory usage (90% of container limit 512MB = 460MB)
-      - alert: CriticalMemoryUsage
-        expr: go_memstats_alloc_bytes{job="ntpu-linebot"} > 460 * 1024 * 1024
-        for: 3m
-        labels:
-          severity: critical
-          component: system
-        annotations:
-          summary: "Critical memory usage detected"
-          description: "Memory usage is {{ $value | humanize1024 }}B (threshold: 460MB)"
-
-      # Scraper high latency
-      - alert: ScraperHighLatency
-        expr: |
-          histogram_quantile(0.95,
-            sum(rate(ntpu_scraper_duration_seconds_bucket[5m])) by (le, module)
-          ) > 10
+      - alert: WebhookErrorRateHigh
+        expr: (1 - ntpu:webhook_success_rate:5m) > 0.05
         for: 5m
         labels:
           severity: warning
-          component: scraper
         annotations:
-          summary: "High scraper latency for {{ $labels.module }}"
-          description: "Scraper P95 latency for {{ $labels.module }} is {{ $value }}s (threshold: 10s)"
+          summary: "Webhook error rate is high"
+          description: "Error rate is {{ $value | humanizePercentage }} (target: <5%)"
 
-      # Cache low hit rate (60% threshold, 15 min duration)
-      # Note: Historical course queries always miss cache (on-demand scraping),
-      # so threshold is lowered to account for this expected behavior
-      - alert: CacheLowHitRate
-        expr: |
-          (
-            sum(rate(ntpu_cache_hits_total[15m])) by (module)
-            /
-            (
-              sum(rate(ntpu_cache_hits_total[15m])) by (module)
-              +
-              sum(rate(ntpu_cache_misses_total[15m])) by (module)
-            )
-          ) < 0.6
-        for: 15m
+      # ----------------------------------------
+      # Scraper Alerts
+      # External dependency monitoring
+      # ----------------------------------------
+      - alert: ScraperFailureRateHigh
+        expr: (1 - ntpu:scraper_success_rate:5m) > 0.3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Scraper {{ $labels.module }} failure rate is high"
+          description: "Failure rate is {{ $value | humanizePercentage }} (threshold: 30%)"
+
+      - alert: ScraperLatencyHigh
+        expr: ntpu:scraper_latency_p95:5m > 30
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Scraper {{ $labels.module }} latency is high"
+          description: "P95 latency is {{ $value | printf \"%.1f\" }}s (threshold: 30s)"
+
+      # ----------------------------------------
+      # Cache Alerts
+      # Data freshness and efficiency
+      # ----------------------------------------
+      - alert: CacheHitRateLow
+        expr: ntpu:cache_hit_rate_total:5m < 0.5
+        for: 1h
         labels:
           severity: info
-          component: cache
         annotations:
-          summary: "Low cache hit rate for {{ $labels.module }}"
-          description: "Cache hit rate for {{ $labels.module }} is {{ $value | humanizePercentage }} (threshold: 60%)"
+          summary: "Cache hit rate is low"
+          description: "Overall hit rate is {{ $value | humanizePercentage }} (target: >50%)"
 
-      # High goroutine count
+      # ----------------------------------------
+      # LLM Alerts
+      # API reliability and cost awareness
+      # ----------------------------------------
+      - alert: LLMErrorRateHigh
+        expr: (1 - ntpu:llm_success_rate:5m) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM {{ $labels.operation }} error rate is high"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 20%)"
+
+      - alert: LLMLatencyHigh
+        expr: ntpu:llm_latency_p95:5m > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM {{ $labels.operation }} latency is high"
+          description: "P95 latency is {{ $value | printf \"%.2f\" }}s (threshold: 5s)"
+
+      # ----------------------------------------
+      # Search Alerts
+      # Semantic search quality
+      # ----------------------------------------
+      - alert: SearchIndexEmpty
+        expr: |
+          ntpu_index_size{index="bm25"} == 0
+          or
+          ntpu_index_size{index="vector"} == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Search index {{ $labels.index }} is empty"
+          description: "Index has no documents, semantic search may be degraded"
+
+      - alert: SearchLatencyHigh
+        expr: ntpu:search_latency_p95:5m > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Search latency is high"
+          description: "P95 latency is {{ $value | printf \"%.2f\" }}s (threshold: 3s)"
+
+      # ----------------------------------------
+      # Rate Limiter Alerts
+      # Traffic protection
+      # ----------------------------------------
+      - alert: RateLimiterDroppingRequests
+        expr: |
+          sum(rate(ntpu_rate_limiter_dropped_total[5m])) > 1
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: "Rate limiter is dropping requests"
+          description: "Dropping {{ $value | printf \"%.1f\" }} requests/sec"
+
+      # ----------------------------------------
+      # Background Job Alerts
+      # Warmup, cleanup, sticker refresh
+      # ----------------------------------------
+      - alert: WarmupJobSlow
+        expr: |
+          histogram_quantile(0.95, sum(rate(ntpu_job_duration_seconds_bucket{job="warmup",module="total"}[1h])) by (le)) > 1800
+        for: 0m
+        labels:
+          severity: info
+        annotations:
+          summary: "Daily warmup job is taking longer than expected"
+          description: "Warmup P95 duration is {{ $value | printf \"%.0f\" }}s (threshold: 30min)"
+
+      - alert: CleanupJobSlow
+        expr: |
+          histogram_quantile(0.95, sum(rate(ntpu_job_duration_seconds_bucket{job="cleanup"}[1h])) by (le)) > 300
+        for: 0m
+        labels:
+          severity: info
+        annotations:
+          summary: "Cache cleanup job is taking longer than expected"
+          description: "Cleanup P95 duration is {{ $value | printf \"%.0f\" }}s (threshold: 5min)"
+
+      # ----------------------------------------
+      # Resource Alerts
+      # Go runtime monitoring
+      # ----------------------------------------
+      - alert: HighMemoryUsage
+        expr: |
+          go_memstats_alloc_bytes{job="ntpu-linebot"} > 400 * 1024 * 1024
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value | humanize1024 }}B (threshold: 400MB)"
+
       - alert: HighGoroutineCount
         expr: go_goroutines{job="ntpu-linebot"} > 1000
         for: 10m
         labels:
           severity: warning
-          component: system
         annotations:
-          summary: "High number of goroutines"
-          description: "Goroutine count is {{ $value }} (threshold: 1000), possible goroutine leak"
+          summary: "High goroutine count"
+          description: "Goroutine count is {{ $value }} (threshold: 1000)"
 
-      # High rate limiter drop rate
-      - alert: HighRateLimiterDropRate
+  # ============================================
+  # Recording Rules
+  # Pre-computed metrics for dashboard efficiency
+  # ============================================
+  - name: ntpu_recording_rules
+    interval: 30s
+    rules:
+      # Webhook metrics
+      - record: ntpu:webhook_success_rate:5m
         expr: |
-          sum(rate(ntpu_rate_limiter_dropped_total[5m])) by (limiter_type) > 5
-        for: 3m
-        labels:
-          severity: warning
-          component: rate_limiter
-        annotations:
-          summary: "High rate limiter drop rate for {{ $labels.limiter_type }}"
-          description: "Rate limiter is dropping {{ $value }} requests/sec for {{ $labels.limiter_type }}"
+          sum(rate(ntpu_webhook_total{status="success"}[5m]))
+          /
+          sum(rate(ntpu_webhook_total[5m]))
 
-      # Data integrity issues
-      - alert: CourseDataIntegrityIssues
+      - record: ntpu:webhook_latency_p50:5m
         expr: |
-          sum(rate(ntpu_course_data_integrity_issues_total[10m])) by (issue_type) > 1
-        for: 5m
-        labels:
-          severity: info
-          component: data_integrity
-        annotations:
-          summary: "Course data integrity issues detected: {{ $labels.issue_type }}"
-          description: "Detected {{ $value }} {{ $labels.issue_type }} issues per second in course data"
+          histogram_quantile(0.5, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le))
 
-      # Semantic search high error rate
-      - alert: SemanticSearchHighErrorRate
+      - record: ntpu:webhook_latency_p95:5m
         expr: |
-          (
-            sum(rate(ntpu_semantic_search_total{status="error"}[5m]))
-            /
-            sum(rate(ntpu_semantic_search_total[5m]))
-          ) > 0.3
-        for: 5m
-        labels:
-          severity: warning
-          component: semantic_search
-        annotations:
-          summary: "High semantic search error rate"
-          description: "Semantic search error rate is {{ $value | humanizePercentage }} (threshold: 30%)"
+          histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le))
 
-      # Semantic search high latency
-      - alert: SemanticSearchHighLatency
+      - record: ntpu:webhook_latency_p99:5m
         expr: |
-          histogram_quantile(0.95,
-            sum(rate(ntpu_semantic_search_duration_seconds_bucket{type="query"}[5m])) by (le)
-          ) > 5
-        for: 5m
-        labels:
-          severity: warning
-          component: semantic_search
-        annotations:
-          summary: "High semantic search latency"
-          description: "Semantic search P95 latency is {{ $value }}s (threshold: 5s)"
+          histogram_quantile(0.99, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le))
 
-      # VectorDB empty (when semantic search is enabled but DB is empty)
-      - alert: VectorDBEmpty
+      # Cache metrics
+      - record: ntpu:cache_hit_rate:5m
         expr: |
-          ntpu_vectordb_documents == 0
-          and
-          sum(rate(ntpu_semantic_search_total{status!="disabled"}[5m])) > 0
-        for: 10m
-        labels:
-          severity: warning
-          component: semantic_search
-        annotations:
-          summary: "VectorDB is empty but semantic search is enabled"
-          description: "VectorDB has no documents but semantic searches are being attempted"
+          sum(rate(ntpu_cache_operations_total{result="hit"}[5m])) by (module)
+          /
+          sum(rate(ntpu_cache_operations_total[5m])) by (module)
+
+      - record: ntpu:cache_hit_rate_total:5m
+        expr: |
+          sum(rate(ntpu_cache_operations_total{result="hit"}[5m]))
+          /
+          sum(rate(ntpu_cache_operations_total[5m]))
+
+      # Scraper metrics
+      - record: ntpu:scraper_success_rate:5m
+        expr: |
+          sum(rate(ntpu_scraper_total{status="success"}[5m])) by (module)
+          /
+          sum(rate(ntpu_scraper_total[5m])) by (module)
+
+      - record: ntpu:scraper_latency_p95:5m
+        expr: |
+          histogram_quantile(0.95, sum(rate(ntpu_scraper_duration_seconds_bucket[5m])) by (le, module))
+
+      # LLM metrics
+      - record: ntpu:llm_success_rate:5m
+        expr: |
+          sum(rate(ntpu_llm_total{status="success"}[5m])) by (operation)
+          /
+          sum(rate(ntpu_llm_total[5m])) by (operation)
+
+      - record: ntpu:llm_latency_p95:5m
+        expr: |
+          histogram_quantile(0.95, sum(rate(ntpu_llm_duration_seconds_bucket[5m])) by (le, operation))
+
+      # Search metrics
+      - record: ntpu:search_success_rate:5m
+        expr: |
+          sum(rate(ntpu_search_total{status="success"}[5m])) by (type)
+          /
+          sum(rate(ntpu_search_total[5m])) by (type)
+
+      - record: ntpu:search_latency_p95:5m
+        expr: |
+          histogram_quantile(0.95, sum(rate(ntpu_search_duration_seconds_bucket[5m])) by (le))
+
+      # Request rate
+      - record: ntpu:webhook_rps:5m
+        expr: |
+          sum(rate(ntpu_webhook_total[5m]))
+
+      - record: ntpu:scraper_rps:5m
+        expr: |
+          sum(rate(ntpu_scraper_total[5m]))
+
+      - record: ntpu:llm_rps:5m
+        expr: |
+          sum(rate(ntpu_llm_total[5m]))
+
+      - record: ntpu:search_rps:5m
+        expr: |
+          sum(rate(ntpu_search_total[5m]))

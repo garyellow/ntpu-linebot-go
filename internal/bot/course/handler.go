@@ -1098,7 +1098,7 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 
 	if !hybridEnabled && !vectorEnabled {
 		log.Info("Semantic search not enabled")
-		h.metrics.RecordSemanticSearch("disabled", time.Since(startTime).Seconds(), 0, "direct")
+		h.metrics.RecordSearch("disabled", "skipped", time.Since(startTime).Seconds(), 0)
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		return []messaging_api.MessageInterface{
 			lineutil.NewTextMessageWithConsistentSender(
@@ -1149,7 +1149,7 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 
 	if err != nil {
 		log.WithError(err).Warn("Semantic search failed")
-		h.metrics.RecordSemanticSearch("error", time.Since(startTime).Seconds(), 0, "direct")
+		h.metrics.RecordSearch(searchType, "error", time.Since(startTime).Seconds(), 0)
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		return []messaging_api.MessageInterface{
 			lineutil.NewTextMessageWithConsistentSender(
@@ -1159,7 +1159,7 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 
 	if len(results) == 0 {
 		log.Info("No semantic search results found")
-		h.metrics.RecordSemanticSearch("no_results", time.Since(startTime).Seconds(), 0, "direct")
+		h.metrics.RecordSearch(searchType, "no_results", time.Since(startTime).Seconds(), 0)
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		return []messaging_api.MessageInterface{
 			lineutil.NewTextMessageWithConsistentSender(
@@ -1187,7 +1187,7 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 	}
 
 	// Record successful semantic search metrics
-	h.metrics.RecordSemanticSearch("success", time.Since(startTime).Seconds(), len(results), "direct")
+	h.metrics.RecordSearch(searchType, "success", time.Since(startTime).Seconds(), len(results))
 
 	// Format response with similarity badges
 	return h.formatSemanticSearchResponse(courses, results)

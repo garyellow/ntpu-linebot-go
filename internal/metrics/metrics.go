@@ -1,6 +1,13 @@
 // Package metrics provides Prometheus metrics for monitoring.
-// It tracks scraper performance, cache hit/miss rates, webhook latency,
-// and data integrity issues.
+//
+// Design Philosophy (2025 Best Practices):
+// - RED Method for services: Rate, Errors, Duration
+// - USE Method for resources: Utilization, Saturation, Errors
+// - Custom registry to avoid global state conflicts
+// - Consistent naming: ntpu_{component}_{metric}_{unit}
+// - Low cardinality labels (avoid high-cardinality values)
+// - Histogram buckets aligned with SLO targets
+// - Focus on actionable observability over vanity metrics
 package metrics
 
 import (
@@ -8,330 +15,380 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// Metrics holds all Prometheus metrics
+// Metrics holds all Prometheus metrics for the NTPU LineBot.
+// Organized by component following the RED/USE methodology.
 type Metrics struct {
-	// registry is the custom Prometheus registry (avoids global state)
 	registry *prometheus.Registry
-	// Scraper metrics
-	ScraperRequestsTotal   *prometheus.CounterVec
-	ScraperDurationSeconds *prometheus.HistogramVec
 
-	// Cache metrics
-	CacheHitsTotal   *prometheus.CounterVec
-	CacheMissesTotal *prometheus.CounterVec
-	CacheSize        *prometheus.GaugeVec // Track cache entry count by module
+	// ============================================
+	// Webhook (LINE Bot Core - RED Method)
+	// Primary service entry point
+	// ============================================
+	// Rate: requests per second by event type
+	// Errors: tracked via status label (success/error/rate_limited)
+	// Duration: processing time from receive to reply
+	WebhookTotal    *prometheus.CounterVec
+	WebhookDuration *prometheus.HistogramVec
 
-	// Webhook metrics
-	WebhookDurationSeconds *prometheus.HistogramVec
-	WebhookRequestsTotal   *prometheus.CounterVec
+	// ============================================
+	// Scraper (External HTTP Calls - RED Method)
+	// Calls to NTPU LMS/SEA systems
+	// ============================================
+	ScraperTotal    *prometheus.CounterVec
+	ScraperDuration *prometheus.HistogramVec
 
-	// HTTP metrics
-	HTTPErrorsTotal *prometheus.CounterVec
+	// ============================================
+	// Cache (SQLite - USE Method)
+	// Local data cache layer
+	// ============================================
+	CacheOperations *prometheus.CounterVec // hit/miss by module
+	CacheSize       *prometheus.GaugeVec   // current entries by module
 
-	// Data integrity metrics
-	CourseDataIntegrity *prometheus.CounterVec
+	// ============================================
+	// LLM (Gemini API - RED Method)
+	// NLU intent parsing (embedding/expansion tracked via logs)
+	// ============================================
+	LLMTotal    *prometheus.CounterVec   // requests by operation and status
+	LLMDuration *prometheus.HistogramVec // latency by operation
 
-	// Rate limiter metrics
-	RateLimiterDropped     *prometheus.CounterVec
-	RateLimiterActiveUsers prometheus.Gauge   // Track active user limiters
-	RateLimiterCleaned     prometheus.Counter // Track cleanup count
+	// ============================================
+	// Hybrid Search (BM25 + Vector - RED Method)
+	// Semantic course search
+	// ============================================
+	SearchTotal    *prometheus.CounterVec
+	SearchDuration *prometheus.HistogramVec
+	SearchResults  *prometheus.HistogramVec // result count distribution
 
-	// Warmup metrics
-	WarmupTasksTotal *prometheus.CounterVec
-	WarmupDuration   prometheus.Histogram
+	// Index sizes (Gauges - point-in-time values)
+	IndexSize *prometheus.GaugeVec // documents in BM25/Vector indexes
 
-	// Semantic search metrics
-	SemanticSearchTotal    *prometheus.CounterVec   // Total searches by status
-	SemanticSearchDuration *prometheus.HistogramVec // Search latency
-	SemanticSearchResults  *prometheus.HistogramVec // Number of results returned
-	VectorDBSize           prometheus.Gauge         // Current document count in vector store
+	// ============================================
+	// Rate Limiter (USE Method)
+	// Request throttling
+	// ============================================
+	RateLimiterDropped *prometheus.CounterVec
+	RateLimiterUsers   prometheus.Gauge // active user limiters
 
-	// NLU intent parser metrics
-	NLURequestsTotal   *prometheus.CounterVec   // Total NLU requests by status and intent
-	NLUDurationSeconds *prometheus.HistogramVec // NLU parse latency
-	NLUFallbackTotal   prometheus.Counter       // API error fallback count
+	// ============================================
+	// Background Jobs (Duration only)
+	// Warmup, Cleanup operations
+	// ============================================
+	JobDuration *prometheus.HistogramVec
 }
 
-// New creates a new Metrics instance with all metrics registered
-// Note: Go runtime, process, and build info collectors should be registered
-// by the caller before calling this function to avoid duplicate registration
+// New creates a new Metrics instance with all metrics registered.
+// The caller should register Go/Process/BuildInfo collectors separately
+// to avoid duplicate registration issues.
 func New(registry *prometheus.Registry) *Metrics {
 	m := &Metrics{
 		registry: registry,
-		// Scraper metrics
-		ScraperRequestsTotal: promauto.With(registry).NewCounterVec(
+
+		// ============================================
+		// Webhook metrics
+		// ============================================
+		WebhookTotal: promauto.With(registry).NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "ntpu_scraper_requests_total",
-				Help: "Total number of scraper requests by module and status",
+				Name: "ntpu_webhook_total",
+				Help: "Total webhook events processed",
 			},
-			[]string{"module", "status"}, // status: success, error, timeout, not_found
+			// event_type: message, postback, follow
+			// status: success, error, rate_limited
+			[]string{"event_type", "status"},
 		),
 
-		ScraperDurationSeconds: promauto.With(registry).NewHistogramVec(
+		WebhookDuration: promauto.With(registry).NewHistogramVec(
 			prometheus.HistogramOpts{
-				Name:    "ntpu_scraper_duration_seconds",
-				Help:    "Scraper request duration in seconds by module",
-				Buckets: []float64{1, 2, 5, 10, 15, 30, 60, 90, 120}, // Optimized for 120s timeout
+				Name: "ntpu_webhook_duration_seconds",
+				Help: "Webhook processing duration in seconds",
+				// Buckets aligned with LINE API expectations:
+				// < 2s: excellent (LINE best practice)
+				// 2-5s: acceptable
+				// > 5s: degraded experience
+				Buckets: []float64{0.1, 0.25, 0.5, 1, 2, 5, 10, 30},
 			},
-			[]string{"module"}, // module: id, contact, course
+			[]string{"event_type"},
 		),
 
+		// ============================================
+		// Scraper metrics
+		// ============================================
+		ScraperTotal: promauto.With(registry).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "ntpu_scraper_total",
+				Help: "Total scraper requests to NTPU systems",
+			},
+			// module: id, contact, course, syllabus
+			// status: success, error, timeout, not_found, semantic_fallback
+			[]string{"module", "status"},
+		),
+
+		ScraperDuration: promauto.With(registry).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name: "ntpu_scraper_duration_seconds",
+				Help: "Scraper request duration in seconds",
+				// Buckets for external HTTP calls:
+				// Most should complete in 2-10s
+				// Max configured timeout is 120s
+				Buckets: []float64{1, 2, 5, 10, 20, 30, 60, 120},
+			},
+			[]string{"module"},
+		),
+
+		// ============================================
 		// Cache metrics
-		CacheHitsTotal: promauto.With(registry).NewCounterVec(
+		// ============================================
+		CacheOperations: promauto.With(registry).NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "ntpu_cache_hits_total",
-				Help: "Total number of cache hits by module",
+				Name: "ntpu_cache_operations_total",
+				Help: "Total cache operations (hits and misses)",
 			},
-			[]string{"module"},
-		),
-
-		CacheMissesTotal: promauto.With(registry).NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "ntpu_cache_misses_total",
-				Help: "Total number of cache misses by module",
-			},
-			[]string{"module"},
+			// module: students, contacts, courses, syllabi, stickers
+			// result: hit, miss
+			[]string{"module", "result"},
 		),
 
 		CacheSize: promauto.With(registry).NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: "ntpu_cache_entries",
-				Help: "Current number of entries in cache by module",
+				Name: "ntpu_cache_size",
+				Help: "Current number of entries in cache",
 			},
-			[]string{"module"}, // module: students, contacts, courses, stickers
+			[]string{"module"},
 		),
 
-		// Webhook metrics
-		WebhookDurationSeconds: promauto.With(registry).NewHistogramVec(
+		// ============================================
+		// LLM metrics
+		// ============================================
+		LLMTotal: promauto.With(registry).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "ntpu_llm_total",
+				Help: "Total LLM API requests",
+			},
+			// operation: nlu (embedding/expansion tracked in warmup logs, not metrics)
+			// status: success, error, fallback, clarification
+			[]string{"operation", "status"},
+		),
+
+		LLMDuration: promauto.With(registry).NewHistogramVec(
 			prometheus.HistogramOpts{
-				Name:    "ntpu_webhook_duration_seconds",
-				Help:    "Webhook processing duration in seconds by event type",
-				Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 25, 60}, // Extended for webhook timeout (60s)
+				Name: "ntpu_llm_duration_seconds",
+				Help: "LLM API request duration in seconds",
+				// Buckets for Gemini API latency:
+				// Fast: < 0.5s (simple queries)
+				// Normal: 0.5-2s (typical)
+				// Slow: > 2s (complex or retry)
+				Buckets: []float64{0.1, 0.25, 0.5, 1, 2, 5, 10},
 			},
-			[]string{"event_type"}, // event_type: message, postback, follow
+			[]string{"operation"},
 		),
 
-		WebhookRequestsTotal: promauto.With(registry).NewCounterVec(
+		// ============================================
+		// Hybrid Search metrics
+		// ============================================
+		SearchTotal: promauto.With(registry).NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "ntpu_webhook_requests_total",
-				Help: "Total number of webhook requests by event type and status",
+				Name: "ntpu_search_total",
+				Help: "Total semantic search requests",
 			},
-			[]string{"event_type", "status"}, // status: success, error
+			// type: bm25, vector, hybrid
+			// status: success, error, no_results
+			[]string{"type", "status"},
 		),
 
-		// HTTP metrics
-		HTTPErrorsTotal: promauto.With(registry).NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "ntpu_http_errors_total",
-				Help: "Total HTTP errors by type and module",
+		SearchDuration: promauto.With(registry).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name: "ntpu_search_duration_seconds",
+				Help: "Search operation duration in seconds",
+				// Buckets for search latency:
+				// BM25: < 50ms (in-memory)
+				// Vector: 100ms-1s (embedding + search)
+				// Hybrid: combined
+				Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5},
 			},
-			[]string{"error_type", "module"}, // error_type: timeout, rate_limit, invalid_signature, etc.
+			// type: bm25, vector, hybrid, disabled
+			[]string{"type"},
 		),
 
-		// Data integrity metrics
-		CourseDataIntegrity: promauto.With(registry).NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "ntpu_course_data_integrity_issues_total",
-				Help: "Total number of course data integrity issues detected",
+		SearchResults: promauto.With(registry).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "ntpu_search_results",
+				Help:    "Number of results returned by search",
+				Buckets: []float64{0, 1, 5, 10, 20, 40},
 			},
-			[]string{"issue_type"}, // issue_type: missing_no, empty_title, etc.
+			[]string{"type"},
 		),
 
-		// Rate limiter metrics
+		IndexSize: promauto.With(registry).NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "ntpu_index_size",
+				Help: "Number of documents in search indexes",
+			},
+			// index: bm25, vector
+			[]string{"index"},
+		),
+
+		// ============================================
+		// Rate Limiter metrics
+		// ============================================
 		RateLimiterDropped: promauto.With(registry).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "ntpu_rate_limiter_dropped_total",
-				Help: "Total number of requests dropped by rate limiter",
+				Help: "Total requests dropped by rate limiter",
 			},
-			[]string{"limiter_type"}, // limiter_type: user, global
+			// limiter: user, global
+			[]string{"limiter"},
 		),
 
-		RateLimiterActiveUsers: promauto.With(registry).NewGauge(
+		RateLimiterUsers: promauto.With(registry).NewGauge(
 			prometheus.GaugeOpts{
-				Name: "ntpu_rate_limiter_active_users",
-				Help: "Current number of active user rate limiters",
+				Name: "ntpu_rate_limiter_users",
+				Help: "Current number of tracked user rate limiters",
 			},
 		),
 
-		RateLimiterCleaned: promauto.With(registry).NewCounter(
-			prometheus.CounterOpts{
-				Name: "ntpu_rate_limiter_cleaned_total",
-				Help: "Total number of user rate limiters cleaned up",
-			},
-		),
-
-		// Warmup metrics
-		WarmupTasksTotal: promauto.With(registry).NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "ntpu_warmup_tasks_total",
-				Help: "Total number of warmup tasks by module and status",
-			},
-			[]string{"module", "status"}, // status: success, error
-		),
-
-		WarmupDuration: promauto.With(registry).NewHistogram(
+		// ============================================
+		// Background Job metrics
+		// ============================================
+		JobDuration: promauto.With(registry).NewHistogramVec(
 			prometheus.HistogramOpts{
-				Name:    "ntpu_warmup_duration_seconds",
-				Help:    "Total duration of warmup process",
-				Buckets: []float64{10, 30, 60, 120, 300, 600, 900, 1800}, // 10s to 30min
+				Name: "ntpu_job_duration_seconds",
+				Help: "Background job duration in seconds",
+				// Jobs can run for minutes (warmup) to seconds (cleanup)
+				Buckets: []float64{1, 10, 30, 60, 120, 300, 600, 1800},
 			},
-		),
-
-		// Semantic search metrics
-		SemanticSearchTotal: promauto.With(registry).NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "ntpu_semantic_search_total",
-				Help: "Total number of semantic searches by status",
-			},
-			[]string{"status"}, // status: success, error, fallback, disabled
-		),
-
-		SemanticSearchDuration: promauto.With(registry).NewHistogramVec(
-			prometheus.HistogramOpts{
-				Name:    "ntpu_semantic_search_duration_seconds",
-				Help:    "Semantic search latency in seconds",
-				Buckets: []float64{0.1, 0.25, 0.5, 1, 2, 5, 10}, // 100ms to 10s
-			},
-			[]string{"type"}, // type: query, embedding
-		),
-
-		SemanticSearchResults: promauto.With(registry).NewHistogramVec(
-			prometheus.HistogramOpts{
-				Name:    "ntpu_semantic_search_results",
-				Help:    "Number of results returned by semantic search",
-				Buckets: []float64{0, 1, 2, 5, 10, 20}, // 0 to 20 results
-			},
-			[]string{"source"}, // source: direct, fallback
-		),
-
-		VectorDBSize: promauto.With(registry).NewGauge(
-			prometheus.GaugeOpts{
-				Name: "ntpu_vectordb_documents",
-				Help: "Current number of documents in vector database",
-			},
-		),
-
-		// NLU intent parser metrics
-		NLURequestsTotal: promauto.With(registry).NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "ntpu_nlu_requests_total",
-				Help: "Total number of NLU intent parsing requests by status and intent",
-			},
-			[]string{"status", "intent"}, // status: success, error, clarification; intent: function name
-		),
-
-		NLUDurationSeconds: promauto.With(registry).NewHistogramVec(
-			prometheus.HistogramOpts{
-				Name:    "ntpu_nlu_duration_seconds",
-				Help:    "NLU intent parsing latency in seconds",
-				Buckets: []float64{0.1, 0.25, 0.5, 1, 2, 5, 10}, // 100ms to 10s
-			},
-			[]string{"status"}, // status: success, error, clarification
-		),
-
-		NLUFallbackTotal: promauto.With(registry).NewCounter(
-			prometheus.CounterOpts{
-				Name: "ntpu_nlu_fallback_total",
-				Help: "Total number of NLU fallbacks due to API errors",
-			},
+			// job: warmup, cleanup
+			// module: id, contact, course, syllabus, total (for warmup)
+			[]string{"job", "module"},
 		),
 	}
 
 	return m
 }
 
-// RecordScraperRequest records a scraper request with status
-func (m *Metrics) RecordScraperRequest(module, status string, duration float64) {
-	m.ScraperRequestsTotal.WithLabelValues(module, status).Inc()
-	m.ScraperDurationSeconds.WithLabelValues(module).Observe(duration)
-}
+// ============================================
+// Webhook helpers
+// ============================================
 
-// RecordCacheHit records a cache hit
-func (m *Metrics) RecordCacheHit(module string) {
-	m.CacheHitsTotal.WithLabelValues(module).Inc()
-}
-
-// RecordCacheMiss records a cache miss
-func (m *Metrics) RecordCacheMiss(module string) {
-	m.CacheMissesTotal.WithLabelValues(module).Inc()
-}
-
-// RecordWebhook records a webhook request
+// RecordWebhook records a webhook event.
+// eventType: message, postback, follow
+// status: success, error, rate_limited
 func (m *Metrics) RecordWebhook(eventType, status string, duration float64) {
-	m.WebhookRequestsTotal.WithLabelValues(eventType, status).Inc()
-	m.WebhookDurationSeconds.WithLabelValues(eventType).Observe(duration)
+	m.WebhookTotal.WithLabelValues(eventType, status).Inc()
+	m.WebhookDuration.WithLabelValues(eventType).Observe(duration)
 }
 
-// RecordHTTPError records HTTP error metrics
-func (m *Metrics) RecordHTTPError(errorType, module string) {
-	m.HTTPErrorsTotal.WithLabelValues(errorType, module).Inc()
+// ============================================
+// Scraper helpers
+// ============================================
+
+// RecordScraper records a scraper request.
+// module: id, contact, course, syllabus
+// status: success, error, timeout
+func (m *Metrics) RecordScraper(module, status string, duration float64) {
+	m.ScraperTotal.WithLabelValues(module, status).Inc()
+	m.ScraperDuration.WithLabelValues(module).Observe(duration)
 }
 
-// RecordCourseIntegrityIssue records a course data integrity issue
-func (m *Metrics) RecordCourseIntegrityIssue(issueType string) {
-	m.CourseDataIntegrity.WithLabelValues(issueType).Inc()
+// ============================================
+// Cache helpers
+// ============================================
+
+// RecordCacheHit records a cache hit.
+func (m *Metrics) RecordCacheHit(module string) {
+	m.CacheOperations.WithLabelValues(module, "hit").Inc()
 }
 
-// RecordRateLimiterDrop records a request dropped by rate limiter
-func (m *Metrics) RecordRateLimiterDrop(limiterType string) {
-	m.RateLimiterDropped.WithLabelValues(limiterType).Inc()
+// RecordCacheMiss records a cache miss.
+func (m *Metrics) RecordCacheMiss(module string) {
+	m.CacheOperations.WithLabelValues(module, "miss").Inc()
 }
 
-// SetRateLimiterActiveUsers sets the current number of active user limiters
-func (m *Metrics) SetRateLimiterActiveUsers(count int) {
-	m.RateLimiterActiveUsers.Set(float64(count))
-}
-
-// RecordRateLimiterCleanup records the number of limiters cleaned up
-func (m *Metrics) RecordRateLimiterCleanup(count int) {
-	m.RateLimiterCleaned.Add(float64(count))
-}
-
-// RecordWarmupTask records a warmup task completion
-func (m *Metrics) RecordWarmupTask(module, status string) {
-	m.WarmupTasksTotal.WithLabelValues(module, status).Inc()
-}
-
-// RecordWarmupDuration records total warmup duration
-func (m *Metrics) RecordWarmupDuration(duration float64) {
-	m.WarmupDuration.Observe(duration)
-}
-
-// SetCacheSize sets the current cache size for a module
+// SetCacheSize sets the current cache size for a module.
 func (m *Metrics) SetCacheSize(module string, size int) {
 	m.CacheSize.WithLabelValues(module).Set(float64(size))
 }
 
-// RecordSemanticSearch records a semantic search request
-func (m *Metrics) RecordSemanticSearch(status string, duration float64, resultCount int, source string) {
-	m.SemanticSearchTotal.WithLabelValues(status).Inc()
-	m.SemanticSearchDuration.WithLabelValues("query").Observe(duration)
-	m.SemanticSearchResults.WithLabelValues(source).Observe(float64(resultCount))
+// ============================================
+// LLM helpers
+// ============================================
+
+// RecordLLM records an LLM API request.
+// operation: nlu (primary user-facing intent parsing)
+// status: success, error, fallback, clarification
+func (m *Metrics) RecordLLM(operation, status string, duration float64) {
+	m.LLMTotal.WithLabelValues(operation, status).Inc()
+	m.LLMDuration.WithLabelValues(operation).Observe(duration)
 }
 
-// RecordEmbeddingLatency records embedding generation latency
-func (m *Metrics) RecordEmbeddingLatency(duration float64) {
-	m.SemanticSearchDuration.WithLabelValues("embedding").Observe(duration)
+// ============================================
+// Search helpers
+// ============================================
+
+// RecordSearch records a search operation.
+// searchType: bm25, vector, hybrid, disabled
+// status: success, error, no_results, skipped
+func (m *Metrics) RecordSearch(searchType, status string, duration float64, resultCount int) {
+	m.SearchTotal.WithLabelValues(searchType, status).Inc()
+	m.SearchDuration.WithLabelValues(searchType).Observe(duration)
+	m.SearchResults.WithLabelValues(searchType).Observe(float64(resultCount))
 }
 
-// SetVectorDBSize sets the current vector database document count
-func (m *Metrics) SetVectorDBSize(count int) {
-	m.VectorDBSize.Set(float64(count))
+// SetIndexSize sets the current index size.
+// index: bm25, vector
+func (m *Metrics) SetIndexSize(index string, count int) {
+	m.IndexSize.WithLabelValues(index).Set(float64(count))
 }
 
-// RecordNLURequest records an NLU intent parsing request
-func (m *Metrics) RecordNLURequest(status, intent string, duration float64) {
-	m.NLURequestsTotal.WithLabelValues(status, intent).Inc()
-	m.NLUDurationSeconds.WithLabelValues(status).Observe(duration)
+// ============================================
+// Rate Limiter helpers
+// ============================================
+
+// RecordRateLimiterDrop records a dropped request.
+// limiter: user, global
+func (m *Metrics) RecordRateLimiterDrop(limiter string) {
+	m.RateLimiterDropped.WithLabelValues(limiter).Inc()
 }
 
-// RecordNLUFallback records an NLU fallback due to API error
-func (m *Metrics) RecordNLUFallback() {
-	m.NLUFallbackTotal.Inc()
+// SetRateLimiterUsers sets the current number of active user limiters.
+func (m *Metrics) SetRateLimiterUsers(count int) {
+	m.RateLimiterUsers.Set(float64(count))
 }
 
-// Registry returns the custom Prometheus registry
-// Use this with promhttp.HandlerFor() instead of the default handler
+// ============================================
+// Job helpers
+// ============================================
+
+// RecordJob records a background job execution.
+// job: warmup, cleanup
+// module: id, contact, course, syllabus, total
+func (m *Metrics) RecordJob(job, module string, duration float64) {
+	m.JobDuration.WithLabelValues(job, module).Observe(duration)
+}
+
+// ============================================
+// Registry access
+// ============================================
+
+// Registry returns the custom Prometheus registry.
+// Use with promhttp.HandlerFor() for metrics endpoint.
 func (m *Metrics) Registry() *prometheus.Registry {
 	return m.registry
+}
+
+// ============================================
+// Aliases (for cleaner API)
+// ============================================
+
+// RecordScraperRequest is an alias for RecordScraper.
+func (m *Metrics) RecordScraperRequest(module, status string, duration float64) {
+	m.RecordScraper(module, status, duration)
+}
+
+// RecordLLMRequest is an alias for RecordLLM.
+func (m *Metrics) RecordLLMRequest(operation, status string, duration float64) {
+	m.RecordLLM(operation, status, duration)
+}
+
+// RecordLLMFallback records an LLM fallback event.
+func (m *Metrics) RecordLLMFallback(operation string) {
+	m.LLMTotal.WithLabelValues(operation, "fallback").Inc()
 }

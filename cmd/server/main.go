@@ -60,9 +60,6 @@ func main() {
 	m := metrics.New(registry)
 	log.Info("Metrics initialized")
 
-	// Set metrics recorder for database integrity checks
-	db.SetMetrics(m)
-
 	// Create scraper client
 	scraperClient := scraper.NewClient(
 		cfg.ScraperTimeout,
@@ -228,7 +225,7 @@ func main() {
 				log.WithField("panic", r).Error("Panic in cache cleanup goroutine")
 			}
 		}()
-		cleanupExpiredCache(ctx, db, cfg.CacheTTL, log)
+		cleanupExpiredCache(ctx, db, cfg.CacheTTL, m, log)
 	}()
 
 	// Sticker refresh goroutine (every 24 hours)
@@ -240,7 +237,7 @@ func main() {
 				log.WithField("panic", r).Error("Panic in sticker refresh goroutine")
 			}
 		}()
-		refreshStickers(ctx, stickerManager, log)
+		refreshStickers(ctx, stickerManager, m, log)
 	}()
 
 	// Daily cache warmup goroutine (daily at 3:00 AM)
@@ -267,7 +264,7 @@ func main() {
 				log.WithField("panic", r).Error("Panic in cache metrics goroutine")
 			}
 		}()
-		updateCacheSizeMetrics(ctx, db, stickerManager, vectorDB, m, log)
+		updateCacheSizeMetrics(ctx, db, stickerManager, vectorDB, bm25Index, m, log)
 	}()
 
 	// Start server in goroutine

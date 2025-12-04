@@ -108,10 +108,7 @@ func (url *UserRateLimiter) cleanupLoop() {
 
 			// Update metrics if available
 			if url.metrics != nil {
-				url.metrics.SetRateLimiterActiveUsers(activeCount)
-				if cleanedCount > 0 {
-					url.metrics.RecordRateLimiterCleanup(cleanedCount)
-				}
+				url.metrics.SetRateLimiterUsers(activeCount)
 			}
 		}
 	}

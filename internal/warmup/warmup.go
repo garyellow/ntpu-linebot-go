@@ -196,11 +196,6 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 		WithField("syllabi", stats.Syllabi.Load()).
 		Info("Cache warming complete")
 
-	// Record warmup metrics if available
-	if opts.Metrics != nil {
-		opts.Metrics.RecordWarmupDuration(duration.Seconds())
-	}
-
 	// Return combined error if any modules failed
 	// Note: We still return stats to allow partial success usage
 	if len(errs) > 0 {
@@ -288,6 +283,13 @@ func resetCache(ctx context.Context, db *storage.DB) error {
 // warmupIDModule warms student ID cache
 // Executes tasks sequentially (one at a time) to avoid overwhelming the server
 func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
+	startTime := time.Now()
+	defer func() {
+		if m != nil {
+			m.RecordJob("warmup", "id", time.Since(startTime).Seconds())
+		}
+	}()
+
 	// Warmup range: 101-112 (LMS 2.0 已無 113+ 資料)
 	currentYear := time.Now().Year() - 1911
 	fromYear := min(112, currentYear)
@@ -348,17 +350,6 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 		}
 	}
 
-	// Record metrics
-	if m != nil {
-		successCount := completed - errorCount
-		if successCount > 0 {
-			m.WarmupTasksTotal.WithLabelValues("id", "success").Add(float64(successCount))
-		}
-		if errorCount > 0 {
-			m.WarmupTasksTotal.WithLabelValues("id", "error").Add(float64(errorCount))
-		}
-	}
-
 	if errorCount > 0 {
 		return fmt.Errorf("completed with %d errors", errorCount)
 	}
@@ -370,6 +361,13 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 // Allows partial success: if one source succeeds, the function returns nil.
 // Use logs to identify which source failed when partial success occurs.
 func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
+	startTime := time.Now()
+	defer func() {
+		if m != nil {
+			m.RecordJob("warmup", "contact", time.Since(startTime).Seconds())
+		}
+	}()
+
 	log.Info("Starting contact module warmup")
 
 	var errs []error
@@ -406,18 +404,6 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 		}
 	}
 
-	// Record metrics
-	if m != nil {
-		if len(errs) < 2 {
-			// At least one source succeeded
-			m.RecordWarmupTask("contact", "success")
-		}
-		if len(errs) > 0 {
-			// At least one source failed
-			m.RecordWarmupTask("contact", "error")
-		}
-	}
-
 	// Return error only if both failed
 	// This allows the warmup to succeed with partial data (e.g., only academic or only administrative)
 	if len(errs) == 2 {
@@ -438,6 +424,13 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 // Only warms up 2 years (current + previous) for regular course queries
 // Historical courses (older than 2 years) use separate historical_courses table with on-demand scraping
 func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
+	startTime := time.Now()
+	defer func() {
+		if m != nil {
+			m.RecordJob("warmup", "course", time.Since(startTime).Seconds())
+		}
+	}()
+
 	log.Info("Starting course module warmup")
 
 	currentYear := time.Now().Year() - 1911
@@ -468,9 +461,6 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 			log.WithError(err).
 				WithField("year", year).
 				Warn("Failed to scrape courses for year")
-			if m != nil {
-				m.RecordWarmupTask("course", "error")
-			}
 			continue
 		}
 
@@ -480,16 +470,10 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 				WithField("year", year).
 				WithField("count", len(courses)).
 				Warn("Failed to save courses batch")
-			if m != nil {
-				m.RecordWarmupTask("course", "error")
-			}
 			continue
 		}
 
 		stats.Courses.Add(int64(len(courses)))
-		if m != nil {
-			m.RecordWarmupTask("course", "success")
-		}
 		log.WithField("year", year).
 			WithField("count", len(courses)).
 			Info("Courses cached for year")
@@ -500,20 +484,21 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 
 // warmupStickerModule warms sticker cache
 func warmupStickerModule(ctx context.Context, stickerMgr *sticker.Manager, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
+	startTime := time.Now()
+	defer func() {
+		if m != nil {
+			m.RecordJob("warmup", "sticker", time.Since(startTime).Seconds())
+		}
+	}()
+
 	log.Info("Starting sticker module warmup")
 
 	if err := stickerMgr.LoadStickers(ctx); err != nil {
-		if m != nil {
-			m.RecordWarmupTask("sticker", "error")
-		}
 		return fmt.Errorf("failed to load stickers: %w", err)
 	}
 
 	count := stickerMgr.Count()
 	stats.Stickers.Store(int64(count))
-	if m != nil {
-		m.RecordWarmupTask("sticker", "success")
-	}
 	log.WithField("count", count).Info("Stickers cached")
 
 	return nil
@@ -523,14 +508,18 @@ func warmupStickerModule(ctx context.Context, stickerMgr *sticker.Manager, log *
 // Fetches syllabus content for all courses in cache, using content hash for incremental updates
 // Only processes courses that have changed since last warmup
 func warmupSyllabusModule(ctx context.Context, db *storage.DB, client *scraper.Client, vectorDB *rag.VectorDB, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
+	startTime := time.Now()
+	defer func() {
+		if m != nil {
+			m.RecordJob("warmup", "syllabus", time.Since(startTime).Seconds())
+		}
+	}()
+
 	log.Info("Starting syllabus module warmup")
 
 	// Get all courses from recent semesters
 	courses, err := db.GetCoursesByRecentSemesters(ctx)
 	if err != nil {
-		if m != nil {
-			m.RecordWarmupTask("syllabus", "error")
-		}
 		return fmt.Errorf("failed to get courses: %w", err)
 	}
 
@@ -627,9 +616,6 @@ processLoop:
 	if len(newSyllabi) > 0 {
 		if err := db.SaveSyllabusBatch(ctx, newSyllabi); err != nil {
 			log.WithError(err).Error("Failed to save syllabi batch")
-			if m != nil {
-				m.RecordWarmupTask("syllabus", "error")
-			}
 			return fmt.Errorf("failed to save syllabi: %w", err)
 		}
 
@@ -643,9 +629,6 @@ processLoop:
 	}
 
 	stats.Syllabi.Add(int64(len(newSyllabi)))
-	if m != nil {
-		m.RecordWarmupTask("syllabus", "success")
-	}
 
 	log.WithField("new", updatedCount).
 		WithField("skipped", skippedCount).
