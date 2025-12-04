@@ -67,18 +67,62 @@ if err != nil {
 - Temperature: 0.1 (低變異性)
 - Max Tokens: 256
 
-### 短查詢自動擴展 (Query Expansion)
+## Query Expander (查詢擴展)
 
-當使用者輸入的語意搜尋查詢過短時（少於 5 個字），模型會自動擴展查詢以提高搜尋效果：
+獨立的查詢擴展模組，用於增強語意搜尋效果。
+
+### 功能說明
+
+當使用者輸入語意搜尋查詢時，`QueryExpander` 會自動擴展查詢，添加：
+
+1. **英文縮寫的全稱**: AWS → Amazon Web Services
+2. **跨語言翻譯**: AI → 人工智慧, 程式設計 → programming
+3. **相關概念和同義詞**: 雲端 → cloud computing, 雲端服務
+
+### 使用範例
 
 | 原始查詢 | 擴展後 |
 |---------|--------|
-| AI | 人工智慧或機器學習相關課程 |
-| 程式 | 程式設計入門或進階課程 |
-| 管理 | 企業管理或商業管理相關課程 |
-| 統計 | 統計學或資料分析課程 |
+| `AWS` | `AWS Amazon Web Services 雲端服務 雲端運算 cloud computing EC2 S3` |
+| `我想學 AI` | `AI 人工智慧 artificial intelligence 機器學習 machine learning 深度學習` |
+| `程式設計` | `程式設計 programming 軟體開發 coding 程式語言 software development` |
+| `資料分析` | `資料分析 data analysis 數據分析 統計 statistics 資料科學 data science` |
 
-此功能透過 System Prompt 和 Function Definition 中的指示實現，無需額外程式碼。
+### 觸發條件
+
+- 查詢長度 ≤ 15 字（runes）
+- 或包含技術縮寫（AWS, AI, ML, SQL, API 等）
+
+### 技術規格
+
+- 模型: `gemini-2.0-flash-lite`
+- 超時: 8 秒
+- Temperature: 0.3 (適度變異性)
+- Max Tokens: 200
+
+### 使用方式
+
+```go
+// 建立 Query Expander
+expander, err := genai.NewQueryExpander(ctx, apiKey)
+if err != nil {
+    // 處理錯誤
+}
+
+// 擴展查詢
+expanded, err := expander.Expand(ctx, "我想學 AWS")
+// expanded = "我想學 AWS Amazon Web Services 雲端服務 雲端運算 cloud computing..."
+```
+
+### 整合方式
+
+課程模組透過 `SetQueryExpander()` 注入：
+
+```go
+handler.SetQueryExpander(expander)
+```
+
+語意搜尋時自動使用擴展後的查詢進行 BM25 + Vector hybrid search。
 
 ## Embedding Client
 
@@ -112,5 +156,6 @@ embeddingFunc := genai.NewEmbeddingFunc(apiKey)
 需設定環境變數 `GEMINI_API_KEY`。若未設定：
 - 語意搜尋功能停用
 - NLU 意圖解析停用（fallback 到關鍵字匹配）
+- 查詢擴展停用（使用原始查詢）
 
 取得 API Key: [Google AI Studio](https://aistudio.google.com/apikey)
