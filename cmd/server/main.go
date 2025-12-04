@@ -159,12 +159,14 @@ func main() {
 	}
 
 	// Create query expander for semantic search (optional - requires Gemini API key)
+	var queryExpander *genai.QueryExpander
 	if cfg.GeminiAPIKey != "" {
-		expander, err := genai.NewQueryExpander(context.Background(), cfg.GeminiAPIKey)
+		var err error
+		queryExpander, err = genai.NewQueryExpander(context.Background(), cfg.GeminiAPIKey)
 		if err != nil {
 			log.WithError(err).Warn("Failed to create query expander")
-		} else if expander != nil {
-			webhookHandler.GetCourseHandler().SetQueryExpander(expander)
+		} else if queryExpander != nil {
+			webhookHandler.GetCourseHandler().SetQueryExpander(queryExpander)
 			log.Info("Query expander enabled for semantic search")
 		}
 	}
@@ -316,6 +318,13 @@ func main() {
 	if intentParser != nil {
 		if err := intentParser.Close(); err != nil {
 			log.WithError(err).Error("Failed to close intent parser")
+		}
+	}
+
+	// Close query expander (if enabled)
+	if queryExpander != nil {
+		if err := queryExpander.Close(); err != nil {
+			log.WithError(err).Error("Failed to close query expander")
 		}
 	}
 
