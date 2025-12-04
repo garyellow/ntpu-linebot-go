@@ -432,10 +432,12 @@ func (v *VectorDB) UpdateSyllabus(ctx context.Context, syl *storage.Syllabus) er
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
-	// Delete all old chunks for this syllabus
+	// Delete all old chunks for this syllabus (5 chunk types)
 	chunkTypes := []syllabus.ChunkType{
-		syllabus.ChunkTypeObjectives,
-		syllabus.ChunkTypeOutline,
+		syllabus.ChunkTypeObjectivesCN,
+		syllabus.ChunkTypeObjectivesEN,
+		syllabus.ChunkTypeOutlineCN,
+		syllabus.ChunkTypeOutlineEN,
 		syllabus.ChunkTypeSchedule,
 	}
 	for _, ct := range chunkTypes {
@@ -459,10 +461,12 @@ func (v *VectorDB) DeleteSyllabus(ctx context.Context, uid string) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
-	// Delete all chunks for this syllabus
+	// Delete all chunks for this syllabus (5 chunk types)
 	chunkTypes := []syllabus.ChunkType{
-		syllabus.ChunkTypeObjectives,
-		syllabus.ChunkTypeOutline,
+		syllabus.ChunkTypeObjectivesCN,
+		syllabus.ChunkTypeObjectivesEN,
+		syllabus.ChunkTypeOutlineCN,
+		syllabus.ChunkTypeOutlineEN,
 		syllabus.ChunkTypeSchedule,
 	}
 	for _, ct := range chunkTypes {

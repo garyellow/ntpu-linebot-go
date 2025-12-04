@@ -13,6 +13,7 @@ import (
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	"github.com/garyellow/ntpu-linebot-go/internal/config"
+	"github.com/garyellow/ntpu-linebot-go/internal/genai"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
@@ -31,7 +32,9 @@ type Handler struct {
 	metrics        *metrics.Metrics
 	logger         *logger.Logger
 	stickerManager *sticker.Manager
-	vectorDB       *rag.VectorDB // Optional: for semantic search (nil if disabled)
+	vectorDB       *rag.VectorDB        // Optional: for semantic search (nil if disabled)
+	hybridSearcher *rag.HybridSearcher  // Optional: for hybrid search (BM25 + vector)
+	queryExpander  *genai.QueryExpander // Optional: for query expansion (nil if disabled)
 }
 
 // Course handler constants.
@@ -95,17 +98,41 @@ func NewHandler(db *storage.DB, scraper *scraper.Client, metrics *metrics.Metric
 		logger:         logger,
 		stickerManager: stickerManager,
 		vectorDB:       nil, // Set via SetVectorDB after initialization
+		hybridSearcher: nil, // Set via SetHybridSearcher after initialization
+		queryExpander:  nil, // Set via SetQueryExpander after initialization
 	}
 }
 
-// SetVectorDB sets the vector database for semantic search
-// This is optional - if not set, semantic search is disabled
+// SetVectorDB sets the vector database for semantic search.
+// This is optional - if not set, semantic search is disabled.
+//
+// Deprecated: Use SetHybridSearcher for better search quality.
 func (h *Handler) SetVectorDB(vectorDB *rag.VectorDB) {
 	h.vectorDB = vectorDB
 }
 
+// SetHybridSearcher sets the hybrid searcher for combined BM25 + vector search
+// This is optional - if not set, falls back to vector-only search
+func (h *Handler) SetHybridSearcher(searcher *rag.HybridSearcher) {
+	h.hybridSearcher = searcher
+	// Also set vectorDB for backward compatibility
+	if searcher != nil {
+		h.vectorDB = searcher.VectorDB()
+	}
+}
+
+// SetQueryExpander sets the query expander for semantic search query expansion
+// This is optional - if not set, queries are used as-is
+func (h *Handler) SetQueryExpander(expander *genai.QueryExpander) {
+	h.queryExpander = expander
+}
+
 // IsSemanticSearchEnabled returns true if semantic search is enabled
 func (h *Handler) IsSemanticSearchEnabled() bool {
+	// Check hybrid searcher first, then fallback to vectorDB
+	if h.hybridSearcher != nil && h.hybridSearcher.IsEnabled() {
+		return true
+	}
 	return h.vectorDB != nil && h.vectorDB.IsEnabled()
 }
 
@@ -1052,12 +1079,16 @@ func deduplicateCourses(courses []storage.Course) []storage.Course {
 
 // handleSemanticSearch performs semantic search using syllabus embeddings
 // This is triggered by "找課" keywords and searches course syllabi content
+// Uses hybrid search (BM25 + vector) if available, otherwise falls back to vector-only
 func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(moduleName)
 	startTime := time.Now()
 
-	// Check if semantic search is enabled
-	if h.vectorDB == nil || !h.vectorDB.IsEnabled() {
+	// Check if any semantic search is enabled
+	hybridEnabled := h.hybridSearcher != nil && h.hybridSearcher.IsEnabled()
+	vectorEnabled := h.vectorDB != nil && h.vectorDB.IsEnabled()
+
+	if !hybridEnabled && !vectorEnabled {
 		log.Info("Semantic search not enabled")
 		h.metrics.RecordSemanticSearch("disabled", time.Since(startTime).Seconds(), 0, "direct")
 		sender := lineutil.GetSender(senderName, h.stickerManager)
@@ -1067,15 +1098,47 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 		}
 	}
 
-	log.Infof("Performing semantic search for: %s", query)
+	searchType := "hybrid"
+	if !hybridEnabled {
+		searchType = "vector"
+	}
 
 	// Use a detached context for embedding API calls to prevent cancellation
 	// when the HTTP request context is canceled (e.g., LINE server closes connection)
 	searchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), config.SemanticSearchTimeout)
 	defer cancel()
 
-	// Perform semantic search
-	results, err := h.vectorDB.Search(searchCtx, query, 10)
+	// Expand query for better search results (adds synonyms, translations, related terms)
+	// Examples: "AWS" → "AWS Amazon Web Services 雲端服務 雲端運算 cloud computing"
+	expandedQuery := query
+	if h.queryExpander != nil {
+		expanded, err := h.queryExpander.Expand(searchCtx, query)
+		if err != nil {
+			log.WithError(err).Debug("Query expansion failed, using original query")
+		} else if expanded != query {
+			expandedQuery = expanded
+			log.WithFields(map[string]any{
+				"original": query,
+				"expanded": expandedQuery,
+			}).Debug("Query expanded")
+		}
+	}
+
+	log.WithFields(map[string]any{
+		"type":     searchType,
+		"original": query,
+		"expanded": expandedQuery,
+	}).Infof("Performing semantic search")
+
+	// Perform search (hybrid or vector-only)
+	var results []rag.SearchResult
+	var err error
+	if hybridEnabled {
+		results, err = h.hybridSearcher.Search(searchCtx, expandedQuery, 10)
+	} else {
+		results, err = h.vectorDB.Search(searchCtx, expandedQuery, 10)
+	}
+
 	if err != nil {
 		log.WithError(err).Warn("Semantic search failed")
 		h.metrics.RecordSemanticSearch("error", time.Since(startTime).Seconds(), 0, "direct")

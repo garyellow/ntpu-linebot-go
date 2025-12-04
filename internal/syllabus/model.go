@@ -13,9 +13,11 @@ type ChunkType string
 
 // Chunk types for syllabus embedding
 const (
-	ChunkTypeObjectives ChunkType = "objectives" // 教學目標
-	ChunkTypeOutline    ChunkType = "outline"    // 內容綱要
-	ChunkTypeSchedule   ChunkType = "schedule"   // 教學進度
+	ChunkTypeObjectivesCN ChunkType = "objectives_cn" // 教學目標（中文）
+	ChunkTypeObjectivesEN ChunkType = "objectives_en" // Course Objectives（英文）
+	ChunkTypeOutlineCN    ChunkType = "outline_cn"    // 內容綱要（中文）
+	ChunkTypeOutlineEN    ChunkType = "outline_en"    // Course Outline（英文）
+	ChunkTypeSchedule     ChunkType = "schedule"      // 教學進度
 )
 
 // Chunk represents a single chunk of syllabus content for embedding
@@ -47,12 +49,11 @@ type Fields struct {
 // Each chunk includes the course title as context prefix.
 // This improves retrieval accuracy for short queries against long documents.
 //
-// Strategy (2025 best practices):
-// - Each syllabus field is already a semantically coherent unit
+// Strategy (2025 update):
+// - 5 separate chunks: ObjectivesCN, ObjectivesEN, OutlineCN, OutlineEN, Schedule
+// - Chinese and English are kept separate for cleaner semantic matching
 // - No truncation needed as Gemini embedding supports 2048 tokens (~8000 chars)
-// - Full content preserved for maximum retrieval accuracy
 // - Whitespace-only fields are skipped (no value for embedding)
-// - Chinese and English content are merged when both exist for better semantic coverage
 func (f *Fields) ChunksForEmbedding(courseTitle string) []Chunk {
 	var chunks []Chunk
 	prefix := ""
@@ -60,54 +61,47 @@ func (f *Fields) ChunksForEmbedding(courseTitle string) []Chunk {
 		prefix = "【" + courseTitle + "】\n"
 	}
 
-	// Chunk 1: Objectives (merge CN + EN if both exist)
-	// Most important for "what will I learn" queries
-	objectives := mergeContent(f.ObjectivesCN, f.ObjectivesEN)
-	if strings.TrimSpace(objectives) != "" {
+	// Chunk 1: Objectives CN (教學目標 - 中文)
+	if strings.TrimSpace(f.ObjectivesCN) != "" {
 		chunks = append(chunks, Chunk{
-			Type:    ChunkTypeObjectives,
-			Content: prefix + "教學目標：" + objectives,
+			Type:    ChunkTypeObjectivesCN,
+			Content: prefix + "教學目標：" + strings.TrimSpace(f.ObjectivesCN),
 		})
 	}
 
-	// Chunk 2: Outline (merge CN + EN if both exist)
-	// Important for topic/content queries
-	outline := mergeContent(f.OutlineCN, f.OutlineEN)
-	if strings.TrimSpace(outline) != "" {
+	// Chunk 2: Objectives EN (Course Objectives - English)
+	if strings.TrimSpace(f.ObjectivesEN) != "" {
 		chunks = append(chunks, Chunk{
-			Type:    ChunkTypeOutline,
-			Content: prefix + "內容綱要：" + outline,
+			Type:    ChunkTypeObjectivesEN,
+			Content: prefix + "Course Objectives: " + strings.TrimSpace(f.ObjectivesEN),
 		})
 	}
 
-	// Chunk 3: Schedule (full content, may contain useful info like exam weeks)
+	// Chunk 3: Outline CN (內容綱要 - 中文)
+	if strings.TrimSpace(f.OutlineCN) != "" {
+		chunks = append(chunks, Chunk{
+			Type:    ChunkTypeOutlineCN,
+			Content: prefix + "內容綱要：" + strings.TrimSpace(f.OutlineCN),
+		})
+	}
+
+	// Chunk 4: Outline EN (Course Outline - English)
+	if strings.TrimSpace(f.OutlineEN) != "" {
+		chunks = append(chunks, Chunk{
+			Type:    ChunkTypeOutlineEN,
+			Content: prefix + "Course Outline: " + strings.TrimSpace(f.OutlineEN),
+		})
+	}
+
+	// Chunk 5: Schedule (教學進度)
 	if strings.TrimSpace(f.Schedule) != "" {
 		chunks = append(chunks, Chunk{
 			Type:    ChunkTypeSchedule,
-			Content: prefix + "教學進度：" + f.Schedule,
+			Content: prefix + "教學進度：" + strings.TrimSpace(f.Schedule),
 		})
 	}
 
 	return chunks
-}
-
-// mergeContent merges Chinese and English content with proper formatting.
-// If only one exists, return that one. If both exist, combine with newline separator.
-func mergeContent(cn, en string) string {
-	cn = strings.TrimSpace(cn)
-	en = strings.TrimSpace(en)
-
-	if cn == "" && en == "" {
-		return ""
-	}
-	if cn == "" {
-		return en
-	}
-	if en == "" {
-		return cn
-	}
-	// Both exist - combine them
-	return cn + "\n" + en
 }
 
 // IsEmpty returns true if all fields are empty or whitespace-only

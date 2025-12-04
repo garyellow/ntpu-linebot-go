@@ -1,40 +1,63 @@
 # rag
 
-Retrieval-Augmented Generation (RAG) 模組，使用 chromem-go 進行課程大綱的向量搜尋。
+Retrieval-Augmented Generation (RAG) 模組，提供課程語意搜尋功能。
 
 ## 功能
 
-- **VectorDB**: 封裝 chromem-go 向量資料庫
-- **SearchResult**: 語意搜尋結果結構
-- **Chunking**: 語意分段提升搜尋準確度
-- **去重**: 同一課程多個 chunk 只保留最高相似度
+- **HybridSearcher**: BM25 關鍵字搜尋 + Vector 語意搜尋的混合搜尋器
+- **VectorDB**: 封裝 chromem-go 向量資料庫 (Gemini Embedding)
+- **BM25Index**: BM25 關鍵字搜尋索引 (中文分詞優化)
+- **RRF Fusion**: Reciprocal Rank Fusion 結果融合演算法
+- **去重**: 同一課程多個 chunk 只保留最高分結果
 
 ## 架構
 
 ```
-RAG Flow (with Chunking):
-  課程大綱 → 語意分段 (教學目標/內容綱要/教學進度)
+Hybrid Search Flow:
+  使用者查詢 → Query Expansion (LLM 擴展)
       ↓
-  CN + EN 合併 → Gemini Embedding → chromem-go Vector Store
+  ┌─────────────────────────────────────────┐
+  │         Parallel Search                  │
+  │  ┌─────────────┐   ┌──────────────────┐ │
+  │  │ BM25 Search │   │ Vector Search    │ │
+  │  │ (keyword)   │   │ (semantic)       │ │
+  │  └─────────────┘   └──────────────────┘ │
+  └─────────────────────────────────────────┘
       ↓
-  使用者查詢 → Embedding → 餘弦相似度搜尋 → 去重合併 → 過濾低相似度 → 排序結果
+  RRF Fusion (k=60, BM25:0.4, Vector:0.6)
+      ↓
+  去重合併 → 排序結果
 ```
+
+## Hybrid Search 策略
+
+**問題**: 純 Vector 搜尋對精確關鍵字匹配效果不佳；純 BM25 對語意相似但詞彙不同的查詢效果差
+
+**解決方案**: Hybrid Search (BM25 + Vector) with RRF Fusion
+
+| 搜尋方法 | 權重 | 優勢 |
+|----------|------|------|
+| Vector Search | 60% | 語意相似度、跨語言匹配 |
+| BM25 Search | 40% | 精確關鍵字匹配、縮寫擴展 |
+
+**RRF 公式**: `score(d) = Σ (w_i / (k + rank_i))`
+- k = 60 (標準值，平衡頂部與長尾結果)
+- rank_i = 該結果在各搜尋方法中的排名
 
 ## Chunking 策略
 
-**問題**: Asymmetric semantic search（短查詢 vs 長文檔）會導致相似度分數偏低
-
-**解決方案**: 按語意欄位分段，中英文合併
+**解決方案**: 按語意欄位分段，中英文分開
 
 | Chunk | 內容 | 用途 |
 |-------|------|------|
-| `{UID}_objectives` | 【課程名稱】教學目標：{CN} {EN} | 匹配「想學什麼」類查詢 |
-| `{UID}_outline` | 【課程名稱】內容綱要：{CN} {EN} | 匹配主題/內容查詢 |
+| `{UID}_objectives_cn` | 【課程名稱】教學目標：{CN} | 匹配中文查詢 |
+| `{UID}_objectives_en` | 【課程名稱】Course Objectives: {EN} | 匹配英文查詢 |
+| `{UID}_outline_cn` | 【課程名稱】內容綱要：{CN} | 匹配主題查詢 |
+| `{UID}_outline_en` | 【課程名稱】Course Outline: {EN} | 匹配英文主題 |
 | `{UID}_schedule` | 【課程名稱】教學進度：... | 匹配週次/進度查詢 |
 
-**設計原則** (參考 2025 RAG Chunking 研究):
-- 每個欄位本身是語意完整的單元，不需額外截斷
-- 中英文內容合併提升多語言搜尋效果
+**設計原則** (2025 RAG 最佳實踐):
+- 中英文分開建立獨立 chunk，提升語意匹配清晰度
 - Gemini embedding 支援 2048 tokens (~8000 字元)
 - 課程名稱前綴提供上下文，改善短查詢的匹配
 
@@ -42,43 +65,53 @@ RAG Flow (with Chunking):
 
 | 常數 | 值 | 說明 |
 |------|-----|------|
-| `DefaultSearchResults` | 10 | 預設返回筆數 |
-| `MaxSearchResults` | 100 | 最大返回筆數 |
+| `RRFConstant` | 60 | RRF 公式常數 k |
+| `DefaultBM25Weight` | 0.4 | BM25 預設權重 (40%) |
+| `DefaultVectorWeight` | 0.6 | Vector 預設權重 (60%) |
 | `MinSimilarityThreshold` | 0.3 | 最低相似度門檻 (30%) |
 | `HighRelevanceThreshold` | 0.7 | 高度相關門檻 (70%) |
-
-## 搜尋結果邏輯
-
-1. **高度相關 (≥70%)**: 全部返回
-2. **結果補足**: 向上取整到 10 的倍數 (例如 13 個 ≥70% → 返回 20 個)
-3. **最少保證**: 至少返回 10 個結果 (如果有足夠資料)
-4. **去重**: 同課程只保留最高相似度的結果
 
 ## 使用
 
 ```go
-// 初始化
-vectorDB, err := rag.NewVectorDB(dataDir, geminiAPIKey, logger)
+// 初始化各組件
+vectorDB, _ := rag.NewVectorDB(dataDir, geminiAPIKey, logger)
+bm25Index := rag.NewBM25Index(logger)
+hybridSearcher := rag.NewHybridSearcher(vectorDB, bm25Index, logger)
 
-// 載入現有資料 (自動分段)
+// 載入資料 (同時初始化 BM25 和 Vector 索引)
 syllabi, _ := db.GetAllSyllabi(ctx)
-vectorDB.Initialize(ctx, syllabi)
+hybridSearcher.Initialize(ctx, syllabi)
 
-// 搜尋 (自動去重，70% 高度相關全部返回)
-results, err := vectorDB.Search(ctx, "想學機器學習", 10)
+// Hybrid 搜尋 (BM25 + Vector with RRF)
+results, err := hybridSearcher.Search(ctx, "我想學 AWS", 10)
 for _, r := range results {
     fmt.Printf("%s (%.0f%% 相關)\n", r.Title, r.Similarity*100)
 }
+
+// 也可以單獨使用 BM25 或 Vector
+bm25Results, _ := bm25Index.Search("cloud computing", 10)
+vectorResults, _ := vectorDB.Search(ctx, "雲端運算", 10)
 ```
+
+## Fallback 機制
+
+- **雙引擎可用**: 使用 RRF 融合兩者結果
+- **僅 BM25 可用**: 使用 BM25 結果 (無需 API Key)
+- **僅 Vector 可用**: 使用 Vector 結果
+- **均不可用**: 返回空結果
 
 ## 儲存
 
-- 資料持久化: `data/chromem/syllabi/` (gob 格式)
+- Vector 持久化: `data/chromem/syllabi/` (gob 格式)
+- BM25 索引: 記憶體中，每次啟動時重建
 - Document ID 格式: `{UID}_{chunk_type}`
 - 啟動時自動載入已索引資料
 
 ## 依賴
 
-- `internal/genai`: Gemini embedding 客戶端
+- `internal/genai`: Gemini embedding 客戶端、Query Expander
 - `internal/storage`: Syllabus 資料模型
 - `internal/syllabus`: Chunking 邏輯
+- `github.com/crawlab-team/bm25`: BM25 演算法實作
+- `github.com/philippgille/chromem-go`: Vector 資料庫

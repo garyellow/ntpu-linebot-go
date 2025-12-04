@@ -154,7 +154,7 @@ func TestAddSyllabusInternal_WhitespaceOnlyFields(t *testing.T) {
 			wantChunkCount: 1,
 		},
 		{
-			name: "CN + EN objectives - should create 1 merged chunk",
+			name: "CN + EN objectives - should create 2 separate chunks",
 			syllabus: &storage.Syllabus{
 				UID:          "1131U0003b",
 				Title:        "測試課程",
@@ -164,7 +164,7 @@ func TestAddSyllabusInternal_WhitespaceOnlyFields(t *testing.T) {
 				OutlineEN:    "",
 				Schedule:     "",
 			},
-			wantChunkCount: 1,
+			wantChunkCount: 2,
 		},
 		{
 			name: "two valid fields (CN only) - should create 2 chunks",

@@ -76,6 +76,9 @@ func main() {
 
 	// Create vector database for semantic search (optional - requires Gemini API key)
 	var vectorDB *rag.VectorDB
+	var bm25Index *rag.BM25Index
+	var hybridSearcher *rag.HybridSearcher
+
 	if cfg.GeminiAPIKey != "" {
 		var err error
 		vectorDB, err = rag.NewVectorDB(cfg.DataDir, cfg.GeminiAPIKey, log)
@@ -86,14 +89,35 @@ func main() {
 			syllabi, err := db.GetAllSyllabi(context.Background())
 			if err != nil {
 				log.WithError(err).Warn("Failed to load syllabi for vector store initialization")
-			} else if err := vectorDB.Initialize(context.Background(), syllabi); err != nil {
-				log.WithError(err).Warn("Failed to initialize vector store")
 			} else {
-				log.WithField("syllabi_count", len(syllabi)).Info("Vector database initialized for semantic search")
+				// Initialize vector database
+				if err := vectorDB.Initialize(context.Background(), syllabi); err != nil {
+					log.WithError(err).Warn("Failed to initialize vector store")
+				} else {
+					log.WithField("syllabi_count", len(syllabi)).Info("Vector database initialized for semantic search")
+				}
+
+				// Initialize BM25 index for hybrid search
+				bm25Index = rag.NewBM25Index(log)
+				if err := bm25Index.Initialize(syllabi); err != nil {
+					log.WithError(err).Warn("Failed to initialize BM25 index")
+					bm25Index = nil
+				} else {
+					log.WithField("doc_count", bm25Index.Count()).Info("BM25 index initialized for hybrid search")
+				}
 			}
 		}
 	} else {
 		log.Info("Gemini API key not configured, semantic search disabled")
+	}
+
+	// Create hybrid searcher if either component is available
+	if vectorDB != nil || bm25Index != nil {
+		hybridSearcher = rag.NewHybridSearcher(vectorDB, bm25Index, log)
+		log.WithFields(map[string]any{
+			"vector_enabled": vectorDB != nil && vectorDB.IsEnabled(),
+			"bm25_enabled":   bm25Index != nil && bm25Index.IsEnabled(),
+		}).Info("Hybrid searcher created")
 	}
 
 	// Start background cache warming (non-blocking)
@@ -123,10 +147,25 @@ func main() {
 		log.WithError(err).Fatal("Failed to create webhook handler")
 	}
 
-	// Set vector database for course semantic search
-	if vectorDB != nil {
-		webhookHandler.GetCourseHandler().SetVectorDB(vectorDB)
-		log.Info("Semantic search enabled for course module")
+	// Set hybrid searcher for course semantic search (includes BM25 + vector)
+	if hybridSearcher != nil {
+		webhookHandler.GetCourseHandler().SetHybridSearcher(hybridSearcher)
+		log.Info("Hybrid search enabled for course module")
+	} else if vectorDB != nil {
+		// Fallback to vector-only if hybrid not available
+		webhookHandler.GetCourseHandler().SetVectorDB(vectorDB) //nolint:staticcheck // Intentional fallback for backward compatibility
+		log.Info("Vector-only semantic search enabled for course module")
+	}
+
+	// Create query expander for semantic search (optional - requires Gemini API key)
+	if cfg.GeminiAPIKey != "" {
+		expander, err := genai.NewQueryExpander(context.Background(), cfg.GeminiAPIKey)
+		if err != nil {
+			log.WithError(err).Warn("Failed to create query expander")
+		} else if expander != nil {
+			webhookHandler.GetCourseHandler().SetQueryExpander(expander)
+			log.Info("Query expander enabled for semantic search")
+		}
 	}
 
 	// Create NLU intent parser (optional - requires Gemini API key)

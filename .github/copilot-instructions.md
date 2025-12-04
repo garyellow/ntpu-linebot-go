@@ -47,6 +47,8 @@ LINE Webhook → Gin Handler
 
 **Course Module**: Smart semester detection (`semester.go`), UID regex (`(?i)\d{3,4}[umnp]\d{4}`), max 40 results, Flex Message carousels
 - **Semantic search**: `找課` keyword triggers embedding-based search using syllabus content (requires `GEMINI_API_KEY`)
+- **Hybrid search**: BM25 keyword + Vector semantic search with RRF fusion (k=60, BM25:0.4, Vector:0.6)
+- **Query expansion**: LLM-based expansion for short queries and technical abbreviations (AWS→雲端運算, AI→人工智慧)
 - **Detached context**: Uses `context.WithoutCancel()` to prevent request context cancellation from aborting embedding API calls
 - **Fallback**: Keyword search → semantic search (when no results and VectorDB enabled)
 
