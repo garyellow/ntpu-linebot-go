@@ -16,13 +16,13 @@ import (
 )
 
 // cleanupExpiredCache periodically removes expired cache entries from database
-func cleanupExpiredCache(ctx context.Context, db *storage.DB, ttl time.Duration, log *logger.Logger) {
+func cleanupExpiredCache(ctx context.Context, db *storage.DB, ttl time.Duration, m *metrics.Metrics, log *logger.Logger) {
 	// Run initial cleanup after configured delay to let server stabilize
 	select {
 	case <-ctx.Done():
 		return
 	case <-time.After(config.CacheCleanupInitialDelay):
-		performCacheCleanup(ctx, db, ttl, log)
+		performCacheCleanup(ctx, db, ttl, m, log)
 	}
 
 	// Then run cleanup at configured interval
@@ -34,13 +34,14 @@ func cleanupExpiredCache(ctx context.Context, db *storage.DB, ttl time.Duration,
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			performCacheCleanup(ctx, db, ttl, log)
+			performCacheCleanup(ctx, db, ttl, m, log)
 		}
 	}
 }
 
 // performCacheCleanup executes cache cleanup operation
-func performCacheCleanup(ctx context.Context, db *storage.DB, ttl time.Duration, log *logger.Logger) {
+func performCacheCleanup(ctx context.Context, db *storage.DB, ttl time.Duration, m *metrics.Metrics, log *logger.Logger) {
+	startTime := time.Now()
 	log.Info("Starting cache cleanup...")
 
 	var totalDeleted int64
@@ -124,17 +125,22 @@ func performCacheCleanup(ctx context.Context, db *storage.DB, ttl time.Duration,
 		log.Debug("Database vacuumed successfully")
 	}
 
+	// Record job metrics
+	if m != nil {
+		m.RecordJob("cleanup", "all", time.Since(startTime).Seconds())
+	}
+
 	log.WithField("total_deleted", totalDeleted).Info("Cache cleanup complete")
 }
 
 // refreshStickers periodically refreshes stickers from web sources
-func refreshStickers(ctx context.Context, stickerManager *sticker.Manager, log *logger.Logger) {
+func refreshStickers(ctx context.Context, stickerManager *sticker.Manager, m *metrics.Metrics, log *logger.Logger) {
 	// Run initial refresh after configured delay to let server stabilize
 	select {
 	case <-ctx.Done():
 		return
 	case <-time.After(config.StickerRefreshInitialDelay):
-		performStickerRefresh(ctx, stickerManager, log)
+		performStickerRefresh(ctx, stickerManager, m, log)
 	}
 
 	// Then refresh at configured interval
@@ -146,13 +152,14 @@ func refreshStickers(ctx context.Context, stickerManager *sticker.Manager, log *
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			performStickerRefresh(ctx, stickerManager, log)
+			performStickerRefresh(ctx, stickerManager, m, log)
 		}
 	}
 }
 
 // performStickerRefresh executes sticker refresh operation
-func performStickerRefresh(ctx context.Context, stickerManager *sticker.Manager, log *logger.Logger) {
+func performStickerRefresh(ctx context.Context, stickerManager *sticker.Manager, m *metrics.Metrics, log *logger.Logger) {
+	startTime := time.Now()
 	log.Info("Starting periodic sticker refresh...")
 
 	refreshCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
@@ -166,6 +173,11 @@ func performStickerRefresh(ctx context.Context, stickerManager *sticker.Manager,
 		log.WithField("count", count).
 			WithField("stats", stats).
 			Info("Sticker refresh complete")
+	}
+
+	// Record job metrics (record even on error to track duration)
+	if m != nil {
+		m.RecordJob("sticker_refresh", "all", time.Since(startTime).Seconds())
 	}
 }
 
@@ -239,26 +251,26 @@ func performProactiveWarmup(ctx context.Context, db *storage.DB, client *scraper
 }
 
 // updateCacheSizeMetrics periodically updates cache size gauge metrics
-func updateCacheSizeMetrics(ctx context.Context, db *storage.DB, stickerManager *sticker.Manager, vectorDB *rag.VectorDB, m *metrics.Metrics, log *logger.Logger) {
+func updateCacheSizeMetrics(ctx context.Context, db *storage.DB, stickerManager *sticker.Manager, vectorDB *rag.VectorDB, bm25Index *rag.BM25Index, m *metrics.Metrics, log *logger.Logger) {
 	// Update metrics at configured interval
 	ticker := time.NewTicker(config.MetricsUpdateInterval)
 	defer ticker.Stop()
 
 	// Run initial update immediately
-	performCacheSizeUpdate(ctx, db, stickerManager, vectorDB, m, log)
+	performCacheSizeUpdate(ctx, db, stickerManager, vectorDB, bm25Index, m, log)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			performCacheSizeUpdate(ctx, db, stickerManager, vectorDB, m, log)
+			performCacheSizeUpdate(ctx, db, stickerManager, vectorDB, bm25Index, m, log)
 		}
 	}
 }
 
 // performCacheSizeUpdate updates cache size metrics
-func performCacheSizeUpdate(ctx context.Context, db *storage.DB, stickerManager *sticker.Manager, vectorDB *rag.VectorDB, m *metrics.Metrics, log *logger.Logger) {
+func performCacheSizeUpdate(ctx context.Context, db *storage.DB, stickerManager *sticker.Manager, vectorDB *rag.VectorDB, bm25Index *rag.BM25Index, m *metrics.Metrics, log *logger.Logger) {
 	if studentCount, err := db.CountStudents(ctx); err == nil {
 		m.SetCacheSize("students", studentCount)
 	} else {
@@ -286,8 +298,11 @@ func performCacheSizeUpdate(ctx context.Context, db *storage.DB, stickerManager 
 	}
 	m.SetCacheSize("stickers", stickerManager.Count())
 
-	// Update VectorDB document count if enabled
+	// Update search index sizes if enabled
 	if vectorDB != nil && vectorDB.IsEnabled() {
-		m.SetVectorDBSize(vectorDB.Count())
+		m.SetIndexSize("vector", vectorDB.Count())
+	}
+	if bm25Index != nil && bm25Index.IsEnabled() {
+		m.SetIndexSize("bm25", bm25Index.Count())
 	}
 }

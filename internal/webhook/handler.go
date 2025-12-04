@@ -132,7 +132,6 @@ func (h *Handler) Handle(c *gin.Context) {
 	// Validate Content-Length to prevent abuse
 	if c.Request.ContentLength > 1<<20 { // 1MB limit
 		h.logger.Warn("Request body too large")
-		h.metrics.RecordHTTPError("request_too_large", "webhook")
 		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request too large"})
 		return
 	}
@@ -144,10 +143,8 @@ func (h *Handler) Handle(c *gin.Context) {
 		if errors.Is(err, webhook.ErrInvalidSignature) {
 			// Invalid signature - potential security threat
 			h.metrics.RecordWebhook("invalid_signature", "error", time.Since(start).Seconds())
-			h.metrics.RecordHTTPError("invalid_signature", "webhook")
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid signature"})
 		} else {
-			h.metrics.RecordHTTPError("parse_error", "webhook")
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to parse request"})
 		}
 		return
@@ -257,7 +254,6 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 		// Check global rate limit (user rate limit is checked in handleMessageEvent)
 		if !h.rateLimiter.Allow() {
 			h.logger.Warn("Global rate limit exceeded, waiting...")
-			h.metrics.RecordHTTPError("rate_limit_global", "webhook")
 			h.metrics.RecordRateLimiterDrop("global")
 			h.rateLimiter.WaitForToken()
 		}
@@ -312,7 +308,6 @@ func (h *Handler) checkUserRateLimit(source webhook.SourceInterface, chatID stri
 		logChatID = chatID[:8] + "..."
 	}
 	h.logger.WithField("chat_id", logChatID).Warn("User rate limit exceeded")
-	h.metrics.RecordHTTPError("rate_limit_user", "webhook")
 
 	// For personal chats, return a friendly message
 	if h.isPersonalChat(source) {
@@ -733,22 +728,22 @@ func (h *Handler) handleWithNLU(ctx context.Context, text string) ([]messaging_a
 	if err != nil {
 		// NLU error - log warning and fallback to help message
 		h.logger.WithError(err).Warn("NLU intent parsing failed")
-		h.metrics.RecordNLURequest("error", "", duration)
-		h.metrics.RecordNLUFallback()
+		h.metrics.RecordLLMRequest("nlu", "error", duration)
+		h.metrics.RecordLLMFallback("nlu")
 		return h.getHelpMessage(), nil
 	}
 
 	if result == nil {
 		// No result - fallback to help message
-		h.metrics.RecordNLURequest("error", "", duration)
-		h.metrics.RecordNLUFallback()
+		h.metrics.RecordLLMRequest("nlu", "error", duration)
+		h.metrics.RecordLLMFallback("nlu")
 		return h.getHelpMessage(), nil
 	}
 
 	// Check if model returned clarification text instead of function call
 	if result.ClarificationText != "" {
 		h.logger.WithField("clarification", result.ClarificationText).Debug("NLU returned clarification")
-		h.metrics.RecordNLURequest("clarification", "", duration)
+		h.metrics.RecordLLMRequest("nlu", "clarification", duration)
 
 		// Return clarification text as a message
 		sender := lineutil.GetSender("小幫手", h.stickerManager)
@@ -762,7 +757,7 @@ func (h *Handler) handleWithNLU(ctx context.Context, text string) ([]messaging_a
 		WithField("intent", result.Intent).
 		WithField("params", result.Params).
 		Debug("NLU intent parsed")
-	h.metrics.RecordNLURequest("success", result.FunctionName, duration)
+	h.metrics.RecordLLMRequest("nlu", "success", duration)
 
 	// Dispatch to appropriate handler based on intent
 	return h.dispatchIntent(ctx, result)

@@ -517,16 +517,6 @@ func (db *DB) CountContacts(ctx context.Context) (int, error) {
 
 // SaveCourse inserts or updates a course record (serializes arrays as JSON)
 func (db *DB) SaveCourse(ctx context.Context, course *Course) error {
-	// Check data integrity and record metrics if available
-	if db.metrics != nil {
-		if course.No == "" {
-			db.metrics.RecordCourseIntegrityIssue("missing_no")
-		}
-		if course.Title == "" {
-			db.metrics.RecordCourseIntegrityIssue("empty_title")
-		}
-	}
-
 	teachersJSON, err := json.Marshal(course.Teachers)
 	if err != nil {
 		return fmt.Errorf("failed to marshal teachers: %w", err)
