@@ -101,6 +101,7 @@ func main() {
 				bm25Index = rag.NewBM25Index(log)
 				if err := bm25Index.Initialize(syllabi); err != nil {
 					log.WithError(err).Warn("Failed to initialize BM25 index")
+					log.Warn("Hybrid search will use vector-only fallback (degraded search quality)")
 					bm25Index = nil
 				} else {
 					log.WithField("doc_count", bm25Index.Count()).Info("BM25 index initialized for hybrid search")

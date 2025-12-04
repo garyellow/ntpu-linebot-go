@@ -1080,6 +1080,14 @@ func deduplicateCourses(courses []storage.Course) []storage.Course {
 // handleSemanticSearch performs semantic search using syllabus embeddings
 // This is triggered by "找課" keywords and searches course syllabi content
 // Uses hybrid search (BM25 + vector) if available, otherwise falls back to vector-only
+//
+// Timeout hierarchy (nested within 60s webhook processing timeout):
+//   - SemanticSearchTimeout: 30s total (detached context from HTTP request)
+//   - QueryExpander: 8s nested timeout within search context
+//   - Actual search: remainder of 30s after expansion completes
+//
+// Total operation is bounded by SemanticSearchTimeout (30s), well within
+// the 60s webhook limit. Reply token remains valid for ~20 minutes.
 func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(moduleName)
 	startTime := time.Now()

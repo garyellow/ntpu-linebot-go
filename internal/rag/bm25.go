@@ -221,11 +221,65 @@ func (idx *BM25Index) Search(query string, topN int) ([]BM25Result, error) {
 	return results, nil
 }
 
-// AddSyllabus adds a single syllabus to the index
-// Note: This rebuilds the entire index (BM25 doesn't support incremental updates)
+// AddSyllabus adds a single syllabus to the index.
+// Note: BM25 doesn't support incremental updates, so this triggers a full rebuild.
 func (idx *BM25Index) AddSyllabus(syl *storage.Syllabus) error {
-	// For now, we don't support incremental updates
-	// The index should be rebuilt during warmup
+	if idx == nil || syl == nil {
+		return nil
+	}
+
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+
+	// Check if syllabus already exists (by UID)
+	if _, exists := idx.metadata[syl.UID]; exists {
+		// Already in index, skip (update not supported)
+		return nil
+	}
+
+	// Add new syllabus metadata
+	idx.metadata[syl.UID] = docMeta{
+		Title:    syl.Title,
+		Teachers: syl.Teachers,
+		Year:     syl.Year,
+		Term:     syl.Term,
+	}
+
+	// Generate chunks for new syllabus
+	fields := &syllabus.Fields{
+		ObjectivesCN: syl.ObjectivesCN,
+		ObjectivesEN: syl.ObjectivesEN,
+		OutlineCN:    syl.OutlineCN,
+		OutlineEN:    syl.OutlineEN,
+		Schedule:     syl.Schedule,
+	}
+	chunks := fields.ChunksForEmbedding(syl.Title)
+
+	docIndex := len(idx.corpus)
+	for _, chunk := range chunks {
+		if strings.TrimSpace(chunk.Content) == "" {
+			continue
+		}
+		idx.rawDocs = append(idx.rawDocs, chunk.Content)
+		idx.corpus = append(idx.corpus, chunk.Content)
+		idx.uidToDocIDs[syl.UID] = append(idx.uidToDocIDs[syl.UID], docIndex)
+		idx.docIDToUID[docIndex] = syl.UID
+		docIndex++
+	}
+
+	// Rebuild BM25 index from updated corpus
+	if len(idx.corpus) == 0 {
+		return nil
+	}
+
+	bm25Okapi, err := bm25.NewBM25Okapi(idx.corpus, tokenizeChinese, 1.5, 0.75, nil)
+	if err != nil {
+		return fmt.Errorf("failed to rebuild BM25 index: %w", err)
+	}
+	idx.bm25Okapi = bm25Okapi
+	idx.initialized = true
+
+	idx.logger.WithField("uid", syl.UID).Debug("Added syllabus to BM25 index")
 	return nil
 }
 

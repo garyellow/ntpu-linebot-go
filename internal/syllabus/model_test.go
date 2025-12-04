@@ -1,6 +1,7 @@
 package syllabus
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -333,8 +334,9 @@ func TestFields_ChunksForEmbedding_FullContent(t *testing.T) {
 	}
 
 	// Verify it contains the full range (week 0-9 should appear multiple times)
+	// Note: Uses Arabic numerals (第0週, 第1週) to match the test data format
 	for i := 0; i < 10; i++ {
-		weekStr := "第" + string(rune('0'+i)) + "週"
+		weekStr := fmt.Sprintf("第%d週", i)
 		if !containsStr(scheduleChunk.Content, weekStr) {
 			t.Errorf("Schedule should contain %s", weekStr)
 		}

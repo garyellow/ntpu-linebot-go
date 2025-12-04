@@ -348,3 +348,171 @@ func TestIsCJK(t *testing.T) {
 		})
 	}
 }
+
+func TestBM25Index_AddSyllabus(t *testing.T) {
+	log := logger.New("debug")
+	idx := NewBM25Index(log)
+
+	// Initialize with three syllabi - same as TestBM25Index_Search for proper IDF calculation
+	initialSyllabi := []*storage.Syllabus{
+		{
+			UID:          "1131U0001",
+			Title:        "雲端運算 Cloud Computing",
+			Teachers:     []string{"王大明"},
+			Year:         113,
+			Term:         1,
+			ObjectivesCN: "本課程介紹雲端運算基礎概念，包含 AWS EC2, S3, Lambda 等服務",
+			ObjectivesEN: "Introduction to cloud computing with AWS services",
+			OutlineCN:    "1. 雲端運算概論 2. AWS 架構 3. EC2 虛擬機器 4. S3 儲存服務",
+			OutlineEN:    "1. Cloud Computing Overview 2. AWS Architecture 3. EC2 4. S3",
+			Schedule:     "Week 1: 課程介紹 Week 2: AWS Academy",
+		},
+		{
+			UID:          "1131U0002",
+			Title:        "資料結構 Data Structures",
+			Teachers:     []string{"李小華"},
+			Year:         113,
+			Term:         1,
+			ObjectivesCN: "學習基礎資料結構，包含陣列、鏈結串列、樹、圖",
+			ObjectivesEN: "Learn fundamental data structures",
+			OutlineCN:    "陣列 鏈結串列 堆疊 佇列 樹 圖 排序演算法",
+			OutlineEN:    "Array, Linked List, Stack, Queue, Tree, Graph, Sorting",
+			Schedule:     "Week 1-4: 基礎結構 Week 5-8: 進階結構",
+		},
+		{
+			UID:          "1131U0003",
+			Title:        "機器學習 Machine Learning",
+			Teachers:     []string{"陳小明"},
+			Year:         113,
+			Term:         1,
+			ObjectivesCN: "介紹機器學習基礎，包含監督式學習、非監督式學習",
+			ObjectivesEN: "Introduction to machine learning, supervised and unsupervised learning",
+			OutlineCN:    "線性迴歸 邏輯迴歸 決策樹 神經網路",
+			OutlineEN:    "Linear Regression, Logistic Regression, Decision Trees, Neural Networks",
+			Schedule:     "Week 1-8: 基礎 Week 9-16: 進階",
+		},
+	}
+
+	if err := idx.Initialize(initialSyllabi); err != nil {
+		t.Fatalf("Initialize() error = %v", err)
+	}
+
+	initialCount := idx.Count()
+	if initialCount == 0 {
+		t.Fatal("Expected count > 0 after initialization")
+	}
+	t.Logf("Initial count: %d", initialCount)
+
+	// Verify initial search works BEFORE AddSyllabus
+	results, err := idx.Search("AWS", 5)
+	if err != nil {
+		t.Fatalf("Initial Search() error = %v", err)
+	}
+	t.Logf("Initial AWS search: %d results", len(results))
+	if len(results) == 0 {
+		t.Fatal("Expected to find AWS course after initialization (before AddSyllabus)")
+	}
+
+	// Add a new syllabus (fourth one)
+	newSyllabus := &storage.Syllabus{
+		UID:          "1131U0004",
+		Title:        "人工智慧 Artificial Intelligence",
+		Teachers:     []string{"張大華"},
+		Year:         113,
+		Term:         1,
+		ObjectivesCN: "探索人工智慧的理論與應用，包含深度學習框架",
+		ObjectivesEN: "Explore AI theory and applications with deep learning frameworks",
+		OutlineCN:    "卷積神經網路 循環神經網路 強化學習 自然語言處理",
+		OutlineEN:    "CNN, RNN, Reinforcement Learning, NLP",
+		Schedule:     "Week 1-8: 理論 Week 9-16: 實作",
+	}
+
+	if err := idx.AddSyllabus(newSyllabus); err != nil {
+		t.Fatalf("AddSyllabus() error = %v", err)
+	}
+
+	afterCount := idx.Count()
+	t.Logf("After AddSyllabus count: %d", afterCount)
+
+	// Count should increase
+	if afterCount <= initialCount {
+		t.Errorf("Count after AddSyllabus = %d, want > %d", afterCount, initialCount)
+	}
+
+	// Search for the new course's unique content (deep learning)
+	results, err = idx.Search("deep learning", 5)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatal("Expected to find deep learning after AddSyllabus")
+	}
+	if results[0].UID != "1131U0004" {
+		t.Errorf("Expected top result UID = 1131U0004, got %s", results[0].UID)
+	}
+
+	// Original courses should still be searchable
+	results, err = idx.Search("AWS", 5)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	t.Logf("After AddSyllabus - AWS search: %d results", len(results))
+	if len(results) == 0 {
+		t.Fatal("Expected to still find AWS course after AddSyllabus")
+	}
+	if results[0].UID != "1131U0001" {
+		t.Errorf("Expected top result UID = 1131U0001, got %s", results[0].UID)
+	}
+}
+
+func TestBM25Index_AddSyllabus_Duplicate(t *testing.T) {
+	log := logger.New("debug")
+	idx := NewBM25Index(log)
+
+	syl := &storage.Syllabus{
+		UID:          "1131U0001",
+		Title:        "雲端運算",
+		Teachers:     []string{"王大明"},
+		Year:         113,
+		Term:         1,
+		ObjectivesCN: "雲端運算課程",
+	}
+
+	// Initialize with the syllabus
+	if err := idx.Initialize([]*storage.Syllabus{syl}); err != nil {
+		t.Fatalf("Initialize() error = %v", err)
+	}
+
+	initialCount := idx.Count()
+
+	// Try to add the same syllabus again (duplicate UID)
+	if err := idx.AddSyllabus(syl); err != nil {
+		t.Fatalf("AddSyllabus() error = %v", err)
+	}
+
+	// Count should not change (duplicate skipped)
+	if idx.Count() != initialCount {
+		t.Errorf("Count after duplicate AddSyllabus = %d, want %d (no change)", idx.Count(), initialCount)
+	}
+}
+
+func TestBM25Index_AddSyllabus_Nil(t *testing.T) {
+	log := logger.New("debug")
+	idx := NewBM25Index(log)
+
+	// Initialize first
+	if err := idx.Initialize([]*storage.Syllabus{}); err != nil {
+		t.Fatalf("Initialize() error = %v", err)
+	}
+
+	// Adding nil should not error
+	if err := idx.AddSyllabus(nil); err != nil {
+		t.Errorf("AddSyllabus(nil) error = %v, want nil", err)
+	}
+
+	// Nil index should not error
+	var nilIdx *BM25Index
+	if err := nilIdx.AddSyllabus(&storage.Syllabus{UID: "test"}); err != nil {
+		t.Errorf("nil.AddSyllabus() error = %v, want nil", err)
+	}
+}
