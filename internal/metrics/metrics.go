@@ -1,6 +1,6 @@
 // Package metrics provides Prometheus metrics for monitoring.
 //
-// Design Philosophy (2025 Best Practices):
+// Design Philosophy:
 // - RED Method for services: Rate, Errors, Duration
 // - USE Method for resources: Utilization, Saturation, Errors
 // - Custom registry to avoid global state conflicts

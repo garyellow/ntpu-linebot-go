@@ -164,9 +164,21 @@ func TestToSearchResults(t *testing.T) {
 		t.Fatalf("ToSearchResults() returned %d results, want 2", len(results))
 	}
 
-	// First result should preserve vector similarity
-	if results[0].Similarity != 0.85 {
-		t.Errorf("ToSearchResults() first result similarity = %v, want 0.85", results[0].Similarity)
+	// First result has both BM25 and Vector - uses new confidence formula
+	// 70% RRF confidence + 30% vector similarity + boost
+	// baseConfidence = 0.02/0.02 = 1.0, VectorSim = 0.85
+	// combined = 0.7 * 1.0 + 0.3 * 0.85 = 0.955
+	// boost = 0.1 * (1 - 0.955) = 0.0045
+	// Expected: ~0.96
+	if results[0].Similarity < 0.9 {
+		t.Errorf("ToSearchResults() first result (both sources) confidence = %v, want >= 0.9", results[0].Similarity)
+	}
+
+	// Second result has BM25 only - uses RRF confidence + rank decay
+	// baseConfidence = 0.015/0.02 = 0.75, rankDecay = 1/(1+0.05*1) ≈ 0.952
+	// Expected: 0.5 * 0.75 + 0.5 * 0.952 ≈ 0.851
+	if results[1].Similarity < 0.8 {
+		t.Errorf("ToSearchResults() second result (BM25 only) confidence = %v, want >= 0.8", results[1].Similarity)
 	}
 
 	// Metadata should be preserved
@@ -176,6 +188,81 @@ func TestToSearchResults(t *testing.T) {
 
 	if len(results[0].Teachers) != 1 || results[0].Teachers[0] != "Teacher 1" {
 		t.Errorf("ToSearchResults() first result teachers = %v, want [Teacher 1]", results[0].Teachers)
+	}
+}
+
+func TestToSearchResults_BM25Only(t *testing.T) {
+	// Test that BM25-only results get confidence scores based on RRF and rank
+	// 50% RRF confidence + 50% rank decay
+	hybridResults := []HybridResult{
+		{
+			UID:       "exact_match",
+			Title:     "Cloud Computing with AWS",
+			BM25Score: 15.0,
+			RRFScore:  0.006,
+			BM25Rank:  1,
+		},
+		{
+			UID:       "partial_match",
+			Title:     "Introduction to Cloud",
+			BM25Score: 8.0,
+			RRFScore:  0.0058,
+			BM25Rank:  2,
+		},
+	}
+
+	results := ToSearchResults(hybridResults)
+
+	if len(results) != 2 {
+		t.Fatalf("ToSearchResults() returned %d results, want 2", len(results))
+	}
+
+	// Top BM25 result (rank 1): high confidence
+	// baseConfidence = 1.0, rankDecay = 1/(1+0.05*1) ≈ 0.952
+	// Expected: 0.5 * 1.0 + 0.5 * 0.952 ≈ 0.976
+	if results[0].Similarity < 0.9 {
+		t.Errorf("ToSearchResults() top BM25 result confidence = %v, want >= 0.9", results[0].Similarity)
+	}
+
+	// Second result (rank 2): slightly lower confidence
+	// baseConfidence ≈ 0.967, rankDecay = 1/(1+0.05*2) ≈ 0.909
+	// Expected: ~0.938
+	if results[1].Similarity < 0.85 {
+		t.Errorf("ToSearchResults() second BM25 result confidence = %v, want >= 0.85", results[1].Similarity)
+	}
+
+	// Top result should have higher confidence than second
+	if results[0].Similarity <= results[1].Similarity {
+		t.Errorf("ToSearchResults() top result confidence (%v) should be > second (%v)",
+			results[0].Similarity, results[1].Similarity)
+	}
+}
+
+func TestToSearchResults_VectorOnly(t *testing.T) {
+	// Test that vector-only results blend RRF confidence with vector similarity
+	// 40% RRF-based confidence + 60% vector similarity
+	hybridResults := []HybridResult{
+		{
+			UID:        "semantic_match",
+			Title:      "Machine Learning Basics",
+			VectorSim:  0.78,
+			RRFScore:   0.0098,
+			VectorRank: 1,
+		},
+	}
+
+	results := ToSearchResults(hybridResults)
+
+	if len(results) != 1 {
+		t.Fatalf("ToSearchResults() returned %d results, want 1", len(results))
+	}
+
+	// Vector-only result: 40% RRF confidence (1.0 for rank 1) + 60% vector similarity (0.78)
+	// Expected: 0.4 * 1.0 + 0.6 * 0.78 = 0.868
+	expectedSim := float32(0.4*1.0 + 0.6*0.78)
+	tolerance := float32(0.01)
+	if results[0].Similarity < expectedSim-tolerance || results[0].Similarity > expectedSim+tolerance {
+		t.Errorf("ToSearchResults() vector-only result similarity = %v, want ~%v", results[0].Similarity, expectedSim)
 	}
 }
 

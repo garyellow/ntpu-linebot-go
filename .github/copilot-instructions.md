@@ -2,7 +2,7 @@
 
 LINE chatbot for NTPU (National Taipei University) providing student ID lookup, contact directory, and course queries. Built with Go, emphasizing anti-scraping measures, persistent caching, and observability.
 
-## Architecture: Async Webhook Processing (2025 Best Practice)
+## Architecture: Async Webhook Processing
 
 ```
 LINE Webhook → Gin Handler
@@ -45,9 +45,11 @@ LINE Webhook → Gin Handler
 
 **ID Module**: Year query range (95-112, name search 101-112), department selection flow, student search (max 500 results), Flex Message cards
 
-**Course Module**: Smart semester detection (`semester.go`), UID regex (`(?i)\d{3,4}[umnp]\d{4}`), max 40 results, Flex Message carousels
+**Course Module**: Smart semester detection (`semester.go`), UID regex (`(?i)\\d{3,4}[umnp]\\d{4}`), max 40 results, Flex Message carousels
 - **Semantic search**: `找課` keyword triggers embedding-based search using syllabus content (requires `GEMINI_API_KEY`)
 - **Hybrid search**: BM25 keyword + Vector semantic search with RRF fusion (k=60, BM25:0.4, Vector:0.6)
+- **Confidence scoring**: RRF-based confidence, NOT similarity. BM25 has no similarity concept.
+- **Thresholds**: Only for Vector (Min=0.5, High=0.8). BM25 uses rank limits, not similarity.
 - **Query expansion**: LLM-based expansion for short queries and technical abbreviations (AWS→雲端運算, AI→人工智慧)
 - **Detached context**: Uses `context.WithoutCancel()` to prevent request context cancellation from aborting embedding API calls
 - **Fallback**: Keyword search → semantic search (when no results and VectorDB enabled)

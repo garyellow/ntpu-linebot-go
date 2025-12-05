@@ -306,7 +306,7 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 ### 2. 語意搜尋架構（可選功能）
 
 ```
-語意搜尋流程:
+Hybrid Search 流程:
                                       ┌─────────────────┐
                                       │ Gemini API      │
                                       │ (embedding)     │
@@ -317,25 +317,47 @@ Warmup:                                        ▼
               ↓                       ↓              ↓
           syllabus/              content_hash    chromem-go
           scraper.go             (增量更新)      (gob 持久化)
+                                                       ↓
+                                               同步建立 BM25 索引 (記憶體)
 
 查詢:
   「找課 想學機器學習」
               ↓
-        語意 embedding
-              ↓
-      chromem-go 餘弦搜尋
-              ↓
-    回傳相似度排序結果
+    ┌────────┴────────┐
+    ▼                 ▼
+  BM25 Search    Vector Search
+  (關鍵字)       (語意 embedding)
+    │                 │
+    └────────┬────────┘
+             ▼
+    RRF Fusion (k=60)
+    BM25:40% + Vector:60%
+             ↓
+    Confidence-based ranking
+    (非 similarity 概念)
+             ↓
+    回傳信心分數排序結果
 ```
 
+**Hybrid Search 策略**:
+- **BM25**: 精確關鍵字匹配、縮寫擴展（無需 API）
+- **Vector**: 語意相似度、跨語言匹配（需 Gemini API）
+- **RRF Fusion**: 結合兩者排名，輸出「信心分數」而非「相似度」
+
+**關鍵概念**:
+- BM25 輸出無界分數，不可跨查詢比較
+- Vector 輸出 Cosine similarity (0-1)，是真正的語意相似度
+- RRF 只看排名，避免比較不可比較的分數
+
 **啟用條件**:
-- 設定 `GEMINI_API_KEY` 環境變數
+- 設定 `GEMINI_API_KEY` 環境變數（Vector Search 需要）
+- 即使沒有 API Key，BM25 搜尋仍可使用
 - 將 `syllabus` 加入 `WARMUP_MODULES`
 
 **關鍵實作**:
-- `internal/genai/`: Gemini embedding 客戶端，含 Rate Limiter
-- `internal/rag/`: chromem-go 向量資料庫封裝
-- `internal/syllabus/`: 課程大綱擷取與 hash 計算
+- `internal/genai/`: Gemini embedding 客戶端、Query Expander
+- `internal/rag/`: HybridSearcher、VectorDB、BM25Index、RRF Fusion
+- `internal/syllabus/`: 課程大綱擷取與 hash 計算、Chunking 策略
 
 **效能優化**:
 - 使用 `content_hash` 實現增量更新（僅重新索引變更內容）

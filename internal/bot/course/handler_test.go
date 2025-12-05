@@ -450,6 +450,8 @@ func TestHandleSemanticSearch_EmptyQuery(t *testing.T) {
 }
 
 func TestGetSimilarityBadge(t *testing.T) {
+	// Tests updated to match new thresholds
+	// >= 80%: 高度相關, 65-79%: 相關, 50-64%: 可能相關, < 50%: 參考
 	tests := []struct {
 		name           string
 		similarity     float32
@@ -457,7 +459,7 @@ func TestGetSimilarityBadge(t *testing.T) {
 		wantColorCheck func(color string) bool
 	}{
 		{
-			name:       "very high similarity (95%)",
+			name:       "very high confidence (95%)",
 			similarity: 0.95,
 			wantBadge:  "🎯 高度相關 95%",
 			wantColorCheck: func(c string) bool {
@@ -465,55 +467,55 @@ func TestGetSimilarityBadge(t *testing.T) {
 			},
 		},
 		{
-			name:       "high similarity (70%)",
-			similarity: 0.70,
-			wantBadge:  "🎯 高度相關 70%",
+			name:       "high confidence threshold (80%)",
+			similarity: 0.80,
+			wantBadge:  "🎯 高度相關 80%",
 			wantColorCheck: func(c string) bool {
 				return c != ""
 			},
 		},
 		{
-			name:       "medium similarity (55%)",
-			similarity: 0.55,
-			wantBadge:  "✨ 相關 55%",
+			name:       "relevant upper bound (79%)",
+			similarity: 0.79,
+			wantBadge:  "✨ 相關 79%",
 			wantColorCheck: func(c string) bool {
 				return c != ""
 			},
 		},
 		{
-			name:       "medium-low similarity (50%)",
+			name:       "relevant lower bound (65%)",
+			similarity: 0.65,
+			wantBadge:  "✨ 相關 65%",
+			wantColorCheck: func(c string) bool {
+				return c != ""
+			},
+		},
+		{
+			name:       "possibly relevant upper bound (64%)",
+			similarity: 0.64,
+			wantBadge:  "💡 可能相關 64%",
+			wantColorCheck: func(c string) bool {
+				return c != ""
+			},
+		},
+		{
+			name:       "possibly relevant lower bound (50%)",
 			similarity: 0.50,
-			wantBadge:  "✨ 相關 50%",
+			wantBadge:  "💡 可能相關 50%",
 			wantColorCheck: func(c string) bool {
 				return c != ""
 			},
 		},
 		{
-			name:       "low similarity (45%)",
-			similarity: 0.45,
-			wantBadge:  "💡 可能相關 45%",
+			name:       "below threshold - edge case (49%)",
+			similarity: 0.49,
+			wantBadge:  "🔍 參考 49%",
 			wantColorCheck: func(c string) bool {
 				return c != ""
 			},
 		},
 		{
-			name:       "low similarity (40%)",
-			similarity: 0.40,
-			wantBadge:  "💡 可能相關 40%",
-			wantColorCheck: func(c string) bool {
-				return c != ""
-			},
-		},
-		{
-			name:       "very low similarity (35%)",
-			similarity: 0.35,
-			wantBadge:  "🔍 參考 35%",
-			wantColorCheck: func(c string) bool {
-				return c != ""
-			},
-		},
-		{
-			name:       "minimum threshold (30%)",
+			name:       "below threshold - edge case (30%)",
 			similarity: 0.30,
 			wantBadge:  "🔍 參考 30%",
 			wantColorCheck: func(c string) bool {

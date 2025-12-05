@@ -49,7 +49,7 @@ type Fields struct {
 // Each chunk includes the course title as context prefix.
 // This improves retrieval accuracy for short queries against long documents.
 //
-// Strategy (2025 update):
+// Strategy:
 // - 5 separate chunks: ObjectivesCN, ObjectivesEN, OutlineCN, OutlineEN, Schedule
 // - Chinese and English are kept separate for cleaner semantic matching
 // - No truncation needed as Gemini embedding supports 2048 tokens (~8000 chars)

@@ -94,7 +94,7 @@ func (h *HybridSearcher) Search(ctx context.Context, query string, topN int) ([]
 
 	// Handle single-source scenarios
 	if !bm25Enabled || len(bm25Results) == 0 {
-		// Vector only
+		// Vector only - vector results already have true similarity scores
 		if len(vectorResults) > topN {
 			vectorResults = vectorResults[:topN]
 		}
@@ -103,24 +103,22 @@ func (h *HybridSearcher) Search(ctx context.Context, query string, topN int) ([]
 
 	if !vectorEnabled || len(vectorResults) == 0 {
 		// BM25 only - convert to SearchResult format
-		results := make([]SearchResult, 0, len(bm25Results))
+		// BM25 has no similarity concept, use rank-based confidence
+		results := make([]SearchResult, 0, min(len(bm25Results), topN))
 		for _, r := range bm25Results {
 			if len(results) >= topN {
 				break
 			}
-			// Normalize BM25 score to 0-1 range (approximate)
-			// BM25 scores can be quite variable, so we use rank-based normalization
-			similarity := float32(1.0 - float64(r.Rank-1)/float64(len(bm25Results)))
-			if similarity < 0.3 {
-				similarity = 0.3 // Minimum threshold for display
-			}
+			// Rank-based confidence: top ranks get higher scores
+			// rank 1 → ~0.95, rank 5 → ~0.80, rank 10 → ~0.67
+			confidence := computeBM25Confidence(r.Rank)
 			results = append(results, SearchResult{
 				UID:        r.UID,
 				Title:      r.Title,
 				Teachers:   r.Teachers,
 				Year:       r.Year,
 				Term:       r.Term,
-				Similarity: similarity,
+				Similarity: confidence,
 			})
 		}
 		return results, nil
@@ -138,6 +136,27 @@ func (h *HybridSearcher) Search(ctx context.Context, query string, topN int) ([]
 	}).Debug("Hybrid search completed")
 
 	return ToSearchResults(hybridResults), nil
+}
+
+// computeBM25Confidence calculates confidence score for BM25-only results.
+//
+// BM25 scores are unbounded and query-dependent, so they cannot be
+// converted to a meaningful "similarity" measure. Instead, we use
+// rank position as a proxy for relevance confidence.
+//
+// Formula: 1 / (1 + 0.05 * rank)
+// - rank 1 → 0.95
+// - rank 5 → 0.80
+// - rank 10 → 0.67
+// - rank 20 → 0.50
+//
+// This gives users a reasonable confidence indicator without
+// falsely implying semantic similarity.
+func computeBM25Confidence(rank int) float32 {
+	if rank <= 0 {
+		return 0
+	}
+	return float32(1.0 / (1.0 + 0.05*float64(rank)))
 }
 
 // Initialize initializes both BM25 and vector indexes with syllabi data
