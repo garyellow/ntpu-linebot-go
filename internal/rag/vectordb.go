@@ -374,10 +374,15 @@ func (v *VectorDB) Search(ctx context.Context, query string, nResults int) ([]Se
 	// 1. Results >= 80% similarity: always displayed (high relevance)
 	// 2. Results >= 50% similarity: pad to next multiple of 10
 	// 3. Results < 50% similarity: already filtered out above
+	//
+	// Since searchResults is sorted descending by similarity,
+	// we can break early once we hit a result below threshold.
 	highRelevanceCount := 0
 	for _, sr := range searchResults {
 		if sr.Similarity >= HighRelevanceThreshold {
 			highRelevanceCount++
+		} else {
+			break // Results are sorted; remaining are all below threshold
 		}
 	}
 
@@ -388,13 +393,10 @@ func (v *VectorDB) Search(ctx context.Context, query string, nResults int) ([]Se
 	if highRelevanceCount > 0 {
 		// All high relevance results + pad to multiple of 10
 		finalCount = ((highRelevanceCount + 9) / 10) * 10
-		// Don't exceed available results (all >= MinSimilarityThreshold)
+		// Cap at available results (note: highRelevanceCount <= len(searchResults)
+		// by definition, so this cap still ensures all high relevance results are included)
 		if finalCount > len(searchResults) {
 			finalCount = len(searchResults)
-		}
-		// Ensure at least the high relevance count
-		if finalCount < highRelevanceCount {
-			finalCount = highRelevanceCount
 		}
 		// Don't exceed max limit
 		if finalCount > MaxSearchResults {
