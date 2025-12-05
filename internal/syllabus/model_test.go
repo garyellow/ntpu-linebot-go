@@ -296,7 +296,7 @@ func TestFields_ChunksForEmbedding(t *testing.T) {
 }
 
 func TestFields_ChunksForEmbedding_FullContent(t *testing.T) {
-	// Create a very long schedule - should NOT be truncated (2025 best practice)
+	// Create a very long schedule - should NOT be truncated
 	longSchedule := ""
 	for i := 0; i < 100; i++ {
 		longSchedule += "第" + string(rune('0'+i%10)) + "週：課程內容說明與實作練習\n"

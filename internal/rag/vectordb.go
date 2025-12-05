@@ -26,22 +26,22 @@ const (
 	DefaultSearchResults = 10
 
 	// MaxSearchResults is the maximum number of results for semantic search
-	// With the new 10-multiple logic, we may return more than this
 	MaxSearchResults = 100
 
-	// MinSimilarityThreshold is the minimum cosine similarity score to include a result
-	// Results below this threshold are considered not relevant enough
-	// Range: 0.0 to 1.0 (cosine similarity)
+	// MinSimilarityThreshold is the minimum vector similarity to include a result.
+	// This applies to VECTOR SEARCH ONLY, where cosine similarity is a true
+	// measure of semantic closeness (range 0-1).
 	//
-	// Note: We use asymmetric semantic search (short query vs chunked document)
-	// With chunking, similarity scores should be higher than whole-document embedding
-	// 0.3 filters out low-quality matches while keeping reasonably relevant results
-	MinSimilarityThreshold float32 = 0.3
+	// For hybrid search, this threshold is applied to the vector component,
+	// while BM25 results use rank-based confidence instead.
+	//
+	// 0.5 balances precision and recall for vector search
+	MinSimilarityThreshold float32 = 0.5
 
-	// HighRelevanceThreshold is the similarity score threshold for highly relevant results
-	// Results with similarity >= 0.7 (70%) are considered highly relevant
-	// All highly relevant results are returned, then padded to next multiple of 10
-	HighRelevanceThreshold float32 = 0.7
+	// HighRelevanceThreshold is the similarity threshold for highly relevant results.
+	// Results with vector similarity >= 80% are considered highly relevant.
+	// Used for padding results to multiples of 10 in the UI.
+	HighRelevanceThreshold float32 = 0.8
 )
 
 // VectorDB wraps chromem-go database for course syllabus semantic search
@@ -62,7 +62,7 @@ type SearchResult struct {
 	Year       int      // Academic year
 	Term       int      // Semester
 	Content    string   // Syllabus content
-	Similarity float32  // Cosine similarity score (0-1)
+	Similarity float32  // Relevance score (0-1): cosine similarity for vector search, confidence for hybrid search
 }
 
 // NewVectorDB creates a new vector database for syllabus search
@@ -264,7 +264,7 @@ func (v *VectorDB) addSyllabiInternal(ctx context.Context, syllabi []*storage.Sy
 // Search performs semantic search for courses matching the query.
 //
 // The nResults parameter serves as a fallback count when no highly relevant results exist.
-// When highly relevant results (>= 70% similarity) are found, they take priority:
+// When highly relevant results (>= 80% similarity) are found, they take priority:
 //
 //   - If highRelevanceCount > 0: Returns ceil(highRelevanceCount / 10) * 10 results
 //     (e.g., 3 high relevance → 10, 13 high relevance → 20)
@@ -370,33 +370,33 @@ func (v *VectorDB) Search(ctx context.Context, query string, nResults int) ([]Se
 		return searchResults[i].Similarity > searchResults[j].Similarity
 	})
 
-	// Apply the new relevance-based logic:
-	// 1. Count highly relevant results (>= 70% similarity)
-	// 2. All highly relevant results are always included
-	// 3. Pad to next multiple of 10 (min 10 results)
+	// Apply relevance-based result selection:
+	// 1. Results >= 80% similarity: always displayed (high relevance)
+	// 2. Results >= 50% similarity: pad to next multiple of 10
+	// 3. Results < 50% similarity: already filtered out above
 	highRelevanceCount := 0
 	for _, sr := range searchResults {
 		if sr.Similarity >= HighRelevanceThreshold {
 			highRelevanceCount++
-		} else {
-			break // Since sorted, no more high relevance after this
 		}
 	}
 
-	// Calculate final result count
+	// Calculate final result count based on relevance tiers
+	// All results at this point are >= MinSimilarityThreshold
 	finalCount := nResults // Default to requested count
 
 	if highRelevanceCount > 0 {
-		// Pad to next multiple of 10
+		// All high relevance results + pad to multiple of 10
 		finalCount = ((highRelevanceCount + 9) / 10) * 10
-		// Ensure at least 10 results
-		if finalCount < 10 {
-			finalCount = 10
-		}
-		// Don't exceed available results or max limit
+		// Don't exceed available results (all >= MinSimilarityThreshold)
 		if finalCount > len(searchResults) {
 			finalCount = len(searchResults)
 		}
+		// Ensure at least the high relevance count
+		if finalCount < highRelevanceCount {
+			finalCount = highRelevanceCount
+		}
+		// Don't exceed max limit
 		if finalCount > MaxSearchResults {
 			finalCount = MaxSearchResults
 		}

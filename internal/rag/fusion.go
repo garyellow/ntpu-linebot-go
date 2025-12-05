@@ -144,28 +144,38 @@ func FuseRRFWithDefaults(bm25Results []BM25Result, vectorResults []SearchResult,
 	return FuseRRF(bm25Results, vectorResults, DefaultBM25Weight, topN)
 }
 
-// ToSearchResults converts HybridResults to SearchResults for compatibility
-// Uses RRF score as a normalized similarity (scaled to 0-1 range approximately)
+// ToSearchResults converts HybridResults to SearchResults for compatibility.
+//
+// RRF-based confidence scoring:
+//
+// Key insight: BM25 scores are unbounded and not comparable to vector similarity.
+// RRF deliberately ignores raw scores and only uses rankings.
+// Therefore, we derive a "confidence" score from the RRF score itself,
+// NOT from trying to normalize/combine BM25 and vector scores.
+//
+// The confidence score represents "how strongly this result was endorsed
+// by both retrieval methods" rather than a true similarity measure.
+//
+// Confidence calculation:
+//   - Normalize RRF score relative to top result (0-1 range)
+//   - Apply source bonus: results found by BOTH methods get a boost
+//   - Vector similarity acts as a tiebreaker when available
+//
+// This avoids the conceptual error of treating BM25 scores as similarities.
 func ToSearchResults(hybridResults []HybridResult) []SearchResult {
 	if len(hybridResults) == 0 {
 		return nil
 	}
 
-	// Find max RRF score for normalization
-	maxScore := hybridResults[0].RRFScore
+	// RRF scores are already rank-based, normalize to 0-1 using max score
+	maxRRFScore := hybridResults[0].RRFScore
+	if maxRRFScore <= 0 {
+		maxRRFScore = 1 // Prevent division by zero
+	}
 
 	results := make([]SearchResult, len(hybridResults))
 	for i, hr := range hybridResults {
-		// Normalize RRF score to 0-1 range
-		// Use original vector similarity if available, otherwise scale RRF
-		var similarity float32
-		if hr.VectorSim > 0 {
-			// Prefer actual vector similarity for display
-			similarity = hr.VectorSim
-		} else if maxScore > 0 {
-			// Scale RRF score to approximate similarity
-			similarity = float32(hr.RRFScore / maxScore)
-		}
+		confidence := computeConfidence(hr, maxRRFScore)
 
 		results[i] = SearchResult{
 			UID:        hr.UID,
@@ -174,9 +184,63 @@ func ToSearchResults(hybridResults []HybridResult) []SearchResult {
 			Year:       hr.Year,
 			Term:       hr.Term,
 			Content:    hr.Content,
-			Similarity: similarity,
+			Similarity: confidence,
 		}
 	}
 
 	return results
+}
+
+// computeConfidence calculates a confidence score for hybrid search results.
+//
+// - RRF score reflects ranking consensus, not semantic similarity
+// - We convert RRF to a 0-1 "confidence" scale for UX purposes
+// - Results appearing in BOTH sources get higher confidence
+// - Vector similarity provides additional signal when available
+//
+// This is conceptually different from "similarity" - it represents
+// "retrieval confidence" rather than "semantic closeness".
+func computeConfidence(hr HybridResult, maxRRFScore float64) float32 {
+	hasBM25 := hr.BM25Rank > 0
+	hasVector := hr.VectorRank > 0
+
+	// Base confidence from normalized RRF score
+	// RRF scores typically range from 0 to ~0.03, normalize to 0-1
+	baseConfidence := float32(hr.RRFScore / maxRRFScore)
+
+	switch {
+	case hasBM25 && hasVector:
+		// Both sources agree - highest confidence
+		// Use vector similarity to refine, as it's the only true similarity measure
+		// Formula: 70% RRF-based + 30% vector similarity
+		combined := 0.7*baseConfidence + 0.3*hr.VectorSim
+		// Boost for appearing in both (up to 10% bonus for lower scores)
+		boost := 0.1 * (1.0 - combined)
+		return clampSimilarity(combined + float32(boost))
+
+	case hasVector:
+		// Vector only - use vector similarity directly (true similarity)
+		// But weight by RRF position
+		return clampSimilarity(0.4*baseConfidence + 0.6*hr.VectorSim)
+
+	case hasBM25:
+		// BM25 only - use RRF confidence since BM25 has no similarity concept
+		// Apply rank-based decay: rank 1 → 0.9, rank 10 → 0.5
+		rankDecay := float32(1.0 / (1.0 + 0.05*float64(hr.BM25Rank)))
+		return clampSimilarity(0.5*baseConfidence + 0.5*rankDecay)
+
+	default:
+		return baseConfidence
+	}
+}
+
+// clampSimilarity ensures similarity is within valid range [0, 1]
+func clampSimilarity(s float32) float32 {
+	if s < 0 {
+		return 0
+	}
+	if s > 1 {
+		return 1
+	}
+	return s
 }

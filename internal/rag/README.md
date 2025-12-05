@@ -44,6 +44,42 @@ Hybrid Search Flow:
 - k = 60 (標準值，平衡頂部與長尾結果)
 - rank_i = 該結果在各搜尋方法中的排名
 
+## Confidence 計算
+
+### 核心概念
+
+**BM25 沒有「相似度」** - BM25 輸出的是無界分數 (0 到 100+)，不同查詢間不可比較
+
+**Vector 有「相似度」** - Cosine similarity 在 0-1 範圍，是真正的語意相似度
+
+**RRF 只看排名** - 這是 RRF 的優勢，它將不可比較的分數轉換為可比較的排名
+
+### Confidence 公式
+
+我們輸出的是「信心分數」(Confidence) 而非「相似度」(Similarity)，代表「檢索系統對此結果的信心程度」：
+
+| 情境 | 計算方式 | 說明 |
+|------|----------|------|
+| **兩者皆有** | `0.7×RRF + 0.3×Vector + boost` | RRF 共識 + Vector 語意 + 雙來源獎勵 |
+| **僅 Vector** | `0.4×RRF + 0.6×Vector` | 以 Vector 相似度為主 |
+| **僅 BM25** | `0.5×RRF + 0.5×rankDecay` | 純排名信心，無相似度概念 |
+
+**設計原則**:
+- 同時出現在兩個來源的結果獲得最高信心
+- Vector 相似度是唯一真正的語意相似度，用於微調
+- BM25-only 結果使用排名衰減，不假裝有相似度
+
+## 結果選擇邏輯
+
+| 門檻 | 處理方式 | 適用對象 |
+|------|----------|----------|
+| ≥ 80% | 🎯 高度相關 | 高信心結果，必定展示 |
+| 65-79% | ✨ 相關 | 良好匹配 |
+| 50-64% | 💡 可能相關 | 符合最低門檻 |
+| < 50% | 🔍 參考 | 過濾掉（僅用於邊緣情況）|
+
+**注意**: 門檻僅適用於包含 Vector 相似度的結果。純 BM25 結果使用排名限制，不適用相似度門檻。
+
 ## Chunking 策略
 
 **解決方案**: 按語意欄位分段，中英文分開
@@ -56,7 +92,7 @@ Hybrid Search Flow:
 | `{UID}_outline_en` | 【課程名稱】Course Outline: {EN} | 匹配英文主題 |
 | `{UID}_schedule` | 【課程名稱】教學進度：... | 匹配週次/進度查詢 |
 
-**設計原則** (2025 RAG 最佳實踐):
+**設計原則**:
 - 中英文分開建立獨立 chunk，提升語意匹配清晰度
 - Gemini embedding 支援 2048 tokens (~8000 字元)
 - 課程名稱前綴提供上下文，改善短查詢的匹配
@@ -68,8 +104,8 @@ Hybrid Search Flow:
 | `RRFConstant` | 60 | RRF 公式常數 k |
 | `DefaultBM25Weight` | 0.4 | BM25 預設權重 (40%) |
 | `DefaultVectorWeight` | 0.6 | Vector 預設權重 (60%) |
-| `MinSimilarityThreshold` | 0.3 | 最低相似度門檻 (30%) |
-| `HighRelevanceThreshold` | 0.7 | 高度相關門檻 (70%) |
+| `MinSimilarityThreshold` | 0.5 | 最低相似度門檻 (50%) |
+| `HighRelevanceThreshold` | 0.8 | 高度相關門檻 (80%) |
 
 ## 使用
 

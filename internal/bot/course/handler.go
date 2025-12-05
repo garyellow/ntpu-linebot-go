@@ -1323,18 +1323,29 @@ func (h *Handler) buildSemanticCourseBubble(course storage.Course, similarity fl
 	return bubble
 }
 
-// getSimilarityBadge returns a user-friendly badge text and color based on similarity score
-// Combines descriptive labels with percentage for transparency
+// getSimilarityBadge returns a user-friendly badge text and color based on confidence score.
+//
+// This displays "confidence" (how sure the system is about relevance)
+// rather than "similarity" (semantic closeness). The values come from RRF fusion
+// for hybrid search, where BM25 has no similarity concept.
+//
+// Thresholds aligned with rag.MinSimilarityThreshold (0.5) and rag.HighRelevanceThreshold (0.8):
+//   - >= 80%: High relevance (both sources agree or high vector similarity)
+//   - 65-79%: Relevant (good match)
+//   - 50-64%: Possibly relevant (meets minimum threshold)
+//   - < 50%: Should not appear (filtered by search layer)
 func getSimilarityBadge(similarity float32) (string, string) {
 	percent := int(similarity * 100)
 	switch {
-	case similarity >= 0.70:
+	case similarity >= 0.80:
 		return fmt.Sprintf("🎯 高度相關 %d%%", percent), lineutil.ColorPrimary // LINE Green - high relevance
+	case similarity >= 0.65:
+		return fmt.Sprintf("✨ 相關 %d%%", percent), lineutil.ColorSubtext // Gray - good match
 	case similarity >= 0.50:
-		return fmt.Sprintf("✨ 相關 %d%%", percent), lineutil.ColorSubtext // Gray - medium relevance
-	case similarity >= 0.40:
-		return fmt.Sprintf("💡 可能相關 %d%%", percent), lineutil.ColorLabel // Darker gray - low relevance
+		return fmt.Sprintf("💡 可能相關 %d%%", percent), lineutil.ColorLabel // Darker gray - meets threshold
 	default:
-		return fmt.Sprintf("🔍 參考 %d%%", percent), lineutil.ColorNote // Light gray - very low relevance (threshold: 30%)
+		// Results below 50% should be filtered by the search layer
+		// This case handles edge cases or legacy data
+		return fmt.Sprintf("🔍 參考 %d%%", percent), lineutil.ColorNote // Light gray - below threshold
 	}
 }
