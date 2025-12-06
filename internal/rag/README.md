@@ -16,13 +16,24 @@ Search Flow:
       ↓
   ┌──────────────────────────────────┐
   │ BM25 Search (expanded keywords)  │
-  │ - 中文 Bigram 分詞              │
+  │ - 中文 Unigram 分詞              │
   │ - IDF 加權                       │
   │ - 排名信心分數                   │
   └──────────────────────────────────┘
       ↓
   去重合併 → 排序結果
 ```
+
+### BM25 實作
+
+使用 [iwilltry42/bm25-go](https://github.com/iwilltry42/bm25-go) 外部函式庫：
+
+- **可靠維護者**：由 [k3d-io/k3d](https://github.com/k3d-io/k3d) (⭐6.1k) 維護者維護
+- **已修復 IDF 問題**：解決了常見 Go BM25 庫的負 IDF 值問題
+- **BM25Okapi 參數**：k1=1.5, b=0.75（標準值）
+- **中文分詞**：CJK 字元使用 Unigram（單字元），非 CJK 保持完整詞彙
+- **大小寫不敏感**：所有 token 轉為小寫
+- **線程安全**：使用 `sync.RWMutex` 保護索引操作
 
 ## 為什麼不用 Embedding？
 
@@ -40,7 +51,7 @@ Search Flow:
 
 ## 相關度顯示
 
-### 設計原則 (2025 UX 最佳實踐)
+### 設計原則
 
 BM25 輸出無界分數，不同查詢間無法比較。基於 chatbot UX 研究，我們採用**簡化兩層制**：
 
@@ -64,22 +75,36 @@ confidence = 1 / (1 + 0.05 * rank)
 // rank 1: 95%, rank 5: 80%, rank 10: 67%
 ```
 
-## Chunking 策略
+## 索引策略：Single Document (BM25 最佳實踐)
 
-每門課程的教學大綱分成多個 chunks：
+每門課程 = 一個文檔，不做 chunking。
 
-| Chunk | 內容 | 用途 |
-|-------|------|------|
-| `{UID}_objectives_cn` | 【課程名稱】教學目標：{CN} | 匹配中文查詢 |
-| `{UID}_objectives_en` | 【課程名稱】Course Objectives: {EN} | 匹配英文查詢 |
-| `{UID}_outline_cn` | 【課程名稱】內容綱要：{CN} | 匹配主題查詢 |
-| `{UID}_outline_en` | 【Course】Course Outline: {EN} | 匹配英文主題 |
-| `{UID}_schedule` | 【課程名稱】教學進度：... | 匹配週次/進度查詢 |
+### 為什麼不像 Embedding 那樣分 Chunk？
+
+| 考量 | BM25 | Embedding |
+|------|------|-----------|
+| **Token 限制** | ❌ 無限制 | ✅ 512-8192 tokens |
+| **長度正規化** | ✅ b=0.75 參數處理 | ❌ 無（需 chunking） |
+| **IDF 準確度** | ✅ 1課程=1文檔最準確 | N/A |
+| **去重邏輯** | ❌ 不需要 | ✅ 需要（多 chunk 對應同一文檔） |
+| **實作複雜度** | ✅ 簡單 | 較複雜 |
+
+### 文檔格式
+
+```
+【課程名稱】
+教學目標：{ObjectivesCN}
+Course Objectives: {ObjectivesEN}
+內容綱要：{OutlineCN}
+Course Outline: {OutlineEN}
+教學進度：{Schedule}
+```
 
 **設計原則**:
-- 中英文分開建立獨立 chunk，提升匹配清晰度
+- 單一文檔策略：每門課程合併所有欄位成一個文檔
+- BM25 長度正規化 (b=0.75) 自動處理不同長度的文檔
 - 課程名稱前綴提供上下文，改善短查詢的匹配
-- 同一課程多個 chunk 只保留最高分結果
+- 無需去重邏輯：1 UID = 1 document
 
 ## 使用
 
@@ -107,11 +132,11 @@ results, _ = bm25Index.SearchCourses(ctx, expanded, 10)
 ## 儲存
 
 - BM25 索引: 記憶體中，每次啟動時從 SQLite 重建
-- Document ID 格式: `{UID}_{chunk_type}`
+- 1 UID = 1 Document（單一文檔策略）
 - 啟動時自動從 syllabi 表載入資料
 
 ## 依賴
 
 - `internal/genai`: Query Expander（可選，需 Gemini API Key）
 - `internal/storage`: Syllabus 資料模型
-- `github.com/crawlab-team/bm25`: BM25 演算法實現
+- `internal/syllabus`: Syllabus 欄位處理與內容生成

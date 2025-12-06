@@ -47,7 +47,7 @@ LINE Webhook → Gin Handler
 
 **Course Module**: Smart semester detection (`semester.go`), UID regex (`(?i)\\d{3,4}[umnp]\\d{4}`), max 40 results, Flex Message carousels
 - **Semantic search**: `找課` keyword triggers BM25 + Query Expansion search using syllabus content (requires `GEMINI_API_KEY` for Query Expansion)
-- **BM25 search**: Keyword-based search with Chinese tokenization (bigram for CJK)
+- **BM25 search**: Keyword-based search with Chinese tokenization (unigram for CJK)
 - **Confidence scoring**: Rank-based confidence (not similarity). Higher rank = higher confidence.
 - **Query expansion**: LLM-based expansion for short queries and technical abbreviations (AWS→雲端運算, AI→人工智慧)
 - **Detached context**: Uses `context.WithoutCancel()` to prevent request context cancellation from aborting API calls
@@ -73,8 +73,11 @@ LINE Webhook → Gin Handler
 - **Syllabi table**: Stores syllabus content + SHA256 hash for incremental updates
 
 **BM25 Index** (`internal/rag/`):
-- In-memory BM25 index (rebuilt on startup from SQLite)
-- Chinese tokenization with bigram for CJK characters
+- Uses [iwilltry42/bm25-go](https://github.com/iwilltry42/bm25-go) (k1=1.5, b=0.75)
+- Maintained by k3d-io/k3d (⭐6.1k) maintainer - reliable and actively fixed
+- In-memory index (rebuilt on startup from SQLite)
+- Chinese tokenization with unigram for CJK characters
+- Single document strategy: 1 course = 1 document (no chunking)
 - Combined with LLM Query Expansion for effective retrieval
 - Optional: Gemini API Key enables Query Expansion
 

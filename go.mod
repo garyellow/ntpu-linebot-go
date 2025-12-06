@@ -5,8 +5,8 @@ go 1.25.5
 require (
 	github.com/PuerkitoBio/goquery v1.11.0
 	github.com/corpix/uarand v0.2.0
-	github.com/crawlab-team/bm25 v0.0.0-20250328025100-5014dda86138
 	github.com/gin-gonic/gin v1.11.0
+	github.com/iwilltry42/bm25-go v0.0.0-20240909111832-a928590cc9da
 	github.com/joho/godotenv v1.5.1
 	github.com/line/line-bot-sdk-go/v8 v8.18.0
 	github.com/prometheus/client_golang v1.23.2

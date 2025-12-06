@@ -1298,7 +1298,7 @@ func (h *Handler) buildSemanticCourseBubble(course storage.Course, rank int) *li
 
 // getRelevanceBadge returns a user-friendly relevance label based on ranking position.
 //
-// Design rationale (2025 best practices):
+// Design rationale:
 //   - No percentages: Users can't compare scores across different queries
 //   - Simple 2-tier system: Reduces cognitive load in chatbot context
 //   - Rank-based: Easier to understand ("top 3" vs abstract percentages)

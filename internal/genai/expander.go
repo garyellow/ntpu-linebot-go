@@ -14,7 +14,7 @@ import (
 
 const (
 	// ExpanderModel is the model used for query expansion
-	ExpanderModel = "gemini-2.0-flash-lite"
+	ExpanderModel = "gemini-2.5-flash-lite"
 
 	// ExpanderTimeout is the timeout for query expansion calls
 	ExpanderTimeout = 8 * time.Second

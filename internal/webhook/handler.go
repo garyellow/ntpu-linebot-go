@@ -523,7 +523,7 @@ func (h *Handler) handleFollowEvent(_ webhook.FollowEvent) ([]messaging_api.Mess
 }
 
 // showLoadingAnimation shows a loading circle animation to inform users
-// the bot is processing their request. This is a LINE 2024 best practice.
+// the bot is processing their request. This is a LINE best practice.
 //
 // Important notes:
 //   - Only works for 1-on-1 chats (personal chats); not supported for groups/rooms
