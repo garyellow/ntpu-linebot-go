@@ -90,11 +90,17 @@ return handler.HandleMessage(ctx, rawText)
   - 歷史課程查詢（`課程 {年度} {關鍵字}`）
   - 智慧搜尋（BM25 + Query Expansion 智慧匹配，需設定 `GEMINI_API_KEY` 以啟用 Query Expansion）
 - **搜尋策略**：
-  - 關鍵字：SQL LIKE (title, teachers) + 模糊 ContainsAllRunes (title, teachers)
-  - 語意：BM25 索引搜尋 + LLM Query Expansion
-- **Fallback 策略**：關鍵字搜尋無結果時，自動嘗試 BM25 智慧搜尋（需啟用 BM25Index）
+  - 精確搜尋（課程）：SQL LIKE (title, teachers) + 模糊 ContainsAllRunes (title, teachers)
+  - 智慧搜尋（找課）：BM25 索引搜尋 + LLM Query Expansion
+- **Fallback 策略**：精確搜尋無結果時，自動嘗試 BM25 智慧搜尋（需啟用 BM25Index）
 - **Postback 前綴**：`course:`
 - **Sender 名稱**：課程小幫手
+
+**使用者指引**：
+| 方式 | 關鍵字 | 適用情境 | 範例 |
+|------|--------|----------|------|
+| 🔍 精確搜尋 | `課程`、`老師` | 知道課名或教師名 | `課程 微積分`、`課程 王小明` |
+| 🔮 智慧搜尋 | `找課` | 描述想學的內容 | `找課 想學資料分析` |
 
 ## 共用工具 (utils.go)
 

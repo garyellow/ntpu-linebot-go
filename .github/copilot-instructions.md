@@ -46,12 +46,14 @@ LINE Webhook → Gin Handler
 **ID Module**: Year query range (95-112, name search 101-112), department selection flow, student search (max 500 results), Flex Message cards
 
 **Course Module**: Smart semester detection (`semester.go`), UID regex (`(?i)\\d{3,4}[umnp]\\d{4}`), max 40 results, Flex Message carousels
+- **Precise search**: `課程` keyword triggers SQL LIKE + fuzzy search on course title and teachers
 - **Smart search**: `找課` keyword triggers BM25 + Query Expansion search using syllabus content (requires `GEMINI_API_KEY` for Query Expansion)
 - **BM25 search**: Keyword-based search with Chinese tokenization (unigram for CJK)
 - **Confidence scoring**: Rank-based confidence (not similarity). Higher rank = higher confidence.
 - **Query expansion**: LLM-based expansion for short queries and technical abbreviations (AWS→雲端運算, AI→人工智慧)
 - **Detached context**: Uses `context.WithoutCancel()` to prevent request context cancellation from aborting API calls
-- **Fallback**: Keyword search → BM25 smart search (when no results and BM25Index enabled)
+- **Fallback**: Precise search → BM25 smart search (when no results and BM25Index enabled)
+- **UX terminology**: Uses "精確搜尋" (precise) for keyword search, "智慧搜尋" (smart) for BM25 search
 
 **Contact Module**: Emergency phones (hardcoded), multilingual keywords, organization/individual contacts, Flex Message cards
 - **SQL LIKE fields**: name, title (fast path)

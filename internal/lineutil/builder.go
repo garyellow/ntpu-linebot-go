@@ -468,9 +468,15 @@ func QuickReplyRetryAction(retryText string) QuickReplyItem {
 	return QuickReplyItem{Action: NewMessageAction("🔄 重試", retryText)}
 }
 
-// QuickReplySemanticSearchAction returns a "找課" semantic search quick reply item
-func QuickReplySemanticSearchAction() QuickReplyItem {
+// QuickReplySmartSearchAction returns a "找課" smart search quick reply item
+func QuickReplySmartSearchAction() QuickReplyItem {
 	return QuickReplyItem{Action: NewMessageAction("🔮 找課", "找課")}
+}
+
+// QuickReplySemanticSearchAction is an alias for QuickReplySmartSearchAction for backward compatibility
+// Deprecated: Use QuickReplySmartSearchAction instead
+func QuickReplySemanticSearchAction() QuickReplyItem {
+	return QuickReplySmartSearchAction()
 }
 
 // ================================================
