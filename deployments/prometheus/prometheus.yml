@@ -1,4 +1,4 @@
-# Prometheus Configuration for NTPU LINE Bot (2025)
+# Prometheus Configuration for NTPU LINE Bot
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
