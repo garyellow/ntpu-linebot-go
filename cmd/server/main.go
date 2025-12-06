@@ -112,6 +112,7 @@ func main() {
 		cfg.WebhookTimeout,
 		cfg.UserRateLimitTokens,
 		cfg.UserRateLimitRefillRate,
+		cfg.LLMRateLimitPerHour, // LLM-specific rate limiting for NLU and query expansion
 	)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to create webhook handler")
@@ -135,6 +136,15 @@ func main() {
 			log.Info("Query expander enabled for smart search")
 		}
 	}
+
+	// Set LLM rate limiter for course handler's query expansion
+	// This enables rate limiting for both NLU-routed and keyword-triggered smart searches
+	// The limiter is shared with NLU intent parsing to enforce a unified quota
+	webhookHandler.GetCourseHandler().SetLLMRateLimiter(
+		webhookHandler.GetLLMRateLimiter(),
+		cfg.LLMRateLimitPerHour,
+	)
+	log.Info("LLM rate limiter enabled for course query expansion")
 
 	// Create NLU intent parser (optional - requires Gemini API key)
 	var intentParser genai.IntentParser

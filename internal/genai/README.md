@@ -61,7 +61,7 @@ if err != nil {
 
 ### 技術規格
 
-- 模型: `gemini-2.5-flash-lite`
+- 模型: `gemma-3-27b-it`
 - 超時: 10 秒
 - Temperature: 0.1 (低變異性)
 - Max Tokens: 256
@@ -94,7 +94,7 @@ if err != nil {
 
 ### 技術規格
 
-- 模型: `gemini-2.5-flash-lite`
+- 模型: `gemma-3-27b-it`
 - 超時: 8 秒
 - Temperature: 0.3 (適度變異性)
 - Max Tokens: 200
@@ -131,8 +131,13 @@ handler.SetQueryExpander(expander)
 
 ## 配置
 
-需設定環境變數 `GEMINI_API_KEY`。若未設定：
-- NLU 意圖解析停用（fallback 到關鍵字匹配）
-- 查詢擴展停用（使用原始查詢進行 BM25 搜尋）
+### 環境變數
 
-取得 API Key: [Google AI Studio](https://aistudio.google.com/apikey)
+**`GEMINI_API_KEY`** (必填)：
+- 若未設定：NLU 意圖解析停用（fallback 到關鍵字匹配）、查詢擴展停用
+- 取得方式: [Google AI Studio](https://aistudio.google.com/apikey)
+
+**`LLM_RATE_LIMIT_PER_HOUR`** (可選，預設 50)：
+- 每位使用者每小時的 LLM API 請求數上限
+- 適用於 NLU 意圖解析 (IntentParser) 和課程智慧搜尋的 Query Expansion (QueryExpander)
+- 超過限制時顯示友善提示並記錄 `ntpu_rate_limiter_dropped_total{limiter="llm"}` 指標

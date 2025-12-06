@@ -17,6 +17,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
+	"github.com/garyellow/ntpu-linebot-go/internal/ratelimit"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
@@ -24,6 +25,34 @@ import (
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 	"github.com/line/line-bot-sdk-go/v8/linebot/webhook"
 )
+
+// contextKey is a private type for context keys to avoid collisions.
+// Using a private type ensures our context keys don't conflict with other packages.
+type contextKey string
+
+const (
+	// chatIDContextKey holds the chat ID (user/group/room ID) for the current request.
+	// This enables request-scoped data to flow through the call stack without
+	// changing function signatures, following Go's context best practices.
+	chatIDContextKey contextKey = "chatID"
+)
+
+// WithChatID returns a new context with the chat ID embedded.
+// This allows bot modules to access the chat ID for features like rate limiting
+// without tight coupling through function parameters.
+func WithChatID(ctx context.Context, chatID string) context.Context {
+	return context.WithValue(ctx, chatIDContextKey, chatID)
+}
+
+// GetChatID extracts the chat ID from context.
+// Returns empty string if chat ID is not present or has wrong type.
+// This is safe to call from any layer that receives the context.
+func GetChatID(ctx context.Context) string {
+	if chatID, ok := ctx.Value(chatIDContextKey).(string); ok {
+		return chatID
+	}
+	return ""
+}
 
 // LINE API limits and constraints
 const (
@@ -49,21 +78,23 @@ type Handler struct {
 	idHandler      *id.Handler
 	contactHandler *contact.Handler
 	courseHandler  *course.Handler
-	rateLimiter    *RateLimiter     // Global rate limiter for API calls
-	userLimiter    *UserRateLimiter // Per-user rate limiter
-	stickerManager *sticker.Manager // Sticker manager for avatar URLs
-	webhookTimeout time.Duration    // Timeout for bot processing
+	rateLimiter    *RateLimiter              // Global rate limiter for API calls
+	userLimiter    *UserRateLimiter          // Per-user rate limiter
+	llmLimiter     *ratelimit.LLMRateLimiter // LLM-specific rate limiter (NLU + query expansion)
+	stickerManager *sticker.Manager          // Sticker manager for avatar URLs
+	webhookTimeout time.Duration             // Timeout for bot processing
 
 	// Rate limit configuration
 	userRateLimitTokens     float64
 	userRateLimitRefillRate float64
+	llmRateLimitPerHour     float64 // LLM requests per user per hour
 
 	// NLU intent parser (optional - requires Gemini API key)
 	intentParser genai.IntentParser
 }
 
 // NewHandler creates a new webhook handler
-func NewHandler(channelSecret, channelToken string, db *storage.DB, scraperClient *scraper.Client, m *metrics.Metrics, log *logger.Logger, stickerManager *sticker.Manager, webhookTimeout time.Duration, userRateLimitTokens, userRateLimitRefillRate float64) (*Handler, error) {
+func NewHandler(channelSecret, channelToken string, db *storage.DB, scraperClient *scraper.Client, m *metrics.Metrics, log *logger.Logger, stickerManager *sticker.Manager, webhookTimeout time.Duration, userRateLimitTokens, userRateLimitRefillRate, llmRateLimitPerHour float64) (*Handler, error) {
 	// Create messaging API client
 	client, err := messaging_api.NewMessagingApiAPI(channelToken)
 	if err != nil {
@@ -79,9 +110,11 @@ func NewHandler(channelSecret, channelToken string, db *storage.DB, scraperClien
 	// LINE API rate limits: https://developers.line.biz/en/reference/messaging-api/#rate-limits
 	// Global: 100 requests per second (we use 80 to be safe)
 	globalRateLimiter := NewRateLimiter(80.0, 80.0)
-
 	// Per-user rate limiter with metrics support
 	userRateLimiter := NewUserRateLimiter(5*time.Minute, m)
+
+	// LLM-specific rate limiter (per hour, with cleanup every 5 minutes)
+	llmRateLimiter := ratelimit.NewLLMRateLimiter(llmRateLimitPerHour, 5*time.Minute, m)
 
 	return &Handler{
 		channelSecret:           channelSecret,
@@ -93,10 +126,12 @@ func NewHandler(channelSecret, channelToken string, db *storage.DB, scraperClien
 		courseHandler:           courseHandler,
 		rateLimiter:             globalRateLimiter,
 		userLimiter:             userRateLimiter,
+		llmLimiter:              llmRateLimiter,
 		stickerManager:          stickerManager,
 		webhookTimeout:          webhookTimeout,
 		userRateLimitTokens:     userRateLimitTokens,
 		userRateLimitRefillRate: userRateLimitRefillRate,
+		llmRateLimitPerHour:     llmRateLimitPerHour,
 	}, nil
 }
 
@@ -106,12 +141,22 @@ func (h *Handler) Stop() {
 	if h.userLimiter != nil {
 		h.userLimiter.Stop()
 	}
+	if h.llmLimiter != nil {
+		h.llmLimiter.Stop()
+	}
 }
 
 // GetCourseHandler returns the course handler for external configuration
-// Used to set BM25Index for smart search from main.go
+// Used to set BM25Index and QueryExpander for smart search from main.go
 func (h *Handler) GetCourseHandler() *course.Handler {
 	return h.courseHandler
+}
+
+// GetLLMRateLimiter returns the LLM rate limiter for sharing with bot modules.
+// This allows course handler to use the same limiter for query expansion,
+// ensuring unified LLM quota management across all AI features.
+func (h *Handler) GetLLMRateLimiter() *ratelimit.LLMRateLimiter {
+	return h.llmLimiter
 }
 
 // SetIntentParser sets the NLU intent parser for the handler.
@@ -289,6 +334,64 @@ func (h *Handler) isPersonalChat(source webhook.SourceInterface) bool {
 	return ok
 }
 
+// checkLLMRateLimit checks if the user has exceeded their LLM API rate limit.
+// Returns (allowed bool, rateLimitMessage []MessageInterface).
+// For personal chats, returns a detailed message showing quota and reset time.
+// For group/room chats, returns nil to silently ignore (avoid spamming groups).
+func (h *Handler) checkLLMRateLimit(source webhook.SourceInterface, chatID string) (bool, []messaging_api.MessageInterface) {
+	if chatID == "" || h.llmLimiter == nil {
+		return true, nil // No chat ID or limiter not initialized, allow by default
+	}
+
+	if h.llmLimiter.Allow(chatID, h.llmRateLimitPerHour) {
+		return true, nil // Rate limit not exceeded
+	}
+
+	// Rate limit exceeded - log it
+	logChatID := chatID
+	if len(chatID) > 8 {
+		logChatID = chatID[:8] + "..."
+	}
+	h.logger.WithField("chat_id", logChatID).Warn("LLM rate limit exceeded")
+
+	// For personal chats, return a detailed message
+	if h.isPersonalChat(source) {
+		available := h.llmLimiter.GetAvailable(chatID, h.llmRateLimitPerHour)
+		// Calculate approximate reset time in minutes
+		// Formula: (maxPerHour - available) tokens * 3600 seconds/hour / maxPerHour / 60 seconds/minute
+		resetMinutes := int((h.llmRateLimitPerHour - available) * 3600 / h.llmRateLimitPerHour / 60)
+		if resetMinutes < 1 {
+			resetMinutes = 1 // At least 1 minute
+		}
+
+		sender := lineutil.GetSender("系統小幫手", h.stickerManager)
+		message := fmt.Sprintf(
+			"⏳ AI 功能使用次數已達上限\n\n"+
+				"📊 本小時配額：%.0f 次（已用完）\n"+
+				"⏰ 約 %d 分鐘後重置\n\n"+
+				"💡 您仍可使用：\n"+
+				"• 關鍵字查詢：課程 微積分\n"+
+				"• 課號查詢：1131U0001",
+			h.llmRateLimitPerHour,
+			resetMinutes,
+		)
+
+		// Add Quick Reply actions to guide user to alternative methods
+		msg := lineutil.NewTextMessageWithConsistentSender(message, sender)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			lineutil.QuickReplyCourseAction(),
+			lineutil.QuickReplyHelpAction(),
+		})
+
+		return false, []messaging_api.MessageInterface{
+			msg,
+		}
+	}
+
+	// For group/room chats, return nil to silently ignore
+	return false, nil
+}
+
 // checkUserRateLimit checks if the user has exceeded their rate limit.
 // Returns (allowed bool, rateLimitMessage []MessageInterface).
 // For personal chats, returns a friendly message when rate limited.
@@ -326,8 +429,13 @@ func (h *Handler) checkUserRateLimit(source webhook.SourceInterface, chatID stri
 
 // handleMessageEvent processes text message events
 func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageEvent) ([]messaging_api.MessageInterface, error) {
-	// Check rate limit early to avoid unnecessary processing
+	// Extract chat ID and inject into context for request-scoped access
+	// This allows downstream handlers (like course module) to access chat ID
+	// for rate limiting without tight coupling through function parameters
 	chatID := h.getChatIDFromSource(event.Source)
+	ctx = WithChatID(ctx, chatID)
+
+	// Check rate limit early to avoid unnecessary processing
 	if allowed, rateLimitMsg := h.checkUserRateLimit(event.Source, chatID); !allowed {
 		return rateLimitMsg, nil
 	}
@@ -711,7 +819,9 @@ func (h *Handler) handleUnmatchedMessage(ctx context.Context, source webhook.Sou
 
 	// Try NLU if available
 	if h.intentParser != nil && h.intentParser.IsEnabled() {
-		return h.handleWithNLU(ctx, sanitizedText)
+		// Extract chatID from context or source
+		chatID := h.getChatIDFromSource(source)
+		return h.handleWithNLU(ctx, sanitizedText, source, chatID)
 	}
 
 	// NLU not available - return help message
@@ -719,7 +829,12 @@ func (h *Handler) handleUnmatchedMessage(ctx context.Context, source webhook.Sou
 }
 
 // handleWithNLU processes the message using NLU intent parsing.
-func (h *Handler) handleWithNLU(ctx context.Context, text string) ([]messaging_api.MessageInterface, error) {
+func (h *Handler) handleWithNLU(ctx context.Context, text string, source webhook.SourceInterface, chatID string) ([]messaging_api.MessageInterface, error) {
+	// Check LLM rate limit before making API call
+	if allowed, rateLimitMsg := h.checkLLMRateLimit(source, chatID); !allowed {
+		return rateLimitMsg, nil
+	}
+
 	start := time.Now()
 
 	result, err := h.intentParser.Parse(ctx, text)

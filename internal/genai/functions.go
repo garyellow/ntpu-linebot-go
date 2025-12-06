@@ -11,13 +11,13 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 		// Course module functions
 		{
 			Name:        "course_search",
-			Description: "搜尋課程或教師。使用者想依課程名稱或教師姓名查詢課程時呼叫此函數。",
+			Description: "【精確搜尋】當使用者提供明確的課程名稱或教師姓名時使用。特徵：使用者已經知道要找什麼課，只是不確定詳細資訊（如時間、教室、學分）。這是快速查詢模式，直接比對課名或教師名。",
 			Parameters: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
 					"keyword": {
 						Type:        genai.TypeString,
-						Description: "課程名稱或教師姓名關鍵字，例如「微積分」、「王小明」、「程式設計」",
+						Description: "課程名稱或教師姓名關鍵字。範例：「微積分」（課程名）、「王小明」（教師名）、「程式設計」（課程名）、「陳教授」（教師名）。注意：這應該是具體名稱，不是抽象描述。",
 					},
 				},
 				Required: []string{"keyword"},
@@ -25,13 +25,13 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 		},
 		{
 			Name:        "course_smart",
-			Description: "用自然語言描述想要的課程類型進行智慧搜尋。適用於使用者不知道確切課程名稱，但能描述想學什麼的情況。注意：若使用者輸入過短（如「AI」、「程式」），請自動擴展為更具體的描述以提高搜尋效果。",
+			Description: "【智慧搜尋】當使用者描述想學的內容或主題時使用。特徵：使用者不確定課程名稱，但能描述學習目標、興趣或需求（如「想學 Python」、「對 AI 有興趣」、「輕鬆過的通識」）。這會使用語意搜尋分析課程大綱內容。注意：此功能消耗 LLM 配額，僅在必要時使用。",
 			Parameters: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
 					"query": {
 						Type:        genai.TypeString,
-						Description: "自然語言描述，若使用者輸入較短（少於5字），請擴展為更完整的描述。例如：「AI」→「人工智慧相關課程」、「程式」→「程式設計入門課程」、「資料」→「資料分析或資料科學相關課程」",
+						Description: "自然語言描述使用者的學習目標或需求。若輸入較短（少於5字），請擴展為完整描述以提高搜尋效果。範例：「AI」→「人工智慧 機器學習 深度學習 neural networks」、「程式」→「程式設計 程式語言 coding programming 軟體開發」、「想學資料分析」→「資料分析 data analysis 統計分析 視覺化」、「輕鬆過的通識」→「通識課程 輕鬆 好過 學分容易」",
 					},
 				},
 				Required: []string{"query"},

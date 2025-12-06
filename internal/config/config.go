@@ -46,6 +46,7 @@ type Config struct {
 	// Rate Limit Configuration
 	UserRateLimitTokens     float64 // Maximum tokens per user (default: 6)
 	UserRateLimitRefillRate float64 // Tokens refill rate per second (default: 1/5, i.e., 1 token per 5 seconds)
+	LLMRateLimitPerHour     float64 // Maximum LLM requests per user per hour (default: 50)
 }
 
 // Load reads configuration from environment variables
@@ -84,6 +85,7 @@ func Load() (*Config, error) {
 		// Rate Limit Configuration
 		UserRateLimitTokens:     getFloatEnv("USER_RATE_LIMIT_TOKENS", 6.0),
 		UserRateLimitRefillRate: getFloatEnv("USER_RATE_LIMIT_REFILL_RATE", 1.0/5.0),
+		LLMRateLimitPerHour:     getFloatEnv("LLM_RATE_LIMIT_PER_HOUR", 50.0),
 	}
 
 	// Validate configuration
@@ -113,6 +115,9 @@ func (c *Config) Validate() error {
 	}
 	if c.UserRateLimitRefillRate <= 0 {
 		return fmt.Errorf("USER_RATE_LIMIT_REFILL_RATE must be positive")
+	}
+	if c.LLMRateLimitPerHour <= 0 {
+		return fmt.Errorf("LLM_RATE_LIMIT_PER_HOUR must be positive")
 	}
 	if c.DataDir == "" {
 		return fmt.Errorf("DATA_DIR is required")

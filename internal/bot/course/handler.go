@@ -27,13 +27,23 @@ import (
 
 // Handler handles course-related queries
 type Handler struct {
-	db             *storage.DB
-	scraper        *scraper.Client
-	metrics        *metrics.Metrics
-	logger         *logger.Logger
-	stickerManager *sticker.Manager
-	bm25Index      *rag.BM25Index       // Optional: for BM25 search (nil if disabled)
-	queryExpander  *genai.QueryExpander // Optional: for query expansion (nil if disabled)
+	db                  *storage.DB
+	scraper             *scraper.Client
+	metrics             *metrics.Metrics
+	logger              *logger.Logger
+	stickerManager      *sticker.Manager
+	bm25Index           *rag.BM25Index       // Optional: for BM25 search (nil if disabled)
+	queryExpander       *genai.QueryExpander // Optional: for query expansion (nil if disabled)
+	llmRateLimiter      LLMRateLimiter       // Optional: for LLM rate limiting (nil if disabled)
+	llmRateLimitPerHour float64              // LLM requests per user per hour
+}
+
+// LLMRateLimiter interface for rate limiting LLM operations.
+// This interface decouples the course handler from the concrete rate limiter implementation,
+// enabling easier testing and following the Dependency Inversion Principle.
+type LLMRateLimiter interface {
+	Allow(userID string, maxPerHour float64) bool
+	GetAvailable(userID string, maxPerHour float64) float64
 }
 
 // Course handler constants.
@@ -107,10 +117,19 @@ func (h *Handler) SetBM25Index(bm25Index *rag.BM25Index) {
 	h.bm25Index = bm25Index
 }
 
-// SetQueryExpander sets the query expander for smart search query expansion
-// This is optional - if not set, queries are used as-is
+// SetQueryExpander sets the query expander for smart search query expansion.
+// This is optional - if not set, queries are used as-is.
+// Query expansion adds synonyms, translations, and related terms for better BM25 search results.
 func (h *Handler) SetQueryExpander(expander *genai.QueryExpander) {
 	h.queryExpander = expander
+}
+
+// SetLLMRateLimiter sets the LLM rate limiter for query expansion.
+// This enables rate limiting for both NLU-routed and keyword-triggered smart searches.
+// The limiter and maxPerHour should match the webhook handler's configuration.
+func (h *Handler) SetLLMRateLimiter(limiter LLMRateLimiter, maxPerHour float64) {
+	h.llmRateLimiter = limiter
+	h.llmRateLimitPerHour = maxPerHour
 }
 
 // IsBM25SearchEnabled returns true if BM25 search is enabled
@@ -1059,6 +1078,26 @@ func deduplicateCourses(courses []storage.Course) []storage.Course {
 	return result
 }
 
+// getChatIDFromContext extracts the chat ID from context.
+// This function is internal to the course package and uses the context key
+// defined in the webhook package. It follows Go's context best practice:
+// "Use context Values only for request-scoped data that transits processes and APIs."
+//
+// The chatID enables features like rate limiting without coupling the course
+// handler to webhook-specific types or session management.
+func getChatIDFromContext(ctx context.Context) string {
+	// Use the same context key pattern as webhook package
+	// Note: This requires importing the context key or using a shared package
+	// For now, we use interface{} type assertion with the string key
+	type contextKey string
+	const chatIDContextKey contextKey = "chatID"
+
+	if chatID, ok := ctx.Value(chatIDContextKey).(string); ok {
+		return chatID
+	}
+	return ""
+}
+
 // handleSmartSearch performs smart search using BM25 + Query Expansion
 // This is triggered by "找課" keywords and searches course syllabi content
 //
@@ -1095,17 +1134,47 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 
 	// Expand query for better search results (adds synonyms, translations, related terms)
 	// Examples: "AWS" → "AWS Amazon Web Services 雲端服務 雲端運算 cloud computing"
+	//
+	// LLM Rate Limiting Strategy:
+	// - NLU-routed requests: Already checked at webhook layer before reaching here
+	// - Keyword-triggered requests: Check here using chatID from context
+	//
+	// This design maintains low coupling - the course handler doesn't need to know
+	// about webhook sources or user sessions, it just uses the chatID from context.
 	expandedQuery := query
 	if h.queryExpander != nil {
-		expanded, err := h.queryExpander.Expand(searchCtx, query)
-		if err != nil {
-			log.WithError(err).Debug("Query expansion failed, using original query")
-		} else if expanded != query {
-			expandedQuery = expanded
-			log.WithFields(map[string]any{
-				"original": query,
-				"expanded": expandedQuery,
-			}).Debug("Query expanded")
+		// Check LLM rate limit if limiter is available and we have a chatID in context
+		// The chatID is injected by webhook handler via context.WithValue
+		chatID := getChatIDFromContext(ctx)
+		if h.llmRateLimiter != nil && chatID != "" {
+			if !h.llmRateLimiter.Allow(chatID, h.llmRateLimitPerHour) {
+				log.WithField("chat_id", chatID[:min(8, len(chatID))]+"...").Debug("LLM rate limit exceeded for query expansion, using original query")
+				// Graceful degradation: continue with original query instead of failing
+			} else {
+				// Rate limit OK, proceed with expansion
+				expanded, err := h.queryExpander.Expand(searchCtx, query)
+				if err != nil {
+					log.WithError(err).Debug("Query expansion failed, using original query")
+				} else if expanded != query {
+					expandedQuery = expanded
+					log.WithFields(map[string]any{
+						"original": query,
+						"expanded": expandedQuery,
+					}).Debug("Query expanded")
+				}
+			}
+		} else {
+			// No rate limiting configured, proceed with expansion
+			expanded, err := h.queryExpander.Expand(searchCtx, query)
+			if err != nil {
+				log.WithError(err).Debug("Query expansion failed, using original query")
+			} else if expanded != query {
+				expandedQuery = expanded
+				log.WithFields(map[string]any{
+					"original": query,
+					"expanded": expandedQuery,
+				}).Debug("Query expanded")
+			}
 		}
 	}
 

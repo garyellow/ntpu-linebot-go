@@ -50,6 +50,7 @@ func setupTestHandler(t *testing.T) *Handler {
 		30*time.Second, // Default webhook timeout for tests
 		6.0,            // User rate limit tokens
 		1.0/5.0,        // User rate limit refill rate (1 token per 5 seconds)
+		50.0,           // LLM rate limit per hour
 	)
 	if err != nil {
 		t.Fatalf("Failed to create handler: %v", err)

@@ -66,8 +66,9 @@ type Metrics struct {
 	// Rate Limiter (USE Method)
 	// Request throttling
 	// ============================================
-	RateLimiterDropped *prometheus.CounterVec
-	RateLimiterUsers   prometheus.Gauge // active user limiters
+	RateLimiterDropped  *prometheus.CounterVec
+	RateLimiterUsers    prometheus.Gauge // active user limiters
+	LLMRateLimiterUsers prometheus.Gauge // active LLM rate limiters
 
 	// ============================================
 	// Background Jobs (Duration only)
@@ -244,6 +245,13 @@ func New(registry *prometheus.Registry) *Metrics {
 			},
 		),
 
+		LLMRateLimiterUsers: promauto.With(registry).NewGauge(
+			prometheus.GaugeOpts{
+				Name: "ntpu_llm_rate_limiter_users",
+				Help: "Current number of tracked LLM rate limiters",
+			},
+		),
+
 		// ============================================
 		// Background Job metrics
 		// ============================================
@@ -342,7 +350,7 @@ func (m *Metrics) SetIndexSize(index string, count int) {
 // ============================================
 
 // RecordRateLimiterDrop records a dropped request.
-// limiter: user, global
+// limiter: user, global, llm
 func (m *Metrics) RecordRateLimiterDrop(limiter string) {
 	m.RateLimiterDropped.WithLabelValues(limiter).Inc()
 }
@@ -350,6 +358,11 @@ func (m *Metrics) RecordRateLimiterDrop(limiter string) {
 // SetRateLimiterUsers sets the current number of active user limiters.
 func (m *Metrics) SetRateLimiterUsers(count int) {
 	m.RateLimiterUsers.Set(float64(count))
+}
+
+// SetLLMRateLimiterUsers sets the current number of active LLM rate limiters.
+func (m *Metrics) SetLLMRateLimiterUsers(count int) {
+	m.LLMRateLimiterUsers.Set(float64(count))
 }
 
 // ============================================
