@@ -473,12 +473,6 @@ func QuickReplySmartSearchAction() QuickReplyItem {
 	return QuickReplyItem{Action: NewMessageAction("🔮 找課", "找課")}
 }
 
-// QuickReplySemanticSearchAction is an alias for QuickReplySmartSearchAction for backward compatibility
-// Deprecated: Use QuickReplySmartSearchAction instead
-func QuickReplySemanticSearchAction() QuickReplyItem {
-	return QuickReplySmartSearchAction()
-}
-
 // ================================================
 // Message Helper Functions
 // ================================================
