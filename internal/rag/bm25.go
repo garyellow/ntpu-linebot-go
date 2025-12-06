@@ -362,8 +362,7 @@ func tokenizeChinese(text string) []string {
 	var tokens []string
 	var currentWord strings.Builder
 
-	runes := []rune(text)
-	for _, r := range runes {
+	for _, r := range text {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) {
 			// Check if this is a CJK character
 			if isCJK(r) {
