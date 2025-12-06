@@ -32,8 +32,7 @@ type Handler struct {
 	metrics        *metrics.Metrics
 	logger         *logger.Logger
 	stickerManager *sticker.Manager
-	vectorDB       *rag.VectorDB        // Optional: for semantic search (nil if disabled)
-	hybridSearcher *rag.HybridSearcher  // Optional: for hybrid search (BM25 + vector)
+	bm25Index      *rag.BM25Index       // Optional: for BM25 search (nil if disabled)
 	queryExpander  *genai.QueryExpander // Optional: for query expansion (nil if disabled)
 }
 
@@ -97,28 +96,15 @@ func NewHandler(db *storage.DB, scraper *scraper.Client, metrics *metrics.Metric
 		metrics:        metrics,
 		logger:         logger,
 		stickerManager: stickerManager,
-		vectorDB:       nil, // Set via SetVectorDB after initialization
-		hybridSearcher: nil, // Set via SetHybridSearcher after initialization
+		bm25Index:      nil, // Set via SetBM25Index after initialization
 		queryExpander:  nil, // Set via SetQueryExpander after initialization
 	}
 }
 
-// SetVectorDB sets the vector database for semantic search.
+// SetBM25Index sets the BM25 index for semantic search.
 // This is optional - if not set, semantic search is disabled.
-//
-// Deprecated: Use SetHybridSearcher for better search quality.
-func (h *Handler) SetVectorDB(vectorDB *rag.VectorDB) {
-	h.vectorDB = vectorDB
-}
-
-// SetHybridSearcher sets the hybrid searcher for combined BM25 + vector search
-// This is optional - if not set, falls back to vector-only search
-func (h *Handler) SetHybridSearcher(searcher *rag.HybridSearcher) {
-	h.hybridSearcher = searcher
-	// Also set vectorDB for backward compatibility
-	if searcher != nil {
-		h.vectorDB = searcher.VectorDB()
-	}
+func (h *Handler) SetBM25Index(bm25Index *rag.BM25Index) {
+	h.bm25Index = bm25Index
 }
 
 // SetQueryExpander sets the query expander for semantic search query expansion
@@ -127,19 +113,15 @@ func (h *Handler) SetQueryExpander(expander *genai.QueryExpander) {
 	h.queryExpander = expander
 }
 
-// IsSemanticSearchEnabled returns true if semantic search is enabled
-func (h *Handler) IsSemanticSearchEnabled() bool {
-	// Check hybrid searcher first, then fallback to vectorDB
-	if h.hybridSearcher != nil && h.hybridSearcher.IsEnabled() {
-		return true
-	}
-	return h.vectorDB != nil && h.vectorDB.IsEnabled()
+// IsBM25SearchEnabled returns true if BM25 search is enabled
+func (h *Handler) IsBM25SearchEnabled() bool {
+	return h.bm25Index != nil && h.bm25Index.IsEnabled()
 }
 
 // Intent names for NLU dispatcher
 const (
 	IntentSearch   = "search"   // Unified course/teacher search
-	IntentSemantic = "semantic" // Semantic search via VectorDB
+	IntentSemantic = "semantic" // Semantic search via BM25 + Query Expansion
 	IntentUID      = "uid"      // Direct course UID lookup
 )
 
@@ -255,7 +237,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			sender := lineutil.GetSender(senderName, h.stickerManager)
 			// Check if semantic search is actually enabled
 			var helpText string
-			if h.vectorDB != nil && h.vectorDB.IsEnabled() {
+			if h.bm25Index != nil && h.bm25Index.IsEnabled() {
 				helpText = "🔮 請輸入想找的課程描述\n\n例如：\n• 找課 想學習資料分析\n• 找課 Python 機器學習\n• 找課 商業管理相關課程\n\n💡 語意搜尋會根據課程大綱內容智慧匹配"
 			} else {
 				helpText = "⚠️ 語意搜尋目前未啟用\n\n請使用「課程 關鍵字」進行搜尋\n例如：課程 微積分、課程 王小明"
@@ -279,7 +261,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			sender := lineutil.GetSender(senderName, h.stickerManager)
 			var helpText string
 			var quickReplyItems []lineutil.QuickReplyItem
-			if h.vectorDB != nil && h.vectorDB.IsEnabled() {
+			if h.bm25Index != nil && h.bm25Index.IsEnabled() {
 				// Semantic search enabled - mention it as an option
 				helpText = "📚 請輸入課程關鍵字\n\n例如：\n• 課 程式設計\n• 課程 微積分\n• 課 王小明（搜尋教師）\n\n🔮 或使用「找課」進行語意搜尋\n• 找課 想學程式設計\n\n💡 也可直接輸入課程編號（如：1131U0001）"
 				quickReplyItems = []lineutil.QuickReplyItem{
@@ -635,14 +617,14 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 		return h.formatCourseListResponse(courses)
 	}
 
-	// Step 4: No keyword results - try semantic search as last resort
-	if h.vectorDB != nil && h.vectorDB.IsEnabled() {
-		log.Infof("No keyword results for %s, trying semantic search...", searchTerm)
+	// Step 4: No keyword results - try BM25 semantic search as last resort
+	if h.bm25Index != nil && h.bm25Index.IsEnabled() {
+		log.Infof("No keyword results for %s, trying BM25 search...", searchTerm)
 
 		// Use detached context to prevent cancellation from request context
 		searchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), config.SemanticSearchTimeout)
 		defer cancel()
-		semanticResults, err := h.vectorDB.Search(searchCtx, searchTerm, 5)
+		semanticResults, err := h.bm25Index.SearchCourses(searchCtx, searchTerm, 5)
 
 		if err == nil && len(semanticResults) > 0 {
 			// Convert semantic results to courses
@@ -668,7 +650,7 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 		"🔍 查無包含「%s」的課程或教師\n\n💡 請確認：\n• 課程名稱或教師姓名是否正確\n• 該課程是否在近兩學年度開設\n• 可嘗試只輸入部分關鍵字（如姓氏）",
 		searchTerm,
 	)
-	if h.vectorDB != nil && h.vectorDB.IsEnabled() {
+	if h.bm25Index != nil && h.bm25Index.IsEnabled() {
 		helpText += "\n\n🔮 試試語意搜尋：「找課 " + searchTerm + "」"
 	}
 
@@ -678,7 +660,7 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 	quickReplyItems := []lineutil.QuickReplyItem{
 		lineutil.QuickReplyCourseAction(),
 	}
-	if h.vectorDB != nil && h.vectorDB.IsEnabled() {
+	if h.bm25Index != nil && h.bm25Index.IsEnabled() {
 		quickReplyItems = append(quickReplyItems,
 			lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("🔮 語意搜尋", "找課 "+searchTerm)},
 		)
@@ -1077,9 +1059,8 @@ func deduplicateCourses(courses []storage.Course) []storage.Course {
 	return result
 }
 
-// handleSemanticSearch performs semantic search using syllabus embeddings
+// handleSemanticSearch performs semantic search using BM25 + Query Expansion
 // This is triggered by "找課" keywords and searches course syllabi content
-// Uses hybrid search (BM25 + vector) if available, otherwise falls back to vector-only
 //
 // Timeout hierarchy (nested within 60s webhook processing timeout):
 //   - SemanticSearchTimeout: 30s total (detached context from HTTP request)
@@ -1092,11 +1073,10 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 	log := h.logger.WithModule(moduleName)
 	startTime := time.Now()
 
-	// Check if any semantic search is enabled
-	hybridEnabled := h.hybridSearcher != nil && h.hybridSearcher.IsEnabled()
-	vectorEnabled := h.vectorDB != nil && h.vectorDB.IsEnabled()
+	// Check if BM25 search is enabled
+	bm25Enabled := h.bm25Index != nil && h.bm25Index.IsEnabled()
 
-	if !hybridEnabled && !vectorEnabled {
+	if !bm25Enabled {
 		log.Info("Semantic search not enabled")
 		h.metrics.RecordSearch("disabled", "skipped", time.Since(startTime).Seconds(), 0)
 		sender := lineutil.GetSender(senderName, h.stickerManager)
@@ -1106,12 +1086,9 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 		}
 	}
 
-	searchType := "hybrid"
-	if !hybridEnabled {
-		searchType = "vector"
-	}
+	searchType := "bm25"
 
-	// Use a detached context for embedding API calls to prevent cancellation
+	// Use a detached context for API calls to prevent cancellation
 	// when the HTTP request context is canceled (e.g., LINE server closes connection)
 	searchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), config.SemanticSearchTimeout)
 	defer cancel()
@@ -1138,14 +1115,8 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 		"expanded": expandedQuery,
 	}).Infof("Performing semantic search")
 
-	// Perform search (hybrid or vector-only)
-	var results []rag.SearchResult
-	var err error
-	if hybridEnabled {
-		results, err = h.hybridSearcher.Search(searchCtx, expandedQuery, 10)
-	} else {
-		results, err = h.vectorDB.Search(searchCtx, expandedQuery, 10)
-	}
+	// Perform BM25 search
+	results, err := h.bm25Index.SearchCourses(searchCtx, expandedQuery, 10)
 
 	if err != nil {
 		log.WithError(err).Warn("Semantic search failed")
@@ -1189,11 +1160,11 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 	// Record successful semantic search metrics
 	h.metrics.RecordSearch(searchType, "success", time.Since(startTime).Seconds(), len(results))
 
-	// Format response with similarity badges
+	// Format response with confidence badges
 	return h.formatSemanticSearchResponse(courses, results)
 }
 
-// formatSemanticSearchResponse formats semantic search results with similarity badges
+// formatSemanticSearchResponse formats semantic search results with confidence badges
 func (h *Handler) formatSemanticSearchResponse(courses []storage.Course, results []rag.SearchResult) []messaging_api.MessageInterface {
 	if len(courses) == 0 {
 		sender := lineutil.GetSender(senderName, h.stickerManager)
@@ -1204,17 +1175,17 @@ func (h *Handler) formatSemanticSearchResponse(courses []storage.Course, results
 
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
-	// Create similarity map for lookup
-	similarityMap := make(map[string]float32)
+	// Create confidence map for lookup
+	confidenceMap := make(map[string]float32)
 	for _, r := range results {
-		similarityMap[r.UID] = r.Similarity
+		confidenceMap[r.UID] = r.Confidence
 	}
 
-	// Build bubbles with similarity badges
+	// Build bubbles with confidence badges
 	bubbles := make([]messaging_api.FlexBubble, 0, len(courses))
 	for _, course := range courses {
-		similarity := similarityMap[course.UID]
-		bubble := h.buildSemanticCourseBubble(course, similarity)
+		confidence := confidenceMap[course.UID]
+		bubble := h.buildSemanticCourseBubble(course, confidence)
 		bubbles = append(bubbles, *bubble.FlexBubble)
 	}
 
@@ -1254,10 +1225,10 @@ func (h *Handler) formatSemanticSearchResponse(courses []storage.Course, results
 	return messages
 }
 
-// buildSemanticCourseBubble creates a Flex Message bubble for a course with similarity badge
-func (h *Handler) buildSemanticCourseBubble(course storage.Course, similarity float32) *lineutil.FlexBubble {
-	// Similarity badge text based on similarity score (user-friendly labels)
-	similarityBadge, similarityColor := getSimilarityBadge(similarity)
+// buildSemanticCourseBubble creates a Flex Message bubble for a course with confidence badge
+func (h *Handler) buildSemanticCourseBubble(course storage.Course, confidence float32) *lineutil.FlexBubble {
+	// Confidence badge text based on confidence score (user-friendly labels)
+	confidenceBadge, confidenceColor := getConfidenceBadge(confidence)
 
 	// Hero: Course title with course code
 	heroTitle := lineutil.FormatCourseTitleWithUID(course.Title, course.UID)
@@ -1267,7 +1238,7 @@ func (h *Handler) buildSemanticCourseBubble(course storage.Course, similarity fl
 	// 第一列：相關度 badge
 	contents := []messaging_api.FlexComponentInterface{
 		lineutil.NewFlexBox("horizontal",
-			lineutil.NewFlexText(similarityBadge).WithSize("xs").WithColor(similarityColor).WithFlex(0).FlexText,
+			lineutil.NewFlexText(confidenceBadge).WithSize("xs").WithColor(confidenceColor).WithFlex(0).FlexText,
 		).WithMargin("none").FlexBox,
 		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 	}
@@ -1323,25 +1294,24 @@ func (h *Handler) buildSemanticCourseBubble(course storage.Course, similarity fl
 	return bubble
 }
 
-// getSimilarityBadge returns a user-friendly badge text and color based on confidence score.
+// getConfidenceBadge returns a user-friendly badge text and color based on confidence score.
 //
 // This displays "confidence" (how sure the system is about relevance)
-// rather than "similarity" (semantic closeness). The values come from RRF fusion
-// for hybrid search, where BM25 has no similarity concept.
+// based on BM25 search ranking. Higher rank position = higher confidence.
 //
-// Thresholds aligned with rag.MinSimilarityThreshold (0.5) and rag.HighRelevanceThreshold (0.8):
-//   - >= 80%: High relevance (both sources agree or high vector similarity)
+// Thresholds:
+//   - >= 80%: High relevance (top-ranked results)
 //   - 65-79%: Relevant (good match)
 //   - 50-64%: Possibly relevant (meets minimum threshold)
 //   - < 50%: Should not appear (filtered by search layer)
-func getSimilarityBadge(similarity float32) (string, string) {
-	percent := int(similarity * 100)
+func getConfidenceBadge(confidence float32) (string, string) {
+	percent := int(confidence * 100)
 	switch {
-	case similarity >= 0.80:
+	case confidence >= 0.80:
 		return fmt.Sprintf("🎯 高度相關 %d%%", percent), lineutil.ColorPrimary // LINE Green - high relevance
-	case similarity >= 0.65:
+	case confidence >= 0.65:
 		return fmt.Sprintf("✨ 相關 %d%%", percent), lineutil.ColorSubtext // Gray - good match
-	case similarity >= 0.50:
+	case confidence >= 0.50:
 		return fmt.Sprintf("💡 可能相關 %d%%", percent), lineutil.ColorLabel // Darker gray - meets threshold
 	default:
 		// Results below 50% should be filtered by the search layer

@@ -71,60 +71,32 @@ func main() {
 	stickerManager := sticker.NewManager(db, scraperClient, log)
 	log.Info("Sticker manager created")
 
-	// Create vector database for semantic search (optional - requires Gemini API key)
-	var vectorDB *rag.VectorDB
+	// Create BM25 index for semantic search (uses syllabus content)
+	// BM25 + Query Expansion provides effective retrieval without embedding costs
 	var bm25Index *rag.BM25Index
-	var hybridSearcher *rag.HybridSearcher
-
-	if cfg.GeminiAPIKey != "" {
-		var err error
-		vectorDB, err = rag.NewVectorDB(cfg.DataDir, cfg.GeminiAPIKey, log)
-		if err != nil {
-			log.WithError(err).Warn("Failed to create vector database, semantic search disabled")
-		} else if vectorDB != nil {
-			// Initialize vector store with existing syllabi from database
-			syllabi, err := db.GetAllSyllabi(context.Background())
-			if err != nil {
-				log.WithError(err).Warn("Failed to load syllabi for vector store initialization")
-			} else {
-				// Initialize vector database
-				if err := vectorDB.Initialize(context.Background(), syllabi); err != nil {
-					log.WithError(err).Warn("Failed to initialize vector store")
-				} else {
-					log.WithField("syllabi_count", len(syllabi)).Info("Vector database initialized for semantic search")
-				}
-
-				// Initialize BM25 index for hybrid search
-				bm25Index = rag.NewBM25Index(log)
-				if err := bm25Index.Initialize(syllabi); err != nil {
-					log.WithError(err).Warn("Failed to initialize BM25 index")
-					log.Warn("Hybrid search will use vector-only fallback (degraded search quality)")
-					bm25Index = nil
-				} else {
-					log.WithField("doc_count", bm25Index.Count()).Info("BM25 index initialized for hybrid search")
-				}
-			}
+	syllabi, err := db.GetAllSyllabi(context.Background())
+	if err != nil {
+		log.WithError(err).Warn("Failed to load syllabi for BM25 index")
+	} else if len(syllabi) > 0 {
+		bm25Index = rag.NewBM25Index(log)
+		if err := bm25Index.Initialize(syllabi); err != nil {
+			log.WithError(err).Warn("Failed to initialize BM25 index")
+			bm25Index = nil
+		} else {
+			log.WithField("doc_count", bm25Index.Count()).Info("BM25 index initialized for semantic search")
 		}
 	} else {
-		log.Info("Gemini API key not configured, semantic search disabled")
-	}
-
-	// Create hybrid searcher if either component is available
-	if vectorDB != nil || bm25Index != nil {
-		hybridSearcher = rag.NewHybridSearcher(vectorDB, bm25Index, log)
-		log.WithFields(map[string]any{
-			"vector_enabled": vectorDB != nil && vectorDB.IsEnabled(),
-			"bm25_enabled":   bm25Index != nil && bm25Index.IsEnabled(),
-		}).Info("Hybrid searcher created")
+		log.Info("No syllabi found, BM25 index will be empty until warmup")
+		bm25Index = rag.NewBM25Index(log)
 	}
 
 	// Start background cache warming (non-blocking)
 	// Warmup runs concurrently with server startup until completion
 	warmup.RunInBackground(context.Background(), db, scraperClient, stickerManager, log, warmup.Options{
-		Modules:  warmup.ParseModules(cfg.WarmupModules),
-		Reset:    false,    // Never reset in production
-		Metrics:  m,        // Pass metrics for monitoring
-		VectorDB: vectorDB, // Pass vector database for syllabus indexing
+		Modules:   warmup.ParseModules(cfg.WarmupModules),
+		Reset:     false, // Never reset in production
+		Metrics:   m,     // Pass metrics for monitoring
+		BM25Index: bm25Index,
 	})
 	log.Info("Background cache warming started")
 
@@ -145,14 +117,10 @@ func main() {
 		log.WithError(err).Fatal("Failed to create webhook handler")
 	}
 
-	// Set hybrid searcher for course semantic search (includes BM25 + vector)
-	if hybridSearcher != nil {
-		webhookHandler.GetCourseHandler().SetHybridSearcher(hybridSearcher)
-		log.Info("Hybrid search enabled for course module")
-	} else if vectorDB != nil {
-		// Fallback to vector-only if hybrid not available
-		webhookHandler.GetCourseHandler().SetVectorDB(vectorDB) //nolint:staticcheck // Intentional fallback for backward compatibility
-		log.Info("Vector-only semantic search enabled for course module")
+	// Set BM25 index for course semantic search
+	if bm25Index != nil {
+		webhookHandler.GetCourseHandler().SetBM25Index(bm25Index)
+		log.Info("BM25 search enabled for course module")
 	}
 
 	// Create query expander for semantic search (optional - requires Gemini API key)
@@ -251,7 +219,7 @@ func main() {
 				log.WithField("panic", r).Error("Panic in proactive warmup goroutine")
 			}
 		}()
-		proactiveWarmup(ctx, db, scraperClient, stickerManager, log, cfg, vectorDB)
+		proactiveWarmup(ctx, db, scraperClient, stickerManager, log, cfg, bm25Index)
 	}()
 
 	// Cache size metrics updater goroutine (every 5 minutes)
@@ -264,7 +232,7 @@ func main() {
 				log.WithField("panic", r).Error("Panic in cache metrics goroutine")
 			}
 		}()
-		updateCacheSizeMetrics(ctx, db, stickerManager, vectorDB, bm25Index, m, log)
+		updateCacheSizeMetrics(ctx, db, stickerManager, bm25Index, m, log)
 	}()
 
 	// Start server in goroutine

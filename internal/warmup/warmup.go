@@ -33,10 +33,10 @@ type Stats struct {
 
 // Options configures cache warming behavior
 type Options struct {
-	Modules  []string         // Modules to warm (id, contact, course, sticker, syllabus)
-	Reset    bool             // Whether to reset cache before warming
-	Metrics  *metrics.Metrics // Optional metrics recorder
-	VectorDB *rag.VectorDB    // Optional vector database for syllabus indexing
+	Modules   []string         // Modules to warm (id, contact, course, sticker, syllabus)
+	Reset     bool             // Whether to reset cache before warming
+	Metrics   *metrics.Metrics // Optional metrics recorder
+	BM25Index *rag.BM25Index   // Optional BM25 index for syllabus indexing
 }
 
 // Run executes cache warming with the given options
@@ -165,12 +165,12 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 				// Course completed (or wasn't requested), proceed with syllabus
 			}
 
-			if opts.VectorDB == nil {
-				log.Info("Syllabus module skipped: VectorDB not configured")
+			if opts.BM25Index == nil {
+				log.Info("Syllabus module skipped: BM25Index not configured")
 				return
 			}
 
-			if err := warmupSyllabusModule(ctx, db, client, opts.VectorDB, log, stats, opts.Metrics); err != nil {
+			if err := warmupSyllabusModule(ctx, db, client, opts.BM25Index, log, stats, opts.Metrics); err != nil {
 				log.WithError(err).Error("Syllabus module warmup failed")
 				errChan <- fmt.Errorf("syllabus module: %w", err)
 			}
@@ -504,10 +504,10 @@ func warmupStickerModule(ctx context.Context, stickerMgr *sticker.Manager, log *
 	return nil
 }
 
-// warmupSyllabusModule warms syllabus cache and vector store
+// warmupSyllabusModule warms syllabus cache and BM25 index
 // Fetches syllabus content for all courses in cache, using content hash for incremental updates
 // Only processes courses that have changed since last warmup
-func warmupSyllabusModule(ctx context.Context, db *storage.DB, client *scraper.Client, vectorDB *rag.VectorDB, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
+func warmupSyllabusModule(ctx context.Context, db *storage.DB, client *scraper.Client, bm25Index *rag.BM25Index, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
 	startTime := time.Now()
 	defer func() {
 		if m != nil {
@@ -619,11 +619,11 @@ processLoop:
 			return fmt.Errorf("failed to save syllabi: %w", err)
 		}
 
-		// Add to vector store
-		if vectorDB != nil {
-			if err := vectorDB.AddSyllabi(ctx, newSyllabi); err != nil {
-				log.WithError(err).Warn("Failed to add syllabi to vector store")
-				// Don't fail the whole warmup for vector store errors
+		// Add to BM25 index
+		if bm25Index != nil {
+			if err := bm25Index.AddSyllabi(ctx, newSyllabi); err != nil {
+				log.WithError(err).Warn("Failed to add syllabi to BM25 index")
+				// Don't fail the whole warmup for index errors
 			}
 		}
 	}

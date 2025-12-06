@@ -46,13 +46,13 @@ type Metrics struct {
 
 	// ============================================
 	// LLM (Gemini API - RED Method)
-	// NLU intent parsing (embedding/expansion tracked via logs)
+	// NLU intent parsing, Query Expansion
 	// ============================================
 	LLMTotal    *prometheus.CounterVec   // requests by operation and status
 	LLMDuration *prometheus.HistogramVec // latency by operation
 
 	// ============================================
-	// Hybrid Search (BM25 + Vector - RED Method)
+	// Semantic Search (BM25 - RED Method)
 	// Semantic course search
 	// ============================================
 	SearchTotal    *prometheus.CounterVec
@@ -60,7 +60,7 @@ type Metrics struct {
 	SearchResults  *prometheus.HistogramVec // result count distribution
 
 	// Index sizes (Gauges - point-in-time values)
-	IndexSize *prometheus.GaugeVec // documents in BM25/Vector indexes
+	IndexSize *prometheus.GaugeVec // documents in BM25 index
 
 	// ============================================
 	// Rate Limiter (USE Method)
@@ -163,7 +163,7 @@ func New(registry *prometheus.Registry) *Metrics {
 				Name: "ntpu_llm_total",
 				Help: "Total LLM API requests",
 			},
-			// operation: nlu (embedding/expansion tracked in warmup logs, not metrics)
+			// operation: nlu, expansion
 			// status: success, error, fallback, clarification
 			[]string{"operation", "status"},
 		),
@@ -182,14 +182,14 @@ func New(registry *prometheus.Registry) *Metrics {
 		),
 
 		// ============================================
-		// Hybrid Search metrics
+		// Semantic Search metrics
 		// ============================================
 		SearchTotal: promauto.With(registry).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "ntpu_search_total",
 				Help: "Total semantic search requests",
 			},
-			// type: bm25, vector, hybrid
+			// type: bm25, disabled
 			// status: success, error, no_results
 			[]string{"type", "status"},
 		),
@@ -200,11 +200,10 @@ func New(registry *prometheus.Registry) *Metrics {
 				Help: "Search operation duration in seconds",
 				// Buckets for search latency:
 				// BM25: < 50ms (in-memory)
-				// Vector: 100ms-1s (embedding + search)
-				// Hybrid: combined
+				// Query Expansion: 1-5s (Gemini API)
 				Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5},
 			},
-			// type: bm25, vector, hybrid, disabled
+			// type: bm25, disabled
 			[]string{"type"},
 		),
 
@@ -222,7 +221,7 @@ func New(registry *prometheus.Registry) *Metrics {
 				Name: "ntpu_index_size",
 				Help: "Number of documents in search indexes",
 			},
-			// index: bm25, vector
+			// index: bm25
 			[]string{"index"},
 		),
 
@@ -324,7 +323,7 @@ func (m *Metrics) RecordLLM(operation, status string, duration float64) {
 // ============================================
 
 // RecordSearch records a search operation.
-// searchType: bm25, vector, hybrid, disabled
+// searchType: bm25, disabled
 // status: success, error, no_results, skipped
 func (m *Metrics) RecordSearch(searchType, status string, duration float64, resultCount int) {
 	m.SearchTotal.WithLabelValues(searchType, status).Inc()
@@ -333,7 +332,7 @@ func (m *Metrics) RecordSearch(searchType, status string, duration float64, resu
 }
 
 // SetIndexSize sets the current index size.
-// index: bm25, vector
+// index: bm25
 func (m *Metrics) SetIndexSize(index string, count int) {
 	m.IndexSize.WithLabelValues(index).Set(float64(count))
 }

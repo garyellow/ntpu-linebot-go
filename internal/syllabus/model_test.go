@@ -179,7 +179,7 @@ func TestFields_IsEmpty(t *testing.T) {
 	}
 }
 
-func TestFields_ChunksForEmbedding(t *testing.T) {
+func TestFields_ChunksForIndexing(t *testing.T) {
 	tests := []struct {
 		name        string
 		fields      Fields
@@ -276,13 +276,13 @@ func TestFields_ChunksForEmbedding(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			chunks := tt.fields.ChunksForEmbedding(tt.courseTitle)
+			chunks := tt.fields.ChunksForIndexing(tt.courseTitle)
 			if len(chunks) != tt.wantCount {
-				t.Errorf("ChunksForEmbedding() count = %d, want %d", len(chunks), tt.wantCount)
+				t.Errorf("ChunksForIndexing() count = %d, want %d", len(chunks), tt.wantCount)
 			}
 			for i, chunk := range chunks {
 				if i < len(tt.wantTypes) && chunk.Type != tt.wantTypes[i] {
-					t.Errorf("ChunksForEmbedding()[%d].Type = %s, want %s", i, chunk.Type, tt.wantTypes[i])
+					t.Errorf("ChunksForIndexing()[%d].Type = %s, want %s", i, chunk.Type, tt.wantTypes[i])
 				}
 				// Verify course title is included in content
 				if tt.courseTitle != "" && len(chunk.Content) > 0 {
@@ -295,7 +295,7 @@ func TestFields_ChunksForEmbedding(t *testing.T) {
 	}
 }
 
-func TestFields_ChunksForEmbedding_FullContent(t *testing.T) {
+func TestFields_ChunksForIndexing_FullContent(t *testing.T) {
 	// Create a very long schedule - should NOT be truncated
 	longSchedule := ""
 	for i := 0; i < 100; i++ {
@@ -307,7 +307,7 @@ func TestFields_ChunksForEmbedding_FullContent(t *testing.T) {
 		Schedule:     longSchedule,
 	}
 
-	chunks := fields.ChunksForEmbedding("測試課程")
+	chunks := fields.ChunksForIndexing("測試課程")
 
 	// Find schedule chunk
 	var scheduleChunk *Chunk
@@ -343,7 +343,7 @@ func TestFields_ChunksForEmbedding_FullContent(t *testing.T) {
 	}
 }
 
-func TestFields_ChunksForEmbedding_SeparateChunks(t *testing.T) {
+func TestFields_ChunksForIndexing_SeparateChunks(t *testing.T) {
 	// Test that CN and EN content are in separate chunks
 	fields := Fields{
 		ObjectivesCN: "培養程式設計能力",
@@ -352,7 +352,7 @@ func TestFields_ChunksForEmbedding_SeparateChunks(t *testing.T) {
 		OutlineEN:    "Variables, loops, functions",
 	}
 
-	chunks := fields.ChunksForEmbedding("測試課程")
+	chunks := fields.ChunksForIndexing("測試課程")
 
 	if len(chunks) != 4 {
 		t.Fatalf("Expected 4 chunks (objectives_cn, objectives_en, outline_cn, outline_en), got %d", len(chunks))

@@ -1,7 +1,9 @@
-// Package rag provides Retrieval-Augmented Generation functionality
+// Package rag provides Retrieval-Augmented Generation functionality.
+// Uses BM25 keyword search with LLM-based query expansion for course retrieval.
 package rag
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -15,8 +17,19 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/syllabus"
 )
 
-// BM25Index provides keyword-based search using BM25 algorithm
-// Complements vector search for hybrid search functionality
+// SearchResult represents a search result with confidence score.
+// Confidence is derived from BM25 rank position, not semantic similarity.
+type SearchResult struct {
+	UID        string   // Course UID
+	Title      string   // Course title
+	Teachers   []string // Course teachers
+	Year       int      // Academic year
+	Term       int      // Semester
+	Confidence float32  // Rank-based confidence (0-1), higher = more relevant
+}
+
+// BM25Index provides keyword-based search using BM25 algorithm.
+// Combined with LLM query expansion, provides effective course retrieval.
 type BM25Index struct {
 	bm25Okapi   *bm25.BM25Okapi
 	corpus      []string           // Tokenized document content
@@ -97,7 +110,7 @@ func (idx *BM25Index) Initialize(syllabi []*storage.Syllabus) error {
 			OutlineEN:    syl.OutlineEN,
 			Schedule:     syl.Schedule,
 		}
-		chunks := fields.ChunksForEmbedding(syl.Title)
+		chunks := fields.ChunksForIndexing(syl.Title)
 
 		for _, chunk := range chunks {
 			if strings.TrimSpace(chunk.Content) == "" {
@@ -133,6 +146,58 @@ func (idx *BM25Index) Initialize(syllabi []*storage.Syllabus) error {
 
 	idx.logger.WithField("docs", len(corpus)).Info("BM25 index initialized")
 	return nil
+}
+
+// AddSyllabi adds new syllabi to the BM25 index incrementally.
+// This is called during warmup to update the index with new data.
+// For simplicity, this re-initializes the entire index with all syllabi.
+// Context parameter is for API compatibility.
+func (idx *BM25Index) AddSyllabi(_ context.Context, syllabi []*storage.Syllabus) error {
+	if len(syllabi) == 0 {
+		return nil
+	}
+
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+
+	// For incremental updates, we need to rebuild the entire index
+	// since BM25 requires all documents for IDF calculation
+	// Get existing syllabi from metadata
+	var allSyllabi []*storage.Syllabus
+	existingUIDs := make(map[string]bool)
+
+	for uid, meta := range idx.metadata {
+		existingUIDs[uid] = true
+		// Reconstruct syllabus from metadata (basic info only)
+		allSyllabi = append(allSyllabi, &storage.Syllabus{
+			UID:      uid,
+			Title:    meta.Title,
+			Teachers: meta.Teachers,
+			Year:     meta.Year,
+			Term:     meta.Term,
+		})
+	}
+
+	// Add new syllabi (avoid duplicates)
+	for _, syl := range syllabi {
+		if !existingUIDs[syl.UID] {
+			allSyllabi = append(allSyllabi, syl)
+		}
+	}
+
+	// Reinitialize with all syllabi
+	idx.initialized = false
+	idx.corpus = nil
+	idx.rawDocs = nil
+	idx.uidToDocIDs = make(map[string][]int)
+	idx.docIDToUID = make(map[int]string)
+	idx.metadata = make(map[string]docMeta)
+	idx.bm25Okapi = nil
+	idx.mu.Unlock()
+
+	err := idx.Initialize(allSyllabi)
+	idx.mu.Lock() // Re-lock for deferred unlock
+	return err
 }
 
 // Search performs BM25 keyword search
@@ -221,6 +286,45 @@ func (idx *BM25Index) Search(query string, topN int) ([]BM25Result, error) {
 	return results, nil
 }
 
+// SearchCourses performs BM25 search and returns SearchResult with confidence scores.
+// This is the primary search interface for course retrieval.
+// Context parameter is for API compatibility (not used in BM25).
+func (idx *BM25Index) SearchCourses(_ context.Context, query string, topN int) ([]SearchResult, error) {
+	bm25Results, err := idx.Search(query, topN)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]SearchResult, len(bm25Results))
+	for i, r := range bm25Results {
+		results[i] = SearchResult{
+			UID:        r.UID,
+			Title:      r.Title,
+			Teachers:   r.Teachers,
+			Year:       r.Year,
+			Term:       r.Term,
+			Confidence: computeRankConfidence(r.Rank),
+		}
+	}
+
+	return results, nil
+}
+
+// computeRankConfidence calculates confidence score from BM25 rank.
+// BM25 scores are unbounded and query-dependent, so we use rank as a proxy.
+//
+// Formula: 1 / (1 + 0.05 * rank)
+//   - rank 1 → 0.95
+//   - rank 5 → 0.80
+//   - rank 10 → 0.67
+//   - rank 20 → 0.50
+func computeRankConfidence(rank int) float32 {
+	if rank <= 0 {
+		return 0
+	}
+	return float32(1.0 / (1.0 + 0.05*float64(rank)))
+}
+
 // AddSyllabus adds a single syllabus to the index.
 // Note: BM25 doesn't support incremental updates, so this triggers a full rebuild.
 func (idx *BM25Index) AddSyllabus(syl *storage.Syllabus) error {
@@ -253,7 +357,7 @@ func (idx *BM25Index) AddSyllabus(syl *storage.Syllabus) error {
 		OutlineEN:    syl.OutlineEN,
 		Schedule:     syl.Schedule,
 	}
-	chunks := fields.ChunksForEmbedding(syl.Title)
+	chunks := fields.ChunksForIndexing(syl.Title)
 
 	docIndex := len(idx.corpus)
 	for _, chunk := range chunks {

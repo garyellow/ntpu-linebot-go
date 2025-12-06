@@ -106,19 +106,16 @@ groups:
 
       # ----------------------------------------
       # Search Alerts
-      # Semantic search quality
+      # BM25 semantic search quality
       # ----------------------------------------
       - alert: SearchIndexEmpty
-        expr: |
-          ntpu_index_size{index="bm25"} == 0
-          or
-          ntpu_index_size{index="vector"} == 0
+        expr: ntpu_index_size{index="bm25"} == 0
         for: 15m
         labels:
           severity: warning
         annotations:
-          summary: "Search index {{ $labels.index }} is empty"
-          description: "Index has no documents, semantic search may be degraded"
+          summary: "BM25 search index is empty"
+          description: "BM25 index has no documents, semantic search is disabled"
 
       - alert: SearchLatencyHigh
         expr: ntpu:search_latency_p95:5m > 3

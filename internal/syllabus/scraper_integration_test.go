@@ -68,10 +68,10 @@ func TestScrapeSyllabus_RealPage(t *testing.T) {
 		t.Log("Schedule (教學進度) is empty - this may be normal for some courses")
 	}
 
-	// Test that ChunksForEmbedding works
-	chunks := fields.ChunksForEmbedding("測試課程")
+	// Test that ChunksForIndexing works
+	chunks := fields.ChunksForIndexing("測試課程")
 	if len(chunks) == 0 && !fields.IsEmpty() {
-		t.Error("ChunksForEmbedding() returned empty for non-empty fields")
+		t.Error("ChunksForIndexing() returned empty for non-empty fields")
 	}
 	t.Logf("Generated %d chunks", len(chunks))
 

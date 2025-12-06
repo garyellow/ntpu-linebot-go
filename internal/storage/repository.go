@@ -1375,7 +1375,7 @@ func (db *DB) GetSyllabusByUID(ctx context.Context, uid string) (*Syllabus, erro
 }
 
 // GetAllSyllabi retrieves all syllabi from the database
-// Used for loading into vector store on startup
+// Used for loading into BM25 index on startup
 func (db *DB) GetAllSyllabi(ctx context.Context) ([]*Syllabus, error) {
 	query := `SELECT uid, year, term, title, teachers, objectives_cn, objectives_en, outline_cn, outline_en, schedule, content_hash, cached_at FROM syllabi`
 

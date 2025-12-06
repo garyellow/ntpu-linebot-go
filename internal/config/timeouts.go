@@ -103,13 +103,13 @@ const (
 // Semantic search timeouts
 const (
 	// SemanticSearchTimeout is the timeout for semantic search operations.
-	// This includes embedding API calls (Gemini) and vector similarity search.
+	// This includes BM25 search and Query Expansion (Gemini API call).
 	// Uses a detached context to prevent cancellation from request context
 	// (e.g., when LINE server closes connection after receiving 200 OK).
 	//
 	// Set to 30s because:
-	//   - Gemini embedding API typically responds in 1-5s
-	//   - Includes retry logic with exponential backoff
+	//   - Query Expansion API typically responds in 1-5s
+	//   - BM25 search is in-memory and very fast (<10ms)
 	//   - Should complete well within the 60s webhook timeout
 	SemanticSearchTimeout = 30 * time.Second
 )

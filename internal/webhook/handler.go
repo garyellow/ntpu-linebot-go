@@ -109,7 +109,7 @@ func (h *Handler) Stop() {
 }
 
 // GetCourseHandler returns the course handler for external configuration
-// Used to set VectorDB for semantic search from main.go
+// Used to set BM25Index for semantic search from main.go
 func (h *Handler) GetCourseHandler() *course.Handler {
 	return h.courseHandler
 }
@@ -802,7 +802,7 @@ func (h *Handler) getDetailedInstructionMessages() []messaging_api.MessageInterf
 
 	// Check feature availability
 	nluEnabled := h.intentParser != nil && h.intentParser.IsEnabled()
-	semanticEnabled := h.courseHandler != nil && h.courseHandler.IsSemanticSearchEnabled()
+	semanticEnabled := h.courseHandler != nil && h.courseHandler.IsBM25SearchEnabled()
 
 	// Message 1: Main instruction text
 	// Common content for both NLU enabled/disabled

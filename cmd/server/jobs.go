@@ -184,7 +184,7 @@ func performStickerRefresh(ctx context.Context, stickerManager *sticker.Manager,
 // proactiveWarmup runs daily cache warmup to ensure data freshness
 // Refreshes all modules unconditionally every day at 3:00 AM
 // Data not updated within 7 days (Hard TTL) will be deleted by cleanup job
-func proactiveWarmup(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, cfg *config.Config, vectorDB *rag.VectorDB) {
+func proactiveWarmup(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, cfg *config.Config, bm25Index *rag.BM25Index) {
 	const targetHour = 3 // 3:00 AM
 
 	for {
@@ -204,7 +204,7 @@ func proactiveWarmup(ctx context.Context, db *storage.DB, client *scraper.Client
 		case <-ctx.Done():
 			return
 		case <-time.After(waitDuration):
-			performProactiveWarmup(ctx, db, client, stickerMgr, log, cfg, vectorDB)
+			performProactiveWarmup(ctx, db, client, stickerMgr, log, cfg, bm25Index)
 		}
 	}
 }
@@ -212,7 +212,7 @@ func proactiveWarmup(ctx context.Context, db *storage.DB, client *scraper.Client
 // performProactiveWarmup executes daily cache warmup for all modules
 // Runs unconditionally every day to ensure data freshness
 // Uses configured modules from WARMUP_MODULES (excluding sticker, which is handled separately)
-func performProactiveWarmup(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, cfg *config.Config, vectorDB *rag.VectorDB) {
+func performProactiveWarmup(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, cfg *config.Config, bm25Index *rag.BM25Index) {
 	log.Info("Starting daily proactive cache warmup...")
 
 	// Parse configured modules, but exclude sticker (handled separately by refreshStickers)
@@ -233,9 +233,9 @@ func performProactiveWarmup(ctx context.Context, db *storage.DB, client *scraper
 
 	// Run warmup (logs progress internally, runs until completion)
 	stats, err := warmup.Run(ctx, db, client, stickerMgr, log, warmup.Options{
-		Modules:  modules,
-		Reset:    false,    // Never reset existing data
-		VectorDB: vectorDB, // Pass VectorDB for syllabus module
+		Modules:   modules,
+		Reset:     false,     // Never reset existing data
+		BM25Index: bm25Index, // Pass BM25Index for syllabus module
 	})
 
 	if err != nil {
@@ -251,26 +251,26 @@ func performProactiveWarmup(ctx context.Context, db *storage.DB, client *scraper
 }
 
 // updateCacheSizeMetrics periodically updates cache size gauge metrics
-func updateCacheSizeMetrics(ctx context.Context, db *storage.DB, stickerManager *sticker.Manager, vectorDB *rag.VectorDB, bm25Index *rag.BM25Index, m *metrics.Metrics, log *logger.Logger) {
+func updateCacheSizeMetrics(ctx context.Context, db *storage.DB, stickerManager *sticker.Manager, bm25Index *rag.BM25Index, m *metrics.Metrics, log *logger.Logger) {
 	// Update metrics at configured interval
 	ticker := time.NewTicker(config.MetricsUpdateInterval)
 	defer ticker.Stop()
 
 	// Run initial update immediately
-	performCacheSizeUpdate(ctx, db, stickerManager, vectorDB, bm25Index, m, log)
+	performCacheSizeUpdate(ctx, db, stickerManager, bm25Index, m, log)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			performCacheSizeUpdate(ctx, db, stickerManager, vectorDB, bm25Index, m, log)
+			performCacheSizeUpdate(ctx, db, stickerManager, bm25Index, m, log)
 		}
 	}
 }
 
 // performCacheSizeUpdate updates cache size metrics
-func performCacheSizeUpdate(ctx context.Context, db *storage.DB, stickerManager *sticker.Manager, vectorDB *rag.VectorDB, bm25Index *rag.BM25Index, m *metrics.Metrics, log *logger.Logger) {
+func performCacheSizeUpdate(ctx context.Context, db *storage.DB, stickerManager *sticker.Manager, bm25Index *rag.BM25Index, m *metrics.Metrics, log *logger.Logger) {
 	if studentCount, err := db.CountStudents(ctx); err == nil {
 		m.SetCacheSize("students", studentCount)
 	} else {
@@ -298,10 +298,7 @@ func performCacheSizeUpdate(ctx context.Context, db *storage.DB, stickerManager 
 	}
 	m.SetCacheSize("stickers", stickerManager.Count())
 
-	// Update search index sizes if enabled
-	if vectorDB != nil && vectorDB.IsEnabled() {
-		m.SetIndexSize("vector", vectorDB.Count())
-	}
+	// Update BM25 index size if enabled
 	if bm25Index != nil && bm25Index.IsEnabled() {
 		m.SetIndexSize("bm25", bm25Index.Count())
 	}

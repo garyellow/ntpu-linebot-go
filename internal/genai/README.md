@@ -1,13 +1,12 @@
 # genai
 
-封裝 Google Gemini API 功能，提供課程語意搜尋所需的向量生成，以及 NLU 意圖解析。
+封裝 Google Gemini API 功能，提供 NLU 意圖解析和查詢擴展。
 
 ## 功能
 
-- **EmbeddingClient**: Gemini embedding API 客戶端（向量生成）
 - **IntentParser** (interface): NLU 意圖解析器介面
 - **GeminiIntentParser** (implementation): Gemini Function Calling 實作
-- **NewEmbeddingFunc**: chromem-go 相容的嵌入函數
+- **QueryExpander**: 查詢擴展器（同義詞、縮寫、翻譯）
 
 ## 檔案結構
 
@@ -17,7 +16,7 @@ internal/genai/
 ├── intent.go         # GeminiIntentParser 實作 (Gemini Function Calling)
 ├── functions.go      # Function Calling 函數定義
 ├── prompts.go        # 系統提示詞
-├── embedding.go      # Embedding 客戶端
+├── expander.go       # Query Expander
 └── README.md
 ```
 
@@ -69,7 +68,7 @@ if err != nil {
 
 ## Query Expander (查詢擴展)
 
-獨立的查詢擴展模組，用於增強語意搜尋效果。
+獨立的查詢擴展模組，用於增強 BM25 搜尋效果。
 
 ### 功能說明
 
@@ -122,28 +121,7 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 handler.SetQueryExpander(expander)
 ```
 
-語意搜尋時自動使用擴展後的查詢進行 BM25 + Vector hybrid search。
-
-## Embedding Client
-
-### 技術規格
-
-- 模型: `gemini-embedding-001`
-- 向量維度: 768
-- API 限流: 1000 RPM (自動處理)
-
-### 使用方式
-
-```go
-// 建立客戶端
-client := genai.NewEmbeddingClient(apiKey)
-
-// 產生 embedding（自動處理重試）
-vector, err := client.Embed(ctx, "課程內容文字")
-
-// 或使用 chromem-go 相容的函數
-embeddingFunc := genai.NewEmbeddingFunc(apiKey)
-```
+語意搜尋時自動使用擴展後的查詢進行 BM25 搜尋。
 
 ## 錯誤處理
 
@@ -154,8 +132,7 @@ embeddingFunc := genai.NewEmbeddingFunc(apiKey)
 ## 配置
 
 需設定環境變數 `GEMINI_API_KEY`。若未設定：
-- 語意搜尋功能停用
 - NLU 意圖解析停用（fallback 到關鍵字匹配）
-- 查詢擴展停用（使用原始查詢）
+- 查詢擴展停用（使用原始查詢進行 BM25 搜尋）
 
 取得 API Key: [Google AI Studio](https://aistudio.google.com/apikey)

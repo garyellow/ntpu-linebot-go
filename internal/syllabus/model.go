@@ -11,7 +11,7 @@ import (
 // ChunkType identifies the type of content in a chunk
 type ChunkType string
 
-// Chunk types for syllabus embedding
+// Chunk types for syllabus indexing (BM25 search)
 const (
 	ChunkTypeObjectivesCN ChunkType = "objectives_cn" // 教學目標（中文）
 	ChunkTypeObjectivesEN ChunkType = "objectives_en" // Course Objectives（英文）
@@ -20,14 +20,14 @@ const (
 	ChunkTypeSchedule     ChunkType = "schedule"      // 教學進度
 )
 
-// Chunk represents a single chunk of syllabus content for embedding
+// Chunk represents a single chunk of syllabus content for indexing
 type Chunk struct {
 	Type    ChunkType // Type of chunk content
-	Content string    // The actual content for embedding
+	Content string    // The actual content for indexing
 }
 
 // ComputeContentHash calculates SHA256 hash of the content.
-// Used for incremental update detection - only re-embed if content changed.
+// Used for incremental update detection - only re-index if content changed.
 func ComputeContentHash(content string) string {
 	hash := sha256.Sum256([]byte(content))
 	return hex.EncodeToString(hash[:])
@@ -45,16 +45,15 @@ type Fields struct {
 	Schedule     string // 教學進度 (only the schedule content, not metadata)
 }
 
-// ChunksForEmbedding returns separate chunks for better asymmetric semantic search.
+// ChunksForIndexing returns separate chunks for BM25 search indexing.
 // Each chunk includes the course title as context prefix.
 // This improves retrieval accuracy for short queries against long documents.
 //
 // Strategy:
 // - 5 separate chunks: ObjectivesCN, ObjectivesEN, OutlineCN, OutlineEN, Schedule
-// - Chinese and English are kept separate for cleaner semantic matching
-// - No truncation needed as Gemini embedding supports 2048 tokens (~8000 chars)
-// - Whitespace-only fields are skipped (no value for embedding)
-func (f *Fields) ChunksForEmbedding(courseTitle string) []Chunk {
+// - Chinese and English are kept separate for cleaner matching
+// - Whitespace-only fields are skipped (no value for indexing)
+func (f *Fields) ChunksForIndexing(courseTitle string) []Chunk {
 	var chunks []Chunk
 	prefix := ""
 	if courseTitle != "" {
