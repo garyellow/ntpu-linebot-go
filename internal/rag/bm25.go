@@ -4,6 +4,7 @@ package rag
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"sync"
 	"unicode"
@@ -201,14 +202,10 @@ func (idx *BM25Index) Search(query string, topN int) ([]BM25Result, error) {
 		}
 	}
 
-	// Sort by score descending (library returns unsorted scores)
-	for i := 0; i < len(scoredDocs); i++ {
-		for j := i + 1; j < len(scoredDocs); j++ {
-			if scoredDocs[j].score > scoredDocs[i].score {
-				scoredDocs[i], scoredDocs[j] = scoredDocs[j], scoredDocs[i]
-			}
-		}
-	}
+	// Sort by score descending using O(n log n) algorithm
+	sort.Slice(scoredDocs, func(i, j int) bool {
+		return scoredDocs[i].score > scoredDocs[j].score
+	})
 
 	// Limit results
 	if topN > 0 && len(scoredDocs) > topN {

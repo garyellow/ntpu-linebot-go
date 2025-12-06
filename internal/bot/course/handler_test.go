@@ -450,7 +450,7 @@ func TestHandleSemanticSearch_EmptyQuery(t *testing.T) {
 }
 
 func TestGetRelevanceBadge(t *testing.T) {
-	// Tests for simplified 2-tier relevance badge (2025 UX best practices)
+	// Tests for simplified 2-tier relevance badge
 	// Top 3: 最相關, Rank 4+: 相關
 	tests := []struct {
 		name           string
