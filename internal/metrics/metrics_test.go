@@ -281,7 +281,7 @@ func TestRecordLLMRequest(t *testing.T) {
 
 	// RecordLLMRequest is an alias for RecordLLM
 	m.RecordLLMRequest("nlu", "success", 0.5)
-	m.RecordLLMRequest("expansion", "error", 1.0)
+	m.RecordLLMRequest("nlu", "error", 1.0)
 }
 
 func TestRecordLLMFallback(t *testing.T) {
@@ -290,5 +290,4 @@ func TestRecordLLMFallback(t *testing.T) {
 
 	// RecordLLMFallback records with "fallback" status
 	m.RecordLLMFallback("nlu")
-	m.RecordLLMFallback("expansion")
 }

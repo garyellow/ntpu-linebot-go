@@ -1,6 +1,6 @@
 # NTPU LINE Bot Prometheus Alerting Rules
 #
-# Design Philosophy (2025):
+# Design Philosophy:
 # - Alert on symptoms, not causes (user-facing impact)
 # - Avoid alert fatigue: meaningful thresholds with appropriate durations
 # - No recording rules: keep it simple, Prometheus handles query efficiency

@@ -25,7 +25,7 @@ services:
         reservations:
           cpus: '0.5'
           memory: 256M
-    # 2025 Best Practice: Limit log size to prevent disk exhaustion
+    # Limit log size to prevent disk exhaustion
     logging:
       driver: "json-file"
       options:
@@ -48,7 +48,7 @@ services:
       - USER_RATE_LIMIT_REFILL_RATE=${USER_RATE_LIMIT_REFILL_RATE:-0.2}
     security_opt:
       - no-new-privileges:true
-    # 2025 Best Practice: Read-only filesystem where possible
+    # Read-only filesystem for enhanced security
     read_only: true
     tmpfs:
       - /tmp:size=64M
@@ -158,10 +158,7 @@ services:
       - GF_ANALYTICS_REPORTING_ENABLED=false
       - GF_ANALYTICS_CHECK_FOR_UPDATES=false
       - GF_INSTALL_PLUGINS=
-      # 2025 Best Practice: Enhanced security settings
       - GF_SECURITY_DISABLE_GRAVATAR=true
-      # COOKIE_SECURE=false: Internal monitoring accessed via HTTP behind nginx proxy
-      # Set to 'true' only when Grafana is served over HTTPS
       - GF_SECURITY_COOKIE_SECURE=false
       - GF_SECURITY_COOKIE_SAMESITE=lax
     deploy:

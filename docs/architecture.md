@@ -504,7 +504,7 @@ ntpu_job_duration_seconds{job, module}
 {
   "level": "info",
   "msg": "Webhook received",
-  "timestamp": "2025-11-21T10:30:45+08:00",
+  "timestamp": "2024-03-15T10:30:45+08:00",
   "module": "webhook",
   "event_type": "message",
   "user_id": "U1234...",

@@ -1,4 +1,4 @@
-# AlertManager configuration for NTPU LINE Bot (2025)
+# AlertManager configuration for NTPU LINE Bot
 global:
   resolve_timeout: 5m
 
