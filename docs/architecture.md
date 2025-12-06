@@ -70,15 +70,15 @@ NTPU LineBot 是一個為國立臺北大學設計的 LINE 聊天機器人，提�
                              │                      │
                              ▼                      ▼
 ┌────────────────────────────────────┐ ┌─────────────────────────┐
-│          Scraper Layer             │ │   Vector Store Layer    │
+│          Scraper Layer             │ │   BM25 Search Layer     │
 │      (internal/scraper/)           │ │   (internal/rag/)       │
 ├────────────────────────────────────┤ ├─────────────────────────┤
-│  Rate Limiter & Retry              │ │  chromem-go             │
-│  • Fixed delay: 2s after success   │ │  • Pure Go (gob 持久化) │
-│  • Timeout: 60s per request        │ │  • 餘弦相似度搜尋       │
-│  • Exponential backoff on failure  │ │  • Gemini embedding     │
-│  • Jitter: ±25% randomization      │ │    (768 維向量)         │
-│  • Max retries: 5 (configurable)   │ │  • 自動載入/持久化      │
+│  Rate Limiter & Retry              │ │  BM25Index              │
+│  • Fixed delay: 2s after success   │ │  • Pure Go (記憶體索引)   │
+│  • Timeout: 60s per request        │ │  • 中文 unigram 分詞    │
+│  • Exponential backoff on failure  │ │  • 關鍵字匹配搜尋        │
+│  • Jitter: ±25% randomization      │ │  • Query Expansion      │
+│  • Max retries: 5 (configurable)   │ │    (Gemini API)        │
 └────────────────────────────────────┘ └─────────────────────────┘
 │  ┌───────────────────────────────────────────────────────────┐ │
 │  │  URL Cache & Failover                                     │ │
@@ -306,63 +306,57 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 ### 2. 語意搜尋架構（可選功能）
 
 ```
-Hybrid Search 流程:
-                                      ┌─────────────────┐
-                                      │ Gemini API      │
-                                      │ (embedding)     │
-                                      └────────┬────────┘
-                                               │
-Warmup:                                        ▼
-  課程列表 → 抓取大綱 → 合併文字 → 計算 Hash → 產生 Embedding → 存入 VectorDB
-              ↓                       ↓              ↓
-          syllabus/              content_hash    chromem-go
-          scraper.go             (增量更新)      (gob 持久化)
-                                                       ↓
-                                               同步建立 BM25 索引 (記憶體)
+BM25 + Query Expansion 流程:
+
+Warmup:
+  課程列表 → 抓取大綱 → 合併文字 → 計算 Hash → 存入 SQLite
+              ↓                       ↓
+          syllabus/              content_hash
+          scraper.go             (增量更新)
+                                       ↓
+                               建立 BM25 索引 (記憶體)
 
 查詢:
   「找課 想學機器學習」
               ↓
     ┌────────┴────────┐
-    ▼                 ▼
-  BM25 Search    Vector Search
-  (關鍵字)       (語意 embedding)
-    │                 │
-    └────────┬────────┘
-             ▼
-    RRF Fusion (k=60)
-    BM25:40% + Vector:60%
-             ↓
-    Confidence-based ranking
-    (非 similarity 概念)
-             ↓
-    回傳信心分數排序結果
+    ▼
+  Query Expansion
+  (Gemini API)
+  擴展: 「AI」 → 「人工智慧 AI 機器學習 深度學習」
+    │
+    ▼
+  BM25 Search
+  (關鍵字匹配)
+    │
+    ▼
+  Confidence-based ranking
+  (排名位置 → 信心分數)
+    ↓
+  回傳信心分數排序結果
 ```
 
-**Hybrid Search 策略**:
-- **BM25**: 精確關鍵字匹配、縮寫擴展（無需 API）
-- **Vector**: 語意相似度、跨語言匹配（需 Gemini API）
-- **RRF Fusion**: 結合兩者排名，輸出「信心分數」而非「相似度」
+**BM25 + Query Expansion 策略**:
+- **Query Expansion**: LLM 擴展查詢，處理同義詞、縮寫、跨語言轉換
+- **BM25**: 精確關鍵字匹配，中文 unigram 分詞
 
 **關鍵概念**:
 - BM25 輸出無界分數，不可跨查詢比較
-- Vector 輸出 Cosine similarity (0-1)，是真正的語意相似度
-- RRF 只看排名，避免比較不可比較的分數
+- 信心分數基於排名位置計算，而非語意相似度
 
 **啟用條件**:
-- 設定 `GEMINI_API_KEY` 環境變數（Vector Search 需要）
-- 即使沒有 API Key，BM25 搜尋仍可使用
 - 將 `syllabus` 加入 `WARMUP_MODULES`
+- 設定 `GEMINI_API_KEY` 環境變數（Query Expansion 需要）
+- 即使沒有 API Key，基本 BM25 搜尋仍可使用
 
 **關鍵實作**:
-- `internal/genai/`: Gemini embedding 客戶端、Query Expander
-- `internal/rag/`: HybridSearcher、VectorDB、BM25Index、RRF Fusion
-- `internal/syllabus/`: 課程大綱擷取與 hash 計算、Chunking 策略
+- `internal/genai/expander.go`: Query Expansion（Gemini API）
+- `internal/rag/bm25.go`: BM25Index（記憶體索引）
+- `internal/syllabus/`: 課程大綱擷取與 hash 計算
 
 **效能優化**:
 - 使用 `content_hash` 實現增量更新（僅重新索引變更內容）
-- 向量資料庫持久化至 `data/chromem/syllabi/`
-- 啟動時自動載入已索引資料
+- BM25 索引在記憶體中運作，查詢延遲 <10ms
 
 ### 3. SQL 查詢優化
 
@@ -482,22 +476,26 @@ if len(data) > 300 {
 
 **關鍵指標**:
 ```
-# 請求量
-ntpu_webhook_requests_total{event_type, status}
-ntpu_scraper_requests_total{module, status}
+# 請求量 (RED Method)
+ntpu_webhook_total{event_type, status}
+ntpu_scraper_total{module, status}
+ntpu_llm_total{operation, status}
+ntpu_search_total{type, status}
 
 # 延遲
 ntpu_webhook_duration_seconds{event_type}
 ntpu_scraper_duration_seconds{module}
+ntpu_llm_duration_seconds{operation}
+ntpu_search_duration_seconds{type}
 
-# 快取
-ntpu_cache_hits_total{module}
-ntpu_cache_misses_total{module}
-ntpu_cache_entries{module}
+# 快取 (USE Method)
+ntpu_cache_operations_total{module, result}  # result: hit, miss
+ntpu_cache_size{module}
 
-# 系統
-ntpu_active_goroutines
-ntpu_memory_bytes
+# 其他
+ntpu_index_size{index}  # BM25 索引大小
+ntpu_rate_limiter_dropped_total{limiter}
+ntpu_job_duration_seconds{job, module}
 ```
 
 ### 2. 結構化日誌
@@ -524,7 +522,7 @@ ntpu_memory_bytes
 **告警閾值**:
 ```yaml
 - alert: ScraperHighFailureRate
-  expr: rate(ntpu_scraper_requests_total{status="error"}[5m]) > 0.3
+  expr: rate(ntpu_scraper_total{status="error"}[5m]) > 0.3
   for: 3m
 
 - alert: WebhookHighLatency
@@ -593,7 +591,7 @@ services:
 - 圖書館座位查詢
 
 ### 4. AI 整合 ✅ 部分已實現
-- ✅ 語意搜尋（課程大綱 embedding）
+- ✅ 語意搜尋（BM25 + Query Expansion）
 - 使用 LLM 理解自然語言查詢
 - 智能推薦相關資訊
 - 多輪對話支援
@@ -605,5 +603,5 @@ services:
 - [SQLite WAL Mode](https://www.sqlite.org/wal.html)
 - [Prometheus Best Practices](https://prometheus.io/docs/practices/)
 - [Grafana Dashboard Design](https://grafana.com/docs/grafana/latest/dashboards/)
-- [chromem-go](https://github.com/philippgille/chromem-go) - 純 Go 向量資料庫
-- [Google Gemini API](https://ai.google.dev/gemini-api/docs) - 文字 embedding
+- [BM25 Algorithm](https://en.wikipedia.org/wiki/Okapi_BM25) - 關鍵字搜尋演算法
+- [Google Gemini API](https://ai.google.dev/gemini-api/docs) - NLU 和 Query Expansion

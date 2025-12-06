@@ -31,7 +31,7 @@ func NewScraper(client *scraper.Client) *Scraper {
 }
 
 // ScrapeSyllabus extracts syllabus content from a course's detail URL
-// Returns the merged content (教學目標 + 內容綱要 + 教學進度) for embedding
+// Returns the merged content (教學目標 + 內容綱要 + 教學進度) for BM25 indexing
 func (s *Scraper) ScrapeSyllabus(ctx context.Context, course *storage.Course) (*Fields, error) {
 	if course.DetailURL == "" {
 		return nil, fmt.Errorf("course %s has no detail URL", course.UID)

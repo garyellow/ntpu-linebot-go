@@ -46,13 +46,12 @@ LINE Webhook → Gin Handler
 **ID Module**: Year query range (95-112, name search 101-112), department selection flow, student search (max 500 results), Flex Message cards
 
 **Course Module**: Smart semester detection (`semester.go`), UID regex (`(?i)\\d{3,4}[umnp]\\d{4}`), max 40 results, Flex Message carousels
-- **Semantic search**: `找課` keyword triggers embedding-based search using syllabus content (requires `GEMINI_API_KEY`)
-- **Hybrid search**: BM25 keyword + Vector semantic search with RRF fusion (k=60, BM25:0.4, Vector:0.6)
-- **Confidence scoring**: RRF-based confidence, NOT similarity. BM25 has no similarity concept.
-- **Thresholds**: Only for Vector (Min=0.5, High=0.8). BM25 uses rank limits, not similarity.
+- **Semantic search**: `找課` keyword triggers BM25 + Query Expansion search using syllabus content (requires `GEMINI_API_KEY` for Query Expansion)
+- **BM25 search**: Keyword-based search with Chinese tokenization (unigram for CJK)
+- **Confidence scoring**: Rank-based confidence (not similarity). Higher rank = higher confidence.
 - **Query expansion**: LLM-based expansion for short queries and technical abbreviations (AWS→雲端運算, AI→人工智慧)
-- **Detached context**: Uses `context.WithoutCancel()` to prevent request context cancellation from aborting embedding API calls
-- **Fallback**: Keyword search → semantic search (when no results and VectorDB enabled)
+- **Detached context**: Uses `context.WithoutCancel()` to prevent request context cancellation from aborting API calls
+- **Fallback**: Keyword search → BM25 semantic search (when no results and BM25Index enabled)
 
 **Contact Module**: Emergency phones (hardcoded), multilingual keywords, organization/individual contacts, Flex Message cards
 - **SQL LIKE fields**: name, title (fast path)
@@ -73,10 +72,14 @@ LINE Webhook → Gin Handler
 - TTL enforced at SQL level: `WHERE cached_at > ?`
 - **Syllabi table**: Stores syllabus content + SHA256 hash for incremental updates
 
-**Vector store** (`internal/rag/`):
-- chromem-go (Pure Go, gob persistence to `data/chromem/syllabi/`)
-- Gemini embedding API (`gemini-embedding-001`, 768 dimensions)
-- Optional: only enabled when `GEMINI_API_KEY` is set
+**BM25 Index** (`internal/rag/`):
+- Uses [iwilltry42/bm25-go](https://github.com/iwilltry42/bm25-go) (k1=1.5, b=0.75)
+- Maintained by k3d-io/k3d (⭐6.1k) maintainer - reliable and actively fixed
+- In-memory index (rebuilt on startup from SQLite)
+- Chinese tokenization with unigram for CJK characters
+- Single document strategy: 1 course = 1 document (no chunking)
+- Combined with LLM Query Expansion for effective retrieval
+- Optional: Gemini API Key enables Query Expansion
 
 **Background Jobs** (`cmd/server/main.go`):
 - **Daily Warmup**: Every day at 3:00 AM, refreshes all data modules unconditionally
@@ -186,7 +189,7 @@ Multiple base URLs per domain (LMS/SEA), automatic failover on 500+ errors, URLC
 **Common queries**:
 ```promql
 # Cache hit rate
-sum(rate(ntpu_cache_hits_total[5m])) / (sum(rate(ntpu_cache_hits_total[5m])) + sum(rate(ntpu_cache_misses_total[5m])))
+sum(rate(ntpu_cache_operations_total{result="hit"}[5m])) / sum(rate(ntpu_cache_operations_total[5m]))
 
 # P95 latency
 histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le))
@@ -224,7 +227,7 @@ Fallback → getHelpMessage() + Warning Log
 - 9 intent functions: `course_search`, `course_semantic`, `course_uid`, `id_search`, `id_student_id`, `id_department`, `contact_search`, `contact_emergency`, `help`
 - Group @Bot detection: Uses `mention.Index` and `mention.Length` for precise removal
 - Fallback strategy: NLU failure → help message with warning log
-- Metrics: `NLURequestsTotal`, `NLUDurationSeconds`, `NLUFallbackTotal`
+- Metrics: `ntpu_llm_total{operation="nlu"}`, `ntpu_llm_duration_seconds{operation="nlu"}`
 
 **Interface Pattern**:
 - `genai.IntentParser`: Interface defining Parse(), IsEnabled(), Close()
@@ -246,8 +249,8 @@ Fallback → getHelpMessage() + Warning Log
 - **DB schema**: `internal/storage/schema.go`
 - **LINE utilities**: `internal/lineutil/builder.go` (use instead of raw SDK)
 - **Sticker manager**: `internal/sticker/sticker.go` (avatar URLs for messages)
-- **Semantic search**: `internal/rag/vectordb.go` (chromem-go wrapper)
-- **Embedding client**: `internal/genai/embedding.go` (Gemini API)
+- **Semantic search**: `internal/rag/bm25.go` (BM25 index with Chinese tokenization)
+- **Query expander**: `internal/genai/expander.go` (LLM-based query expansion)
 - **NLU intent parser**: `internal/genai/intent.go` (Function Calling with Close method)
 - **Syllabus scraper**: `internal/syllabus/scraper.go` (course syllabus extraction)
 - **Timeout constants**: `internal/config/timeouts.go` (all timeout/interval constants)

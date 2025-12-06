@@ -68,12 +68,12 @@ func TestScrapeSyllabus_RealPage(t *testing.T) {
 		t.Log("Schedule (教學進度) is empty - this may be normal for some courses")
 	}
 
-	// Test that ChunksForEmbedding works
-	chunks := fields.ChunksForEmbedding("測試課程")
-	if len(chunks) == 0 && !fields.IsEmpty() {
-		t.Error("ChunksForEmbedding() returned empty for non-empty fields")
+	// Test that ContentForIndexing works
+	content := fields.ContentForIndexing("測試課程")
+	if content == "" && !fields.IsEmpty() {
+		t.Error("ContentForIndexing() returned empty for non-empty fields")
 	}
-	t.Logf("Generated %d chunks", len(chunks))
+	t.Logf("Generated content length: %d characters", len(content))
 
 	// Verify the CN and EN sections are distinct (not duplicated)
 	if fields.ObjectivesCN != "" && fields.ObjectivesEN != "" {

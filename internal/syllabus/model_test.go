@@ -179,39 +179,38 @@ func TestFields_IsEmpty(t *testing.T) {
 	}
 }
 
-func TestFields_ChunksForEmbedding(t *testing.T) {
+func TestFields_ContentForIndexing(t *testing.T) {
 	tests := []struct {
-		name        string
-		fields      Fields
-		courseTitle string
-		wantCount   int
-		wantTypes   []ChunkType
+		name         string
+		fields       Fields
+		courseTitle  string
+		wantEmpty    bool
+		wantContains []string // Strings that must appear in content
 	}{
 		{
 			name:        "empty fields",
 			fields:      Fields{},
 			courseTitle: "測試課程",
-			wantCount:   0,
-			wantTypes:   nil,
+			wantEmpty:   true,
 		},
 		{
 			name: "objectives_cn only",
 			fields: Fields{
 				ObjectivesCN: "培養程式設計能力",
 			},
-			courseTitle: "程式設計",
-			wantCount:   1,
-			wantTypes:   []ChunkType{ChunkTypeObjectivesCN},
+			courseTitle:  "程式設計",
+			wantEmpty:    false,
+			wantContains: []string{"【程式設計】", "教學目標：", "培養程式設計能力"},
 		},
 		{
-			name: "objectives_cn and objectives_en (separate chunks)",
+			name: "objectives_cn and objectives_en",
 			fields: Fields{
 				ObjectivesCN: "培養程式設計能力",
 				ObjectivesEN: "Develop programming skills",
 			},
-			courseTitle: "程式設計",
-			wantCount:   2,
-			wantTypes:   []ChunkType{ChunkTypeObjectivesCN, ChunkTypeObjectivesEN},
+			courseTitle:  "程式設計",
+			wantEmpty:    false,
+			wantContains: []string{"【程式設計】", "教學目標：", "培養程式設計能力", "Course Objectives:", "Develop programming skills"},
 		},
 		{
 			name: "all fields (CN only)",
@@ -220,12 +219,12 @@ func TestFields_ChunksForEmbedding(t *testing.T) {
 				OutlineCN:    "變數、迴圈、函數",
 				Schedule:     "第1週：課程介紹",
 			},
-			courseTitle: "程式設計",
-			wantCount:   3,
-			wantTypes:   []ChunkType{ChunkTypeObjectivesCN, ChunkTypeOutlineCN, ChunkTypeSchedule},
+			courseTitle:  "程式設計",
+			wantEmpty:    false,
+			wantContains: []string{"教學目標：", "培養程式設計能力", "內容綱要：", "變數、迴圈、函數", "教學進度：", "第1週：課程介紹"},
 		},
 		{
-			name: "all fields (CN + EN) - 5 chunks",
+			name: "all fields (CN + EN)",
 			fields: Fields{
 				ObjectivesCN: "培養程式設計能力",
 				ObjectivesEN: "Develop programming skills",
@@ -234,17 +233,24 @@ func TestFields_ChunksForEmbedding(t *testing.T) {
 				Schedule:     "第1週：課程介紹",
 			},
 			courseTitle: "程式設計",
-			wantCount:   5,
-			wantTypes:   []ChunkType{ChunkTypeObjectivesCN, ChunkTypeObjectivesEN, ChunkTypeOutlineCN, ChunkTypeOutlineEN, ChunkTypeSchedule},
+			wantEmpty:   false,
+			wantContains: []string{
+				"【程式設計】",
+				"教學目標：", "培養程式設計能力",
+				"Course Objectives:", "Develop programming skills",
+				"內容綱要：", "變數、迴圈、函數",
+				"Course Outline:", "Variables, loops, functions",
+				"教學進度：", "第1週：課程介紹",
+			},
 		},
 		{
 			name: "empty course title",
 			fields: Fields{
 				ObjectivesCN: "培養能力",
 			},
-			courseTitle: "",
-			wantCount:   1,
-			wantTypes:   []ChunkType{ChunkTypeObjectivesCN},
+			courseTitle:  "",
+			wantEmpty:    false,
+			wantContains: []string{"教學目標：", "培養能力"},
 		},
 		{
 			name: "whitespace only fields are skipped",
@@ -255,9 +261,9 @@ func TestFields_ChunksForEmbedding(t *testing.T) {
 				OutlineEN:    "\n\t\n", // whitespace only - should be skipped
 				Schedule:     "第1週導論",  // valid content
 			},
-			courseTitle: "測試課程",
-			wantCount:   1,
-			wantTypes:   []ChunkType{ChunkTypeSchedule},
+			courseTitle:  "測試課程",
+			wantEmpty:    false,
+			wantContains: []string{"教學進度：", "第1週導論"},
 		},
 		{
 			name: "mixed whitespace and content",
@@ -268,26 +274,25 @@ func TestFields_ChunksForEmbedding(t *testing.T) {
 				OutlineEN:    "",              // empty - should be skipped
 				Schedule:     "\t",            // whitespace only - should be skipped
 			},
-			courseTitle: "測試課程",
-			wantCount:   1,
-			wantTypes:   []ChunkType{ChunkTypeObjectivesCN},
+			courseTitle:  "測試課程",
+			wantEmpty:    false,
+			wantContains: []string{"教學目標：", "有效的教學目標"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			chunks := tt.fields.ChunksForEmbedding(tt.courseTitle)
-			if len(chunks) != tt.wantCount {
-				t.Errorf("ChunksForEmbedding() count = %d, want %d", len(chunks), tt.wantCount)
+			content := tt.fields.ContentForIndexing(tt.courseTitle)
+			isEmpty := content == ""
+
+			if isEmpty != tt.wantEmpty {
+				t.Errorf("ContentForIndexing() empty = %v, want %v", isEmpty, tt.wantEmpty)
 			}
-			for i, chunk := range chunks {
-				if i < len(tt.wantTypes) && chunk.Type != tt.wantTypes[i] {
-					t.Errorf("ChunksForEmbedding()[%d].Type = %s, want %s", i, chunk.Type, tt.wantTypes[i])
-				}
-				// Verify course title is included in content
-				if tt.courseTitle != "" && len(chunk.Content) > 0 {
-					if !containsStr(chunk.Content, tt.courseTitle) {
-						t.Errorf("Chunk content should contain course title %q", tt.courseTitle)
+
+			if !tt.wantEmpty {
+				for _, want := range tt.wantContains {
+					if !containsStr(content, want) {
+						t.Errorf("ContentForIndexing() should contain %q, got:\n%s", want, content)
 					}
 				}
 			}
@@ -295,7 +300,7 @@ func TestFields_ChunksForEmbedding(t *testing.T) {
 	}
 }
 
-func TestFields_ChunksForEmbedding_FullContent(t *testing.T) {
+func TestFields_ContentForIndexing_FullContent(t *testing.T) {
 	// Create a very long schedule - should NOT be truncated
 	longSchedule := ""
 	for i := 0; i < 100; i++ {
@@ -307,44 +312,29 @@ func TestFields_ChunksForEmbedding_FullContent(t *testing.T) {
 		Schedule:     longSchedule,
 	}
 
-	chunks := fields.ChunksForEmbedding("測試課程")
+	content := fields.ContentForIndexing("測試課程")
 
-	// Find schedule chunk
-	var scheduleChunk *Chunk
-	for i := range chunks {
-		if chunks[i].Type == ChunkTypeSchedule {
-			scheduleChunk = &chunks[i]
-			break
-		}
-	}
-
-	if scheduleChunk == nil {
-		t.Fatal("Expected schedule chunk")
-	}
-
-	// Schedule should contain the core content (TrimSpace is applied)
-	// The chunk should contain "課程內容說明與實作練習" multiple times
-	if !containsStr(scheduleChunk.Content, "課程內容說明與實作練習") {
-		t.Error("Schedule chunk should contain schedule content")
+	// Content should contain the schedule content (TrimSpace is applied)
+	if !containsStr(content, "課程內容說明與實作練習") {
+		t.Error("Content should contain schedule content")
 	}
 
 	// Should NOT end with "..." (no truncation)
-	if containsStr(scheduleChunk.Content, "...") {
-		t.Error("Schedule should not be truncated")
+	if containsStr(content, "...") {
+		t.Error("Content should not be truncated")
 	}
 
 	// Verify it contains the full range (week 0-9 should appear multiple times)
-	// Note: Uses Arabic numerals (第0週, 第1週) to match the test data format
 	for i := 0; i < 10; i++ {
 		weekStr := fmt.Sprintf("第%d週", i)
-		if !containsStr(scheduleChunk.Content, weekStr) {
-			t.Errorf("Schedule should contain %s", weekStr)
+		if !containsStr(content, weekStr) {
+			t.Errorf("Content should contain %s", weekStr)
 		}
 	}
 }
 
-func TestFields_ChunksForEmbedding_SeparateChunks(t *testing.T) {
-	// Test that CN and EN content are in separate chunks
+func TestFields_ContentForIndexing_SingleDocument(t *testing.T) {
+	// Test that all content is combined into a single document
 	fields := Fields{
 		ObjectivesCN: "培養程式設計能力",
 		ObjectivesEN: "Develop programming skills",
@@ -352,42 +342,26 @@ func TestFields_ChunksForEmbedding_SeparateChunks(t *testing.T) {
 		OutlineEN:    "Variables, loops, functions",
 	}
 
-	chunks := fields.ChunksForEmbedding("測試課程")
+	content := fields.ContentForIndexing("測試課程")
 
-	if len(chunks) != 4 {
-		t.Fatalf("Expected 4 chunks (objectives_cn, objectives_en, outline_cn, outline_en), got %d", len(chunks))
-	}
-
-	// Check objectives CN chunk
-	if chunks[0].Type != ChunkTypeObjectivesCN {
-		t.Errorf("Expected first chunk type to be %s, got %s", ChunkTypeObjectivesCN, chunks[0].Type)
-	}
-	if !containsStr(chunks[0].Content, "培養程式設計能力") {
-		t.Error("Objectives CN chunk should contain Chinese content")
+	// All content should be in a single string
+	if content == "" {
+		t.Fatal("Expected non-empty content")
 	}
 
-	// Check objectives EN chunk
-	if chunks[1].Type != ChunkTypeObjectivesEN {
-		t.Errorf("Expected second chunk type to be %s, got %s", ChunkTypeObjectivesEN, chunks[1].Type)
-	}
-	if !containsStr(chunks[1].Content, "Develop programming skills") {
-		t.Error("Objectives EN chunk should contain English content")
-	}
-
-	// Check outline CN chunk
-	if chunks[2].Type != ChunkTypeOutlineCN {
-		t.Errorf("Expected third chunk type to be %s, got %s", ChunkTypeOutlineCN, chunks[2].Type)
-	}
-	if !containsStr(chunks[2].Content, "變數、迴圈、函數") {
-		t.Error("Outline CN chunk should contain Chinese content")
+	// Verify all sections are present
+	expectedParts := []string{
+		"【測試課程】",
+		"教學目標：培養程式設計能力",
+		"Course Objectives: Develop programming skills",
+		"內容綱要：變數、迴圈、函數",
+		"Course Outline: Variables, loops, functions",
 	}
 
-	// Check outline EN chunk
-	if chunks[3].Type != ChunkTypeOutlineEN {
-		t.Errorf("Expected fourth chunk type to be %s, got %s", ChunkTypeOutlineEN, chunks[3].Type)
-	}
-	if !containsStr(chunks[3].Content, "Variables, loops, functions") {
-		t.Error("Outline EN chunk should contain English content")
+	for _, part := range expectedParts {
+		if !containsStr(content, part) {
+			t.Errorf("Content should contain %q", part)
+		}
 	}
 }
 

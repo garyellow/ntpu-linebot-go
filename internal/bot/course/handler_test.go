@@ -411,29 +411,29 @@ func TestCanHandle_SemanticKeywords(t *testing.T) {
 	}
 }
 
-func TestSetVectorDB(t *testing.T) {
+func TestSetBM25Index(t *testing.T) {
 	h := setupTestHandler(t)
 
 	// Initially nil
-	if h.vectorDB != nil {
-		t.Error("Expected vectorDB to be nil initially")
+	if h.bm25Index != nil {
+		t.Error("Expected bm25Index to be nil initially")
 	}
 
 	// After setting, should not be nil
-	// Note: We can't easily test with a real VectorDB without API key
+	// Note: We can't easily test with a real BM25Index without data
 	// This test just verifies the setter method exists and works
 }
 
-func TestHandleSemanticSearch_NoVectorDB(t *testing.T) {
+func TestHandleSemanticSearch_NoBM25Index(t *testing.T) {
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
-	// VectorDB is nil by default
+	// BM25Index is nil by default
 	messages := h.HandleMessage(ctx, "找課 機器學習")
 
-	// Should return a helpful message when VectorDB is not available
+	// Should return a helpful message when BM25Index is not available
 	if len(messages) == 0 {
-		t.Error("Expected at least one message when VectorDB is disabled")
+		t.Error("Expected at least one message when BM25 search is disabled")
 	}
 }
 
@@ -449,75 +449,51 @@ func TestHandleSemanticSearch_EmptyQuery(t *testing.T) {
 	}
 }
 
-func TestGetSimilarityBadge(t *testing.T) {
-	// Tests updated to match new thresholds
-	// >= 80%: 高度相關, 65-79%: 相關, 50-64%: 可能相關, < 50%: 參考
+func TestGetRelevanceBadge(t *testing.T) {
+	// Tests for simplified 2-tier relevance badge
+	// Top 3: 最相關, Rank 4+: 相關
 	tests := []struct {
 		name           string
-		similarity     float32
+		rank           int
 		wantBadge      string
 		wantColorCheck func(color string) bool
 	}{
 		{
-			name:       "very high confidence (95%)",
-			similarity: 0.95,
-			wantBadge:  "🎯 高度相關 95%",
+			name:      "top result (rank 1)",
+			rank:      1,
+			wantBadge: "🎯 最相關",
 			wantColorCheck: func(c string) bool {
 				return c != "" // Should have color
 			},
 		},
 		{
-			name:       "high confidence threshold (80%)",
-			similarity: 0.80,
-			wantBadge:  "🎯 高度相關 80%",
+			name:      "top 3 result (rank 2)",
+			rank:      2,
+			wantBadge: "🎯 最相關",
 			wantColorCheck: func(c string) bool {
 				return c != ""
 			},
 		},
 		{
-			name:       "relevant upper bound (79%)",
-			similarity: 0.79,
-			wantBadge:  "✨ 相關 79%",
+			name:      "top 3 result (rank 3)",
+			rank:      3,
+			wantBadge: "🎯 最相關",
 			wantColorCheck: func(c string) bool {
 				return c != ""
 			},
 		},
 		{
-			name:       "relevant lower bound (65%)",
-			similarity: 0.65,
-			wantBadge:  "✨ 相關 65%",
+			name:      "relevant result (rank 4)",
+			rank:      4,
+			wantBadge: "✨ 相關",
 			wantColorCheck: func(c string) bool {
 				return c != ""
 			},
 		},
 		{
-			name:       "possibly relevant upper bound (64%)",
-			similarity: 0.64,
-			wantBadge:  "💡 可能相關 64%",
-			wantColorCheck: func(c string) bool {
-				return c != ""
-			},
-		},
-		{
-			name:       "possibly relevant lower bound (50%)",
-			similarity: 0.50,
-			wantBadge:  "💡 可能相關 50%",
-			wantColorCheck: func(c string) bool {
-				return c != ""
-			},
-		},
-		{
-			name:       "below threshold - edge case (49%)",
-			similarity: 0.49,
-			wantBadge:  "🔍 參考 49%",
-			wantColorCheck: func(c string) bool {
-				return c != ""
-			},
-		},
-		{
-			name:       "below threshold - edge case (30%)",
-			similarity: 0.30,
-			wantBadge:  "🔍 參考 30%",
+			name:      "relevant result (rank 10)",
+			rank:      10,
+			wantBadge: "✨ 相關",
 			wantColorCheck: func(c string) bool {
 				return c != ""
 			},
@@ -526,12 +502,12 @@ func TestGetSimilarityBadge(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			badge, color := getSimilarityBadge(tt.similarity)
+			badge, color := getRelevanceBadge(tt.rank)
 			if badge != tt.wantBadge {
-				t.Errorf("getSimilarityBadge(%f) badge = %q, want %q", tt.similarity, badge, tt.wantBadge)
+				t.Errorf("getRelevanceBadge(%d) badge = %q, want %q", tt.rank, badge, tt.wantBadge)
 			}
 			if !tt.wantColorCheck(color) {
-				t.Errorf("getSimilarityBadge(%f) color = %q, check failed", tt.similarity, color)
+				t.Errorf("getRelevanceBadge(%d) color = %q, check failed", tt.rank, color)
 			}
 		})
 	}
@@ -637,7 +613,7 @@ func TestDispatchIntent_Integration(t *testing.T) {
 			params:       map[string]string{"uid": "1141U0001"},
 			wantMessages: true,
 		},
-		// Semantic search requires VectorDB setup, tested separately
+		// Semantic search requires BM25Index setup, tested separately
 	}
 
 	for _, tt := range tests {
@@ -654,10 +630,10 @@ func TestDispatchIntent_Integration(t *testing.T) {
 	}
 }
 
-// TestDispatchIntent_SemanticNoVectorDB tests semantic search fallback when VectorDB is not configured.
-func TestDispatchIntent_SemanticNoVectorDB(t *testing.T) {
+// TestDispatchIntent_SemanticNoBM25Index tests semantic search fallback when BM25Index is not configured.
+func TestDispatchIntent_SemanticNoBM25Index(t *testing.T) {
 	h := setupTestHandler(t)
-	// VectorDB is nil by default in setupTestHandler
+	// BM25Index is nil by default in setupTestHandler
 	ctx := context.Background()
 
 	msgs, err := h.DispatchIntent(ctx, IntentSemantic, map[string]string{"query": "想學程式設計"})

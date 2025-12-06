@@ -198,10 +198,10 @@ func TestRecordSearch(t *testing.T) {
 		duration    float64
 		resultCount int
 	}{
-		{"hybrid", "success", 0.5, 10},
-		{"bm25", "success", 0.05, 20},
-		{"vector", "error", 1.0, 0},
-		{"hybrid", "no_results", 0.3, 0},
+		{"bm25", "success", 0.05, 10},
+		{"bm25", "success", 0.03, 20},
+		{"bm25", "error", 1.0, 0},
+		{"disabled", "skipped", 0.001, 0},
 	}
 
 	for _, tc := range testCases {
@@ -214,7 +214,7 @@ func TestSetIndexSize(t *testing.T) {
 	m := New(registry)
 
 	m.SetIndexSize("bm25", 1000)
-	m.SetIndexSize("vector", 1000)
+	m.SetIndexSize("bm25", 2000) // Update index size
 }
 
 // ============================================
@@ -281,7 +281,7 @@ func TestRecordLLMRequest(t *testing.T) {
 
 	// RecordLLMRequest is an alias for RecordLLM
 	m.RecordLLMRequest("nlu", "success", 0.5)
-	m.RecordLLMRequest("embedding", "error", 1.0)
+	m.RecordLLMRequest("expansion", "error", 1.0)
 }
 
 func TestRecordLLMFallback(t *testing.T) {
@@ -290,5 +290,5 @@ func TestRecordLLMFallback(t *testing.T) {
 
 	// RecordLLMFallback records with "fallback" status
 	m.RecordLLMFallback("nlu")
-	m.RecordLLMFallback("embedding")
+	m.RecordLLMFallback("expansion")
 }

@@ -8,26 +8,8 @@ import (
 	"strings"
 )
 
-// ChunkType identifies the type of content in a chunk
-type ChunkType string
-
-// Chunk types for syllabus embedding
-const (
-	ChunkTypeObjectivesCN ChunkType = "objectives_cn" // 教學目標（中文）
-	ChunkTypeObjectivesEN ChunkType = "objectives_en" // Course Objectives（英文）
-	ChunkTypeOutlineCN    ChunkType = "outline_cn"    // 內容綱要（中文）
-	ChunkTypeOutlineEN    ChunkType = "outline_en"    // Course Outline（英文）
-	ChunkTypeSchedule     ChunkType = "schedule"      // 教學進度
-)
-
-// Chunk represents a single chunk of syllabus content for embedding
-type Chunk struct {
-	Type    ChunkType // Type of chunk content
-	Content string    // The actual content for embedding
-}
-
 // ComputeContentHash calculates SHA256 hash of the content.
-// Used for incremental update detection - only re-embed if content changed.
+// Used for incremental update detection - only re-index if content changed.
 func ComputeContentHash(content string) string {
 	hash := sha256.Sum256([]byte(content))
 	return hex.EncodeToString(hash[:])
@@ -45,63 +27,63 @@ type Fields struct {
 	Schedule     string // 教學進度 (only the schedule content, not metadata)
 }
 
-// ChunksForEmbedding returns separate chunks for better asymmetric semantic search.
-// Each chunk includes the course title as context prefix.
-// This improves retrieval accuracy for short queries against long documents.
+// ContentForIndexing returns a single document string for BM25 search indexing.
+// Combines all syllabus fields into one document with the course title as prefix.
 //
-// Strategy:
-// - 5 separate chunks: ObjectivesCN, ObjectivesEN, OutlineCN, OutlineEN, Schedule
-// - Chinese and English are kept separate for cleaner semantic matching
-// - No truncation needed as Gemini embedding supports 2048 tokens (~8000 chars)
-// - Whitespace-only fields are skipped (no value for embedding)
-func (f *Fields) ChunksForEmbedding(courseTitle string) []Chunk {
-	var chunks []Chunk
-	prefix := ""
+// BM25 Best Practice:
+// - Single document per course: More accurate IDF calculation
+// - No chunking needed: BM25's length normalization (b=0.75) handles document length
+// - Simpler mapping: 1 course = 1 document, no deduplication needed
+// - Better for small corpus: ~2000 courses doesn't need embedding-style chunking
+//
+// For embedding models, chunking is necessary due to token limits and semantic compression.
+// BM25 doesn't have these constraints - it uses term frequency statistics directly.
+func (f *Fields) ContentForIndexing(courseTitle string) string {
+	// Build content without title first
+	var content strings.Builder
+
+	// Objectives (教學目標)
+	if s := strings.TrimSpace(f.ObjectivesCN); s != "" {
+		content.WriteString("教學目標：")
+		content.WriteString(s)
+		content.WriteString("\n")
+	}
+	if s := strings.TrimSpace(f.ObjectivesEN); s != "" {
+		content.WriteString("Course Objectives: ")
+		content.WriteString(s)
+		content.WriteString("\n")
+	}
+
+	// Outline (內容綱要)
+	if s := strings.TrimSpace(f.OutlineCN); s != "" {
+		content.WriteString("內容綱要：")
+		content.WriteString(s)
+		content.WriteString("\n")
+	}
+	if s := strings.TrimSpace(f.OutlineEN); s != "" {
+		content.WriteString("Course Outline: ")
+		content.WriteString(s)
+		content.WriteString("\n")
+	}
+
+	// Schedule (教學進度)
+	if s := strings.TrimSpace(f.Schedule); s != "" {
+		content.WriteString("教學進度：")
+		content.WriteString(s)
+	}
+
+	// If no content, return empty (don't add title for empty content)
+	trimmedContent := strings.TrimSpace(content.String())
+	if trimmedContent == "" {
+		return ""
+	}
+
+	// Prepend course title if provided
 	if courseTitle != "" {
-		prefix = "【" + courseTitle + "】\n"
+		return "【" + courseTitle + "】\n" + trimmedContent
 	}
 
-	// Chunk 1: Objectives CN (教學目標 - 中文)
-	if strings.TrimSpace(f.ObjectivesCN) != "" {
-		chunks = append(chunks, Chunk{
-			Type:    ChunkTypeObjectivesCN,
-			Content: prefix + "教學目標：" + strings.TrimSpace(f.ObjectivesCN),
-		})
-	}
-
-	// Chunk 2: Objectives EN (Course Objectives - English)
-	if strings.TrimSpace(f.ObjectivesEN) != "" {
-		chunks = append(chunks, Chunk{
-			Type:    ChunkTypeObjectivesEN,
-			Content: prefix + "Course Objectives: " + strings.TrimSpace(f.ObjectivesEN),
-		})
-	}
-
-	// Chunk 3: Outline CN (內容綱要 - 中文)
-	if strings.TrimSpace(f.OutlineCN) != "" {
-		chunks = append(chunks, Chunk{
-			Type:    ChunkTypeOutlineCN,
-			Content: prefix + "內容綱要：" + strings.TrimSpace(f.OutlineCN),
-		})
-	}
-
-	// Chunk 4: Outline EN (Course Outline - English)
-	if strings.TrimSpace(f.OutlineEN) != "" {
-		chunks = append(chunks, Chunk{
-			Type:    ChunkTypeOutlineEN,
-			Content: prefix + "Course Outline: " + strings.TrimSpace(f.OutlineEN),
-		})
-	}
-
-	// Chunk 5: Schedule (教學進度)
-	if strings.TrimSpace(f.Schedule) != "" {
-		chunks = append(chunks, Chunk{
-			Type:    ChunkTypeSchedule,
-			Content: prefix + "教學進度：" + strings.TrimSpace(f.Schedule),
-		})
-	}
-
-	return chunks
+	return trimmedContent
 }
 
 // IsEmpty returns true if all fields are empty or whitespace-only

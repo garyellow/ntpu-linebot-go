@@ -21,7 +21,7 @@ type Config struct {
 	LineChannelSecret string
 
 	// GenAI Configuration
-	GeminiAPIKey string // Gemini API key for embedding and RAG features
+	GeminiAPIKey string // Gemini API key for NLU and Query Expansion features
 
 	// Server Configuration
 	Port            string
@@ -29,7 +29,7 @@ type Config struct {
 	ShutdownTimeout time.Duration
 
 	// Data Configuration
-	DataDir  string        // Data directory for SQLite and vector database
+	DataDir  string        // Data directory for SQLite database
 	CacheTTL time.Duration // Hard TTL: absolute expiration for cache entries (default: 7 days)
 
 	// Scraper Configuration
