@@ -618,13 +618,14 @@ processLoop:
 			log.WithError(err).Error("Failed to save syllabi batch")
 			return fmt.Errorf("failed to save syllabi: %w", err)
 		}
+	}
 
-		// Add to BM25 index
-		if bm25Index != nil {
-			if err := bm25Index.AddSyllabi(ctx, newSyllabi); err != nil {
-				log.WithError(err).Warn("Failed to add syllabi to BM25 index")
-				// Don't fail the whole warmup for index errors
-			}
+	// Rebuild BM25 index from database (includes all syllabi with full content)
+	// This is done after saving to ensure database is the source of truth
+	if bm25Index != nil {
+		if err := bm25Index.RebuildFromDB(ctx, db); err != nil {
+			log.WithError(err).Warn("Failed to rebuild BM25 index")
+			// Don't fail the whole warmup for index errors
 		}
 	}
 

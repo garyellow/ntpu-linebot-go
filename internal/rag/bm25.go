@@ -148,56 +148,29 @@ func (idx *BM25Index) Initialize(syllabi []*storage.Syllabus) error {
 	return nil
 }
 
-// AddSyllabi adds new syllabi to the BM25 index incrementally.
-// This is called during warmup to update the index with new data.
-// For simplicity, this re-initializes the entire index with all syllabi.
-// Context parameter is for API compatibility.
-func (idx *BM25Index) AddSyllabi(_ context.Context, syllabi []*storage.Syllabus) error {
-	if len(syllabi) == 0 {
+// SyllabiLoader is an interface for loading syllabi from storage.
+// This allows BM25Index to reload data without direct storage dependency.
+type SyllabiLoader interface {
+	GetAllSyllabi(ctx context.Context) ([]*storage.Syllabus, error)
+}
+
+// RebuildFromDB reloads all syllabi from the database and rebuilds the index.
+// This is called during warmup after new syllabi are saved to ensure
+// the index contains complete syllabus content (not just metadata).
+// BM25 requires all documents for IDF calculation, so full rebuild is necessary.
+func (idx *BM25Index) RebuildFromDB(ctx context.Context, loader SyllabiLoader) error {
+	if idx == nil {
 		return nil
 	}
 
-	idx.mu.Lock()
-	defer idx.mu.Unlock()
-
-	// For incremental updates, we need to rebuild the entire index
-	// since BM25 requires all documents for IDF calculation
-	// Get existing syllabi from metadata
-	var allSyllabi []*storage.Syllabus
-	existingUIDs := make(map[string]bool)
-
-	for uid, meta := range idx.metadata {
-		existingUIDs[uid] = true
-		// Reconstruct syllabus from metadata (basic info only)
-		allSyllabi = append(allSyllabi, &storage.Syllabus{
-			UID:      uid,
-			Title:    meta.Title,
-			Teachers: meta.Teachers,
-			Year:     meta.Year,
-			Term:     meta.Term,
-		})
+	// Load all syllabi from database (includes full content)
+	syllabi, err := loader.GetAllSyllabi(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to load syllabi from database: %w", err)
 	}
 
-	// Add new syllabi (avoid duplicates)
-	for _, syl := range syllabi {
-		if !existingUIDs[syl.UID] {
-			allSyllabi = append(allSyllabi, syl)
-		}
-	}
-
-	// Reinitialize with all syllabi
-	idx.initialized = false
-	idx.corpus = nil
-	idx.rawDocs = nil
-	idx.uidToDocIDs = make(map[string][]int)
-	idx.docIDToUID = make(map[int]string)
-	idx.metadata = make(map[string]docMeta)
-	idx.bm25Okapi = nil
-	idx.mu.Unlock()
-
-	err := idx.Initialize(allSyllabi)
-	idx.mu.Lock() // Re-lock for deferred unlock
-	return err
+	// Reinitialize index with complete data
+	return idx.Initialize(syllabi)
 }
 
 // Search performs BM25 keyword search
