@@ -207,7 +207,7 @@ ntpu_webhook_duration_seconds_count{event_type="message"} 1000
 | `ntpu_llm_total` | Counter | LLM API 請求總數 | `operation`, `status` |
 | `ntpu_llm_duration_seconds` | Histogram | LLM API 請求耗時 | `operation` |
 | **Search (RED)** | | | |
-| `ntpu_search_total` | Counter | 語意搜尋請求總數 | `type`, `status` |
+| `ntpu_search_total` | Counter | 智慧搜尋請求總數 | `type`, `status` |
 | `ntpu_search_duration_seconds` | Histogram | 搜尋耗時 | `component` |
 | `ntpu_search_results` | Histogram | 搜尋結果數量分布 | `type` |
 | `ntpu_index_size` | Gauge | 索引文件數量 | `index` |

@@ -63,14 +63,14 @@ var (
 		"teacher", "professor", "prof", "dr", "doctor",
 	}
 
-	// Semantic search keywords (direct semantic search)
-	// 找課: directly triggers semantic search without keyword fallback
-	validSemanticKeywords = []string{
+	// Smart search keywords (direct BM25 smart search)
+	// 找課: directly triggers smart search without keyword fallback
+	validSmartSearchKeywords = []string{
 		"找課", "找課程", "搜課",
 	}
 
-	courseRegex         = bot.BuildKeywordRegex(validCourseKeywords)
-	semanticCourseRegex = bot.BuildKeywordRegex(validSemanticKeywords)
+	courseRegex            = bot.BuildKeywordRegex(validCourseKeywords)
+	smartSearchCourseRegex = bot.BuildKeywordRegex(validSmartSearchKeywords)
 	// UID format: {year}{term}{no} where:
 	// - year: 2-3 digits (e.g., 113, 99)
 	// - term: 1 digit (1=上學期, 2=下學期)
@@ -186,8 +186,8 @@ func (h *Handler) CanHandle(text string) bool {
 		return true
 	}
 
-	// Check for semantic search keywords (找課)
-	if semanticCourseRegex.MatchString(text) {
+	// Check for smart search keywords (找課)
+	if smartSearchCourseRegex.MatchString(text) {
 		return true
 	}
 
@@ -228,9 +228,9 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		}
 	}
 
-	// Check for semantic search keywords (找課) - direct semantic search
-	if semanticCourseRegex.MatchString(text) {
-		match := semanticCourseRegex.FindString(text)
+	// Check for smart search keywords (找課) - direct smart search
+	if smartSearchCourseRegex.MatchString(text) {
+		match := smartSearchCourseRegex.FindString(text)
 		searchTerm := bot.ExtractSearchTerm(text, match)
 
 		if searchTerm == "" {
@@ -238,9 +238,9 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			// Check if semantic search is actually enabled
 			var helpText string
 			if h.bm25Index != nil && h.bm25Index.IsEnabled() {
-				helpText = "🔮 請輸入想找的課程描述\n\n例如：\n• 找課 想學習資料分析\n• 找課 Python 機器學習\n• 找課 商業管理相關課程\n\n💡 語意搜尋會根據課程大綱內容智慧匹配"
+				helpText = "🔮 智慧搜尋說明\n\n請描述您想找的課程內容\n• 找課 想學資料分析\n• 找課 Python 機器學習\n• 找課 商業管理相關\n\n💡 根據課程大綱內容匹配\n\n🔍 若知道課名，建議用「課程 名稱」"
 			} else {
-				helpText = "⚠️ 語意搜尋目前未啟用\n\n請使用「課程 關鍵字」進行搜尋\n例如：課程 微積分、課程 王小明"
+				helpText = "⚠️ 智慧搜尋目前未啟用\n\n請使用精確搜尋\n• 課程 微積分\n• 課程 王小明"
 			}
 			msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
 			return []messaging_api.MessageInterface{msg}
@@ -262,14 +262,14 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			var helpText string
 			var quickReplyItems []lineutil.QuickReplyItem
 			if h.bm25Index != nil && h.bm25Index.IsEnabled() {
-				// Semantic search enabled - mention it as an option
-				helpText = "📚 請輸入課程關鍵字\n\n例如：\n• 課 程式設計\n• 課程 微積分\n• 課 王小明（搜尋教師）\n\n🔮 或使用「找課」進行語意搜尋\n• 找課 想學程式設計\n\n💡 也可直接輸入課程編號（如：1131U0001）"
+				// Smart search enabled - mention it as an option
+				helpText = "📚 課程查詢方式\n\n🔍 精確搜尋\n• 課程 微積分\n• 課程 王小明\n• 課程 線代 王\n\n🔮 智慧搜尋\n• 找課 想學資料分析\n• 找課 Python 入門\n\n💡 直接輸入課號也可以（如 1131U0001）"
 				quickReplyItems = []lineutil.QuickReplyItem{
-					lineutil.QuickReplySemanticSearchAction(),
+					lineutil.QuickReplySmartSearchAction(),
 					lineutil.QuickReplyHelpAction(),
 				}
 			} else {
-				helpText = "📚 請輸入課程關鍵字\n\n例如：\n• 課 程式設計\n• 課程 微積分\n• 課 王小明（搜尋教師）\n• 課 線代 王（搜尋課名+教師）\n\n💡 也可直接輸入課程編號（如：1131U0001）"
+				helpText = "📚 課程查詢方式\n\n🔍 精確搜尋\n• 課程 微積分\n• 課程 王小明\n• 課程 線代 王\n\n💡 直接輸入課號也可以（如 1131U0001）"
 				quickReplyItems = []lineutil.QuickReplyItem{
 					lineutil.QuickReplyHelpAction(),
 				}
@@ -354,7 +354,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 		log.Warnf("Course UID %s not found after scraping", uid)
 		h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 請確認：\n• 課程編號拼寫是否正確\n• 該課程是否在近兩學年度開設", uid),
+			fmt.Sprintf("🔍 查無課程編號 %s\n\n請確認\n• 課程編號拼寫是否正確\n• 該課程是否在近兩學年度開設", uid),
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -440,7 +440,7 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 	// Build helpful message with examples
 	exampleUID := fmt.Sprintf("%d1%s", searchYears[0], courseNo)
 	msg := lineutil.NewTextMessageWithConsistentSender(
-		fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 請確認：\n• 課程編號拼寫是否正確\n• 該課程是否在近兩學年度開設\n\n📝 若已知完整課號，可直接輸入：\n   例如：%s", courseNo, exampleUID),
+		fmt.Sprintf("🔍 查無課程編號 %s\n\n請確認\n• 課程編號拼寫是否正確\n• 該課程是否在近兩學年度開設\n\n完整課號範例：%s", courseNo, exampleUID),
 		sender,
 	)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -645,13 +645,13 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 	// No results found even after scraping and semantic search
 	h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
 
-	// Build help message with semantic search suggestion
+	// Build help message with smart search suggestion
 	helpText := fmt.Sprintf(
-		"🔍 查無包含「%s」的課程或教師\n\n💡 請確認：\n• 課程名稱或教師姓名是否正確\n• 該課程是否在近兩學年度開設\n• 可嘗試只輸入部分關鍵字（如姓氏）",
+		"🔍 查無「%s」的相關課程\n\n💡 建議嘗試\n• 縮短關鍵字（如「線性」→「線」）\n• 只輸入教師姓氏\n• 換個描述方式",
 		searchTerm,
 	)
 	if h.bm25Index != nil && h.bm25Index.IsEnabled() {
-		helpText += "\n\n🔮 試試語意搜尋：「找課 " + searchTerm + "」"
+		helpText += "\n\n🔮 或用智慧搜尋\n「找課 " + searchTerm + "」"
 	}
 
 	msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
@@ -662,7 +662,7 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 	}
 	if h.bm25Index != nil && h.bm25Index.IsEnabled() {
 		quickReplyItems = append(quickReplyItems,
-			lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("🔮 語意搜尋", "找課 "+searchTerm)},
+			lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("🔮 找課", "找課 "+searchTerm)},
 		)
 	}
 	quickReplyItems = append(quickReplyItems, lineutil.QuickReplyHelpAction())
@@ -682,7 +682,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	currentYear := time.Now().Year() - 1911
 	if year < 89 || year > currentYear {
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("❌ 無效的學年度：%d\n\n💡 請輸入 89-%d 之間的學年度\n範例：課程 110 微積分", year, currentYear),
+			fmt.Sprintf("❌ 無效的學年度：%d\n\n請輸入 89-%d 之間的學年度\n範例：課程 110 微積分", year, currentYear),
 			sender,
 		)
 		return []messaging_api.MessageInterface{msg}
@@ -722,7 +722,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 			Warn("Failed to scrape historical courses")
 		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("🔍 查無 %d 學年度包含「%s」的課程\n\n💡 請確認：\n• 學年度和課程名稱是否正確\n• 該課程是否在該學年度開設", year, keyword),
+			fmt.Sprintf("🔍 查無 %d 學年度包含「%s」的課程\n\n請確認\n• 學年度和課程名稱是否正確\n• 該課程是否在該學年度開設", year, keyword),
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -753,7 +753,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	// No results found
 	h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
 	msg := lineutil.NewTextMessageWithConsistentSender(
-		fmt.Sprintf("🔍 查無 %d 學年度包含「%s」的課程\n\n💡 請確認：\n• 學年度和課程名稱是否正確\n• 該課程是否在該學年度開設", year, keyword),
+		fmt.Sprintf("🔍 查無 %d 學年度包含「%s」的課程\n\n請確認\n• 學年度和課程名稱是否正確\n• 該課程是否在該學年度開設", year, keyword),
 		sender,
 	)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -1077,12 +1077,12 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 	bm25Enabled := h.bm25Index != nil && h.bm25Index.IsEnabled()
 
 	if !bm25Enabled {
-		log.Info("Semantic search not enabled")
+		log.Info("Smart search not enabled")
 		h.metrics.RecordSearch("disabled", "skipped", time.Since(startTime).Seconds(), 0)
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		return []messaging_api.MessageInterface{
 			lineutil.NewTextMessageWithConsistentSender(
-				"⚠️ 語意搜尋功能尚未啟用\n\n請使用「課程 關鍵字」進行一般搜尋", sender),
+				"⚠️ 智慧搜尋目前未啟用\n\n請使用精確搜尋\n• 課程 微積分\n• 課程 王小明", sender),
 		}
 	}
 
@@ -1124,17 +1124,17 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		return []messaging_api.MessageInterface{
 			lineutil.NewTextMessageWithConsistentSender(
-				"⚠️ 語意搜尋暫時無法使用\n\n請稍後再試，或使用「課程 關鍵字」進行一般搜尋", sender),
+				"⚠️ 智慧搜尋暫時無法使用\n\n請稍後再試，或使用精確搜尋\n• 課程 微積分", sender),
 		}
 	}
 
 	if len(results) == 0 {
-		log.Info("No semantic search results found")
+		log.Info("No smart search results found")
 		h.metrics.RecordSearch(searchType, "no_results", time.Since(startTime).Seconds(), 0)
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		return []messaging_api.MessageInterface{
 			lineutil.NewTextMessageWithConsistentSender(
-				"🔍 找不到相關課程\n\n沒有找到與您描述足夠相關的課程\n請嘗試不同的描述方式", sender),
+				"🔍 找不到相關課程\n\n嘗試不同的描述方式\n或使用精確搜尋\n• 課程 名稱", sender),
 		}
 	}
 
@@ -1169,7 +1169,7 @@ func (h *Handler) formatSemanticSearchResponse(courses []storage.Course, results
 	if len(courses) == 0 {
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithConsistentSender("🔍 找不到相關課程\n\n請嘗試其他描述或使用「課程」關鍵字搜尋", sender),
+			lineutil.NewTextMessageWithConsistentSender("🔍 找不到相關課程\n\n請嘗試其他描述\n或使用精確搜尋\n• 課程 名稱", sender),
 		}
 	}
 
@@ -1199,9 +1199,9 @@ func (h *Handler) formatSemanticSearchResponse(courses []storage.Course, results
 		}
 
 		carousel := lineutil.NewFlexCarousel(bubbles[i:end])
-		altText := "🔮 語意搜尋結果"
+		altText := "🔮 智慧搜尋結果"
 		if i > 0 {
-			altText = fmt.Sprintf("語意搜尋結果 (%d-%d)", i+1, end)
+			altText = fmt.Sprintf("智慧搜尋結果 (%d-%d)", i+1, end)
 		}
 		msg := lineutil.NewFlexMessage(altText, carousel)
 		msg.Sender = sender
@@ -1210,7 +1210,7 @@ func (h *Handler) formatSemanticSearchResponse(courses []storage.Course, results
 
 	// Add header message with search guidance
 	// Provide tips when results are few to help users refine their queries
-	headerText := fmt.Sprintf("🔮 語意搜尋找到 %d 門相關課程\n\n根據課程大綱內容智慧匹配", len(courses))
+	headerText := fmt.Sprintf("🔮 智慧搜尋找到 %d 門相關課程\n\n根據課程大綱內容智慧匹配", len(courses))
 	if len(courses) <= 3 {
 		headerText += "\n\n💡 提示：使用更具體的關鍵字（如「雲端運算」、「Python」）可獲得更多結果"
 	}
@@ -1219,7 +1219,7 @@ func (h *Handler) formatSemanticSearchResponse(courses []storage.Course, results
 
 	// Add Quick Reply
 	lineutil.AddQuickReplyToMessages(messages,
-		lineutil.QuickReplySemanticSearchAction(),
+		lineutil.QuickReplySmartSearchAction(),
 		lineutil.QuickReplyCourseAction(),
 		lineutil.QuickReplyHelpAction(),
 	)

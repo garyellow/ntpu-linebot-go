@@ -1,6 +1,8 @@
 # rag
 
-Retrieval-Augmented Generation (RAG) 模組，提供課程語意搜尋功能。
+Retrieval-Augmented Generation (RAG) 模組，提供課程智慧搜尋功能。
+
+> ℹ️ 注意：本模組使用 **BM25 關鍵字搜尋 + LLM Query Expansion**，不是真正的「語意搜尋」(Semantic Search / Embedding-based Vector Search)。
 
 ## 功能
 

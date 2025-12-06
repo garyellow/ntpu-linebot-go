@@ -814,7 +814,7 @@ func (h *Handler) getDetailedInstructionMessages() []messaging_api.MessageInterf
 		"• 聯繫：「聯繫 {單位/姓名}」\n" +
 		"• 緊急：「緊急」查看緊急電話"
 	if semanticEnabled {
-		baseInstructions += "\n• 找課：「找課 {描述}」語意搜尋"
+		baseInstructions += "\n• 找課：「找課 {描述}」智慧搜尋"
 	}
 
 	var instructionText string
