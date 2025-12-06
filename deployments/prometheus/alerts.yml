@@ -125,7 +125,7 @@ groups:
     rules:
       # Empty search index
       - alert: SearchIndexEmpty
-        expr: sum(ntpu_index_size) == 0
+        expr: sum(ntpu_index_size{index="bm25"}) == 0
         for: 15m
         labels:
           severity: warning

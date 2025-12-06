@@ -160,6 +160,8 @@ services:
       - GF_INSTALL_PLUGINS=
       # 2025 Best Practice: Enhanced security settings
       - GF_SECURITY_DISABLE_GRAVATAR=true
+      # COOKIE_SECURE=false: Internal monitoring accessed via HTTP behind nginx proxy
+      # Set to 'true' only when Grafana is served over HTTPS
       - GF_SECURITY_COOKIE_SECURE=false
       - GF_SECURITY_COOKIE_SAMESITE=lax
     deploy:
