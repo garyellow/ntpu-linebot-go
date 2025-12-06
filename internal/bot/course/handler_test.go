@@ -380,9 +380,9 @@ func TestHandlePostback_InvalidData(t *testing.T) {
 // TestSemesterDetectionLogic tests the actual getSemestersForDate() function
 // with comprehensive date-based test cases - no need to duplicate here.
 
-// ==================== Semantic Search Tests ====================
+// ==================== Smart Search Tests ====================
 
-func TestCanHandle_SemanticKeywords(t *testing.T) {
+func TestCanHandle_SmartKeywords(t *testing.T) {
 	h := setupTestHandler(t)
 
 	tests := []struct {
@@ -390,7 +390,7 @@ func TestCanHandle_SemanticKeywords(t *testing.T) {
 		input string
 		want  bool
 	}{
-		// Semantic search keywords (找課)
+		// Smart search keywords (找課)
 		{"找課 keyword", "找課 機器學習", true},
 		{"找課程 keyword", "找課程 資料分析", true},
 		{"搜課 keyword", "搜課 Python", true},
@@ -424,7 +424,7 @@ func TestSetBM25Index(t *testing.T) {
 	// This test just verifies the setter method exists and works
 }
 
-func TestHandleSemanticSearch_NoBM25Index(t *testing.T) {
+func TestHandleSmartSearch_NoBM25Index(t *testing.T) {
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -437,7 +437,7 @@ func TestHandleSemanticSearch_NoBM25Index(t *testing.T) {
 	}
 }
 
-func TestHandleSemanticSearch_EmptyQuery(t *testing.T) {
+func TestHandleSmartSearch_EmptyQuery(t *testing.T) {
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -445,7 +445,7 @@ func TestHandleSemanticSearch_EmptyQuery(t *testing.T) {
 	messages := h.HandleMessage(ctx, "找課")
 
 	if len(messages) == 0 {
-		t.Error("Expected help message for empty semantic search query")
+		t.Error("Expected help message for empty smart search query")
 	}
 }
 
@@ -535,14 +535,14 @@ func TestDispatchIntent_ParamValidation(t *testing.T) {
 			errContains: "missing required param: keyword",
 		},
 		{
-			name:        "semantic intent missing query",
-			intent:      IntentSemantic,
+			name:        "smart intent missing query",
+			intent:      IntentSmart,
 			params:      map[string]string{},
 			errContains: "missing required param: query",
 		},
 		{
-			name:        "semantic intent empty query",
-			intent:      IntentSemantic,
+			name:        "smart intent empty query",
+			intent:      IntentSmart,
 			params:      map[string]string{"query": ""},
 			errContains: "missing required param: query",
 		},
@@ -613,7 +613,7 @@ func TestDispatchIntent_Integration(t *testing.T) {
 			params:       map[string]string{"uid": "1141U0001"},
 			wantMessages: true,
 		},
-		// Semantic search requires BM25Index setup, tested separately
+		// Smart search requires BM25Index setup, tested separately
 	}
 
 	for _, tt := range tests {
@@ -630,18 +630,18 @@ func TestDispatchIntent_Integration(t *testing.T) {
 	}
 }
 
-// TestDispatchIntent_SemanticNoBM25Index tests semantic search fallback when BM25Index is not configured.
-func TestDispatchIntent_SemanticNoBM25Index(t *testing.T) {
+// TestDispatchIntent_SmartNoBM25Index tests smart search fallback when BM25Index is not configured.
+func TestDispatchIntent_SmartNoBM25Index(t *testing.T) {
 	h := setupTestHandler(t)
 	// BM25Index is nil by default in setupTestHandler
 	ctx := context.Background()
 
-	msgs, err := h.DispatchIntent(ctx, IntentSemantic, map[string]string{"query": "想學程式設計"})
+	msgs, err := h.DispatchIntent(ctx, IntentSmart, map[string]string{"query": "想學程式設計"})
 	if err != nil {
 		t.Errorf("DispatchIntent() unexpected error: %v", err)
 		return
 	}
-	// Should return a message indicating semantic search is not available
+	// Should return a message indicating smart search is not available
 	if len(msgs) == 0 {
 		t.Error("DispatchIntent() expected fallback message, got none")
 	}

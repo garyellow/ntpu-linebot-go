@@ -101,13 +101,13 @@ func NewHandler(db *storage.DB, scraper *scraper.Client, metrics *metrics.Metric
 	}
 }
 
-// SetBM25Index sets the BM25 index for semantic search.
-// This is optional - if not set, semantic search is disabled.
+// SetBM25Index sets the BM25 index for smart search.
+// This is optional - if not set, smart search is disabled.
 func (h *Handler) SetBM25Index(bm25Index *rag.BM25Index) {
 	h.bm25Index = bm25Index
 }
 
-// SetQueryExpander sets the query expander for semantic search query expansion
+// SetQueryExpander sets the query expander for smart search query expansion
 // This is optional - if not set, queries are used as-is
 func (h *Handler) SetQueryExpander(expander *genai.QueryExpander) {
 	h.queryExpander = expander
@@ -120,9 +120,9 @@ func (h *Handler) IsBM25SearchEnabled() bool {
 
 // Intent names for NLU dispatcher
 const (
-	IntentSearch   = "search"   // Unified course/teacher search
-	IntentSemantic = "semantic" // Semantic search via BM25 + Query Expansion
-	IntentUID      = "uid"      // Direct course UID lookup
+	IntentSearch = "search" // Unified course/teacher search
+	IntentSmart  = "smart"  // Smart search via BM25 + Query Expansion
+	IntentUID    = "uid"    // Direct course UID lookup
 )
 
 // DispatchIntent handles NLU-parsed intents for the course module.
@@ -130,7 +130,7 @@ const (
 //
 // Supported intents:
 //   - "search": requires "keyword" param, calls handleUnifiedCourseSearch
-//   - "semantic": requires "query" param, calls handleSemanticSearch
+//   - "smart": requires "query" param, calls handleSmartSearch
 //   - "uid": requires "uid" param, calls handleCourseUIDQuery
 //
 // Returns error if intent is unknown or required parameters are missing.
@@ -147,7 +147,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 		}
 		return h.handleUnifiedCourseSearch(ctx, keyword), nil
 
-	case IntentSemantic:
+	case IntentSmart:
 		query, ok := params["query"]
 		if !ok || query == "" {
 			return nil, fmt.Errorf("missing required param: query")
@@ -155,7 +155,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 		if h.logger != nil {
 			h.logger.WithModule(moduleName).Infof("Dispatching course intent: %s, query: %s", intent, query)
 		}
-		return h.handleSemanticSearch(ctx, query), nil
+		return h.handleSmartSearch(ctx, query), nil
 
 	case IntentUID:
 		uid, ok := params["uid"]
@@ -235,7 +235,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 
 		if searchTerm == "" {
 			sender := lineutil.GetSender(senderName, h.stickerManager)
-			// Check if semantic search is actually enabled
+			// Check if smart search is actually enabled
 			var helpText string
 			if h.bm25Index != nil && h.bm25Index.IsEnabled() {
 				helpText = "🔮 智慧搜尋說明\n\n請描述您想找的課程內容\n• 找課 想學資料分析\n• 找課 Python 機器學習\n• 找課 商業管理相關\n\n💡 根據課程大綱內容匹配\n\n🔍 若知道課名，建議用「課程 名稱」"
@@ -246,7 +246,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			return []messaging_api.MessageInterface{msg}
 		}
 
-		return h.handleSemanticSearch(ctx, searchTerm)
+		return h.handleSmartSearch(ctx, searchTerm)
 	}
 
 	// Check for course title search - extract term after keyword
@@ -617,32 +617,32 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 		return h.formatCourseListResponse(courses)
 	}
 
-	// Step 4: No keyword results - try BM25 semantic search as last resort
+	// Step 4: No keyword results - try BM25 smart search as last resort
 	if h.bm25Index != nil && h.bm25Index.IsEnabled() {
 		log.Infof("No keyword results for %s, trying BM25 search...", searchTerm)
 
 		// Use detached context to prevent cancellation from request context
-		searchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), config.SemanticSearchTimeout)
+		searchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), config.SmartSearchTimeout)
 		defer cancel()
-		semanticResults, err := h.bm25Index.SearchCourses(searchCtx, searchTerm, 5)
+		smartResults, err := h.bm25Index.SearchCourses(searchCtx, searchTerm, 5)
 
-		if err == nil && len(semanticResults) > 0 {
-			// Convert semantic results to courses
-			var semanticCourses []storage.Course
-			for _, result := range semanticResults {
+		if err == nil && len(smartResults) > 0 {
+			// Convert smart search results to courses
+			var smartCourses []storage.Course
+			for _, result := range smartResults {
 				if course, err := h.db.GetCourseByUID(ctx, result.UID); err == nil && course != nil {
-					semanticCourses = append(semanticCourses, *course)
+					smartCourses = append(smartCourses, *course)
 				}
 			}
 
-			if len(semanticCourses) > 0 {
-				h.metrics.RecordScraperRequest(moduleName, "semantic_fallback", time.Since(startTime).Seconds())
-				return h.formatSemanticSearchResponse(semanticCourses, semanticResults)
+			if len(smartCourses) > 0 {
+				h.metrics.RecordScraperRequest(moduleName, "smart_fallback", time.Since(startTime).Seconds())
+				return h.formatSmartSearchResponse(smartCourses, smartResults)
 			}
 		}
 	}
 
-	// No results found even after scraping and semantic search
+	// No results found even after scraping and smart search
 	h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
 
 	// Build help message with smart search suggestion
@@ -1059,17 +1059,17 @@ func deduplicateCourses(courses []storage.Course) []storage.Course {
 	return result
 }
 
-// handleSemanticSearch performs semantic search using BM25 + Query Expansion
+// handleSmartSearch performs smart search using BM25 + Query Expansion
 // This is triggered by "找課" keywords and searches course syllabi content
 //
 // Timeout hierarchy (nested within 60s webhook processing timeout):
-//   - SemanticSearchTimeout: 30s total (detached context from HTTP request)
+//   - SmartSearchTimeout: 30s total (detached context from HTTP request)
 //   - QueryExpander: 8s nested timeout within search context
 //   - Actual search: remainder of 30s after expansion completes
 //
-// Total operation is bounded by SemanticSearchTimeout (30s), well within
+// Total operation is bounded by SmartSearchTimeout (30s), well within
 // the 60s webhook limit. Reply token remains valid for ~20 minutes.
-func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []messaging_api.MessageInterface {
+func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(moduleName)
 	startTime := time.Now()
 
@@ -1090,7 +1090,7 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 
 	// Use a detached context for API calls to prevent cancellation
 	// when the HTTP request context is canceled (e.g., LINE server closes connection)
-	searchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), config.SemanticSearchTimeout)
+	searchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), config.SmartSearchTimeout)
 	defer cancel()
 
 	// Expand query for better search results (adds synonyms, translations, related terms)
@@ -1113,13 +1113,13 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 		"type":     searchType,
 		"original": query,
 		"expanded": expandedQuery,
-	}).Infof("Performing semantic search")
+	}).Infof("Performing smart search")
 
 	// Perform BM25 search
 	results, err := h.bm25Index.SearchCourses(searchCtx, expandedQuery, 10)
 
 	if err != nil {
-		log.WithError(err).Warn("Semantic search failed")
+		log.WithError(err).Warn("Smart search failed")
 		h.metrics.RecordSearch(searchType, "error", time.Since(startTime).Seconds(), 0)
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		return []messaging_api.MessageInterface{
@@ -1157,15 +1157,15 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 		}
 	}
 
-	// Record successful semantic search metrics
+	// Record successful smart search metrics
 	h.metrics.RecordSearch(searchType, "success", time.Since(startTime).Seconds(), len(results))
 
 	// Format response with confidence badges
-	return h.formatSemanticSearchResponse(courses, results)
+	return h.formatSmartSearchResponse(courses, results)
 }
 
-// formatSemanticSearchResponse formats semantic search results with confidence badges
-func (h *Handler) formatSemanticSearchResponse(courses []storage.Course, results []rag.SearchResult) []messaging_api.MessageInterface {
+// formatSmartSearchResponse formats smart search results with confidence badges
+func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []rag.SearchResult) []messaging_api.MessageInterface {
 	if len(courses) == 0 {
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		return []messaging_api.MessageInterface{
@@ -1185,7 +1185,7 @@ func (h *Handler) formatSemanticSearchResponse(courses []storage.Course, results
 	bubbles := make([]messaging_api.FlexBubble, 0, len(courses))
 	for _, course := range courses {
 		rank := rankMap[course.UID]
-		bubble := h.buildSemanticCourseBubble(course, rank)
+		bubble := h.buildSmartCourseBubble(course, rank)
 		bubbles = append(bubbles, *bubble.FlexBubble)
 	}
 
@@ -1227,8 +1227,8 @@ func (h *Handler) formatSemanticSearchResponse(courses []storage.Course, results
 	return messages
 }
 
-// buildSemanticCourseBubble creates a Flex Message bubble for a course with relevance badge
-func (h *Handler) buildSemanticCourseBubble(course storage.Course, rank int) *lineutil.FlexBubble {
+// buildSmartCourseBubble creates a Flex Message bubble for a course with relevance badge
+func (h *Handler) buildSmartCourseBubble(course storage.Course, rank int) *lineutil.FlexBubble {
 	// Relevance badge based on ranking position (user-friendly labels)
 	relevanceBadge, relevanceColor := getRelevanceBadge(rank)
 

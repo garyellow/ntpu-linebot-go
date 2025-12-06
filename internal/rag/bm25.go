@@ -16,7 +16,7 @@ import (
 )
 
 // SearchResult represents a search result with confidence score.
-// Confidence is derived from BM25 rank position, not semantic similarity.
+// Confidence is derived from BM25 rank position, not vector similarity.
 type SearchResult struct {
 	UID        string   // Course UID
 	Title      string   // Course title

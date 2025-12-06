@@ -38,7 +38,7 @@ NTPU LineBot 是一個為國立臺北大學設計的 LINE 聊天機器人，提�
 │  │ HandleMsg() │  │ • Emergency │  │ • UID Query │            │
 │  │ HandlePost()│  │ • Search    │  │ • Title     │            │
 │  │             │  │             │  │ • Teacher   │            │
-│  │ • ID Query  │  │ • Big5 Enc  │  │ • Semantic  │            │
+│  │ • ID Query  │  │ • Big5 Enc  │  │ • Smart     │            │
 │  │ • Name      │  │             │  │             │            │
 │  │ • Year      │  │             │  │             │            │
 │  │ • Dept      │  │             │  │             │            │
@@ -342,7 +342,7 @@ Warmup:
 
 **關鍵概念**:
 - BM25 輸出無界分數，不可跨查詢比較
-- 信心分數基於排名位置計算，而非語意相似度
+- 信心分數基於排名位置計算，而非向量相似度
 
 **啟用條件**:
 - 將 `syllabus` 加入 `WARMUP_MODULES`

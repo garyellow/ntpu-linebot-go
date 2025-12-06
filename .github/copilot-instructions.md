@@ -226,7 +226,7 @@ Fallback → getHelpMessage() + Warning Log
 
 **Key Features**:
 - Function Calling (AUTO mode): Model chooses function call or text response
-- 9 intent functions: `course_search`, `course_semantic`, `course_uid`, `id_search`, `id_student_id`, `id_department`, `contact_search`, `contact_emergency`, `help`
+- 9 intent functions: `course_search`, `course_smart`, `course_uid`, `id_search`, `id_student_id`, `id_department`, `contact_search`, `contact_emergency`, `help`
 - Group @Bot detection: Uses `mention.Index` and `mention.Length` for precise removal
 - Fallback strategy: NLU failure → help message with warning log
 - Metrics: `ntpu_llm_total{operation="nlu"}`, `ntpu_llm_duration_seconds{operation="nlu"}`

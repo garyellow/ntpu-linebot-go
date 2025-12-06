@@ -10,7 +10,7 @@ func TestIntentModuleMap(t *testing.T) {
 	// Verify all expected functions are mapped
 	expectedFunctions := []string{
 		"course_search",
-		"course_semantic",
+		"course_smart",
 		"course_uid",
 		"id_search",
 		"id_student_id",
@@ -40,7 +40,7 @@ func TestParamKeyMap(t *testing.T) {
 		shouldExist bool
 	}{
 		{"course_search", "keyword", true},
-		{"course_semantic", "query", true},
+		{"course_smart", "query", true},
 		{"course_uid", "uid", true},
 		{"id_search", "name", true},
 		{"id_student_id", "student_id", true},

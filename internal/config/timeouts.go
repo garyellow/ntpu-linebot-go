@@ -15,7 +15,7 @@
 // We use 60s webhook timeout to maximize processing time:
 //   - LINE loading animation shows for up to 60s
 //   - Scraping time (NTPU websites can be slow)
-//   - Allow sufficient time for semantic search operations
+//   - Allow sufficient time for smart search operations
 package config
 
 import "time"
@@ -27,7 +27,7 @@ const (
 	//
 	// Set to 60s because:
 	//   - LINE loading animation shows for up to 60s
-	//   - Semantic search operations may take significant time
+	//   - Smart search operations may take significant time
 	//   - Scraping + DB operations need ~5-15s in worst case
 	//   - Maximizes available processing time within LINE's limits
 	WebhookProcessing = 60 * time.Second
@@ -100,9 +100,9 @@ const (
 	WarmupStickerFetch = 5 * time.Second
 )
 
-// Semantic search timeouts
+// Smart search timeouts
 const (
-	// SemanticSearchTimeout is the timeout for semantic search operations.
+	// SmartSearchTimeout is the timeout for smart search operations.
 	// This includes BM25 search and Query Expansion (Gemini API call).
 	// Uses a detached context to prevent cancellation from request context
 	// (e.g., when LINE server closes connection after receiving 200 OK).
@@ -111,7 +111,7 @@ const (
 	//   - Query Expansion API typically responds in 1-5s
 	//   - BM25 search is in-memory and very fast (<10ms)
 	//   - Should complete well within the 60s webhook timeout
-	SemanticSearchTimeout = 30 * time.Second
+	SmartSearchTimeout = 30 * time.Second
 )
 
 // Graceful shutdown

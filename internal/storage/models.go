@@ -59,7 +59,7 @@ type Sticker struct {
 	FailureCount int    `json:"failure_count"`
 }
 
-// Syllabus represents a course syllabus record for semantic search
+// Syllabus represents a course syllabus record for smart search
 // Supports both separated (5 fields) and merged (3 fields) formats:
 // - Separated: ObjectivesCN, ObjectivesEN, OutlineCN, OutlineEN, Schedule
 // - Merged: ObjectivesCN contains merged content, *EN fields are empty

@@ -71,7 +71,7 @@ func main() {
 	stickerManager := sticker.NewManager(db, scraperClient, log)
 	log.Info("Sticker manager created")
 
-	// Create BM25 index for semantic search (uses syllabus content)
+	// Create BM25 index for smart search (uses syllabus content)
 	// BM25 + Query Expansion provides effective retrieval without embedding costs
 	var bm25Index *rag.BM25Index
 	syllabi, err := db.GetAllSyllabi(context.Background())
@@ -83,7 +83,7 @@ func main() {
 			log.WithError(err).Warn("Failed to initialize BM25 index")
 			bm25Index = nil
 		} else {
-			log.WithField("doc_count", bm25Index.Count()).Info("BM25 index initialized for semantic search")
+			log.WithField("doc_count", bm25Index.Count()).Info("BM25 index initialized for smart search")
 		}
 	} else {
 		log.Info("No syllabi found, BM25 index will be empty until warmup")
@@ -117,13 +117,13 @@ func main() {
 		log.WithError(err).Fatal("Failed to create webhook handler")
 	}
 
-	// Set BM25 index for course semantic search
+	// Set BM25 index for course smart search
 	if bm25Index != nil {
 		webhookHandler.GetCourseHandler().SetBM25Index(bm25Index)
 		log.Info("BM25 search enabled for course module")
 	}
 
-	// Create query expander for semantic search (optional - requires Gemini API key)
+	// Create query expander for smart search (optional - requires Gemini API key)
 	var queryExpander *genai.QueryExpander
 	if cfg.GeminiAPIKey != "" {
 		var err error
@@ -132,7 +132,7 @@ func main() {
 			log.WithError(err).Warn("Failed to create query expander")
 		} else if queryExpander != nil {
 			webhookHandler.GetCourseHandler().SetQueryExpander(queryExpander)
-			log.Info("Query expander enabled for semantic search")
+			log.Info("Query expander enabled for smart search")
 		}
 	}
 

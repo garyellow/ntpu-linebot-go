@@ -1,5 +1,5 @@
 // Package syllabus provides syllabus data extraction and management
-// for course semantic search functionality.
+// for course smart search functionality.
 package syllabus
 
 import (
@@ -36,7 +36,7 @@ type Fields struct {
 // - Simpler mapping: 1 course = 1 document, no deduplication needed
 // - Better for small corpus: ~2000 courses doesn't need embedding-style chunking
 //
-// For embedding models, chunking is necessary due to token limits and semantic compression.
+// For embedding models, chunking is necessary due to token limits and vector compression.
 // BM25 doesn't have these constraints - it uses term frequency statistics directly.
 func (f *Fields) ContentForIndexing(courseTitle string) string {
 	// Build content without title first
