@@ -363,8 +363,7 @@ sequenceDiagram
 
 ```json
 {
-  "error": "invalid signature",
-  "details": "X-Line-Signature header validation failed"
+  "error": "invalid signature"
 }
 ```
 
