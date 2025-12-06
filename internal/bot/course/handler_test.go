@@ -449,75 +449,51 @@ func TestHandleSemanticSearch_EmptyQuery(t *testing.T) {
 	}
 }
 
-func TestGetConfidenceBadge(t *testing.T) {
-	// Tests updated to match new thresholds
-	// >= 80%: 高度相關, 65-79%: 相關, 50-64%: 可能相關, < 50%: 參考
+func TestGetRelevanceBadge(t *testing.T) {
+	// Tests for simplified 2-tier relevance badge (2025 UX best practices)
+	// Top 3: 最相關, Rank 4+: 相關
 	tests := []struct {
 		name           string
-		confidence     float32
+		rank           int
 		wantBadge      string
 		wantColorCheck func(color string) bool
 	}{
 		{
-			name:       "very high confidence (95%)",
-			confidence: 0.95,
-			wantBadge:  "🎯 高度相關 95%",
+			name:      "top result (rank 1)",
+			rank:      1,
+			wantBadge: "🎯 最相關",
 			wantColorCheck: func(c string) bool {
 				return c != "" // Should have color
 			},
 		},
 		{
-			name:       "high confidence threshold (80%)",
-			confidence: 0.80,
-			wantBadge:  "🎯 高度相關 80%",
+			name:      "top 3 result (rank 2)",
+			rank:      2,
+			wantBadge: "🎯 最相關",
 			wantColorCheck: func(c string) bool {
 				return c != ""
 			},
 		},
 		{
-			name:       "relevant upper bound (79%)",
-			confidence: 0.79,
-			wantBadge:  "✨ 相關 79%",
+			name:      "top 3 result (rank 3)",
+			rank:      3,
+			wantBadge: "🎯 最相關",
 			wantColorCheck: func(c string) bool {
 				return c != ""
 			},
 		},
 		{
-			name:       "relevant lower bound (65%)",
-			confidence: 0.65,
-			wantBadge:  "✨ 相關 65%",
+			name:      "relevant result (rank 4)",
+			rank:      4,
+			wantBadge: "✨ 相關",
 			wantColorCheck: func(c string) bool {
 				return c != ""
 			},
 		},
 		{
-			name:       "possibly relevant upper bound (64%)",
-			confidence: 0.64,
-			wantBadge:  "💡 可能相關 64%",
-			wantColorCheck: func(c string) bool {
-				return c != ""
-			},
-		},
-		{
-			name:       "possibly relevant lower bound (50%)",
-			confidence: 0.50,
-			wantBadge:  "💡 可能相關 50%",
-			wantColorCheck: func(c string) bool {
-				return c != ""
-			},
-		},
-		{
-			name:       "below threshold - edge case (49%)",
-			confidence: 0.49,
-			wantBadge:  "🔍 參考 49%",
-			wantColorCheck: func(c string) bool {
-				return c != ""
-			},
-		},
-		{
-			name:       "below threshold - edge case (30%)",
-			confidence: 0.30,
-			wantBadge:  "🔍 參考 30%",
+			name:      "relevant result (rank 10)",
+			rank:      10,
+			wantBadge: "✨ 相關",
 			wantColorCheck: func(c string) bool {
 				return c != ""
 			},
@@ -526,12 +502,12 @@ func TestGetConfidenceBadge(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			badge, color := getConfidenceBadge(tt.confidence)
+			badge, color := getRelevanceBadge(tt.rank)
 			if badge != tt.wantBadge {
-				t.Errorf("getConfidenceBadge(%f) badge = %q, want %q", tt.confidence, badge, tt.wantBadge)
+				t.Errorf("getRelevanceBadge(%d) badge = %q, want %q", tt.rank, badge, tt.wantBadge)
 			}
 			if !tt.wantColorCheck(color) {
-				t.Errorf("getConfidenceBadge(%f) color = %q, check failed", tt.confidence, color)
+				t.Errorf("getRelevanceBadge(%d) color = %q, check failed", tt.rank, color)
 			}
 		})
 	}

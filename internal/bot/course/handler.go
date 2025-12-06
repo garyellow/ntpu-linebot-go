@@ -1175,17 +1175,17 @@ func (h *Handler) formatSemanticSearchResponse(courses []storage.Course, results
 
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
-	// Create confidence map for lookup
-	confidenceMap := make(map[string]float32)
-	for _, r := range results {
-		confidenceMap[r.UID] = r.Confidence
+	// Create rank map for lookup (1-indexed based on result order)
+	rankMap := make(map[string]int)
+	for i, r := range results {
+		rankMap[r.UID] = i + 1 // 1-indexed rank
 	}
 
-	// Build bubbles with confidence badges
+	// Build bubbles with relevance badges based on rank
 	bubbles := make([]messaging_api.FlexBubble, 0, len(courses))
 	for _, course := range courses {
-		confidence := confidenceMap[course.UID]
-		bubble := h.buildSemanticCourseBubble(course, confidence)
+		rank := rankMap[course.UID]
+		bubble := h.buildSemanticCourseBubble(course, rank)
 		bubbles = append(bubbles, *bubble.FlexBubble)
 	}
 
@@ -1208,11 +1208,13 @@ func (h *Handler) formatSemanticSearchResponse(courses []storage.Course, results
 		messages = append(messages, msg)
 	}
 
-	// Add header message
-	headerMsg := lineutil.NewTextMessageWithConsistentSender(
-		fmt.Sprintf("🔮 語意搜尋找到 %d 門相關課程\n\n根據課程大綱內容智慧匹配", len(courses)),
-		sender,
-	)
+	// Add header message with search guidance
+	// Provide tips when results are few to help users refine their queries
+	headerText := fmt.Sprintf("🔮 語意搜尋找到 %d 門相關課程\n\n根據課程大綱內容智慧匹配", len(courses))
+	if len(courses) <= 3 {
+		headerText += "\n\n💡 提示：使用更具體的關鍵字（如「雲端運算」、「Python」）可獲得更多結果"
+	}
+	headerMsg := lineutil.NewTextMessageWithConsistentSender(headerText, sender)
 	messages = append([]messaging_api.MessageInterface{headerMsg}, messages...)
 
 	// Add Quick Reply
@@ -1225,10 +1227,10 @@ func (h *Handler) formatSemanticSearchResponse(courses []storage.Course, results
 	return messages
 }
 
-// buildSemanticCourseBubble creates a Flex Message bubble for a course with confidence badge
-func (h *Handler) buildSemanticCourseBubble(course storage.Course, confidence float32) *lineutil.FlexBubble {
-	// Confidence badge text based on confidence score (user-friendly labels)
-	confidenceBadge, confidenceColor := getConfidenceBadge(confidence)
+// buildSemanticCourseBubble creates a Flex Message bubble for a course with relevance badge
+func (h *Handler) buildSemanticCourseBubble(course storage.Course, rank int) *lineutil.FlexBubble {
+	// Relevance badge based on ranking position (user-friendly labels)
+	relevanceBadge, relevanceColor := getRelevanceBadge(rank)
 
 	// Hero: Course title with course code
 	heroTitle := lineutil.FormatCourseTitleWithUID(course.Title, course.UID)
@@ -1238,7 +1240,7 @@ func (h *Handler) buildSemanticCourseBubble(course storage.Course, confidence fl
 	// 第一列：相關度 badge
 	contents := []messaging_api.FlexComponentInterface{
 		lineutil.NewFlexBox("horizontal",
-			lineutil.NewFlexText(confidenceBadge).WithSize("xs").WithColor(confidenceColor).WithFlex(0).FlexText,
+			lineutil.NewFlexText(relevanceBadge).WithSize("xs").WithColor(relevanceColor).WithFlex(0).FlexText,
 		).WithMargin("none").FlexBox,
 		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 	}
@@ -1294,28 +1296,19 @@ func (h *Handler) buildSemanticCourseBubble(course storage.Course, confidence fl
 	return bubble
 }
 
-// getConfidenceBadge returns a user-friendly badge text and color based on confidence score.
+// getRelevanceBadge returns a user-friendly relevance label based on ranking position.
 //
-// This displays "confidence" (how sure the system is about relevance)
-// based on BM25 search ranking. Higher rank position = higher confidence.
+// Design rationale (2025 best practices):
+//   - No percentages: Users can't compare scores across different queries
+//   - Simple 2-tier system: Reduces cognitive load in chatbot context
+//   - Rank-based: Easier to understand ("top 3" vs abstract percentages)
 //
-// Thresholds:
-//   - >= 80%: High relevance (top-ranked results)
-//   - 65-79%: Relevant (good match)
-//   - 50-64%: Possibly relevant (meets minimum threshold)
-//   - < 50%: Should not appear (filtered by search layer)
-func getConfidenceBadge(confidence float32) (string, string) {
-	percent := int(confidence * 100)
-	switch {
-	case confidence >= 0.80:
-		return fmt.Sprintf("🎯 高度相關 %d%%", percent), lineutil.ColorPrimary // LINE Green - high relevance
-	case confidence >= 0.65:
-		return fmt.Sprintf("✨ 相關 %d%%", percent), lineutil.ColorSubtext // Gray - good match
-	case confidence >= 0.50:
-		return fmt.Sprintf("💡 可能相關 %d%%", percent), lineutil.ColorLabel // Darker gray - meets threshold
-	default:
-		// Results below 50% should be filtered by the search layer
-		// This case handles edge cases or legacy data
-		return fmt.Sprintf("🔍 參考 %d%%", percent), lineutil.ColorNote // Light gray - below threshold
+// Categories:
+//   - Top 3 results: "最相關" (highest relevance, strong recommendation)
+//   - Remaining results: "相關" (still matches the query)
+func getRelevanceBadge(rank int) (string, string) {
+	if rank <= 3 {
+		return "🎯 最相關", lineutil.ColorPrimary // LINE Green - top results
 	}
+	return "✨ 相關", lineutil.ColorSubtext // Gray - relevant but not top
 }
