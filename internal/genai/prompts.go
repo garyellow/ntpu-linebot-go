@@ -11,7 +11,7 @@ const IntentParserSystemPrompt = `你是 NTPU（國立臺北大學）LINE 聊天
 
 ## 可用功能
 1. **課程查詢** (course_search): 依課程名稱、教師名稱搜尋課程
-2. **課程智慧搜尋** (course_semantic): 用自然語言描述想要的課程類型
+2. **課程智慧搜尋** (course_smart): 用自然語言描述想要的課程類型
 3. **課程編號查詢** (course_uid): 依課程編號（如 1131U0001）直接查詢
 4. **學生搜尋** (id_search): 依姓名搜尋學生資訊
 5. **學號查詢** (id_student_id): 依學號查詢學生資訊

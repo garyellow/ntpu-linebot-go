@@ -29,10 +29,9 @@ docker compose up -d
 - `LINE_CHANNEL_SECRET`
 
 可選：
-- `GEMINI_API_KEY` - Gemini API Key，啟用課程智慧搜尋（從 [Google AI Studio](https://aistudio.google.com/apikey) 取得）
+- `GEMINI_API_KEY` - Gemini API Key，啟用 NLU 自然語言理解和課程智慧搜尋（從 [Google AI Studio](https://aistudio.google.com/apikey) 取得）
 - `IMAGE_TAG` - 映像版本（預設：latest）
-- `WARMUP_MODULES` - 預熱模組（預設：sticker,id,contact,course）
-  - 加入 `syllabus` 啟用課程大綱預熱（需設定 `GEMINI_API_KEY`）
+- `WARMUP_MODULES` - 預熱模組（預設：sticker,id,contact,course,syllabus）
 - `LOG_LEVEL` - 日誌層級（預設：info）
 - `WEBHOOK_TIMEOUT` - Webhook 處理超時時間（預設：60s，配合 LINE Loading Animation）
 - `USER_RATE_LIMIT_TOKENS` - 每位使用者的令牌數量上限（預設：6）
@@ -100,11 +99,24 @@ task access:down
 
 ## 告警規則
 
-- **ScraperHighFailureRate** - 爬蟲失敗率 >30% 持續 3 分鐘
-- **WebhookHighLatency** - Webhook P95 延遲 >3s 持續 5 分鐘
-- **ServiceDown** - 服務停止回應持續 2 分鐘
-- **HighMemoryUsage** - 記憶體使用 >410MB 持續 5 分鐘
-- **CacheLowHitRate** - 快取命中率 <70% 持續 10 分鐘
+| 告警名稱 | 條件 | 持續時間 | 嚴重度 |
+|---------|------|---------|--------|
+| **ServiceDown** | 服務停止回應 | 2 分鐘 | Critical |
+| **WebhookLatencyHigh** | Webhook P95 延遲 >2s | 5 分鐘 | Warning |
+| **WebhookErrorRateHigh** | Webhook 錯誤率 >5% | 5 分鐘 | Warning |
+| **ScraperFailureRateHigh** | 爬蟲失敗率 >30% | 5 分鐘 | Warning |
+| **ScraperLatencyHigh** | 爬蟲 P95 延遲 >30s | 10 分鐘 | Warning |
+| **CacheHitRateLow** | 快取命中率 <50% | 1 小時 | Info |
+| **LLMErrorRateHigh** | LLM 錯誤率 >20% | 5 分鐘 | Warning |
+| **LLMLatencyHigh** | LLM P95 延遲 >5s | 5 分鐘 | Warning |
+| **SearchIndexEmpty** | BM25 索引為空 | 15 分鐘 | Warning |
+| **SearchLatencyHigh** | 搜尋 P95 延遲 >3s | 5 分鐘 | Warning |
+| **RateLimiterDroppingRequests** | 正在丟棄請求 | 5 分鐘 | Info |
+| **WarmupJobSlow** | 預熱任務 P95 >30min | 15 分鐘 | Info |
+| **CleanupJobSlow** | 清理任務 P95 >5min | 15 分鐘 | Info |
+| **StickerRefreshJobSlow** | 貼圖刷新 P95 >5min | 15 分鐘 | Info |
+| **HighMemoryUsage** | 記憶體使用 >400MB | 10 分鐘 | Warning |
+| **HighGoroutineCount** | Goroutine 數量 >1000 | 10 分鐘 | Warning |
 
 ## 配置告警通知
 

@@ -24,7 +24,7 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 			},
 		},
 		{
-			Name:        "course_semantic",
+			Name:        "course_smart",
 			Description: "用自然語言描述想要的課程類型進行智慧搜尋。適用於使用者不知道確切課程名稱，但能描述想學什麼的情況。注意：若使用者輸入過短（如「AI」、「程式」），請自動擴展為更具體的描述以提高搜尋效果。",
 			Parameters: &genai.Schema{
 				Type: genai.TypeObject,
@@ -137,7 +137,7 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 // Value: [module, intent] pair
 var IntentModuleMap = map[string][2]string{
 	"course_search":     {"course", "search"},
-	"course_semantic":   {"course", "semantic"},
+	"course_smart":      {"course", "smart"},
 	"course_uid":        {"course", "uid"},
 	"id_search":         {"id", "search"},
 	"id_student_id":     {"id", "student_id"},
@@ -150,12 +150,12 @@ var IntentModuleMap = map[string][2]string{
 // ParamKeyMap maps function names to their primary parameter key.
 // This is used to extract the parameter value from the function call args.
 var ParamKeyMap = map[string]string{
-	"course_search":   "keyword",
-	"course_semantic": "query",
-	"course_uid":      "uid",
-	"id_search":       "name",
-	"id_student_id":   "student_id",
-	"id_department":   "department",
-	"contact_search":  "query",
+	"course_search":  "keyword",
+	"course_smart":   "query",
+	"course_uid":     "uid",
+	"id_search":      "name",
+	"id_student_id":  "student_id",
+	"id_department":  "department",
+	"contact_search": "query",
 	// contact_emergency and help have no parameters
 }

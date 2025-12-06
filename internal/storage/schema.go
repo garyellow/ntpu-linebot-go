@@ -34,7 +34,7 @@ func InitSchema(db *sql.DB) error {
 		return err
 	}
 
-	// Create syllabi table for course syllabus semantic search
+	// Create syllabi table for course syllabus smart search (BM25 index)
 	return createSyllabiTable(db)
 }
 

@@ -1,5 +1,5 @@
 // Package genai provides integration with Google's Generative AI APIs.
-// This file contains the QueryExpander for semantic search query expansion.
+// This file contains the QueryExpander for smart search query expansion.
 package genai
 
 import (
@@ -24,7 +24,7 @@ const (
 	MinQueryLengthForExpansion = 15
 )
 
-// QueryExpander expands user queries for better semantic search results.
+// QueryExpander expands user queries for better smart search results.
 // Uses LLM to add synonyms, translations, and related concepts.
 type QueryExpander struct {
 	client *genai.Client

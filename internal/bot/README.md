@@ -29,7 +29,7 @@ type Handler interface {
 
 ```go
 // DispatchIntent 處理 NLU 解析後的意圖
-// intent: 意圖名稱（如 "search", "semantic", "uid"）
+// intent: 意圖名稱（如 "search", "smart", "uid"）
 // params: 解析出的參數（如 {"keyword": "微積分"}）
 func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[string]string) ([]messaging_api.MessageInterface, error)
 ```

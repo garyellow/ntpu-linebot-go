@@ -25,6 +25,12 @@ services:
         reservations:
           cpus: '0.5'
           memory: 256M
+    # 2025 Best Practice: Limit log size to prevent disk exhaustion
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
     environment:
       - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN}
       - LINE_CHANNEL_SECRET=${LINE_CHANNEL_SECRET}
@@ -37,11 +43,15 @@ services:
       - SCRAPER_MAX_RETRIES=${SCRAPER_MAX_RETRIES:-5}
       - SHUTDOWN_TIMEOUT=${SHUTDOWN_TIMEOUT:-30s}
       - WEBHOOK_TIMEOUT=${WEBHOOK_TIMEOUT:-60s}
-      - WARMUP_MODULES=${WARMUP_MODULES:-sticker,id,contact,course}
+      - WARMUP_MODULES=${WARMUP_MODULES:-sticker,id,contact,course,syllabus}
       - USER_RATE_LIMIT_TOKENS=${USER_RATE_LIMIT_TOKENS:-6}
       - USER_RATE_LIMIT_REFILL_RATE=${USER_RATE_LIMIT_REFILL_RATE:-0.2}
     security_opt:
       - no-new-privileges:true
+    # 2025 Best Practice: Read-only filesystem where possible
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M
     healthcheck:
       test: ["CMD", "/app/healthcheck"]
       interval: 30s
@@ -77,6 +87,11 @@ services:
           memory: 1G
         reservations:
           memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
     security_opt:
       - no-new-privileges:true
     healthcheck:
@@ -111,6 +126,11 @@ services:
           memory: 256M
         reservations:
           memory: 64M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     security_opt:
       - no-new-privileges:true
     healthcheck:
@@ -138,6 +158,12 @@ services:
       - GF_ANALYTICS_REPORTING_ENABLED=false
       - GF_ANALYTICS_CHECK_FOR_UPDATES=false
       - GF_INSTALL_PLUGINS=
+      # 2025 Best Practice: Enhanced security settings
+      - GF_SECURITY_DISABLE_GRAVATAR=true
+      # COOKIE_SECURE=false: Internal monitoring accessed via HTTP behind nginx proxy
+      # Set to 'true' only when Grafana is served over HTTPS
+      - GF_SECURITY_COOKIE_SECURE=false
+      - GF_SECURITY_COOKIE_SAMESITE=lax
     deploy:
       resources:
         limits:
@@ -145,6 +171,11 @@ services:
           memory: 512M
         reservations:
           memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
     security_opt:
       - no-new-privileges:true
     healthcheck:

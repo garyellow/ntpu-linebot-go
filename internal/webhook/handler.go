@@ -109,7 +109,7 @@ func (h *Handler) Stop() {
 }
 
 // GetCourseHandler returns the course handler for external configuration
-// Used to set BM25Index for semantic search from main.go
+// Used to set BM25Index for smart search from main.go
 func (h *Handler) GetCourseHandler() *course.Handler {
 	return h.courseHandler
 }
@@ -796,13 +796,13 @@ func (h *Handler) dispatchIntent(ctx context.Context, result *genai.ParseResult)
 }
 
 // getDetailedInstructionMessages returns detailed instruction messages
-// Content varies based on whether NLU and semantic search are enabled
+// Content varies based on whether NLU and smart search are enabled
 func (h *Handler) getDetailedInstructionMessages() []messaging_api.MessageInterface {
 	senderName := "小幫手"
 
 	// Check feature availability
 	nluEnabled := h.intentParser != nil && h.intentParser.IsEnabled()
-	semanticEnabled := h.courseHandler != nil && h.courseHandler.IsBM25SearchEnabled()
+	smartEnabled := h.courseHandler != nil && h.courseHandler.IsBM25SearchEnabled()
 
 	// Message 1: Main instruction text
 	// Common content for both NLU enabled/disabled
@@ -813,7 +813,7 @@ func (h *Handler) getDetailedInstructionMessages() []messaging_api.MessageInterf
 		"• 歷史：「課程 {學年} {課名}」\n" +
 		"• 聯繫：「聯繫 {單位/姓名}」\n" +
 		"• 緊急：「緊急」查看緊急電話"
-	if semanticEnabled {
+	if smartEnabled {
 		baseInstructions += "\n• 找課：「找課 {描述}」智慧搜尋"
 	}
 
@@ -842,7 +842,7 @@ func (h *Handler) getDetailedInstructionMessages() []messaging_api.MessageInterf
 		fmt.Sprintf("• `學年 %d`\n", rocYear) +
 		"• `課程 程式設計`、`課程 110 微積分`\n" +
 		"• `聯繫 資工系`、`緊急`"
-	if semanticEnabled {
+	if smartEnabled {
 		baseExamples += "\n• `找課 想學程式設計`"
 	}
 

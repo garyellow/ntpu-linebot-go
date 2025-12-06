@@ -52,8 +52,8 @@ type Metrics struct {
 	LLMDuration *prometheus.HistogramVec // latency by operation
 
 	// ============================================
-	// Semantic Search (BM25 - RED Method)
-	// Semantic course search
+	// Smart Search (BM25 - RED Method)
+	// Smart course search
 	// ============================================
 	SearchTotal    *prometheus.CounterVec
 	SearchDuration *prometheus.HistogramVec
@@ -118,7 +118,7 @@ func New(registry *prometheus.Registry) *Metrics {
 				Help: "Total scraper requests to NTPU systems",
 			},
 			// module: id, contact, course, syllabus
-			// status: success, error, timeout, not_found, semantic_fallback
+			// status: success, error, timeout, not_found, smart_fallback
 			[]string{"module", "status"},
 		),
 
@@ -163,7 +163,7 @@ func New(registry *prometheus.Registry) *Metrics {
 				Name: "ntpu_llm_total",
 				Help: "Total LLM API requests",
 			},
-			// operation: nlu, expansion
+			// operation: nlu (intent parsing)
 			// status: success, error, fallback, clarification
 			[]string{"operation", "status"},
 		),
@@ -182,12 +182,12 @@ func New(registry *prometheus.Registry) *Metrics {
 		),
 
 		// ============================================
-		// Semantic Search metrics
+		// Smart Search metrics
 		// ============================================
 		SearchTotal: promauto.With(registry).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "ntpu_search_total",
-				Help: "Total semantic search requests",
+				Help: "Total smart search requests",
 			},
 			// type: bm25, disabled
 			// status: success, error, no_results

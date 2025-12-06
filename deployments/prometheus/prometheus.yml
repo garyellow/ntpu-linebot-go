@@ -1,29 +1,17 @@
-# Prometheus Configuration for NTPU LINE Bot
-#
-# Design Philosophy:
-# - 15s scrape interval for responsive dashboards
-# - Recording rules for expensive queries (in alerts.yml)
-# - Minimal external labels to reduce cardinality
-
+# Prometheus Configuration for NTPU LINE Bot (2025)
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
-  external_labels:
-    env: 'production'
 
-# AlertManager configuration
 alerting:
   alertmanagers:
     - static_configs:
-        - targets:
-            - 'alertmanager:9093'
+        - targets: ['alertmanager:9093']
       timeout: 10s
 
-# Alert and recording rules
 rule_files:
   - 'alerts.yml'
 
-# Scrape configurations
 scrape_configs:
   # NTPU LineBot application metrics
   - job_name: 'ntpu-linebot'
@@ -31,9 +19,7 @@ scrape_configs:
     scrape_timeout: 10s
     metrics_path: '/metrics'
     static_configs:
-      - targets:
-          - 'ntpu-linebot:10000'
-    # Simplify labels - avoid redundant metadata
+      - targets: ['ntpu-linebot:10000']
     relabel_configs:
       - source_labels: [__address__]
         target_label: instance
@@ -43,5 +29,4 @@ scrape_configs:
   - job_name: 'prometheus'
     scrape_interval: 60s
     static_configs:
-      - targets:
-          - 'localhost:9090'
+      - targets: ['localhost:9090']

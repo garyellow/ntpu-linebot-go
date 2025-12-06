@@ -29,7 +29,7 @@ internal/genai/
 | 函數名稱 | 模組 | 說明 |
 |---------|------|------|
 | `course_search` | course | 課程/教師名稱搜尋 |
-| `course_semantic` | course | 課程智慧搜尋 |
+| `course_smart` | course | 課程智慧搜尋 |
 | `course_uid` | course | 課號查詢 |
 | `id_search` | id | 學生姓名搜尋 |
 | `id_student_id` | id | 學號查詢 |
