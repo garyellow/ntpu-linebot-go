@@ -29,7 +29,7 @@ internal/genai/
 | 函數名稱 | 模組 | 說明 |
 |---------|------|------|
 | `course_search` | course | 課程/教師名稱搜尋 |
-| `course_semantic` | course | 課程語意搜尋 |
+| `course_semantic` | course | 課程智慧搜尋 |
 | `course_uid` | course | 課號查詢 |
 | `id_search` | id | 學生姓名搜尋 |
 | `id_student_id` | id | 學號查詢 |
@@ -72,7 +72,7 @@ if err != nil {
 
 ### 功能說明
 
-當使用者輸入語意搜尋查詢時，`QueryExpander` 會自動擴展查詢，添加：
+當使用者輸入智慧搜尋查詢時，`QueryExpander` 會自動擴展查詢，添加：
 
 1. **英文縮寫的全稱**: AWS → Amazon Web Services
 2. **跨語言翻譯**: AI → 人工智慧, 程式設計 → programming
@@ -121,7 +121,7 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 handler.SetQueryExpander(expander)
 ```
 
-語意搜尋時自動使用擴展後的查詢進行 BM25 搜尋。
+智慧搜尋時自動使用擴展後的查詢進行 BM25 搜尋。
 
 ## 錯誤處理
 

@@ -29,7 +29,7 @@ docker compose up -d
 - `LINE_CHANNEL_SECRET`
 
 可選：
-- `GEMINI_API_KEY` - Gemini API Key，啟用課程語意搜尋（從 [Google AI Studio](https://aistudio.google.com/apikey) 取得）
+- `GEMINI_API_KEY` - Gemini API Key，啟用課程智慧搜尋（從 [Google AI Studio](https://aistudio.google.com/apikey) 取得）
 - `IMAGE_TAG` - 映像版本（預設：latest）
 - `WARMUP_MODULES` - 預熱模組（預設：sticker,id,contact,course）
   - 加入 `syllabus` 啟用課程大綱預熱（需設定 `GEMINI_API_KEY`）

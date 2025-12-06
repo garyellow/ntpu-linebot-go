@@ -82,17 +82,17 @@ return handler.HandleMessage(ctx, rawText)
 
 ### course/ - 課程查詢
 - **關鍵字**：課程、課、教師、老師（統一查詢）
-- **語意關鍵字**：找課、找課程、搜課（直接觸發語意搜尋）
+- **智慧關鍵字**：找課、找課程、搜課（直接觸發智慧搜尋）
 - **功能**：
   - 課程名稱搜尋（最多 40 門）
   - 課程編號查詢（UID 格式）
   - 統一查詢（2-tier 並行搜尋：同時搜尋課程名稱和教師姓名）
   - 歷史課程查詢（`課程 {年度} {關鍵字}`）
-  - 語意搜尋（BM25 + Query Expansion 智慧匹配，需設定 `GEMINI_API_KEY` 以啟用 Query Expansion）
+  - 智慧搜尋（BM25 + Query Expansion 智慧匹配，需設定 `GEMINI_API_KEY` 以啟用 Query Expansion）
 - **搜尋策略**：
   - 關鍵字：SQL LIKE (title, teachers) + 模糊 ContainsAllRunes (title, teachers)
   - 語意：BM25 索引搜尋 + LLM Query Expansion
-- **Fallback 策略**：關鍵字搜尋無結果時，自動嘗試 BM25 語意搜尋（需啟用 BM25Index）
+- **Fallback 策略**：關鍵字搜尋無結果時，自動嘗試 BM25 智慧搜尋（需啟用 BM25Index）
 - **Postback 前綴**：`course:`
 - **Sender 名稱**：課程小幫手
 

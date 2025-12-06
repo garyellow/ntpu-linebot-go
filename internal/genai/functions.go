@@ -25,7 +25,7 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 		},
 		{
 			Name:        "course_semantic",
-			Description: "用自然語言描述想要的課程類型進行語意搜尋。適用於使用者不知道確切課程名稱，但能描述想學什麼的情況。注意：若使用者輸入過短（如「AI」、「程式」），請自動擴展為更具體的描述以提高搜尋效果。",
+			Description: "用自然語言描述想要的課程類型進行智慧搜尋。適用於使用者不知道確切課程名稱，但能描述想學什麼的情況。注意：若使用者輸入過短（如「AI」、「程式」），請自動擴展為更具體的描述以提高搜尋效果。",
 			Parameters: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{

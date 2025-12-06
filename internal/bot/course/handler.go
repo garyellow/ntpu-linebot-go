@@ -238,9 +238,9 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			// Check if semantic search is actually enabled
 			var helpText string
 			if h.bm25Index != nil && h.bm25Index.IsEnabled() {
-				helpText = "🔮 請輸入想找的課程描述\n\n例如：\n• 找課 想學習資料分析\n• 找課 Python 機器學習\n• 找課 商業管理相關課程\n\n💡 語意搜尋會根據課程大綱內容智慧匹配"
+				helpText = "🔮 請輸入想找的課程描述\n\n例如：\n• 找課 想學習資料分析\n• 找課 Python 機器學習\n• 找課 商業管理相關課程\n\n💡 智慧搜尋會根據課程大綱內容智慧匹配"
 			} else {
-				helpText = "⚠️ 語意搜尋目前未啟用\n\n請使用「課程 關鍵字」進行搜尋\n例如：課程 微積分、課程 王小明"
+				helpText = "⚠️ 智慧搜尋目前未啟用\n\n請使用「課程 關鍵字」進行搜尋\n例如：課程 微積分、課程 王小明"
 			}
 			msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
 			return []messaging_api.MessageInterface{msg}
@@ -263,7 +263,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			var quickReplyItems []lineutil.QuickReplyItem
 			if h.bm25Index != nil && h.bm25Index.IsEnabled() {
 				// Semantic search enabled - mention it as an option
-				helpText = "📚 請輸入課程關鍵字\n\n例如：\n• 課 程式設計\n• 課程 微積分\n• 課 王小明（搜尋教師）\n\n🔮 或使用「找課」進行語意搜尋\n• 找課 想學程式設計\n\n💡 也可直接輸入課程編號（如：1131U0001）"
+				helpText = "📚 請輸入課程關鍵字\n\n例如：\n• 課 程式設計\n• 課程 微積分\n• 課 王小明（搜尋教師）\n\n🔮 或使用「找課」進行智慧搜尋\n• 找課 想學程式設計\n\n💡 也可直接輸入課程編號（如：1131U0001）"
 				quickReplyItems = []lineutil.QuickReplyItem{
 					lineutil.QuickReplySemanticSearchAction(),
 					lineutil.QuickReplyHelpAction(),
@@ -651,7 +651,7 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 		searchTerm,
 	)
 	if h.bm25Index != nil && h.bm25Index.IsEnabled() {
-		helpText += "\n\n🔮 試試語意搜尋：「找課 " + searchTerm + "」"
+		helpText += "\n\n🔮 試試智慧搜尋：「找課 " + searchTerm + "」"
 	}
 
 	msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
@@ -662,7 +662,7 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 	}
 	if h.bm25Index != nil && h.bm25Index.IsEnabled() {
 		quickReplyItems = append(quickReplyItems,
-			lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("🔮 語意搜尋", "找課 "+searchTerm)},
+			lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("🔮 智慧搜尋", "找課 "+searchTerm)},
 		)
 	}
 	quickReplyItems = append(quickReplyItems, lineutil.QuickReplyHelpAction())
@@ -1082,7 +1082,7 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		return []messaging_api.MessageInterface{
 			lineutil.NewTextMessageWithConsistentSender(
-				"⚠️ 語意搜尋功能尚未啟用\n\n請使用「課程 關鍵字」進行一般搜尋", sender),
+				"⚠️ 智慧搜尋功能尚未啟用\n\n請使用「課程 關鍵字」進行一般搜尋", sender),
 		}
 	}
 
@@ -1124,7 +1124,7 @@ func (h *Handler) handleSemanticSearch(ctx context.Context, query string) []mess
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		return []messaging_api.MessageInterface{
 			lineutil.NewTextMessageWithConsistentSender(
-				"⚠️ 語意搜尋暫時無法使用\n\n請稍後再試，或使用「課程 關鍵字」進行一般搜尋", sender),
+				"⚠️ 智慧搜尋暫時無法使用\n\n請稍後再試，或使用「課程 關鍵字」進行一般搜尋", sender),
 		}
 	}
 
@@ -1199,9 +1199,9 @@ func (h *Handler) formatSemanticSearchResponse(courses []storage.Course, results
 		}
 
 		carousel := lineutil.NewFlexCarousel(bubbles[i:end])
-		altText := "🔮 語意搜尋結果"
+		altText := "🔮 智慧搜尋結果"
 		if i > 0 {
-			altText = fmt.Sprintf("語意搜尋結果 (%d-%d)", i+1, end)
+			altText = fmt.Sprintf("智慧搜尋結果 (%d-%d)", i+1, end)
 		}
 		msg := lineutil.NewFlexMessage(altText, carousel)
 		msg.Sender = sender
@@ -1210,7 +1210,7 @@ func (h *Handler) formatSemanticSearchResponse(courses []storage.Course, results
 
 	// Add header message with search guidance
 	// Provide tips when results are few to help users refine their queries
-	headerText := fmt.Sprintf("🔮 語意搜尋找到 %d 門相關課程\n\n根據課程大綱內容智慧匹配", len(courses))
+	headerText := fmt.Sprintf("🔮 智慧搜尋找到 %d 門相關課程\n\n根據課程大綱內容智慧匹配", len(courses))
 	if len(courses) <= 3 {
 		headerText += "\n\n💡 提示：使用更具體的關鍵字（如「雲端運算」、「Python」）可獲得更多結果"
 	}

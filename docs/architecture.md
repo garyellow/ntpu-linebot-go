@@ -293,7 +293,7 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 - 學生資料：學期內穩定
 - 通訊錄：變動頻率低
 - 課程資料：學期內穩定
-- 課程大綱：學期內穩定（語意搜尋用）
+- 課程大綱：學期內穩定（智慧搜尋用）
 
 **背景任務排程**:
 - **主動 Warmup**: 每日凌晨 3:00，刷新所有資料模組（含課程大綱）
@@ -303,7 +303,7 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 - **Cache Cleanup**: 每 12 小時，刪除超過 Hard TTL 的資料 + VACUUM
 - **Sticker Refresh**: 每 24 小時，更新貼圖快取
 
-### 2. 語意搜尋架構（可選功能）
+### 2. 智慧搜尋架構（可選功能）
 
 ```
 BM25 + Query Expansion 流程:
@@ -591,7 +591,7 @@ services:
 - 圖書館座位查詢
 
 ### 4. AI 整合 ✅ 部分已實現
-- ✅ 語意搜尋（BM25 + Query Expansion）
+- ✅ 智慧搜尋（BM25 + Query Expansion）
 - 使用 LLM 理解自然語言查詢
 - 智能推薦相關資訊
 - 多輪對話支援
