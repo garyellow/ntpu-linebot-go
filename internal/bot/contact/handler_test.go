@@ -16,27 +16,29 @@ import (
 )
 
 func setupTestHandler(t *testing.T) *Handler {
-	// Setup test database
-	db, err := storage.New(":memory:", 168*time.Hour) // 7 days for tests
+	t.Helper()
+
+	// Create test database
+	db, err := storage.New(":memory:", 168*time.Hour)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
+	t.Cleanup(func() { _ = db.Close() })
 
-	// Create test scraper
+	// Create dependencies
 	scraperClient := scraper.NewClient(30*time.Second, 3)
-
-	// Create test metrics
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
-
-	// Create test logger
 	log := logger.New("info")
+	stickerMgr := sticker.NewManager(db, scraperClient, log)
 
-	// Create sticker manager for tests (uses fallback stickers)
-	testLogger := logger.New("info")
-	stickerMgr := sticker.NewManager(db, scraperClient, testLogger)
-
-	return NewHandler(db, scraperClient, m, log, stickerMgr)
+	return NewHandler(
+		WithRepository(db),
+		WithScraper(scraperClient),
+		WithMetrics(m),
+		WithLogger(log),
+		WithStickerManager(stickerMgr),
+	)
 }
 
 func TestCanHandle(t *testing.T) {
@@ -275,13 +277,13 @@ func TestDispatchIntent_ParamValidation(t *testing.T) {
 			name:        "search intent missing query",
 			intent:      IntentSearch,
 			params:      map[string]string{},
-			errContains: "missing required param: query",
+			errContains: "missing required parameter: query",
 		},
 		{
 			name:        "search intent empty query",
 			intent:      IntentSearch,
 			params:      map[string]string{"query": ""},
-			errContains: "missing required param: query",
+			errContains: "missing required parameter: query",
 		},
 		{
 			name:        "unknown intent",

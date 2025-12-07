@@ -12,6 +12,13 @@ import (
 // Handler defines the interface that all bot modules must implement
 // This provides a consistent API for webhook routing and message handling
 type Handler interface {
+	// Name returns the unique name of the module (e.g., "id", "course", "contact")
+	Name() string
+
+	// PostbackPrefix returns the prefix used for postback routing (e.g., "id:", "course:")
+	// Returns empty string if the module doesn't handle postbacks
+	PostbackPrefix() string
+
 	// CanHandle checks if this handler can process the given text message
 	// Returns true if the handler recognizes keywords or patterns in the text
 	CanHandle(text string) bool
@@ -38,4 +45,14 @@ type Handler interface {
 	//
 	// Returns a slice of LINE messages (max 5 messages per reply)
 	HandlePostback(ctx context.Context, data string) []messaging_api.MessageInterface
+}
+
+// IntentDispatcher defines the interface for handlers that support NLU intent dispatching
+type IntentDispatcher interface {
+	DispatchIntent(ctx context.Context, intent string, params map[string]string) ([]messaging_api.MessageInterface, error)
+}
+
+// SmartSearcher defines the interface for handlers that support smart search (BM25)
+type SmartSearcher interface {
+	IsBM25SearchEnabled() bool
 }

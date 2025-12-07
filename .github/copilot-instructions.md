@@ -2,6 +2,32 @@
 
 LINE chatbot for NTPU (National Taipei University) providing student ID lookup, contact directory, and course queries. Built with Go, emphasizing anti-scraping measures, persistent caching, and observability.
 
+## 🎯 2025 Architecture Best Practices (Updated Dec 2025)
+
+**Recent Optimizations (Dec 7, 2025):**
+1. **Pure Dependency Injection** - Application class with constructor injection (see `internal/container/application.go`)
+2. **Functional Options Pattern** - Simplified handler initialization across all modules (see `internal/*/options.go`)
+3. **Typed Error Handling** - Sentinel errors, custom error types, and error wrapping utilities (see `internal/errors/`)
+4. **Centralized Configuration** - Bot config with validation in `internal/config/bot_config.go`
+5. **Context Management (Go 1.21+)** - `context.WithoutCancel()` for async operations with tracing preservation
+6. **Complete Repository Pattern** - All bot handlers depend on interfaces, not concrete types (see `internal/storage/interfaces.go`)
+7. **Standard Middleware Collection** - Corrected middleware chain with proper closure handling (see `internal/bot/middleware.go`)
+8. **Type-Safe Context Values** - Strict type checking with unified injection in webhook handler (see `internal/context/context.go`)
+9. **Error Wrapping Strategy** - Consistent error context with user-friendly messages (see `internal/errors/wrap.go`)
+10. **Config Validation** - Compile-time config validation prevents runtime surprises (see `BotConfig.Validate()`)
+
+**Code Style:**
+- **Pure DI**: All dependencies injected via constructors, no service locator pattern
+- **Repository Pattern**: Handlers depend on interfaces (`storage.StudentRepository`), not concrete `*storage.DB`
+- Use Functional Options for constructors with >3 parameters
+- Use typed errors (`domerrors.ErrNotFound`) instead of string matching
+- Wrap errors with context using `errors.NewWrapper(module, operation).Wrap(err, userMsg)`
+- Prefer centralized constants over magic numbers
+- Use `context.WithoutCancel()` for async operations to preserve tracing values
+- Always inject UserID, ChatID, RequestID into context at webhook entry point
+- All repository interfaces must be fully implemented with compile-time checks
+- Validate configuration at load time using `Validate()` method
+
 ## Architecture: Async Webhook Processing
 
 ```
@@ -27,8 +53,12 @@ LINE Webhook → Gin Handler
 **Critical Flow Details:**
 - **Async processing**: HTTP 200 returned immediately after signature verification (< 2s), events processed in goroutine
 - **LINE Best Practice**: Responds within 2s to prevent request_timeout errors, processes asynchronously to handle long operations
-- **Context handling**: Bot operations use detached context (`context.WithoutCancel`) with 60s timeout, independent from HTTP request lifecycle
-- **Detached context rationale**: LINE may close connection before processing completes; detached context ensures DB queries and scraping finish, reply token remains valid (~20 min)
+- **Context handling**: Bot operations use `context.WithoutCancel()` (Go 1.21+) with 60s timeout
+  - **Why WithoutCancel()**: Preserves parent context Values (request ID, user ID) for tracing/logging
+  - **Why not Background()**: Background() creates clean context but loses all tracing data
+  - **Cancellation independence**: Child timeout is independent from HTTP request lifecycle
+- **Detached context rationale**: LINE may close connection before processing completes; detached cancellation ensures DB queries and scraping finish, reply token remains valid (~20 min)
+- **Observability**: Request ID and user ID flow through entire async operation for log correlation
 - **Message batching**: LINE allows max 5 messages per reply; webhook auto-truncates to 4 + warning
 - **Reference**: https://developers.line.biz/en/docs/partner-docs/development-guidelines/
 
@@ -239,12 +269,9 @@ Fallback → getHelpMessage() + Warning Log
 
 ## Key File Locations
 
-- **Entry points**: `cmd/server/main.go`, `cmd/healthcheck/main.go`
-- **Server organization**:
-  - `cmd/server/main.go` - Entry point and initialization
-  - `cmd/server/routes.go` - HTTP routes configuration
-  - `cmd/server/middleware.go` - Security and logging middleware
-  - `cmd/server/jobs.go` - Background jobs (cleanup, warmup, metrics)
+- **Entry point**: `cmd/server/main.go` - Application entry point (minimalist, ~28 lines)
+- **Application class**: `internal/container/application.go` - Pure DI with HTTP server, routes, middleware, background jobs
+- **Dependency container**: `internal/container/container.go` - Initialization lifecycle management
 - **Webhook handler**: `internal/webhook/handler.go:Handle()` (async processing)
 - **Warmup module**: `internal/warmup/warmup.go` (background cache warming)
 - **Bot module interface**: `internal/bot/handler.go`

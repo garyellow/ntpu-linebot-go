@@ -10,60 +10,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/garyellow/ntpu-linebot-go/internal/bot/contact"
-	"github.com/garyellow/ntpu-linebot-go/internal/bot/course"
-	"github.com/garyellow/ntpu-linebot-go/internal/bot/id"
+	"github.com/garyellow/ntpu-linebot-go/internal/bot"
+	"github.com/garyellow/ntpu-linebot-go/internal/config"
+	ctxpkg "github.com/garyellow/ntpu-linebot-go/internal/context"
 	"github.com/garyellow/ntpu-linebot-go/internal/genai"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 	"github.com/garyellow/ntpu-linebot-go/internal/ratelimit"
-	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
-	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 	"github.com/gin-gonic/gin"
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 	"github.com/line/line-bot-sdk-go/v8/linebot/webhook"
-)
-
-// contextKey is a private type for context keys to avoid collisions.
-// Using a private type ensures our context keys don't conflict with other packages.
-type contextKey string
-
-const (
-	// chatIDContextKey holds the chat ID (user/group/room ID) for the current request.
-	// This enables request-scoped data to flow through the call stack without
-	// changing function signatures, following Go's context best practices.
-	chatIDContextKey contextKey = "chatID"
-)
-
-// WithChatID returns a new context with the chat ID embedded.
-// This allows bot modules to access the chat ID for features like rate limiting
-// without tight coupling through function parameters.
-func WithChatID(ctx context.Context, chatID string) context.Context {
-	return context.WithValue(ctx, chatIDContextKey, chatID)
-}
-
-// GetChatID extracts the chat ID from context.
-// Returns empty string if chat ID is not present or has wrong type.
-// This is safe to call from any layer that receives the context.
-func GetChatID(ctx context.Context) string {
-	if chatID, ok := ctx.Value(chatIDContextKey).(string); ok {
-		return chatID
-	}
-	return ""
-}
-
-// LINE API limits and constraints
-const (
-	MaxMessagesPerReply = 5
-	MaxEventsPerWebhook = 100
-	MinReplyTokenLength = 10
-	MaxMessageLength    = 20000
-	MaxPostbackDataSize = 300
-	// WebhookTimeout is now defined in internal/config/timeouts.go
-	// as config.WebhookProcessing with detailed documentation on
-	// why 25 seconds was chosen (LINE API constraints, user patience, etc.)
 )
 
 // helpKeywords are the keywords that trigger the help message
@@ -75,14 +33,17 @@ type Handler struct {
 	client         *messaging_api.MessagingApiAPI
 	metrics        *metrics.Metrics
 	logger         *logger.Logger
-	idHandler      *id.Handler
-	contactHandler *contact.Handler
-	courseHandler  *course.Handler
+	registry       *bot.Registry
 	rateLimiter    *RateLimiter              // Global rate limiter for API calls
 	userLimiter    *UserRateLimiter          // Per-user rate limiter
 	llmLimiter     *ratelimit.LLMRateLimiter // LLM-specific rate limiter (NLU + query expansion)
 	stickerManager *sticker.Manager          // Sticker manager for avatar URLs
 	webhookTimeout time.Duration             // Timeout for bot processing
+
+	// LINE API constraints (from config.BotConfig)
+	maxMessagesPerReply int
+	maxEventsPerWebhook int
+	minReplyTokenLength int
 
 	// Rate limit configuration
 	userRateLimitTokens     float64
@@ -93,46 +54,65 @@ type Handler struct {
 	intentParser genai.IntentParser
 }
 
-// NewHandler creates a new webhook handler
-func NewHandler(channelSecret, channelToken string, db *storage.DB, scraperClient *scraper.Client, m *metrics.Metrics, log *logger.Logger, stickerManager *sticker.Manager, webhookTimeout time.Duration, userRateLimitTokens, userRateLimitRefillRate, llmRateLimitPerHour float64) (*Handler, error) {
+// NewHandler creates a new webhook handler using functional options pattern.
+// Required parameters: channelSecret, channelToken, registry, metrics, logger
+// Optional parameters: Configure via HandlerOption functions (see options.go)
+//
+// Example:
+//
+//	handler, err := webhook.NewHandler(
+//	    cfg.LineChannelSecret,
+//	    cfg.LineChannelToken,
+//	    registry, m, log,
+//	    webhook.WithBotConfig(botCfg),
+//	    webhook.WithIntentParser(intentParser),
+//	)
+func NewHandler(
+	channelSecret, channelToken string,
+	registry *bot.Registry,
+	m *metrics.Metrics,
+	log *logger.Logger,
+	opts ...HandlerOption,
+) (*Handler, error) {
 	// Create messaging API client
 	client, err := messaging_api.NewMessagingApiAPI(channelToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create messaging API client: %w", err)
 	}
 
-	// Initialize bot module handlers with sticker manager
-	idHandler := id.NewHandler(db, scraperClient, m, log, stickerManager)
-	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerManager)
-	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerManager)
-
-	// Initialize rate limiters
-	// LINE API rate limits: https://developers.line.biz/en/reference/messaging-api/#rate-limits
-	// Global: 100 requests per second (we use 80 to be safe)
-	globalRateLimiter := NewRateLimiter(80.0, 80.0)
-	// Per-user rate limiter with metrics support
-	userRateLimiter := NewUserRateLimiter(5*time.Minute, m)
-
-	// LLM-specific rate limiter (per hour, with cleanup every 5 minutes)
-	llmRateLimiter := ratelimit.NewLLMRateLimiter(llmRateLimitPerHour, 5*time.Minute, m)
-
-	return &Handler{
+	// Apply default configuration
+	defaultCfg := config.DefaultBotConfig()
+	h := &Handler{
 		channelSecret:           channelSecret,
 		client:                  client,
 		metrics:                 m,
 		logger:                  log,
-		idHandler:               idHandler,
-		contactHandler:          contactHandler,
-		courseHandler:           courseHandler,
-		rateLimiter:             globalRateLimiter,
-		userLimiter:             userRateLimiter,
-		llmLimiter:              llmRateLimiter,
-		stickerManager:          stickerManager,
-		webhookTimeout:          webhookTimeout,
-		userRateLimitTokens:     userRateLimitTokens,
-		userRateLimitRefillRate: userRateLimitRefillRate,
-		llmRateLimitPerHour:     llmRateLimitPerHour,
-	}, nil
+		registry:                registry,
+		webhookTimeout:          defaultCfg.WebhookTimeout,
+		maxMessagesPerReply:     defaultCfg.MaxMessagesPerReply,
+		maxEventsPerWebhook:     defaultCfg.MaxEventsPerWebhook,
+		minReplyTokenLength:     defaultCfg.MinReplyTokenLength,
+		userRateLimitTokens:     defaultCfg.UserRateLimitTokens,
+		userRateLimitRefillRate: defaultCfg.UserRateLimitRefillRate,
+		llmRateLimitPerHour:     defaultCfg.LLMRateLimitPerHour,
+	}
+
+	// Apply functional options (allows overriding defaults)
+	for _, opt := range opts {
+		opt(h)
+	}
+
+	// Initialize rate limiters AFTER options are applied
+	// LINE API rate limits: https://developers.line.biz/en/reference/messaging-api/#rate-limits
+	h.rateLimiter = NewRateLimiter(defaultCfg.GlobalRateLimitRPS, defaultCfg.GlobalRateLimitRPS)
+	h.userLimiter = NewUserRateLimiter(5*time.Minute, m)
+
+	// LLM rate limiter (if not set via options)
+	if h.llmLimiter == nil {
+		h.llmLimiter = ratelimit.NewLLMRateLimiter(h.llmRateLimitPerHour, 5*time.Minute, m)
+	}
+
+	return h, nil
 }
 
 // Stop gracefully stops the handler's background goroutines.
@@ -144,12 +124,6 @@ func (h *Handler) Stop() {
 	if h.llmLimiter != nil {
 		h.llmLimiter.Stop()
 	}
-}
-
-// GetCourseHandler returns the course handler for external configuration
-// Used to set BM25Index and QueryExpander for smart search from main.go
-func (h *Handler) GetCourseHandler() *course.Handler {
-	return h.courseHandler
 }
 
 // GetLLMRateLimiter returns the LLM rate limiter for sharing with bot modules.
@@ -203,9 +177,9 @@ func (h *Handler) Handle(c *gin.Context) {
 	processingCtx := context.Background()
 
 	// Validate event count (max events per webhook per LINE API spec)
-	if len(cb.Events) > MaxEventsPerWebhook {
+	if len(cb.Events) > h.maxEventsPerWebhook {
 		h.logger.Warnf("Too many events in single webhook: %d", len(cb.Events))
-		cb.Events = cb.Events[:MaxEventsPerWebhook] // Limit to prevent DoS
+		cb.Events = cb.Events[:h.maxEventsPerWebhook] // Limit to prevent DoS
 	}
 
 	// Copy events to avoid race condition after HTTP response completes
@@ -272,10 +246,10 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 	// Send reply if we have messages
 	if len(messages) > 0 && err == nil {
 		// LINE API restriction: max messages per reply
-		if len(messages) > MaxMessagesPerReply {
-			h.logger.Warnf("Message count %d exceeds limit, truncating to %d", len(messages), MaxMessagesPerReply)
+		if len(messages) > h.maxMessagesPerReply {
+			h.logger.Warnf("Message count %d exceeds limit, truncating to %d", len(messages), h.maxMessagesPerReply)
 			// Add a warning message at the end (keep room for warning)
-			messages = messages[:MaxMessagesPerReply-1]
+			messages = messages[:h.maxMessagesPerReply-1]
 			sender := lineutil.GetSender("系統小幫手", h.stickerManager)
 			messages = append(messages, lineutil.NewTextMessageWithConsistentSender(
 				"ℹ️ 由於訊息數量限制,部分內容未完全顯示。\n請使用更具體的關鍵字縮小搜尋範圍。",
@@ -291,7 +265,7 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 		}
 
 		// Validate reply token format (should not be empty or too short)
-		if len(replyToken) < MinReplyTokenLength {
+		if len(replyToken) < h.minReplyTokenLength {
 			h.logger.WithField("token_length", len(replyToken)).Warn("Invalid reply token format")
 			return
 		}
@@ -429,11 +403,13 @@ func (h *Handler) checkUserRateLimit(source webhook.SourceInterface, chatID stri
 
 // handleMessageEvent processes text message events
 func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageEvent) ([]messaging_api.MessageInterface, error) {
-	// Extract chat ID and inject into context for request-scoped access
-	// This allows downstream handlers (like course module) to access chat ID
-	// for rate limiting without tight coupling through function parameters
+	// Extract and inject context values for tracing and logging
 	chatID := h.getChatIDFromSource(event.Source)
-	ctx = WithChatID(ctx, chatID)
+	userID := h.getUserIDFromSource(event.Source)
+
+	// Inject context values for downstream handlers
+	ctx = ctxpkg.WithChatID(ctx, chatID)
+	ctx = ctxpkg.WithUserID(ctx, userID)
 
 	// Check rate limit early to avoid unnecessary processing
 	if allowed, rateLimitMsg := h.checkUserRateLimit(event.Source, chatID); !allowed {
@@ -461,16 +437,17 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 
 	text := textMsg.Text
 
-	// Validate text length (LINE API allows up to MaxMessageLength characters)
+	// Validate text length (LINE API allows up to 20000 characters)
 	if len(text) == 0 {
 		return nil, nil // Empty message, ignore
 	}
-	if len(text) > MaxMessageLength {
+	maxLen := config.DefaultBotConfig().MaxMessageLength
+	if len(text) > maxLen {
 		h.logger.Warnf("Text message too long: %d characters", len(text))
 		sender := lineutil.GetSender("系統小幫手", h.stickerManager)
 		return []messaging_api.MessageInterface{
 			lineutil.NewTextMessageWithConsistentSender(
-				fmt.Sprintf("❌ 訊息內容過長\n\n訊息長度超過 %d 字元，請縮短後重試。", MaxMessageLength),
+				fmt.Sprintf("❌ 訊息內容過長\n\n訊息長度超過 %d 字元，請縮短後重試。", maxLen),
 				sender,
 			),
 		}, nil
@@ -496,29 +473,26 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 	}
 
 	// Create context with timeout for bot processing.
-	// Use WithoutCancel to detach from HTTP request context, preventing
-	// cancellation when client disconnects (e.g., LINE server closes connection).
-	// This ensures database queries and scraping operations complete even if
-	// the original request is canceled, which is important because:
+	// Use context.WithoutCancel() (Go 1.21+) to preserve parent context Values
+	// (request ID, user ID) for logging/tracing while preventing cancellation propagation.
+	//
+	// Why context.WithoutCancel() instead of context.Background():
+	// 1. Preserves request tracing data (request ID, user ID) for correlation
+	// 2. Prevents cancellation when LINE server closes connection
+	// 3. Enables full observability across the async operation
+	//
+	// Why we need detached cancellation:
 	// 1. LINE may close the connection before we finish processing
-	// 2. We still want to send the reply via the reply token
+	// 2. We still want to send the reply via the reply token (valid ~20 min)
 	// 3. Partial work (started DB queries) shouldn't be wasted
 	processCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), h.webhookTimeout)
 	defer cancel()
 
 	// Dispatch to appropriate bot module based on CanHandle
-	// Order matters: Contact and Course have more specific keywords,
-	// ID handler's "系" keyword is too broad and would catch "聯繫 資工系"
-	if h.contactHandler.CanHandle(text) {
-		return h.contactHandler.HandleMessage(processCtx, text), nil
-	}
-
-	if h.courseHandler.CanHandle(text) {
-		return h.courseHandler.HandleMessage(processCtx, text), nil
-	}
-
-	if h.idHandler.CanHandle(text) {
-		return h.idHandler.HandleMessage(processCtx, text), nil
+	// Order matters: Handlers are checked in the order they were registered.
+	// Typically: Contact -> Course -> ID
+	if msgs := h.registry.DispatchMessage(processCtx, text); len(msgs) > 0 {
+		return msgs, nil
 	}
 
 	// No handler matched - try NLU if available
@@ -527,6 +501,14 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 
 // handlePostbackEvent processes postback events
 func (h *Handler) handlePostbackEvent(ctx context.Context, event webhook.PostbackEvent) ([]messaging_api.MessageInterface, error) {
+	// Extract and inject context values for tracing and logging
+	chatID := h.getChatIDFromSource(event.Source)
+	userID := h.getUserIDFromSource(event.Source)
+
+	// Inject context values for downstream handlers
+	ctx = ctxpkg.WithChatID(ctx, chatID)
+	ctx = ctxpkg.WithUserID(ctx, userID)
+
 	data := event.Postback.Data
 
 	// Validate postback data
@@ -556,21 +538,13 @@ func (h *Handler) handlePostbackEvent(ctx context.Context, event webhook.Postbac
 	}
 
 	// Create context with timeout for postback processing.
-	// Use WithoutCancel to detach from HTTP request context (same reason as handleMessageEvent).
+	// Use context.WithoutCancel() to preserve tracing values (same reason as handleMessageEvent).
 	processCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), h.webhookTimeout)
 	defer cancel()
 
 	// Check module prefix or dispatch to all handlers
-	if strings.HasPrefix(data, "id:") {
-		return h.idHandler.HandlePostback(processCtx, strings.TrimPrefix(data, "id:")), nil
-	}
-
-	if strings.HasPrefix(data, "contact:") {
-		return h.contactHandler.HandlePostback(processCtx, strings.TrimPrefix(data, "contact:")), nil
-	}
-
-	if strings.HasPrefix(data, "course:") {
-		return h.courseHandler.HandlePostback(processCtx, strings.TrimPrefix(data, "course:")), nil
+	if msgs := h.registry.DispatchPostback(processCtx, data); len(msgs) > 0 {
+		return msgs, nil
 	}
 
 	// No handler matched
@@ -739,6 +713,19 @@ func (h *Handler) getChatIDFromSource(source webhook.SourceInterface) string {
 	return ""
 }
 
+// getUserIDFromSource extracts user ID from a source interface
+func (h *Handler) getUserIDFromSource(source webhook.SourceInterface) string {
+	switch s := source.(type) {
+	case webhook.UserSource:
+		return s.UserId
+	case webhook.GroupSource:
+		return s.UserId
+	case webhook.RoomSource:
+		return s.UserId
+	}
+	return ""
+}
+
 // getHelpMessage returns a simplified help message (fallback when no handler matches)
 // The message content varies based on whether NLU is enabled.
 func (h *Handler) getHelpMessage() []messaging_api.MessageInterface {
@@ -880,34 +867,28 @@ func (h *Handler) handleWithNLU(ctx context.Context, text string, source webhook
 
 // dispatchIntent dispatches the parsed intent to the appropriate handler.
 func (h *Handler) dispatchIntent(ctx context.Context, result *genai.ParseResult) ([]messaging_api.MessageInterface, error) {
-	switch result.Module {
-	case "course":
-		msgs, err := h.courseHandler.DispatchIntent(ctx, result.Intent, result.Params)
-		if err != nil {
-			h.logger.WithError(err).WithField("intent", result.Intent).Warn("Course dispatch failed")
-			return h.getHelpMessage(), nil
-		}
-		return msgs, nil
-	case "id":
-		msgs, err := h.idHandler.DispatchIntent(ctx, result.Intent, result.Params)
-		if err != nil {
-			h.logger.WithError(err).WithField("intent", result.Intent).Warn("ID dispatch failed")
-			return h.getHelpMessage(), nil
-		}
-		return msgs, nil
-	case "contact":
-		msgs, err := h.contactHandler.DispatchIntent(ctx, result.Intent, result.Params)
-		if err != nil {
-			h.logger.WithError(err).WithField("intent", result.Intent).Warn("Contact dispatch failed")
-			return h.getHelpMessage(), nil
-		}
-		return msgs, nil
-	case "help":
+	if result.Module == "help" {
 		return h.getDetailedInstructionMessages(), nil
-	default:
+	}
+
+	handler := h.registry.GetHandler(result.Module)
+	if handler == nil {
 		h.logger.WithField("module", result.Module).Warn("Unknown module from NLU")
 		return h.getHelpMessage(), nil
 	}
+
+	dispatcher, ok := handler.(bot.IntentDispatcher)
+	if !ok {
+		h.logger.WithField("module", result.Module).Warn("Module does not support NLU dispatch")
+		return h.getHelpMessage(), nil
+	}
+
+	msgs, err := dispatcher.DispatchIntent(ctx, result.Intent, result.Params)
+	if err != nil {
+		h.logger.WithError(err).WithField("intent", result.Intent).Warn("Dispatch failed")
+		return h.getHelpMessage(), nil
+	}
+	return msgs, nil
 }
 
 // getDetailedInstructionMessages returns detailed instruction messages
@@ -917,7 +898,13 @@ func (h *Handler) getDetailedInstructionMessages() []messaging_api.MessageInterf
 
 	// Check feature availability
 	nluEnabled := h.intentParser != nil && h.intentParser.IsEnabled()
-	smartEnabled := h.courseHandler != nil && h.courseHandler.IsBM25SearchEnabled()
+
+	smartEnabled := false
+	if h := h.registry.GetHandler("course"); h != nil {
+		if ss, ok := h.(bot.SmartSearcher); ok {
+			smartEnabled = ss.IsBM25SearchEnabled()
+		}
+	}
 
 	// Message 1: Main instruction text
 	// Common content for both NLU enabled/disabled

@@ -1,12 +1,12 @@
 package storage
 
-import "errors"
-
-// Common errors
-var (
-	// ErrNotFound is returned when a resource is not found in the database
-	ErrNotFound = errors.New("resource not found")
+import (
+	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
 )
+
+// ErrNotFound is an alias to the domain-level error for backward compatibility.
+// Prefer using domerrors.ErrNotFound directly in new code.
+var ErrNotFound = domerrors.ErrNotFound
 
 // Student represents a student record
 type Student struct {

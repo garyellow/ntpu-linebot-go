@@ -8,6 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/garyellow/ntpu-linebot-go/internal/bot"
+	"github.com/garyellow/ntpu-linebot-go/internal/bot/contact"
+	"github.com/garyellow/ntpu-linebot-go/internal/bot/course"
+	"github.com/garyellow/ntpu-linebot-go/internal/bot/id"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
@@ -38,19 +42,47 @@ func setupTestHandler(t *testing.T) *Handler {
 	// Create sticker manager
 	stickerManager := sticker.NewManager(db, scraperClient, log)
 
-	// Create handler
+	// Create bot handlers using functional options
+	idHandler := id.NewHandler(
+		id.WithRepository(db),
+		id.WithScraper(scraperClient),
+		id.WithMetrics(m),
+		id.WithLogger(log),
+		id.WithStickerManager(stickerManager),
+	)
+	contactHandler := contact.NewHandler(
+		contact.WithRepository(db),
+		contact.WithScraper(scraperClient),
+		contact.WithMetrics(m),
+		contact.WithLogger(log),
+		contact.WithStickerManager(stickerManager),
+	)
+	courseHandler := course.NewHandler(
+		course.WithRepository(db),
+		course.WithSyllabusRepository(db),
+		course.WithScraper(scraperClient),
+		course.WithMetrics(m),
+		course.WithLogger(log),
+		course.WithStickerManager(stickerManager),
+	)
+
+	// Create bot registry
+	botRegistry := bot.NewRegistry()
+	botRegistry.Register(contactHandler)
+	botRegistry.Register(courseHandler)
+	botRegistry.Register(idHandler)
+
+	// Create handler using functional options
 	handler, err := NewHandler(
 		"test_channel_secret",
 		"test_channel_token",
-		db,
-		scraperClient,
+		botRegistry,
 		m,
 		log,
-		stickerManager,
-		30*time.Second, // Default webhook timeout for tests
-		6.0,            // User rate limit tokens
-		1.0/5.0,        // User rate limit refill rate (1 token per 5 seconds)
-		50.0,           // LLM rate limit per hour
+		WithStickerManager(stickerManager),
+		WithWebhookTimeout(30*time.Second),
+		WithUserRateLimit(6.0, 1.0/5.0),
+		WithLLMRateLimit(50.0),
 	)
 	if err != nil {
 		t.Fatalf("Failed to create handler: %v", err)
@@ -71,16 +103,8 @@ func TestHandlerInitialization(t *testing.T) {
 		t.Error("Expected client to be initialized")
 	}
 
-	if handler.idHandler == nil {
-		t.Error("Expected idHandler to be initialized")
-	}
-
-	if handler.contactHandler == nil {
-		t.Error("Expected contactHandler to be initialized")
-	}
-
-	if handler.courseHandler == nil {
-		t.Error("Expected courseHandler to be initialized")
+	if handler.registry == nil {
+		t.Error("Expected registry to be initialized")
 	}
 }
 
@@ -215,19 +239,15 @@ func TestMessageValidation(t *testing.T) {
 func TestContextTimeout(t *testing.T) {
 	handler := setupTestHandler(t)
 
-	// Verify handlers are initialized (they should use context internally)
-	if handler.idHandler == nil {
-		t.Error("idHandler should be initialized")
-	}
-	if handler.contactHandler == nil {
-		t.Error("contactHandler should be initialized")
-	}
-	if handler.courseHandler == nil {
-		t.Error("courseHandler should be initialized")
+	// Verify handler is properly initialized
+	if handler == nil {
+		t.Fatal("handler should not be nil")
 	}
 
-	// Use handler to avoid unused variable error
-	_ = handler
+	// Verify registry is set
+	if handler.registry == nil {
+		t.Error("registry should be initialized")
+	}
 }
 
 // TestEventProcessingLimit tests that event processing is limited
@@ -268,20 +288,6 @@ func TestIsPersonalChat(t *testing.T) {
 	// But we can verify the method exists and the logic pattern
 	if handler == nil {
 		t.Fatal("Handler should not be nil")
-	}
-}
-
-func TestGetCourseHandler(t *testing.T) {
-	handler := setupTestHandler(t)
-
-	courseHandler := handler.GetCourseHandler()
-	if courseHandler == nil {
-		t.Error("GetCourseHandler() should not return nil")
-	}
-
-	// Verify it's the same handler
-	if courseHandler != handler.courseHandler {
-		t.Error("GetCourseHandler() should return the internal course handler")
 	}
 }
 

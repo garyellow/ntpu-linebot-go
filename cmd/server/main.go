@@ -1,312 +1,34 @@
-// Package main provides the LINE bot server entry point.
 package main
 
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
-	"os/signal"
-	"sync"
-	"syscall"
-	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/config"
-	"github.com/garyellow/ntpu-linebot-go/internal/genai"
-	"github.com/garyellow/ntpu-linebot-go/internal/logger"
-	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
-	"github.com/garyellow/ntpu-linebot-go/internal/rag"
-	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
-	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
-	"github.com/garyellow/ntpu-linebot-go/internal/storage"
-	"github.com/garyellow/ntpu-linebot-go/internal/warmup"
-	"github.com/garyellow/ntpu-linebot-go/internal/webhook"
-	"github.com/gin-gonic/gin"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/garyellow/ntpu-linebot-go/internal/container"
 )
 
 func main() {
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Initialize logger
-	log := logger.New(cfg.LogLevel)
-	log.Info("Starting NTPU LineBot Server")
-
-	// Connect to database with configured TTL
-	db, err := storage.New(cfg.SQLitePath(), cfg.CacheTTL)
+	// Create container and initialize all dependencies
+	// Container.Initialize() returns a fully-configured Application (Pure DI)
+	c := container.New(cfg)
+	app, err := c.Initialize(context.Background())
 	if err != nil {
-		log.WithError(err).Fatal("Failed to connect to database")
-	}
-	defer func() { _ = db.Close() }()
-	log.WithField("path", cfg.SQLitePath()).
-		WithField("cache_ttl", cfg.CacheTTL).
-		Info("Database connected")
-
-	// Create Prometheus registry
-	registry := prometheus.NewRegistry()
-
-	// Register Go and process collectors
-	registry.MustRegister(collectors.NewGoCollector())
-	registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
-	registry.MustRegister(collectors.NewBuildInfoCollector())
-
-	// Create metrics
-	m := metrics.New(registry)
-	log.Info("Metrics initialized")
-
-	// Create scraper client
-	scraperClient := scraper.NewClient(
-		cfg.ScraperTimeout,
-		cfg.ScraperMaxRetries,
-	)
-	log.Info("Scraper client created")
-
-	// Create sticker manager with database and scraper client
-	stickerManager := sticker.NewManager(db, scraperClient, log)
-	log.Info("Sticker manager created")
-
-	// Create BM25 index for smart search (uses syllabus content)
-	// BM25 + Query Expansion provides effective retrieval without embedding costs
-	var bm25Index *rag.BM25Index
-	syllabi, err := db.GetAllSyllabi(context.Background())
-	if err != nil {
-		log.WithError(err).Warn("Failed to load syllabi for BM25 index")
-	} else if len(syllabi) > 0 {
-		bm25Index = rag.NewBM25Index(log)
-		if err := bm25Index.Initialize(syllabi); err != nil {
-			log.WithError(err).Warn("Failed to initialize BM25 index")
-			bm25Index = nil
-		} else {
-			log.WithField("doc_count", bm25Index.Count()).Info("BM25 index initialized for smart search")
-		}
-	} else {
-		log.Info("No syllabi found, BM25 index will be empty until warmup")
-		bm25Index = rag.NewBM25Index(log)
+		fmt.Fprintf(os.Stderr, "Failed to initialize application: %v\n", err)
+		os.Exit(1)
 	}
 
-	// Start background cache warming (non-blocking)
-	// Warmup runs concurrently with server startup until completion
-	warmup.RunInBackground(context.Background(), db, scraperClient, stickerManager, log, warmup.Options{
-		Modules:   warmup.ParseModules(cfg.WarmupModules),
-		Reset:     false, // Never reset in production
-		Metrics:   m,     // Pass metrics for monitoring
-		BM25Index: bm25Index,
-	})
-	log.Info("Background cache warming started")
-
-	// Create webhook handler
-	webhookHandler, err := webhook.NewHandler(
-		cfg.LineChannelSecret,
-		cfg.LineChannelToken,
-		db,
-		scraperClient,
-		m,
-		log,
-		stickerManager,
-		cfg.WebhookTimeout,
-		cfg.UserRateLimitTokens,
-		cfg.UserRateLimitRefillRate,
-		cfg.LLMRateLimitPerHour, // LLM-specific rate limiting for NLU and query expansion
-	)
-	if err != nil {
-		log.WithError(err).Fatal("Failed to create webhook handler")
+	// Run the application
+	if err := app.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Application error: %v\n", err)
+		os.Exit(1)
 	}
-
-	// Set BM25 index for course smart search
-	if bm25Index != nil {
-		webhookHandler.GetCourseHandler().SetBM25Index(bm25Index)
-		log.Info("BM25 search enabled for course module")
-	}
-
-	// Create query expander for smart search (optional - requires Gemini API key)
-	var queryExpander *genai.QueryExpander
-	if cfg.GeminiAPIKey != "" {
-		var err error
-		queryExpander, err = genai.NewQueryExpander(context.Background(), cfg.GeminiAPIKey)
-		if err != nil {
-			log.WithError(err).Warn("Failed to create query expander")
-		} else if queryExpander != nil {
-			webhookHandler.GetCourseHandler().SetQueryExpander(queryExpander)
-			log.Info("Query expander enabled for smart search")
-		}
-	}
-
-	// Set LLM rate limiter for course handler's query expansion
-	// This enables rate limiting for both NLU-routed and keyword-triggered smart searches
-	// The limiter is shared with NLU intent parsing to enforce a unified quota
-	webhookHandler.GetCourseHandler().SetLLMRateLimiter(
-		webhookHandler.GetLLMRateLimiter(),
-		cfg.LLMRateLimitPerHour,
-	)
-	log.Info("LLM rate limiter enabled for course query expansion")
-
-	// Create NLU intent parser (optional - requires Gemini API key)
-	var intentParser genai.IntentParser
-	if cfg.GeminiAPIKey != "" {
-		parser, err := genai.NewIntentParser(context.Background(), cfg.GeminiAPIKey)
-		if err != nil {
-			log.WithError(err).Warn("Failed to create intent parser, NLU disabled")
-		} else if parser != nil {
-			intentParser = parser
-			webhookHandler.SetIntentParser(intentParser)
-			log.Info("NLU intent parser enabled")
-		}
-	}
-	log.Info("Webhook handler created")
-
-	// Set Gin mode based on log level
-	if cfg.LogLevel == "debug" {
-		gin.SetMode(gin.DebugMode)
-	} else {
-		gin.SetMode(gin.ReleaseMode)
-	}
-
-	// Create Gin router
-	router := gin.New()
-
-	// Add middleware
-	router.Use(gin.Recovery())
-	router.Use(securityHeadersMiddleware())
-	router.Use(loggingMiddleware(log))
-
-	// Setup routes
-	setupRoutes(router, webhookHandler, db, registry, scraperClient, stickerManager)
-
-	// Create HTTP server with timeouts optimized for LINE webhook handling
-	// See internal/config/timeouts.go for detailed explanations
-	server := &http.Server{
-		Addr:         ":" + cfg.Port,
-		Handler:      router,
-		ReadTimeout:  config.WebhookHTTPRead,
-		WriteTimeout: config.WebhookHTTPWrite,
-		IdleTimeout:  config.WebhookHTTPIdle,
-	}
-
-	// Start background goroutines
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	var wg sync.WaitGroup
-
-	// Cache cleanup goroutine (every 12 hours)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				log.WithField("panic", r).Error("Panic in cache cleanup goroutine")
-			}
-		}()
-		cleanupExpiredCache(ctx, db, cfg.CacheTTL, m, log)
-	}()
-
-	// Sticker refresh goroutine (every 24 hours)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				log.WithField("panic", r).Error("Panic in sticker refresh goroutine")
-			}
-		}()
-		refreshStickers(ctx, stickerManager, m, log)
-	}()
-
-	// Daily cache warmup goroutine (daily at 3:00 AM)
-	// Refreshes all data modules unconditionally to ensure freshness
-	// Data not updated within 7 days (Hard TTL) will be deleted by cleanup job
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				log.WithField("panic", r).Error("Panic in proactive warmup goroutine")
-			}
-		}()
-		proactiveWarmup(ctx, db, scraperClient, stickerManager, log, cfg, bm25Index)
-	}()
-
-	// Cache size metrics updater goroutine (every 5 minutes)
-	// Updates Prometheus gauge metrics with current cache entry counts
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				log.WithField("panic", r).Error("Panic in cache metrics goroutine")
-			}
-		}()
-		updateCacheSizeMetrics(ctx, db, stickerManager, bm25Index, m, log)
-	}()
-
-	// Start server in goroutine
-	go func() {
-		log.WithField("port", cfg.Port).Info("Server starting")
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.WithError(err).Fatal("Failed to start server")
-		}
-	}()
-
-	// Wait for interrupt signal for graceful shutdown
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
-	log.Info("Shutting down server...")
-
-	// Stop webhook handler background goroutines
-	webhookHandler.Stop()
-
-	// Cancel context to stop metrics updater
-	cancel()
-
-	// Wait for goroutines to finish (with timeout)
-	goDone := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(goDone)
-	}()
-
-	select {
-	case <-goDone:
-		log.Info("All background goroutines stopped")
-	case <-time.After(5 * time.Second):
-		log.Warn("Timeout waiting for goroutines to stop")
-	}
-
-	// Create shutdown context with timeout
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
-	defer shutdownCancel()
-
-	// Shutdown server gracefully
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.WithError(err).Error("Server forced to shutdown")
-	}
-
-	// Close intent parser (if enabled)
-	if intentParser != nil {
-		if err := intentParser.Close(); err != nil {
-			log.WithError(err).Error("Failed to close intent parser")
-		}
-	}
-
-	// Close query expander (if enabled)
-	if queryExpander != nil {
-		if err := queryExpander.Close(); err != nil {
-			log.WithError(err).Error("Failed to close query expander")
-		}
-	}
-
-	// Close database connection
-	if err := db.Close(); err != nil {
-		log.WithError(err).Error("Failed to close database")
-	}
-
-	log.Info("Server stopped")
 }

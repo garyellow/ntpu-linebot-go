@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
+	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
@@ -17,21 +18,34 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper/ntpu"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
+	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
-// Handler handles student ID related queries
+// Handler handles student ID related queries.
+// It uses repository interface for data access, enabling clean separation
+// between business logic and data persistence.
 type Handler struct {
-	db             *storage.DB
+	repo           storage.StudentRepository
 	scraper        *scraper.Client
 	metrics        *metrics.Metrics
 	logger         *logger.Logger
 	stickerManager *sticker.Manager
 }
 
+// Name returns the module name
+func (h *Handler) Name() string {
+	return ModuleName
+}
+
+// PostbackPrefix returns the postback prefix
+func (h *Handler) PostbackPrefix() string {
+	return ModuleName + ":"
+}
+
 // ID handler constants.
 const (
-	moduleName           = "id"
+	ModuleName           = "id" // Module identifier for registration
 	senderName           = "學號小幫手"
 	MaxStudentsPerSearch = 500 // Maximum students to return in name search results
 )
@@ -62,15 +76,14 @@ var (
 	allDeptCodeText = "所有系代碼"
 )
 
-// NewHandler creates a new ID handler
-func NewHandler(db *storage.DB, scraper *scraper.Client, metrics *metrics.Metrics, logger *logger.Logger, stickerManager *sticker.Manager) *Handler {
-	return &Handler{
-		db:             db,
-		scraper:        scraper,
-		metrics:        metrics,
-		logger:         logger,
-		stickerManager: stickerManager,
+// NewHandler creates a new ID handler using functional options pattern.
+// This provides flexibility in configuration and makes the API more maintainable.
+func NewHandler(opts ...HandlerOption) *Handler {
+	h := &Handler{}
+	for _, opt := range opts {
+		opt(h)
 	}
+	return h
 }
 
 // Intent names for NLU dispatcher
@@ -95,35 +108,35 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 	case IntentSearch:
 		name, ok := params["name"]
 		if !ok || name == "" {
-			return nil, fmt.Errorf("missing required param: name")
+			return nil, fmt.Errorf("%w: name", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(moduleName).Infof("Dispatching ID intent: %s, name: %s", intent, name)
+			h.logger.WithModule(ModuleName).Infof("Dispatching ID intent: %s, name: %s", intent, name)
 		}
 		return h.handleStudentNameQuery(ctx, name), nil
 
 	case IntentStudentID:
 		studentID, ok := params["student_id"]
 		if !ok || studentID == "" {
-			return nil, fmt.Errorf("missing required param: student_id")
+			return nil, fmt.Errorf("%w: student_id", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(moduleName).Infof("Dispatching ID intent: %s, student_id: %s", intent, studentID)
+			h.logger.WithModule(ModuleName).Infof("Dispatching ID intent: %s, student_id: %s", intent, studentID)
 		}
 		return h.handleStudentIDQuery(ctx, studentID), nil
 
 	case IntentDepartment:
 		department, ok := params["department"]
 		if !ok || department == "" {
-			return nil, fmt.Errorf("missing required param: department")
+			return nil, fmt.Errorf("%w: department", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(moduleName).Infof("Dispatching ID intent: %s, department: %s", intent, department)
+			h.logger.WithModule(ModuleName).Infof("Dispatching ID intent: %s, department: %s", intent, department)
 		}
 		return h.handleDepartmentNameQuery(department), nil
 
 	default:
-		return nil, fmt.Errorf("unknown intent: %s", intent)
+		return nil, fmt.Errorf("%w: %s", domerrors.ErrUnknownIntent, intent)
 	}
 }
 
@@ -138,7 +151,7 @@ func (h *Handler) CanHandle(text string) bool {
 
 	// Check for student ID (8-9 digits) at the start of text
 	// This handles direct ID input like "412345678"
-	if len(text) >= 8 && len(text) <= 9 && isNumeric(text) {
+	if len(text) >= 8 && len(text) <= 9 && stringutil.IsNumeric(text) {
 		return true
 	}
 
@@ -162,7 +175,7 @@ func (h *Handler) CanHandle(text string) bool {
 
 // HandleMessage handles text messages for the ID module
 func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_api.MessageInterface {
-	log := h.logger.WithModule(moduleName)
+	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
 	log.Infof("Handling ID message: %s", text)
@@ -173,7 +186,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	}
 
 	// Check for direct student ID input (8-9 digits without keyword)
-	if len(text) >= 8 && len(text) <= 9 && isNumeric(text) {
+	if len(text) >= 8 && len(text) <= 9 && stringutil.IsNumeric(text) {
 		return h.handleStudentIDQuery(ctx, text)
 	}
 
@@ -229,7 +242,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		}
 
 		// Check if it's a student ID (8-9 digits)
-		if isNumeric(searchTerm) && (len(searchTerm) == 8 || len(searchTerm) == 9) {
+		if stringutil.IsNumeric(searchTerm) && (len(searchTerm) == 8 || len(searchTerm) == 9) {
 			return h.handleStudentIDQuery(ctx, searchTerm)
 		}
 		// Otherwise, it's a name search
@@ -241,7 +254,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 
 // HandlePostback handles postback events for the ID module
 func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_api.MessageInterface {
-	log := h.logger.WithModule(moduleName)
+	log := h.logger.WithModule(ModuleName)
 	log.Infof("Handling ID postback: %s", data)
 
 	// Handle "兇" (easter egg) - support both with and without prefix
@@ -515,15 +528,15 @@ func (h *Handler) handleYearSearchConfirm(yearStr string) []messaging_api.Messag
 
 // handleStudentIDQuery handles student ID queries
 func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []messaging_api.MessageInterface {
-	log := h.logger.WithModule(moduleName)
+	log := h.logger.WithModule(ModuleName)
 	startTime := time.Now()
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	// Check cache first
-	student, err := h.db.GetStudentByID(ctx, studentID)
+	student, err := h.repo.GetStudentByID(ctx, studentID)
 	if err != nil {
 		log.WithError(err).Error("Failed to query cache")
-		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
+		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		return []messaging_api.MessageInterface{
 			lineutil.ErrorMessageWithQuickReply("查詢學號時發生問題", sender, "學號 "+studentID),
 		}
@@ -531,19 +544,19 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 
 	if student != nil {
 		// Cache hit
-		h.metrics.RecordCacheHit(moduleName)
+		h.metrics.RecordCacheHit(ModuleName)
 		log.Infof("Cache hit for student ID: %s", studentID)
 		return h.formatStudentResponse(student)
 	}
 
 	// Cache miss - scrape from website
-	h.metrics.RecordCacheMiss(moduleName)
+	h.metrics.RecordCacheMiss(ModuleName)
 	log.Infof("Cache miss for student ID: %s, scraping...", studentID)
 
 	student, err = ntpu.ScrapeStudentByID(ctx, h.scraper, studentID)
 	if err != nil {
 		log.WithError(err).Errorf("Failed to scrape student ID: %s", studentID)
-		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
+		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🔍 學號 %s 不存在喔\n\n請確認學號是否正確", studentID), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyStudentAction(),
@@ -554,11 +567,11 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	}
 
 	// Save to cache
-	if err := h.db.SaveStudent(ctx, student); err != nil {
+	if err := h.repo.SaveStudent(ctx, student); err != nil {
 		log.WithError(err).Warn("Failed to save student to cache")
 	}
 
-	h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
+	h.metrics.RecordScraperRequest(ModuleName, "success", time.Since(startTime).Seconds())
 	return h.formatStudentResponse(student)
 }
 
@@ -575,11 +588,11 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 //
 //     Results from both strategies are merged and deduplicated by student ID.
 func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []messaging_api.MessageInterface {
-	log := h.logger.WithModule(moduleName)
+	log := h.logger.WithModule(ModuleName)
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	// Step 1: Try SQL LIKE search first (fast path for exact substrings)
-	students, err := h.db.SearchStudentsByName(ctx, name)
+	students, err := h.repo.SearchStudentsByName(ctx, name)
 	if err != nil {
 		log.WithError(err).Error("Failed to search students by name")
 		return []messaging_api.MessageInterface{
@@ -589,7 +602,7 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 
 	// Step 2: ALWAYS try fuzzy character-set matching to find additional results
 	// This catches cases like "王明" -> "王小明" that SQL LIKE misses
-	allStudents, err := h.db.GetAllStudents(ctx)
+	allStudents, err := h.repo.GetAllStudents(ctx)
 	if err == nil && len(allStudents) > 0 {
 		for _, s := range allStudents {
 			if bot.ContainsAllRunes(s.Name, name) {
@@ -737,16 +750,7 @@ func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_ap
 }
 
 // Helper functions
-
-// isNumeric checks if a string contains only digits
-func isNumeric(s string) bool {
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return false
-		}
-	}
-	return len(s) > 0
-}
+// Note: isNumeric has been moved to internal/stringutil package
 
 // deduplicateStudents removes duplicate students by ID while preserving order
 func deduplicateStudents(students []storage.Student) []storage.Student {
@@ -951,7 +955,7 @@ func (h *Handler) buildDepartmentSelectionTemplate(year, imageURL string, depart
 
 // handleDepartmentSelection handles final department selection and queries the database
 func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearStr string) []messaging_api.MessageInterface {
-	log := h.logger.WithModule(moduleName)
+	log := h.logger.WithModule(ModuleName)
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	year, err := strconv.Atoi(yearStr)
@@ -980,7 +984,7 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 		queryDeptName = deptName + "系"
 	}
 
-	students, err := h.db.GetStudentsByYearDept(ctx, year, queryDeptName)
+	students, err := h.repo.GetStudentsByDepartment(ctx, queryDeptName, year)
 	if err != nil {
 		log.WithError(err).Error("Failed to search students by year and department")
 		return []messaging_api.MessageInterface{
@@ -991,32 +995,32 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 	// If not found in cache, try scraping
 	if len(students) == 0 {
 		log.Infof("Cache miss for department selection: %d %s, scraping...", year, deptCode)
-		h.metrics.RecordCacheMiss(moduleName)
+		h.metrics.RecordCacheMiss(ModuleName)
 		startTime := time.Now()
 
 		scrapedStudents, err := ntpu.ScrapeStudentsByYear(ctx, h.scraper, year, deptCode)
 		if err != nil {
 			log.WithError(err).Errorf("Failed to scrape students for year %d dept %s", year, deptCode)
-			h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
+			h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 			return []messaging_api.MessageInterface{
 				lineutil.ErrorMessageWithDetailAndSender("查詢學生名單時發生問題，可能是學校網站暫時無法存取", sender),
 			}
 		}
 
 		if len(scrapedStudents) > 0 {
-			h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
+			h.metrics.RecordScraperRequest(ModuleName, "success", time.Since(startTime).Seconds())
 			// Save to cache and convert to value slice
 			for _, s := range scrapedStudents {
-				if err := h.db.SaveStudent(ctx, s); err != nil {
+				if err := h.repo.SaveStudent(ctx, s); err != nil {
 					log.WithError(err).Warn("Failed to save student to cache")
 				}
 				students = append(students, *s)
 			}
 		} else {
-			h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
+			h.metrics.RecordScraperRequest(ModuleName, "not_found", time.Since(startTime).Seconds())
 		}
 	} else {
-		h.metrics.RecordCacheHit(moduleName)
+		h.metrics.RecordCacheHit(ModuleName)
 	}
 
 	if len(students) == 0 {
