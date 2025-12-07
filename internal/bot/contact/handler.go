@@ -88,27 +88,22 @@ var (
 )
 
 // NewHandler creates a new contact handler with required dependencies.
-// maxContactsLimit is optional and defaults to 100 if not specified.
 func NewHandler(
 	db *storage.DB,
 	scraper *scraper.Client,
 	metrics *metrics.Metrics,
 	logger *logger.Logger,
 	stickerManager *sticker.Manager,
-	opts ...HandlerOption,
+	maxContactsLimit int,
 ) *Handler {
-	h := &Handler{
+	return &Handler{
 		db:               db,
 		scraper:          scraper,
 		metrics:          metrics,
 		logger:           logger,
 		stickerManager:   stickerManager,
-		maxContactsLimit: 100, // Default limit
+		maxContactsLimit: maxContactsLimit,
 	}
-	for _, opt := range opts {
-		opt(h)
-	}
-	return h
 }
 
 // Intent names for NLU dispatcher

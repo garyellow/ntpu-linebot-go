@@ -5,6 +5,7 @@ package container
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
@@ -24,17 +25,23 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 )
 
-// Container manages application dependencies and their lifecycle.
-// Initialization order:
-// 1. Core services (database, metrics, scraper, sticker manager)
-// 2. Bot handlers (id, course, contact)
-// 3. GenAI components (optional - BM25 index, intent parser, query expander)
-// 4. Webhook handler (aggregates all dependencies)
+// Container manages application dependencies using Pure DI pattern.
+//
+// Initialization phases:
+//  1. Core services: database, metrics, scraper, sticker manager
+//  2. GenAI components: BM25 index, intent parser, query expander (optional)
+//  3. Bot handlers: id, course, contact (with GenAI features injected)
+//  4. Webhook handler: aggregates all handlers and provides unified entry point
+//
+// Lifecycle management:
+//   - Resources are closed in reverse initialization order
+//   - GenAI components implement Close() for proper cleanup
+//   - Database connection pooling handled by modernc.org/sqlite
 type Container struct {
 	cfg    *config.Config
 	logger *logger.Logger
 
-	// Core services (closed in reverse order)
+	// Core services
 	db             *storage.DB
 	metrics        *metrics.Metrics
 	registry       *prometheus.Registry
@@ -46,14 +53,15 @@ type Container struct {
 	courseHandler  *course.Handler
 	contactHandler *contact.Handler
 
-	// GenAI components (optional)
+	// GenAI components (optional, nil if disabled)
 	bm25Index     *rag.BM25Index
 	intentParser  genai.IntentParser
 	queryExpander *genai.QueryExpander
 }
 
-// New creates a new dependency container.
-// Only configuration is required; all other dependencies are lazy-initialized.
+// New creates a dependency container with configuration.
+// Logger is initialized immediately for early error reporting.
+// All other dependencies are initialized via Initialize().
 func New(cfg *config.Config) *Container {
 	return &Container{
 		cfg:    cfg,
@@ -61,9 +69,16 @@ func New(cfg *config.Config) *Container {
 	}
 }
 
-// Initialize performs full dependency initialization and returns a fully-configured Application.
-// Initialization order: Core → GenAI (optional) → Bot Handlers → Webhook
-// GenAI is initialized before handlers so they can receive GenAI options during construction.
+// Initialize performs dependency initialization and returns a configured Application.
+//
+// Initialization sequence ensures proper dependency flow:
+//  1. Core services (required for all modules)
+//  2. GenAI components (optional, error is logged but not fatal)
+//  3. Bot handlers (receive GenAI features via constructor options)
+//  4. Webhook handler (aggregates handlers and owns rate limiters)
+//
+// Returns error only for critical failures. GenAI initialization errors
+// are logged as warnings and the application continues without those features.
 func (c *Container) Initialize(ctx context.Context) (*Application, error) {
 	c.logger.Info("Initializing application...")
 
@@ -101,9 +116,16 @@ func (c *Container) Initialize(ctx context.Context) (*Application, error) {
 	), nil
 }
 
-// initCoreServices initializes database, metrics, scraper, and sticker manager.
+// initCoreServices initializes foundational services required by all modules.
+//
+// Initialization sequence:
+//  1. Database - SQLite with WAL mode (modernc.org/sqlite)
+//  2. Metrics - Prometheus registry with standard collectors
+//  3. Scraper - HTTP client with retry logic and failover URLs
+//  4. Sticker manager - Avatar URL provider for LINE messages
+//
+// All services are mandatory; initialization failure is fatal.
 func (c *Container) initCoreServices(ctx context.Context) error {
-	// Database
 	db, err := storage.New(c.cfg.SQLitePath(), c.cfg.CacheTTL)
 	if err != nil {
 		return fmt.Errorf("database connection: %w", err)
@@ -113,24 +135,29 @@ func (c *Container) initCoreServices(ctx context.Context) error {
 		WithField("cache_ttl", c.cfg.CacheTTL).
 		Info("Database connected")
 
-	// Prometheus registry and metrics
 	c.registry = prometheus.NewRegistry()
 	c.registry.MustRegister(collectors.NewGoCollector())
 	c.registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	c.registry.MustRegister(collectors.NewBuildInfoCollector())
 	c.metrics = metrics.New(c.registry)
 
-	// Scraper client
 	c.scraperClient = scraper.NewClient(c.cfg.ScraperTimeout, c.cfg.ScraperMaxRetries)
 
-	// Sticker manager
 	c.stickerManager = sticker.NewManager(c.db, c.scraperClient, c.logger)
 
 	c.logger.Info("Core services initialized")
 	return nil
 }
 
-// initBotHandlers creates all bot handlers with GenAI options if available.
+// initBotHandlers creates bot handlers with their dependencies.
+//
+// Handler construction patterns:
+//   - ID handler: Direct parameter injection (no optional features)
+//   - Contact handler: Direct parameter injection with static config
+//   - Course handler: Functional options pattern for GenAI features
+//
+// GenAI features (BM25, QueryExpander) are injected as options
+// to avoid nil checks in handler logic.
 func (c *Container) initBotHandlers(ctx context.Context) error {
 	c.idHandler = id.NewHandler(
 		c.db,
@@ -140,7 +167,6 @@ func (c *Container) initBotHandlers(ctx context.Context) error {
 		c.stickerManager,
 	)
 
-	// Build course handler options
 	courseOpts := []course.HandlerOption{}
 	if c.bm25Index != nil {
 		courseOpts = append(courseOpts, course.WithBM25Index(c.bm25Index))
@@ -158,25 +184,33 @@ func (c *Container) initBotHandlers(ctx context.Context) error {
 		courseOpts...,
 	)
 
+	botCfg := config.DefaultBotConfig()
 	c.contactHandler = contact.NewHandler(
 		c.db,
 		c.scraperClient,
 		c.metrics,
 		c.logger,
 		c.stickerManager,
-		contact.WithMaxContactsLimit(config.DefaultBotConfig().MaxContactsPerSearch),
+		botCfg.MaxContactsPerSearch,
 	)
 
 	c.logger.Info("Bot handlers initialized")
 	return nil
 }
 
-// initGenAI initializes optional GenAI features (BM25 index, intent parser, query expander).
-// BM25 index is always initialized if syllabi exist (independent of Gemini API).
-// Intent parser and query expander require Gemini API key.
+// initGenAI initializes optional GenAI features.
+//
+// Features initialized:
+//  1. BM25 Index - Local syllabus search (no API key required)
+//  2. Intent Parser - NLU for unmatched messages (requires Gemini API)
+//  3. Query Expander - Enhances BM25 results (requires Gemini API)
+//
+// BM25 operates independently of Gemini API. If no API key is configured,
+// only keyword-based features remain available.
+//
 // Returns error if API key is configured but initialization fails.
+// Missing API key or empty syllabi are logged as info/warning, not errors.
 func (c *Container) initGenAI(ctx context.Context) error {
-	// Initialize BM25 Index (independent of Gemini API, uses local syllabi data)
 	syllabi, err := c.db.GetAllSyllabi(ctx)
 	if err != nil {
 		return fmt.Errorf("load syllabi for BM25: %w", err)
@@ -193,13 +227,11 @@ func (c *Container) initGenAI(ctx context.Context) error {
 		c.logger.Warn("No syllabi found, BM25 search disabled")
 	}
 
-	// Initialize Gemini-based features (requires API key)
 	if c.cfg.GeminiAPIKey == "" {
 		c.logger.Info("Gemini API key not configured, NLU and query expansion disabled")
 		return nil
 	}
 
-	// Intent Parser (NLU for unmatched messages)
 	intentParser, err := genai.NewIntentParser(ctx, c.cfg.GeminiAPIKey)
 	if err != nil {
 		return fmt.Errorf("intent parser: %w", err)
@@ -207,7 +239,6 @@ func (c *Container) initGenAI(ctx context.Context) error {
 	c.intentParser = intentParser
 	c.logger.Info("Intent parser enabled")
 
-	// Query Expander (improves BM25 search results)
 	queryExpander, err := genai.NewQueryExpander(ctx, c.cfg.GeminiAPIKey)
 	if err != nil {
 		return fmt.Errorf("query expander: %w", err)
@@ -219,15 +250,28 @@ func (c *Container) initGenAI(ctx context.Context) error {
 	return nil
 }
 
-// initWebhook creates and returns the webhook handler with all dependencies.
+// initWebhook creates the webhook handler and wires it to bot handlers.
+//
+// Registry priority determines handler matching order:
+//  1. Contact - Most specific patterns (emergency, org names)
+//  2. Course - Medium specificity (course codes, keywords)
+//  3. ID - Broader patterns (student IDs, departments)
+//
+// Configuration cascade:
+//   - Loads default BotConfig
+//   - Overrides with environment-specific values
+//   - Applies via functional options
+//
+// Post-construction injection:
+//   - LLM rate limiter is owned by webhook (shared across NLU + query expansion)
+//   - Injected into course handler after webhook creation
+//   - Ensures unified quota management for all LLM features
 func (c *Container) initWebhook(ctx context.Context) (*webhook.Handler, error) {
-	// Build registry and register handlers in priority order
 	registry := bot.NewRegistry()
-	registry.Register(c.contactHandler) // Priority 1
-	registry.Register(c.courseHandler)  // Priority 2
-	registry.Register(c.idHandler)      // Priority 3
+	registry.Register(c.contactHandler)
+	registry.Register(c.courseHandler)
+	registry.Register(c.idHandler)
 
-	// Build bot config
 	botCfg, err := config.LoadBotConfig()
 	if err != nil {
 		return nil, fmt.Errorf("load bot config: %w", err)
@@ -245,7 +289,6 @@ func (c *Container) initWebhook(ctx context.Context) (*webhook.Handler, error) {
 		botCfg.LLMRateLimitPerHour = c.cfg.LLMRateLimitPerHour
 	}
 
-	// Build handler options
 	opts := []webhook.HandlerOption{
 		webhook.WithBotConfig(botCfg),
 		webhook.WithStickerManager(c.stickerManager),
@@ -254,7 +297,6 @@ func (c *Container) initWebhook(ctx context.Context) (*webhook.Handler, error) {
 		opts = append(opts, webhook.WithIntentParser(c.intentParser))
 	}
 
-	// Create webhook handler
 	handler, err := webhook.NewHandler(
 		c.cfg.LineChannelSecret,
 		c.cfg.LineChannelToken,
@@ -267,53 +309,21 @@ func (c *Container) initWebhook(ctx context.Context) (*webhook.Handler, error) {
 		return nil, fmt.Errorf("create handler: %w", err)
 	}
 
-	// Add LLM rate limiter to course handler if query expander is available
-	if c.queryExpander != nil {
-		courseOpts := []course.HandlerOption{
-			course.WithBM25Index(c.bm25Index),
-			course.WithQueryExpander(c.queryExpander),
-			course.WithLLMRateLimiter(handler.GetLLMRateLimiter(), c.cfg.LLMRateLimitPerHour),
-		}
-
-		c.courseHandler = course.NewHandler(
-			c.db,
-			c.scraperClient,
-			c.metrics,
-			c.logger,
-			c.stickerManager,
-			courseOpts...,
-		)
-
-		// Recreate registry with updated course handler
-		registry = bot.NewRegistry()
-		registry.Register(c.contactHandler)
-		registry.Register(c.courseHandler)
-		registry.Register(c.idHandler)
-
-		// Recreate webhook handler with updated registry
-		handler, err = webhook.NewHandler(
-			c.cfg.LineChannelSecret,
-			c.cfg.LineChannelToken,
-			registry,
-			c.metrics,
-			c.logger,
-			opts...,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("recreate handler: %w", err)
-		}
+	if c.queryExpander != nil && c.courseHandler != nil {
+		c.courseHandler.SetLLMRateLimiter(handler.GetLLMRateLimiter())
 	}
 
 	c.logger.Info("Webhook handler initialized")
 	return handler, nil
 }
 
-// Close gracefully shuts down all services in reverse initialization order.
+// Close gracefully shuts down services in reverse initialization order.
+// Errors are logged individually but all cleanup operations are attempted.
+// Returns combined error if any closures fail.
 func (c *Container) Close() error {
 	c.logger.Info("Closing services...")
 	var errs []error
 
-	// Close GenAI components
 	if c.queryExpander != nil {
 		if err := c.queryExpander.Close(); err != nil {
 			c.logger.WithError(err).Error("Failed to close query expander")
@@ -327,7 +337,6 @@ func (c *Container) Close() error {
 		}
 	}
 
-	// Close database
 	if c.db != nil {
 		if err := c.db.Close(); err != nil {
 			c.logger.WithError(err).Error("Failed to close database")
@@ -336,7 +345,7 @@ func (c *Container) Close() error {
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("shutdown errors: %v", errs)
+		return errors.Join(errs...)
 	}
 
 	c.logger.Info("Services closed")

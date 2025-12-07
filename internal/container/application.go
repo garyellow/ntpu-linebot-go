@@ -25,12 +25,24 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-// Application represents a fully-configured application with all dependencies injected.
+// Application represents a fully-configured application managing the complete lifecycle
+// from HTTP server startup through background jobs to graceful shutdown.
+//
+// Lifecycle phases:
+//  1. Run() - Starts HTTP server and background jobs
+//  2. Signal handling - Waits for SIGINT/SIGTERM
+//  3. Graceful shutdown - Stops server, closes connections, releases resources
+//
+// Background jobs:
+//   - Cache cleanup (every 12h) - Removes expired entries and VACUUMs database
+//   - Sticker refresh (every 24h) - Updates avatar URL cache
+//   - Daily warmup (3:00 AM) - Proactively refreshes all data
+//   - Metrics update (every 5m) - Updates cache size gauges
 type Application struct {
 	cfg    *config.Config
 	logger *logger.Logger
 
-	// Core services (for lifecycle management)
+	// Core services
 	db             *storage.DB
 	metrics        *metrics.Metrics
 	registry       *prometheus.Registry
@@ -50,7 +62,11 @@ type Application struct {
 	queryExpander *genai.QueryExpander
 }
 
-// NewApplication creates a new Application with all dependencies injected.
+// NewApplication creates an Application with dependencies and configures HTTP routing.
+// Gin is set to release mode and configured with standard middleware:
+//   - Recovery - Panic recovery to prevent crashes
+//   - Security headers - OWASP recommended headers
+//   - Logging - Request/response logging with duration tracking
 func NewApplication(
 	cfg *config.Config,
 	logger *logger.Logger,
@@ -89,18 +105,29 @@ func NewApplication(
 	return app
 }
 
-// Run starts the HTTP server and handles graceful shutdown.
+// Run starts the application and blocks until shutdown signal is received.
+//
+// Startup sequence:
+//  1. Launch background jobs (cache cleanup, warmup, metrics)
+//  2. Start HTTP server (non-blocking via goroutine)
+//  3. Wait for OS signal (SIGINT/SIGTERM)
+//
+// Shutdown sequence:
+//  1. Cancel background jobs context
+//  2. Gracefully shutdown HTTP server (waits for active connections)
+//  3. Close GenAI components (release API clients)
+//  4. Close database (flush pending writes, close connections)
+//
+// Returns error only if server or database shutdown fails.
+// GenAI component errors are logged but don't prevent shutdown.
 func (a *Application) Run() error {
 	log := a.logger
 
-	// Create context for background jobs
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start background jobs
 	go a.startBackgroundJobs(ctx)
 
-	// Create HTTP server
 	a.server = &http.Server{
 		Addr:         fmt.Sprintf(":%s", a.cfg.Port),
 		Handler:      a.router,
@@ -109,7 +136,6 @@ func (a *Application) Run() error {
 		IdleTimeout:  config.WebhookHTTPIdle,
 	}
 
-	// Start server in goroutine
 	go func() {
 		log.WithField("port", a.cfg.Port).Info("Server starting")
 		if err := a.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -117,26 +143,21 @@ func (a *Application) Run() error {
 		}
 	}()
 
-	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	log.Info("Shutting down server...")
 
-	// Cancel background jobs
 	cancel()
 
-	// Graceful shutdown
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), a.cfg.ShutdownTimeout)
 	defer shutdownCancel()
 
-	// Shutdown HTTP server
 	if err := a.server.Shutdown(shutdownCtx); err != nil {
 		log.WithError(err).Error("Server forced to shutdown")
 		return fmt.Errorf("server shutdown: %w", err)
 	}
 
-	// Close GenAI components
 	if a.queryExpander != nil {
 		_ = a.queryExpander.Close()
 	}
@@ -144,7 +165,6 @@ func (a *Application) Run() error {
 		_ = a.intentParser.Close()
 	}
 
-	// Close database
 	if err := a.db.Close(); err != nil {
 		log.WithError(err).Error("Failed to close database")
 	}
@@ -153,25 +173,30 @@ func (a *Application) Run() error {
 	return nil
 }
 
-// setupRoutes configures all HTTP routes (using direct dependency access).
+// setupRoutes configures HTTP endpoints following RESTful conventions.
+//
+// Endpoint structure:
+//   - GET  /        - Redirect to project repository
+//   - GET  /healthz - Liveness probe (always returns 200)
+//   - GET  /ready   - Readiness probe (checks database + cache state)
+//   - POST /callback - LINE webhook entry point
+//   - GET  /metrics - Prometheus metrics endpoint
+//
+// All GET endpoints support HEAD for efficient health checking.
 func (a *Application) setupRoutes() {
-	// Root endpoint - redirect to GitHub
 	rootHandler := func(c *gin.Context) {
 		c.Redirect(http.StatusMovedPermanently, "https://github.com/garyellow/ntpu-linebot-go")
 	}
 	a.router.GET("/", rootHandler)
 	a.router.HEAD("/", rootHandler)
 
-	// Health check endpoints
 	healthHandler := func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	}
 	a.router.GET("/healthz", healthHandler)
 	a.router.HEAD("/healthz", healthHandler)
 
-	// Readiness Probe
 	readyHandler := func(ctx *gin.Context) {
-		// Check database
 		if err := a.db.Ready(ctx.Request.Context()); err != nil {
 			ctx.JSON(http.StatusServiceUnavailable, gin.H{
 				"status": "not ready",
@@ -180,7 +205,6 @@ func (a *Application) setupRoutes() {
 			return
 		}
 
-		// Check scraper URLs (quick check)
 		checkCtx, cancel := context.WithTimeout(ctx.Request.Context(), 3*time.Second)
 		defer cancel()
 
@@ -208,7 +232,6 @@ func (a *Application) setupRoutes() {
 			}
 		}
 
-		// Check cache data
 		studentCount, _ := a.db.CountStudents(ctx.Request.Context())
 		contactCount, _ := a.db.CountContacts(ctx.Request.Context())
 		courseCount, _ := a.db.CountCourses(ctx.Request.Context())
@@ -232,35 +255,26 @@ func (a *Application) setupRoutes() {
 	a.router.GET("/ready", readyHandler)
 	a.router.HEAD("/ready", readyHandler)
 
-	// LINE webhook
 	a.router.POST("/callback", a.webhookHandler.Handle)
 
-	// Prometheus metrics
 	a.router.GET("/metrics", gin.WrapH(promhttp.HandlerFor(a.registry, promhttp.HandlerOpts{})))
 }
 
-// startBackgroundJobs starts all background jobs.
+// startBackgroundJobs launches all periodic maintenance tasks.
+// Each job runs independently in its own goroutine and respects context cancellation.
 func (a *Application) startBackgroundJobs(ctx context.Context) {
 	log := a.logger
-
 	log.Info("Starting background jobs...")
 
-	// Cache cleanup (every 12 hours)
 	go a.cleanupExpiredCache(ctx)
-
-	// Sticker refresh (every 24 hours)
 	go a.refreshStickers(ctx)
-
-	// Proactive warmup (daily at 3:00 AM)
 	go a.proactiveWarmup(ctx)
-
-	// Cache size metrics (every 5 minutes)
 	go a.updateCacheSizeMetrics(ctx)
 }
 
-// cleanupExpiredCache periodically removes expired cache entries.
+// cleanupExpiredCache removes expired cache entries every 12 hours.
+// Includes VACUUM operation to reclaim disk space after deletions.
 func (a *Application) cleanupExpiredCache(ctx context.Context) {
-	// Initial delay
 	select {
 	case <-ctx.Done():
 		return
@@ -268,7 +282,6 @@ func (a *Application) cleanupExpiredCache(ctx context.Context) {
 		a.performCacheCleanup(ctx)
 	}
 
-	// Periodic cleanup
 	ticker := time.NewTicker(config.CacheCleanupInterval)
 	defer ticker.Stop()
 
@@ -282,14 +295,15 @@ func (a *Application) cleanupExpiredCache(ctx context.Context) {
 	}
 }
 
-// performCacheCleanup executes cache cleanup.
+// performCacheCleanup deletes expired cache entries and reclaims disk space.
+// Each cache type is cleaned individually with error logging.
+// VACUUM compacts the database file after deletions.
 func (a *Application) performCacheCleanup(ctx context.Context) {
 	startTime := time.Now()
 	a.logger.Info("Starting cache cleanup...")
 
 	var totalDeleted int64
 
-	// Cleanup each cache type
 	if deleted, err := a.db.DeleteExpiredStudents(ctx, a.cfg.CacheTTL); err != nil {
 		a.logger.WithError(err).Error("Failed to cleanup expired students")
 	} else {
@@ -320,7 +334,6 @@ func (a *Application) performCacheCleanup(ctx context.Context) {
 		totalDeleted += deleted
 	}
 
-	// VACUUM database to reclaim space
 	if _, err := a.db.Writer().Exec("VACUUM"); err != nil {
 		a.logger.WithError(err).Warn("Failed to VACUUM database")
 	} else {
@@ -332,9 +345,9 @@ func (a *Application) performCacheCleanup(ctx context.Context) {
 		Info("Cache cleanup completed")
 }
 
-// refreshStickers periodically refreshes sticker cache.
+// refreshStickers updates avatar URL cache every 24 hours.
+// Fetches latest sticker metadata from LINE API for consistent sender display.
 func (a *Application) refreshStickers(ctx context.Context) {
-	// Initial delay
 	select {
 	case <-ctx.Done():
 		return
@@ -342,7 +355,6 @@ func (a *Application) refreshStickers(ctx context.Context) {
 		a.performStickerRefresh(ctx)
 	}
 
-	// Periodic refresh
 	ticker := time.NewTicker(config.StickerRefreshInterval)
 	defer ticker.Stop()
 
@@ -356,7 +368,7 @@ func (a *Application) refreshStickers(ctx context.Context) {
 	}
 }
 
-// performStickerRefresh executes sticker refresh.
+// performStickerRefresh fetches latest sticker metadata with timeout.
 func (a *Application) performStickerRefresh(ctx context.Context) {
 	a.logger.Info("Starting periodic sticker refresh...")
 	startTime := time.Now()
@@ -374,23 +386,22 @@ func (a *Application) performStickerRefresh(ctx context.Context) {
 			Info("Sticker refresh complete")
 	}
 
-	// Record job metrics
 	if a.metrics != nil {
 		a.metrics.RecordJob("sticker_refresh", "all", time.Since(startTime).Seconds())
 	}
 }
 
 // proactiveWarmup performs daily cache warming at 3:00 AM.
+// proactiveWarmup refreshes all data daily at 3:00 AM.
+// Reduces cold cache hits during peak usage hours by pre-fetching data.
 func (a *Application) proactiveWarmup(ctx context.Context) {
 	for {
-		// Calculate next 3:00 AM
 		now := time.Now()
 		next := time.Date(now.Year(), now.Month(), now.Day(), 3, 0, 0, 0, now.Location())
 		if now.After(next) {
 			next = next.Add(24 * time.Hour)
 		}
 
-		// Wait until 3:00 AM or context cancellation
 		waitDuration := time.Until(next)
 		a.logger.WithField("next_run", next.Format(time.RFC3339)).
 			Info("Scheduled next proactive warmup")
@@ -404,12 +415,12 @@ func (a *Application) proactiveWarmup(ctx context.Context) {
 	}
 }
 
-// performProactiveWarmup executes proactive warmup.
+// performProactiveWarmup executes cache warmup for configured modules.
+// Refreshes data from source systems and rebuilds BM25 index if enabled.
 func (a *Application) performProactiveWarmup(ctx context.Context) {
 	a.logger.Info("Starting proactive warmup...")
 	startTime := time.Now()
 
-	// Warmup all modules unconditionally
 	opts := warmup.Options{
 		Modules:   warmup.ParseModules(a.cfg.WarmupModules),
 		Reset:     false,
@@ -427,9 +438,9 @@ func (a *Application) performProactiveWarmup(ctx context.Context) {
 	}
 }
 
-// updateCacheSizeMetrics periodically updates cache size metrics.
+// updateCacheSizeMetrics logs cache statistics every 5 minutes for monitoring.
 func (a *Application) updateCacheSizeMetrics(ctx context.Context) {
-	ticker := time.NewTicker(5 * time.Minute) // Update every 5 minutes
+	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
 	for {
@@ -442,9 +453,7 @@ func (a *Application) updateCacheSizeMetrics(ctx context.Context) {
 	}
 }
 
-// performCacheSizeMetricsUpdate updates cache size metrics.
-// Note: Cache size metrics are currently tracked via Count methods in each module.
-// If you want explicit Prometheus gauges, add UpdateCacheSize to metrics.Metrics.
+// performCacheSizeMetricsUpdate logs current cache state for observability.
 func (a *Application) performCacheSizeMetricsUpdate(ctx context.Context) {
 	studentCount, _ := a.db.CountStudents(ctx)
 	contactCount, _ := a.db.CountContacts(ctx)
@@ -452,7 +461,6 @@ func (a *Application) performCacheSizeMetricsUpdate(ctx context.Context) {
 	syllabiCount, _ := a.db.CountSyllabi(ctx)
 	stickerCount := a.stickerManager.Count()
 
-	// Log cache sizes for monitoring
 	a.logger.WithFields(map[string]interface{}{
 		"students": studentCount,
 		"contacts": contactCount,
@@ -461,13 +469,12 @@ func (a *Application) performCacheSizeMetricsUpdate(ctx context.Context) {
 		"stickers": stickerCount,
 	}).Debug("Cache size metrics updated")
 
-	// Log BM25 index size if available
 	if a.bm25Index != nil && a.bm25Index.IsEnabled() {
 		a.logger.WithField("bm25_docs", a.bm25Index.Count()).Debug("BM25 index size")
 	}
 }
 
-// securityHeadersMiddleware adds security headers to all responses.
+// securityHeadersMiddleware applies OWASP recommended security headers.
 func securityHeadersMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("X-Content-Type-Options", "nosniff")
@@ -478,7 +485,8 @@ func securityHeadersMiddleware() gin.HandlerFunc {
 	}
 }
 
-// loggingMiddleware logs HTTP requests.
+// loggingMiddleware logs requests with structured fields for observability.
+// Log level varies by status code: info (2xx/3xx), warn (4xx), error (5xx).
 func loggingMiddleware(log *logger.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()

@@ -39,7 +39,7 @@ type BotConfig struct {
 }
 
 // DefaultBotConfig returns default configuration values.
-// These values follow LINE Bot best practices (2025).
+// LINE API limits: https://developers.line.biz/en/reference/messaging-api/#rate-limits
 func DefaultBotConfig() *BotConfig {
 	return &BotConfig{
 		// Webhook (from LINE API constraints)

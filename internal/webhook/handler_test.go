@@ -44,7 +44,7 @@ func setupTestHandler(t *testing.T) *Handler {
 
 	// Create bot handlers with direct constructor injection
 	idHandler := id.NewHandler(db, scraperClient, m, log, stickerManager)
-	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerManager)
+	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerManager, 100)
 	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerManager)
 
 	// Create bot registry
