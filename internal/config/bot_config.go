@@ -70,7 +70,8 @@ func DefaultBotConfig() *BotConfig {
 
 // LoadBotConfig loads configuration from environment variables.
 // Falls back to defaults if environment variables are not set.
-func LoadBotConfig() *BotConfig {
+// Validates configuration before returning.
+func LoadBotConfig() (*BotConfig, error) {
 	cfg := DefaultBotConfig()
 
 	// Allow environment variable overrides
@@ -98,7 +99,11 @@ func LoadBotConfig() *BotConfig {
 		}
 	}
 
-	return cfg
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("config validation failed: %w", err)
+	}
+
+	return cfg, nil
 }
 
 // Validate checks if the configuration is valid.

@@ -28,7 +28,6 @@ func WithUserID(ctx context.Context, userID string) context.Context {
 
 // GetUserID retrieves the user ID from the context.
 // Returns the user ID if found, empty string otherwise.
-// This is the simple version without ok return for convenience.
 func GetUserID(ctx context.Context) string {
 	if v := ctx.Value(userIDKey); v != nil {
 		if userID, ok := v.(string); ok && userID != "" {
@@ -38,19 +37,12 @@ func GetUserID(ctx context.Context) string {
 	return ""
 }
 
-// GetUserIDOk retrieves the user ID from the context.
-// Returns the user ID and true if found, empty string and false otherwise.
-func GetUserIDOk(ctx context.Context) (string, bool) {
-	userID, ok := ctx.Value(userIDKey).(string)
-	return userID, ok
-}
-
 // MustGetUserID retrieves the user ID from the context.
 // Panics if the user ID is not found. Use this in contexts where
 // the user ID is guaranteed to exist (e.g., after authentication middleware).
 func MustGetUserID(ctx context.Context) string {
-	userID, ok := GetUserIDOk(ctx)
-	if !ok {
+	userID, ok := ctx.Value(userIDKey).(string)
+	if !ok || userID == "" {
 		panic("context: userID not found")
 	}
 	return userID
@@ -64,7 +56,6 @@ func WithChatID(ctx context.Context, chatID string) context.Context {
 
 // GetChatID retrieves the chat ID from the context.
 // Returns the chat ID if found, empty string otherwise.
-// This is the simple version without ok return for convenience.
 func GetChatID(ctx context.Context) string {
 	if v := ctx.Value(chatIDKey); v != nil {
 		if chatID, ok := v.(string); ok && chatID != "" {
@@ -74,18 +65,11 @@ func GetChatID(ctx context.Context) string {
 	return ""
 }
 
-// GetChatIDOk retrieves the chat ID from the context.
-// Returns the chat ID and true if found, empty string and false otherwise.
-func GetChatIDOk(ctx context.Context) (string, bool) {
-	chatID, ok := ctx.Value(chatIDKey).(string)
-	return chatID, ok
-}
-
 // MustGetChatID retrieves the chat ID from the context.
 // Panics if the chat ID is not found.
 func MustGetChatID(ctx context.Context) string {
-	chatID, ok := GetChatIDOk(ctx)
-	if !ok {
+	chatID, ok := ctx.Value(chatIDKey).(string)
+	if !ok || chatID == "" {
 		panic("context: chatID not found")
 	}
 	return chatID

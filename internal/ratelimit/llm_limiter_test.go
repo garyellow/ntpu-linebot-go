@@ -28,11 +28,11 @@ func TestLLMRateLimiter_Allow(t *testing.T) {
 
 		userID := "user123"
 		// First request should be allowed
-		if !limiter.Allow(userID, maxPerHour) {
+		if !limiter.Allow(userID) {
 			t.Error("Allow() = false, want true on first request")
 		}
 
-		available := limiter.GetAvailable(userID, maxPerHour)
+		available := limiter.GetAvailable(userID)
 		if available < 48 || available > 50 { // Allow some floating point variance
 			t.Errorf("GetAvailable() = %.2f, want ~49 after first request", available)
 		}
@@ -46,11 +46,11 @@ func TestLLMRateLimiter_Allow(t *testing.T) {
 
 		userID := "user456"
 		// Use up all tokens
-		limiter.Allow(userID, limit)
-		limiter.Allow(userID, limit)
+		limiter.Allow(userID)
+		limiter.Allow(userID)
 
 		// Third request should be denied
-		if limiter.Allow(userID, limit) {
+		if limiter.Allow(userID) {
 			t.Error("Allow() = true when no tokens, want false")
 		}
 	})
@@ -65,19 +65,19 @@ func TestLLMRateLimiter_Allow(t *testing.T) {
 
 		// Use tokens for user1
 		for i := 0; i < 10; i++ {
-			if !limiter.Allow(user1, maxPerHour) {
+			if !limiter.Allow(user1) {
 				t.Errorf("Allow(user1) = false on attempt %d, want true", i+1)
 			}
 		}
 
 		// user2 should still have full quota
-		available2 := limiter.GetAvailable(user2, maxPerHour)
+		available2 := limiter.GetAvailable(user2)
 		if available2 != maxPerHour {
 			t.Errorf("GetAvailable(user2) = %.2f, want %.2f (independent from user1)", available2, maxPerHour)
 		}
 
 		// user1 should have reduced quota
-		available1 := limiter.GetAvailable(user1, maxPerHour)
+		available1 := limiter.GetAvailable(user1)
 		expected := maxPerHour - 10
 		if available1 < expected-1 || available1 > expected+1 {
 			t.Errorf("GetAvailable(user1) = %.2f, want ~%.2f", available1, expected)
@@ -96,10 +96,10 @@ func TestLLMRateLimiter_TokenRefill(t *testing.T) {
 		userID := "user789"
 
 		// Use 2 tokens
-		limiter.Allow(userID, limit)
-		limiter.Allow(userID, limit)
+		limiter.Allow(userID)
+		limiter.Allow(userID)
 
-		available := limiter.GetAvailable(userID, limit)
+		available := limiter.GetAvailable(userID)
 		if available < 3597 || available > 3599 { // ~3598, allow variance
 			t.Errorf("GetAvailable() = %.2f, want ~3598 after using 2 tokens", available)
 		}
@@ -108,7 +108,7 @@ func TestLLMRateLimiter_TokenRefill(t *testing.T) {
 		time.Sleep(1500 * time.Millisecond)
 
 		// Check if tokens were refilled (should have ~3599-3600)
-		available = limiter.GetAvailable(userID, limit)
+		available = limiter.GetAvailable(userID)
 		if available < 3599 {
 			t.Errorf("GetAvailable() = %.2f, want >= 3599 after refill", available)
 		}
@@ -126,16 +126,16 @@ func TestLLMRateLimiter_GetActiveCount(t *testing.T) {
 	}
 
 	// Add some users
-	limiter.Allow("user1", maxPerHour)
-	limiter.Allow("user2", maxPerHour)
-	limiter.Allow("user3", maxPerHour)
+	limiter.Allow("user1")
+	limiter.Allow("user2")
+	limiter.Allow("user3")
 
 	if count := limiter.GetActiveCount(); count != 3 {
 		t.Errorf("GetActiveCount() = %d, want 3", count)
 	}
 
 	// Reusing user should not increase count
-	limiter.Allow("user1", maxPerHour)
+	limiter.Allow("user1")
 	if count := limiter.GetActiveCount(); count != 3 {
 		t.Errorf("GetActiveCount() = %d, want 3 (user1 already exists)", count)
 	}
@@ -150,8 +150,8 @@ func TestLLMRateLimiter_Cleanup(t *testing.T) {
 		defer limiter.Stop()
 
 		// Add users and let them become idle (use up tokens)
-		limiter.Allow("idle_user1", maxPerHour)
-		limiter.Allow("idle_user2", maxPerHour)
+		limiter.Allow("idle_user1")
+		limiter.Allow("idle_user2")
 
 		if count := limiter.GetActiveCount(); count != 2 {
 			t.Errorf("GetActiveCount() = %d, want 2 before cleanup", count)
@@ -178,8 +178,8 @@ func TestLLMRateLimiter_Cleanup(t *testing.T) {
 		defer limiter.Stop()
 
 		// Add users
-		limiter.Allow("active_user1", maxPerHour)
-		limiter.Allow("active_user2", maxPerHour)
+		limiter.Allow("active_user1")
+		limiter.Allow("active_user2")
 
 		// Keep using one user
 		ticker := time.NewTicker(200 * time.Millisecond)
@@ -189,7 +189,7 @@ func TestLLMRateLimiter_Cleanup(t *testing.T) {
 			for {
 				select {
 				case <-ticker.C:
-					limiter.Allow("active_user1", maxPerHour)
+					limiter.Allow("active_user1")
 				case <-done:
 					return
 				}
@@ -214,8 +214,8 @@ func TestLLMRateLimiter_Stop(t *testing.T) {
 	limiter := NewLLMRateLimiter(maxPerHour, 5*time.Minute, nil)
 
 	// Add some users
-	limiter.Allow("user1", maxPerHour)
-	limiter.Allow("user2", maxPerHour)
+	limiter.Allow("user1")
+	limiter.Allow("user2")
 
 	// Stop should not panic
 	limiter.Stop()
@@ -241,8 +241,8 @@ func TestLLMRateLimiter_ConcurrentAccess(t *testing.T) {
 		go func(id int) {
 			userID := "user"
 			for j := 0; j < requestsPerGoroutine; j++ {
-				limiter.Allow(userID, maxPerHour)
-				limiter.GetAvailable(userID, maxPerHour)
+				limiter.Allow(userID)
+				limiter.GetAvailable(userID)
 			}
 			done <- true
 		}(i)
@@ -260,7 +260,7 @@ func TestLLMRateLimiter_ConcurrentAccess(t *testing.T) {
 	}
 
 	// Verify tokens were correctly consumed
-	available := limiter.GetAvailable("user", maxPerHour)
+	available := limiter.GetAvailable("user")
 	expected := maxPerHour - float64(goroutines*requestsPerGoroutine)
 	if available > maxPerHour || available < 0 {
 		t.Errorf("GetAvailable() = %.2f, want between 0 and %.2f", available, expected)

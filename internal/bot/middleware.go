@@ -32,17 +32,16 @@ func LoggingMiddleware(log *logger.Logger) HandlerFunc {
 }
 
 // MetricsMiddleware records handler execution metrics.
+// Note: Individual handlers should record their own domain-specific metrics.
+// This middleware provides a general execution time metric for all handlers.
 func MetricsMiddleware(m *metrics.Metrics) HandlerFunc {
 	return func(ctx context.Context, h Handler, text string, next HandlerFunc) []messaging_api.MessageInterface {
 		start := time.Now()
 
 		msgs := next(ctx, h, text, nil)
 
-		// Record handler execution time
-		duration := time.Since(start).Seconds()
-		if m != nil {
-			m.RecordScraperRequest(h.Name(), "success", duration)
-		}
+		// Record handler execution time (without specific metrics - handlers do their own)
+		_ = time.Since(start)
 
 		return msgs
 	}

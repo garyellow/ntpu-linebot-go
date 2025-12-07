@@ -8,37 +8,23 @@ import (
 func TestUserIDContext(t *testing.T) {
 	ctx := context.Background()
 
-	// Test empty context with GetUserIDOk
-	if _, ok := GetUserIDOk(ctx); ok {
-		t.Error("Expected GetUserIDOk to return false for empty context")
-	}
-
-	// Test empty context with GetUserID (convenience function)
+	// Test empty context with GetUserID
 	if userID := GetUserID(ctx); userID != "" {
 		t.Errorf("Expected empty string, got %s", userID)
 	}
 
-	// Test WithUserID and GetUserIDOk
+	// Test WithUserID and GetUserID
 	expectedUserID := "U1234567890"
 	ctx = WithUserID(ctx, expectedUserID)
-	userID, ok := GetUserIDOk(ctx)
-	if !ok {
-		t.Error("Expected GetUserIDOk to return true")
-	}
-	if userID != expectedUserID {
-		t.Errorf("Expected userID %s, got %s", expectedUserID, userID)
-	}
-
-	// Test GetUserID (convenience function)
-	userID = GetUserID(ctx)
+	userID := GetUserID(ctx)
 	if userID != expectedUserID {
 		t.Errorf("Expected userID %s, got %s", expectedUserID, userID)
 	}
 
 	// Test MustGetUserID
-	userID = MustGetUserID(ctx)
-	if userID != expectedUserID {
-		t.Errorf("Expected userID %s, got %s", expectedUserID, userID)
+	userID2 := MustGetUserID(ctx)
+	if userID2 != expectedUserID {
+		t.Errorf("Expected userID %s, got %s", expectedUserID, userID2)
 	}
 }
 
@@ -57,37 +43,23 @@ func TestMustGetUserID_Panic(t *testing.T) {
 func TestChatIDContext(t *testing.T) {
 	ctx := context.Background()
 
-	// Test empty context with GetChatIDOk
-	if _, ok := GetChatIDOk(ctx); ok {
-		t.Error("Expected GetChatIDOk to return false for empty context")
-	}
-
-	// Test empty context with GetChatID (convenience function)
+	// Test empty context with GetChatID
 	if chatID := GetChatID(ctx); chatID != "" {
 		t.Errorf("Expected empty string, got %s", chatID)
 	}
 
-	// Test WithChatID and GetChatIDOk
+	// Test WithChatID and GetChatID
 	expectedChatID := "C1234567890"
 	ctx = WithChatID(ctx, expectedChatID)
-	chatID, ok := GetChatIDOk(ctx)
-	if !ok {
-		t.Error("Expected GetChatIDOk to return true")
-	}
-	if chatID != expectedChatID {
-		t.Errorf("Expected chatID %s, got %s", expectedChatID, chatID)
-	}
-
-	// Test GetChatID (convenience function)
-	chatID = GetChatID(ctx)
+	chatID := GetChatID(ctx)
 	if chatID != expectedChatID {
 		t.Errorf("Expected chatID %s, got %s", expectedChatID, chatID)
 	}
 
 	// Test MustGetChatID
-	chatID = MustGetChatID(ctx)
-	if chatID != expectedChatID {
-		t.Errorf("Expected chatID %s, got %s", expectedChatID, chatID)
+	chatID2 := MustGetChatID(ctx)
+	if chatID2 != expectedChatID {
+		t.Errorf("Expected chatID %s, got %s", expectedChatID, chatID2)
 	}
 }
 

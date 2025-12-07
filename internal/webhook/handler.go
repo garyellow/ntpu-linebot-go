@@ -317,7 +317,7 @@ func (h *Handler) checkLLMRateLimit(source webhook.SourceInterface, chatID strin
 		return true, nil // No chat ID or limiter not initialized, allow by default
 	}
 
-	if h.llmLimiter.Allow(chatID, h.llmRateLimitPerHour) {
+	if h.llmLimiter.Allow(chatID) {
 		return true, nil // Rate limit not exceeded
 	}
 
@@ -330,7 +330,7 @@ func (h *Handler) checkLLMRateLimit(source webhook.SourceInterface, chatID strin
 
 	// For personal chats, return a detailed message
 	if h.isPersonalChat(source) {
-		available := h.llmLimiter.GetAvailable(chatID, h.llmRateLimitPerHour)
+		available := h.llmLimiter.GetAvailable(chatID)
 		// Calculate approximate reset time in minutes
 		// Formula: (maxPerHour - available) tokens * 3600 seconds/hour / maxPerHour / 60 seconds/minute
 		resetMinutes := int((h.llmRateLimitPerHour - available) * 3600 / h.llmRateLimitPerHour / 60)

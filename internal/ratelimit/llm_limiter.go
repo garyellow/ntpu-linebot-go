@@ -14,11 +14,12 @@ import (
 //
 // Design matches UserRateLimiter for consistency, but applies to LLM-specific operations only.
 type LLMRateLimiter struct {
-	mu       sync.RWMutex
-	limiters map[string]*Limiter // userID -> Limiter
-	cleanup  time.Duration       // cleanup interval
-	metrics  *metrics.Metrics    // metrics reporter (optional)
-	stopCh   chan struct{}       // cleanup goroutine stop signal
+	mu         sync.RWMutex
+	limiters   map[string]*Limiter // userID -> Limiter
+	maxPerHour float64             // maximum requests per hour
+	cleanup    time.Duration       // cleanup interval
+	metrics    *metrics.Metrics    // metrics reporter (optional)
+	stopCh     chan struct{}       // cleanup goroutine stop signal
 }
 
 // NewLLMRateLimiter creates a new LLM rate limiter with per-hour limits.
@@ -42,14 +43,15 @@ type LLMRateLimiter struct {
 //	}
 func NewLLMRateLimiter(maxPerHour float64, cleanup time.Duration, metrics *metrics.Metrics) *LLMRateLimiter {
 	llm := &LLMRateLimiter{
-		limiters: make(map[string]*Limiter),
-		cleanup:  cleanup,
-		metrics:  metrics,
-		stopCh:   make(chan struct{}),
+		limiters:   make(map[string]*Limiter),
+		maxPerHour: maxPerHour,
+		cleanup:    cleanup,
+		metrics:    metrics,
+		stopCh:     make(chan struct{}),
 	}
 
 	// Start cleanup goroutine
-	go llm.cleanupLoop(maxPerHour)
+	go llm.cleanupLoop()
 
 	return llm
 }
@@ -61,7 +63,7 @@ func NewLLMRateLimiter(maxPerHour float64, cleanup time.Duration, metrics *metri
 // limiter for first-time users.
 //
 // If the request is denied, it records a rate limit drop metric (if metrics enabled).
-func (llm *LLMRateLimiter) Allow(userID string, maxPerHour float64) bool {
+func (llm *LLMRateLimiter) Allow(userID string) bool {
 	if userID == "" {
 		return true // Allow requests without user ID
 	}
@@ -76,7 +78,7 @@ func (llm *LLMRateLimiter) Allow(userID string, maxPerHour float64) bool {
 		limiter, exists = llm.limiters[userID]
 		if !exists {
 			// Create new limiter: maxTokens = maxPerHour, refillRate = maxPerHour / 3600
-			limiter = New(maxPerHour, maxPerHour/3600.0)
+			limiter = New(llm.maxPerHour, llm.maxPerHour/3600.0)
 			llm.limiters[userID] = limiter
 		}
 		llm.mu.Unlock()
@@ -93,9 +95,9 @@ func (llm *LLMRateLimiter) Allow(userID string, maxPerHour float64) bool {
 // This can be used to display quota information to users.
 //
 // Returns maxPerHour if the user has no limiter yet (first-time user).
-func (llm *LLMRateLimiter) GetAvailable(userID string, maxPerHour float64) float64 {
+func (llm *LLMRateLimiter) GetAvailable(userID string) float64 {
 	if userID == "" {
-		return maxPerHour
+		return llm.maxPerHour
 	}
 
 	llm.mu.RLock()
@@ -103,7 +105,7 @@ func (llm *LLMRateLimiter) GetAvailable(userID string, maxPerHour float64) float
 	llm.mu.RUnlock()
 
 	if !exists {
-		return maxPerHour // User hasn't used any quota yet
+		return llm.maxPerHour // User hasn't used any quota yet
 	}
 
 	return limiter.Available()
@@ -121,7 +123,7 @@ func (llm *LLMRateLimiter) GetActiveCount() int {
 // A limiter is considered inactive if it's at maximum capacity (user hasn't made requests recently).
 //
 // Stops when Stop() is called (stopCh is closed).
-func (llm *LLMRateLimiter) cleanupLoop(maxPerHour float64) {
+func (llm *LLMRateLimiter) cleanupLoop() {
 	ticker := time.NewTicker(llm.cleanup)
 	defer ticker.Stop()
 
@@ -131,12 +133,10 @@ func (llm *LLMRateLimiter) cleanupLoop(maxPerHour float64) {
 			return
 		case <-ticker.C:
 			llm.mu.Lock()
-			cleanedCount := 0
 			// Remove limiters that are at maximum capacity (inactive users)
 			for userID, limiter := range llm.limiters {
 				if limiter.IsFull() {
 					delete(llm.limiters, userID)
-					cleanedCount++
 				}
 			}
 			activeCount := len(llm.limiters)

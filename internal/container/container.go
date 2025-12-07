@@ -255,11 +255,23 @@ func (c *Container) initGenAI(ctx context.Context) error {
 // initWebhook creates the webhook handler with all dependencies.
 func (c *Container) initWebhook(ctx context.Context) error {
 	// Build bot config from app config
-	botCfg := config.DefaultBotConfig()
-	botCfg.WebhookTimeout = c.cfg.WebhookTimeout
-	botCfg.UserRateLimitTokens = c.cfg.UserRateLimitTokens
-	botCfg.UserRateLimitRefillRate = c.cfg.UserRateLimitRefillRate
-	botCfg.LLMRateLimitPerHour = c.cfg.LLMRateLimitPerHour
+	botCfg, err := config.LoadBotConfig()
+	if err != nil {
+		return fmt.Errorf("load bot config: %w", err)
+	}
+	// Override with app config values if they differ from defaults
+	if c.cfg.WebhookTimeout != 0 {
+		botCfg.WebhookTimeout = c.cfg.WebhookTimeout
+	}
+	if c.cfg.UserRateLimitTokens != 0 {
+		botCfg.UserRateLimitTokens = c.cfg.UserRateLimitTokens
+	}
+	if c.cfg.UserRateLimitRefillRate != 0 {
+		botCfg.UserRateLimitRefillRate = c.cfg.UserRateLimitRefillRate
+	}
+	if c.cfg.LLMRateLimitPerHour != 0 {
+		botCfg.LLMRateLimitPerHour = c.cfg.LLMRateLimitPerHour
+	}
 
 	// Build handler options
 	opts := []webhook.HandlerOption{

@@ -71,7 +71,10 @@ func TestLoadBotConfig(t *testing.T) {
 		os.Unsetenv("BOT_LLM_RATE_LIMIT")
 		os.Unsetenv("BOT_GLOBAL_RPS")
 
-		cfg := LoadBotConfig()
+		cfg, err := LoadBotConfig()
+		if err != nil {
+			t.Fatalf("LoadBotConfig failed: %v", err)
+		}
 
 		if cfg.MaxCoursesPerSearch != 40 {
 			t.Errorf("expected default MaxCoursesPerSearch 40, got %d", cfg.MaxCoursesPerSearch)
@@ -88,7 +91,10 @@ func TestLoadBotConfig(t *testing.T) {
 		os.Setenv("BOT_LLM_RATE_LIMIT", "20.5")
 		os.Setenv("BOT_GLOBAL_RPS", "100.0")
 
-		cfg := LoadBotConfig()
+		cfg, err := LoadBotConfig()
+		if err != nil {
+			t.Fatalf("LoadBotConfig failed: %v", err)
+		}
 
 		if cfg.MaxCoursesPerSearch != 50 {
 			t.Errorf("expected MaxCoursesPerSearch 50, got %d", cfg.MaxCoursesPerSearch)
@@ -112,7 +118,10 @@ func TestLoadBotConfig(t *testing.T) {
 		os.Setenv("BOT_MAX_STUDENTS", "-10")
 		os.Setenv("BOT_LLM_RATE_LIMIT", "not_a_number")
 
-		cfg := LoadBotConfig()
+		cfg, err := LoadBotConfig()
+		if err != nil {
+			t.Fatalf("LoadBotConfig failed: %v", err)
+		}
 
 		// Should fall back to defaults
 		if cfg.MaxCoursesPerSearch != 40 {

@@ -7,48 +7,48 @@ import (
 
 func TestSentinelErrors(t *testing.T) {
 	tests := []struct {
-		name     string
-		err      error
-		checkFn  func(error) bool
-		expected bool
+		name        string
+		err         error
+		sentinel    error
+		shouldMatch bool
 	}{
 		{
-			name:     "ErrNotFound is recognized",
-			err:      ErrNotFound,
-			checkFn:  IsNotFound,
-			expected: true,
+			name:        "ErrNotFound is recognized",
+			err:         ErrNotFound,
+			sentinel:    ErrNotFound,
+			shouldMatch: true,
 		},
 		{
-			name:     "Wrapped ErrNotFound is recognized",
-			err:      errors.Join(ErrNotFound, errors.New("additional context")),
-			checkFn:  IsNotFound,
-			expected: true,
+			name:        "Wrapped ErrNotFound is recognized",
+			err:         errors.Join(ErrNotFound, errors.New("additional context")),
+			sentinel:    ErrNotFound,
+			shouldMatch: true,
 		},
 		{
-			name:     "Different error is not ErrNotFound",
-			err:      ErrRateLimitExceeded,
-			checkFn:  IsNotFound,
-			expected: false,
+			name:        "Different error is not ErrNotFound",
+			err:         ErrRateLimitExceeded,
+			sentinel:    ErrNotFound,
+			shouldMatch: false,
 		},
 		{
-			name:     "ErrRateLimitExceeded is recognized",
-			err:      ErrRateLimitExceeded,
-			checkFn:  IsRateLimitExceeded,
-			expected: true,
+			name:        "ErrRateLimitExceeded is recognized",
+			err:         ErrRateLimitExceeded,
+			sentinel:    ErrRateLimitExceeded,
+			shouldMatch: true,
 		},
 		{
-			name:     "ErrInvalidInput is recognized",
-			err:      ErrInvalidInput,
-			checkFn:  IsInvalidInput,
-			expected: true,
+			name:        "ErrInvalidInput is recognized",
+			err:         ErrInvalidInput,
+			sentinel:    ErrInvalidInput,
+			shouldMatch: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.checkFn(tt.err)
-			if result != tt.expected {
-				t.Errorf("expected %v, got %v", tt.expected, result)
+			result := errors.Is(tt.err, tt.sentinel)
+			if result != tt.shouldMatch {
+				t.Errorf("errors.Is() = %v, want %v", result, tt.shouldMatch)
 			}
 		})
 	}

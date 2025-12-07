@@ -1181,7 +1181,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 		// The chatID is injected by webhook handler via context.WithValue
 		chatID := getChatIDFromContext(ctx)
 		if h.llmRateLimiter != nil && chatID != "" {
-			if !h.llmRateLimiter.Allow(chatID, h.llmRateLimitPerHour) {
+			if !h.llmRateLimiter.Allow(chatID) {
 				log.WithField("chat_id", chatID[:min(8, len(chatID))]+"...").Debug("LLM rate limit exceeded for query expansion, using original query")
 				// Graceful degradation: continue with original query instead of failing
 			} else {
