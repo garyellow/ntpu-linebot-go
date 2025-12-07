@@ -877,9 +877,14 @@ func (h *Handler) dispatchIntent(ctx context.Context, result *genai.ParseResult)
 		return h.getHelpMessage(), nil
 	}
 
-	dispatcher, ok := handler.(bot.IntentDispatcher)
+	// All handlers support DispatchIntent method
+	type intentDispatcher interface {
+		DispatchIntent(ctx context.Context, intent string, params map[string]string) ([]messaging_api.MessageInterface, error)
+	}
+
+	dispatcher, ok := handler.(intentDispatcher)
 	if !ok {
-		h.logger.WithField("module", result.Module).Warn("Module does not support NLU dispatch")
+		h.logger.WithField("module", result.Module).Warn("Handler missing DispatchIntent method")
 		return h.getHelpMessage(), nil
 	}
 
@@ -900,8 +905,11 @@ func (h *Handler) getDetailedInstructionMessages() []messaging_api.MessageInterf
 	nluEnabled := h.intentParser != nil && h.intentParser.IsEnabled()
 
 	smartEnabled := false
-	if h := h.registry.GetHandler("course"); h != nil {
-		if ss, ok := h.(bot.SmartSearcher); ok {
+	if ch := h.registry.GetHandler("course"); ch != nil {
+		type smartSearcher interface {
+			IsBM25SearchEnabled() bool
+		}
+		if ss, ok := ch.(smartSearcher); ok {
 			smartEnabled = ss.IsBM25SearchEnabled()
 		}
 	}

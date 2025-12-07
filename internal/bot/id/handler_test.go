@@ -32,13 +32,7 @@ func setupTestHandler(t *testing.T) *Handler {
 	log := logger.New("info")
 	stickerMgr := sticker.NewManager(db, scraperClient, log)
 
-	return NewHandler(
-		WithRepository(db),
-		WithScraper(scraperClient),
-		WithMetrics(m),
-		WithLogger(log),
-		WithStickerManager(stickerMgr),
-	)
+	return NewHandler(db, scraperClient, m, log, stickerMgr)
 }
 
 // TestCanHandle tests the core routing logic - critical for correct request dispatch

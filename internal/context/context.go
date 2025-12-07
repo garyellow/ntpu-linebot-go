@@ -16,7 +16,6 @@ const (
 	userIDKey contextKey = iota
 	chatIDKey
 	requestIDKey
-	moduleKey
 )
 
 // WithUserID adds a user ID to the context.
@@ -86,17 +85,4 @@ func WithRequestID(ctx context.Context, requestID string) context.Context {
 func GetRequestID(ctx context.Context) (string, bool) {
 	requestID, ok := ctx.Value(requestIDKey).(string)
 	return requestID, ok
-}
-
-// WithModule adds a module name to the context for logging.
-// Module name identifies which bot handler is processing the request.
-func WithModule(ctx context.Context, module string) context.Context {
-	return context.WithValue(ctx, moduleKey, module)
-}
-
-// GetModule retrieves the module name from the context.
-// Returns the module name and true if found, empty string and false otherwise.
-func GetModule(ctx context.Context) (string, bool) {
-	module, ok := ctx.Value(moduleKey).(string)
-	return module, ok
 }

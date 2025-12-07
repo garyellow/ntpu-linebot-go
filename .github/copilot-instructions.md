@@ -2,31 +2,28 @@
 
 LINE chatbot for NTPU (National Taipei University) providing student ID lookup, contact directory, and course queries. Built with Go, emphasizing anti-scraping measures, persistent caching, and observability.
 
-## 🎯 2025 Architecture Best Practices (Updated Dec 2025)
+## 🎯 Architecture Principles (Dec 8, 2025)
 
-**Recent Optimizations (Dec 7, 2025):**
-1. **Pure Dependency Injection** - Application class with constructor injection (see `internal/container/application.go`)
-2. **Functional Options Pattern** - Simplified handler initialization across all modules (see `internal/*/options.go`)
-3. **Typed Error Handling** - Sentinel errors, custom error types, and error wrapping utilities (see `internal/errors/`)
-4. **Centralized Configuration** - Bot config with validation in `internal/config/bot_config.go`
-5. **Context Management (Go 1.21+)** - `context.WithoutCancel()` for async operations with tracing preservation
-6. **Complete Repository Pattern** - All bot handlers depend on interfaces, not concrete types (see `internal/storage/interfaces.go`)
-7. **Standard Middleware Collection** - Corrected middleware chain with proper closure handling (see `internal/bot/middleware.go`)
-8. **Type-Safe Context Values** - Strict type checking with unified injection in webhook handler (see `internal/context/context.go`)
-9. **Error Wrapping Strategy** - Consistent error context with user-friendly messages (see `internal/errors/wrap.go`)
-10. **Config Validation** - Compile-time config validation prevents runtime surprises (see `BotConfig.Validate()`)
+**Core Design:**
+1. **Pure Dependency Injection** - Constructor-based injection with functional options pattern
+2. **Direct Dependencies** - Handlers use `*storage.DB` directly, interfaces only when truly needed
+3. **Typed Error Handling** - Sentinel errors and custom error types with wrapping
+4. **Centralized Configuration** - Bot config with load-time validation
+5. **Context Management (Go 1.21+)** - `context.WithoutCancel()` for async operations
+6. **Functional Options** - Optional parameters via `HandlerOption` pattern
+7. **Simplified Registry** - Direct dispatch without middleware overhead
+8. **No Circular Dependencies** - Clean initialization order: Core → GenAI → Handlers → Webhook
 
 **Code Style:**
-- **Pure DI**: All dependencies injected via constructors, no service locator pattern
-- **Repository Pattern**: Handlers depend on interfaces (`storage.StudentRepository`), not concrete `*storage.DB`
-- Use Functional Options for constructors with >3 parameters
-- Use typed errors (`domerrors.ErrNotFound`) instead of string matching
-- Wrap errors with context using `errors.NewWrapper(module, operation).Wrap(err, userMsg)`
-- Prefer centralized constants over magic numbers
-- Use `context.WithoutCancel()` for async operations to preserve tracing values
-- Always inject UserID, ChatID, RequestID into context at webhook entry point
-- All repository interfaces must be fully implemented with compile-time checks
-- Validate configuration at load time using `Validate()` method
+- **Pure DI**: All dependencies via constructors, functional options for optional features
+- **Concrete Types**: Handlers depend on `*storage.DB` directly (no mocking needed)
+- **Interface Placement**: Defined inline where needed (Go convention: small interfaces)
+- **Functional Options**: For optional GenAI features (BM25, query expansion, LLM limiter)
+- **Context Values**: Minimal usage for request tracing only
+- **Error Handling**: Typed errors with wrapping for context
+- **Constants**: Centralized in config package
+- **Async Operations**: `context.WithoutCancel()` preserves tracing
+- **Validation**: Load-time config validation, runtime parameter checks
 
 ## Architecture: Async Webhook Processing
 
@@ -67,9 +64,11 @@ LINE Webhook → Gin Handler
 **When adding new modules**:
 
 1. **Implement `bot.Handler` interface** (`internal/bot/handler.go`)
-2. **Register in webhook constructor** and dispatcher (`internal/webhook/handler.go`)
-3. **Use prefix convention** for postback routing (e.g., `"course:"`, `"id:"`, `"contact:"`)
-4. **Warmup support** is automatic if module implements cache warming
+2. **Create handler in Container.initBotHandlers()** with required dependencies
+3. **Register in Container.initWebhook()** via `registry.Register(handler)`
+4. **Use prefix convention** for postback routing (e.g., `"course:"`, `"id:"`, `"contact:"`)
+5. **Functional options** for optional features (create `options.go` if needed)
+6. **Warmup support** is automatic if module implements cache warming
 
 **Module-specific features**:
 

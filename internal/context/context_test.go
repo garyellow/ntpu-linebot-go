@@ -96,23 +96,10 @@ func TestRequestIDContext(t *testing.T) {
 }
 
 func TestModuleContext(t *testing.T) {
-	ctx := context.Background()
-
-	// Test empty context
-	if module, ok := GetModule(ctx); ok || module != "" {
-		t.Error("Expected GetModule to return empty string and false for empty context")
-	}
-
-	// Test WithModule and GetModule
-	expectedModule := "course"
-	ctx = WithModule(ctx, expectedModule)
-	module, ok := GetModule(ctx)
-	if !ok {
-		t.Error("Expected GetModule to return true")
-	}
-	if module != expectedModule {
-		t.Errorf("Expected module %s, got %s", expectedModule, module)
-	}
+	// Module context value has been removed - module name is now only in structured logging
+	// This simplifies context management and follows Go best practices:
+	// context.Value should only be used for request-scoped data, not configuration
+	t.Skip("Module context value removed - module tracking now done via structured logging")
 }
 
 func TestContextChaining(t *testing.T) {
@@ -122,7 +109,6 @@ func TestContextChaining(t *testing.T) {
 	ctx = WithUserID(ctx, "U123")
 	ctx = WithChatID(ctx, "C456")
 	ctx = WithRequestID(ctx, "req-789")
-	ctx = WithModule(ctx, "id")
 
 	// Verify all values are preserved
 	if userID := GetUserID(ctx); userID != "U123" {
@@ -133,8 +119,5 @@ func TestContextChaining(t *testing.T) {
 	}
 	if requestID, ok := GetRequestID(ctx); !ok || requestID != "req-789" {
 		t.Error("RequestID not preserved in chained context")
-	}
-	if module, ok := GetModule(ctx); !ok || module != "id" {
-		t.Error("Module not preserved in chained context")
 	}
 }

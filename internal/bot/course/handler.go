@@ -28,11 +28,10 @@ import (
 )
 
 // Handler handles course-related queries.
-// It uses repository interfaces for data access, enabling clean separation
-// between business logic and data persistence.
+// It depends on *storage.DB directly for data access.
+// Interfaces are only used for external dependencies (scraper, metrics).
 type Handler struct {
-	repo                storage.CourseRepository   // Course data repository
-	syllabusRepo        storage.SyllabusRepository // Syllabus data repository
+	db                  *storage.DB // Database for course and syllabus data
 	scraper             *scraper.Client
 	metrics             *metrics.Metrics
 	logger              *logger.Logger
@@ -105,38 +104,31 @@ var (
 	historicalCourseRegex = regexp.MustCompile(`(?i)^(課程?|course|class)\s+(\d{2,3})\s+(.+)$`)
 )
 
-// NewHandler creates a new course handler using functional options pattern.
-// This provides flexibility in configuration and makes the API more maintainable.
-func NewHandler(opts ...HandlerOption) *Handler {
-	h := &Handler{}
+// NewHandler creates a new course handler with required dependencies.
+func NewHandler(
+	db *storage.DB,
+	scraper *scraper.Client,
+	metrics *metrics.Metrics,
+	logger *logger.Logger,
+	stickerManager *sticker.Manager,
+	opts ...HandlerOption,
+) *Handler {
+	h := &Handler{
+		db:             db,
+		scraper:        scraper,
+		metrics:        metrics,
+		logger:         logger,
+		stickerManager: stickerManager,
+	}
+
 	for _, opt := range opts {
 		opt(h)
 	}
+
 	return h
 }
 
-// SetBM25Index sets the BM25 index for smart search.
-// This is optional - if not set, smart search is disabled.
-func (h *Handler) SetBM25Index(bm25Index *rag.BM25Index) {
-	h.bm25Index = bm25Index
-}
-
-// SetQueryExpander sets the query expander for smart search query expansion.
-// This is optional - if not set, queries are used as-is.
-// Query expansion adds synonyms, translations, and related terms for better BM25 search results.
-func (h *Handler) SetQueryExpander(expander *genai.QueryExpander) {
-	h.queryExpander = expander
-}
-
-// SetLLMRateLimiter sets the LLM rate limiter for query expansion.
-// This enables rate limiting for both NLU-routed and keyword-triggered smart searches.
-// The limiter and maxPerHour should match the webhook handler's configuration.
-func (h *Handler) SetLLMRateLimiter(limiter *ratelimit.LLMRateLimiter, maxPerHour float64) {
-	h.llmRateLimiter = limiter
-	h.llmRateLimitPerHour = maxPerHour
-}
-
-// IsBM25SearchEnabled returns true if BM25 search is enabled
+// IsBM25SearchEnabled returns true if BM25 search is enabled.
 func (h *Handler) IsBM25SearchEnabled() bool {
 	return h.bm25Index != nil && h.bm25Index.IsEnabled()
 }
@@ -340,7 +332,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 	uid = strings.ToUpper(uid)
 
 	// Check cache first
-	course, err := h.repo.GetCourseByUID(ctx, uid)
+	course, err := h.db.GetCourseByUID(ctx, uid)
 	if err != nil {
 		log.WithError(err).Error("Failed to query cache")
 		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
@@ -388,7 +380,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 	}
 
 	// Save to cache
-	if err := h.repo.SaveCourse(ctx, course); err != nil {
+	if err := h.db.SaveCourse(ctx, course); err != nil {
 		log.WithError(err).Warn("Failed to save course to cache")
 	}
 
@@ -417,7 +409,7 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 		term := searchTerms[i]
 		uid := fmt.Sprintf("%d%d%s", year, term, courseNo)
 
-		course, err := h.repo.GetCourseByUID(ctx, uid)
+		course, err := h.db.GetCourseByUID(ctx, uid)
 		if err != nil {
 			log.WithError(err).Warnf("Failed to query cache for UID: %s", uid)
 			continue
@@ -447,7 +439,7 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 
 		if course != nil {
 			// Save to cache
-			if err := h.repo.SaveCourse(ctx, course); err != nil {
+			if err := h.db.SaveCourse(ctx, course); err != nil {
 				log.WithError(err).Warn("Failed to save course to cache")
 			}
 
@@ -502,7 +494,7 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 	var courses []storage.Course
 
 	// Step 1: Try SQL LIKE search for title first
-	titleCourses, err := h.repo.SearchCoursesByTitle(ctx, searchTerm)
+	titleCourses, err := h.db.SearchCoursesByTitle(ctx, searchTerm)
 	if err != nil {
 		log.WithError(err).Error("Failed to search courses by title in cache")
 		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
@@ -513,7 +505,7 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 	courses = append(courses, titleCourses...)
 
 	// Step 1b: Also try SQL LIKE search for teacher
-	teacherCourses, err := h.repo.SearchCoursesByTeacher(ctx, searchTerm)
+	teacherCourses, err := h.db.SearchCoursesByTeacher(ctx, searchTerm)
 	if err != nil {
 		log.WithError(err).Warn("Failed to search courses by teacher in cache")
 		// Don't return error, continue with title results
@@ -525,7 +517,7 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 	// Step 2: ALWAYS try fuzzy character-set matching to find additional results
 	// This catches cases like "線代" -> "線性代數" that SQL LIKE misses
 	// SQL LIKE only finds consecutive substrings, but fuzzy matching finds scattered characters
-	allCourses, err := h.repo.GetCoursesByRecentSemesters(ctx)
+	allCourses, err := h.db.GetCoursesByRecentSemesters(ctx)
 	if err == nil && len(allCourses) > 0 {
 		for _, c := range allCourses {
 			// Check if searchTerm matches title OR any teacher using fuzzy matching
@@ -577,7 +569,7 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 
 		// Save courses to cache and collect results
 		for _, course := range scrapedCourses {
-			if err := h.repo.SaveCourse(ctx, course); err != nil {
+			if err := h.db.SaveCourse(ctx, course); err != nil {
 				log.WithError(err).Warn("Failed to save course to cache")
 			}
 			if !existingUIDs[course.UID] {
@@ -608,7 +600,7 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 			// Filter by searchTerm (title or teacher) using fuzzy matching
 			for _, course := range scrapedCourses {
 				// Save all courses for future queries
-				if err := h.repo.SaveCourse(ctx, course); err != nil {
+				if err := h.db.SaveCourse(ctx, course); err != nil {
 					log.WithError(err).Warn("Failed to save course to cache")
 				}
 
@@ -655,7 +647,7 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 			// Convert smart search results to courses
 			var smartCourses []storage.Course
 			for _, result := range smartResults {
-				if course, err := h.repo.GetCourseByUID(ctx, result.UID); err == nil && course != nil {
+				if course, err := h.db.GetCourseByUID(ctx, result.UID); err == nil && course != nil {
 					smartCourses = append(smartCourses, *course)
 				}
 			}
@@ -725,7 +717,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	// Search in both terms for the specified year
 	var courses []storage.Course
 	for _, term := range []int{1, 2} {
-		termCourses, err := h.repo.GetCoursesByYearTerm(ctx, year, term)
+		termCourses, err := h.db.GetCoursesByYearTerm(ctx, year, term)
 		if err != nil {
 			log.WithError(err).Warnf("Failed to get courses for year %d term %d", year, term)
 			continue
@@ -786,7 +778,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 
 	// Save courses to historical_courses table
 	for _, course := range scrapedCourses {
-		if err := h.repo.SaveCourse(ctx, course); err != nil {
+		if err := h.db.SaveCourse(ctx, course); err != nil {
 			log.WithError(err).Warn("Failed to save historical course to cache")
 		}
 	}
@@ -1245,7 +1237,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 	var courses []storage.Course
 	for _, result := range results {
 		// Get full course data from DB
-		course, err := h.repo.GetCourseByUID(ctx, result.UID)
+		course, err := h.db.GetCourseByUID(ctx, result.UID)
 		if err != nil || course == nil {
 			// Use data from search result if course not in DB
 			courses = append(courses, storage.Course{

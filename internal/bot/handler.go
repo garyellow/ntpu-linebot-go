@@ -46,13 +46,3 @@ type Handler interface {
 	// Returns a slice of LINE messages (max 5 messages per reply)
 	HandlePostback(ctx context.Context, data string) []messaging_api.MessageInterface
 }
-
-// IntentDispatcher defines the interface for handlers that support NLU intent dispatching
-type IntentDispatcher interface {
-	DispatchIntent(ctx context.Context, intent string, params map[string]string) ([]messaging_api.MessageInterface, error)
-}
-
-// SmartSearcher defines the interface for handlers that support smart search (BM25)
-type SmartSearcher interface {
-	IsBM25SearchEnabled() bool
-}

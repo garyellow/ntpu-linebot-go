@@ -42,29 +42,10 @@ func setupTestHandler(t *testing.T) *Handler {
 	// Create sticker manager
 	stickerManager := sticker.NewManager(db, scraperClient, log)
 
-	// Create bot handlers using functional options
-	idHandler := id.NewHandler(
-		id.WithRepository(db),
-		id.WithScraper(scraperClient),
-		id.WithMetrics(m),
-		id.WithLogger(log),
-		id.WithStickerManager(stickerManager),
-	)
-	contactHandler := contact.NewHandler(
-		contact.WithRepository(db),
-		contact.WithScraper(scraperClient),
-		contact.WithMetrics(m),
-		contact.WithLogger(log),
-		contact.WithStickerManager(stickerManager),
-	)
-	courseHandler := course.NewHandler(
-		course.WithRepository(db),
-		course.WithSyllabusRepository(db),
-		course.WithScraper(scraperClient),
-		course.WithMetrics(m),
-		course.WithLogger(log),
-		course.WithStickerManager(stickerManager),
-	)
+	// Create bot handlers with direct constructor injection
+	idHandler := id.NewHandler(db, scraperClient, m, log, stickerManager)
+	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerManager)
+	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerManager)
 
 	// Create bot registry
 	botRegistry := bot.NewRegistry()

@@ -25,48 +25,31 @@ import (
 )
 
 // Container manages application dependencies and their lifecycle.
-// It follows pure Dependency Injection pattern - dependencies are initialized
-// during container creation and injected into dependent components.
-// NO getter methods - prevents service locator anti-pattern.
-//
 // Initialization order:
-// 1. Core services (database, metrics, scraper)
+// 1. Core services (database, metrics, scraper, sticker manager)
 // 2. Bot handlers (id, course, contact)
-// 3. GenAI components (optional - intent parser, query expander, BM25)
+// 3. GenAI components (optional - BM25 index, intent parser, query expander)
 // 4. Webhook handler (aggregates all dependencies)
 type Container struct {
-	// Configuration and logging (needed for lifecycle management)
 	cfg    *config.Config
 	logger *logger.Logger
 
-	// Core services
+	// Core services (closed in reverse order)
 	db             *storage.DB
 	metrics        *metrics.Metrics
 	registry       *prometheus.Registry
 	scraperClient  *scraper.Client
 	stickerManager *sticker.Manager
 
-	// Bot components
-	botHandlers    *BotHandlers
-	botRegistry    *bot.Registry
-	webhookHandler *webhook.Handler
+	// Bot handlers
+	idHandler      *id.Handler
+	courseHandler  *course.Handler
+	contactHandler *contact.Handler
 
 	// GenAI components (optional)
-	genaiComponents *GenAIComponents
-}
-
-// BotHandlers groups all bot handler instances.
-type BotHandlers struct {
-	ID      *id.Handler
-	Course  *course.Handler
-	Contact *contact.Handler
-}
-
-// GenAIComponents groups all GenAI-related components.
-type GenAIComponents struct {
-	IntentParser  genai.IntentParser
-	QueryExpander *genai.QueryExpander
-	BM25Index     *rag.BM25Index
+	bm25Index     *rag.BM25Index
+	intentParser  genai.IntentParser
+	queryExpander *genai.QueryExpander
 }
 
 // New creates a new dependency container.
@@ -79,41 +62,31 @@ func New(cfg *config.Config) *Container {
 }
 
 // Initialize performs full dependency initialization and returns a fully-configured Application.
-// This implements Pure Dependency Injection - all dependencies are assembled here,
-// and the Application receives everything it needs via constructor injection.
-//
-// Initialization order:
-//  1. Core services (database, metrics, scraper, sticker manager)
-//  2. Bot handlers (id, course, contact) and registry
-//  3. GenAI components (optional - requires GEMINI_API_KEY)
-//  4. Webhook handler (aggregates all dependencies)
-//  5. Application (HTTP server with all dependencies injected)
-//
-// GenAI initialization failure is non-fatal and only logs a warning.
+// Initialization order: Core → GenAI (optional) → Bot Handlers → Webhook
+// GenAI is initialized before handlers so they can receive GenAI options during construction.
 func (c *Container) Initialize(ctx context.Context) (*Application, error) {
-	c.logger.Info("Initializing application container...")
+	c.logger.Info("Initializing application...")
 
 	if err := c.initCoreServices(ctx); err != nil {
 		return nil, fmt.Errorf("core services: %w", err)
+	}
+
+	if err := c.initGenAI(ctx); err != nil {
+		c.logger.WithError(err).Warn("GenAI features disabled")
 	}
 
 	if err := c.initBotHandlers(ctx); err != nil {
 		return nil, fmt.Errorf("bot handlers: %w", err)
 	}
 
-	if err := c.initGenAI(ctx); err != nil {
-		// GenAI is optional, log warning but don't fail
-		c.logger.WithError(err).Warn("GenAI initialization failed, features disabled")
+	webhookHandler, err := c.initWebhook(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("webhook: %w", err)
 	}
 
-	if err := c.initWebhook(ctx); err != nil {
-		return nil, fmt.Errorf("webhook handler: %w", err)
-	}
+	c.logger.Info("Initialization complete")
 
-	c.logger.Info("Container initialized successfully")
-
-	// Create fully-configured Application with all dependencies injected
-	app := NewApplication(
+	return NewApplication(
 		c.cfg,
 		c.logger,
 		c.db,
@@ -121,12 +94,11 @@ func (c *Container) Initialize(ctx context.Context) (*Application, error) {
 		c.registry,
 		c.scraperClient,
 		c.stickerManager,
-		c.webhookHandler,
-		c.genaiComponents,
-		c, // Container itself for lifecycle management
-	)
-
-	return app, nil
+		webhookHandler,
+		c.bm25Index,
+		c.intentParser,
+		c.queryExpander,
+	), nil
 }
 
 // initCoreServices initializes database, metrics, scraper, and sticker manager.
@@ -158,108 +130,108 @@ func (c *Container) initCoreServices(ctx context.Context) error {
 	return nil
 }
 
-// initBotHandlers creates all bot handlers and registry.
+// initBotHandlers creates all bot handlers with GenAI options if available.
 func (c *Container) initBotHandlers(ctx context.Context) error {
-	c.botHandlers = &BotHandlers{
-		ID: id.NewHandler(
-			id.WithRepository(c.db),
-			id.WithScraper(c.scraperClient),
-			id.WithMetrics(c.metrics),
-			id.WithLogger(c.logger),
-			id.WithStickerManager(c.stickerManager),
-		),
-		Course: course.NewHandler(
-			course.WithRepository(c.db),
-			course.WithSyllabusRepository(c.db),
-			course.WithScraper(c.scraperClient),
-			course.WithMetrics(c.metrics),
-			course.WithLogger(c.logger),
-			course.WithStickerManager(c.stickerManager),
-		),
-		Contact: contact.NewHandler(
-			contact.WithRepository(c.db),
-			contact.WithScraper(c.scraperClient),
-			contact.WithMetrics(c.metrics),
-			contact.WithLogger(c.logger),
-			contact.WithStickerManager(c.stickerManager),
-			contact.WithMaxContactsLimit(config.DefaultBotConfig().MaxContactsPerSearch),
-		),
+	c.idHandler = id.NewHandler(
+		c.db,
+		c.scraperClient,
+		c.metrics,
+		c.logger,
+		c.stickerManager,
+	)
+
+	// Build course handler options
+	courseOpts := []course.HandlerOption{}
+	if c.bm25Index != nil {
+		courseOpts = append(courseOpts, course.WithBM25Index(c.bm25Index))
+	}
+	if c.queryExpander != nil {
+		courseOpts = append(courseOpts, course.WithQueryExpander(c.queryExpander))
 	}
 
-	// Create registry and register handlers in priority order
-	c.botRegistry = bot.NewRegistry()
-	c.botRegistry.Register(c.botHandlers.Contact) // Priority 1
-	c.botRegistry.Register(c.botHandlers.Course)  // Priority 2
-	c.botRegistry.Register(c.botHandlers.ID)      // Priority 3
+	c.courseHandler = course.NewHandler(
+		c.db,
+		c.scraperClient,
+		c.metrics,
+		c.logger,
+		c.stickerManager,
+		courseOpts...,
+	)
 
-	c.logger.Info("Bot handlers initialized and registered")
+	c.contactHandler = contact.NewHandler(
+		c.db,
+		c.scraperClient,
+		c.metrics,
+		c.logger,
+		c.stickerManager,
+		contact.WithMaxContactsLimit(config.DefaultBotConfig().MaxContactsPerSearch),
+	)
+
+	c.logger.Info("Bot handlers initialized")
 	return nil
 }
 
-// initGenAI initializes optional GenAI features (intent parser, query expander, BM25 index).
+// initGenAI initializes optional GenAI features (BM25 index, intent parser, query expander).
+// BM25 index is always initialized if syllabi exist (independent of Gemini API).
+// Intent parser and query expander require Gemini API key.
 // Returns error if API key is configured but initialization fails.
-// Returns nil if API key is not configured (features disabled).
 func (c *Container) initGenAI(ctx context.Context) error {
-	if c.cfg.GeminiAPIKey == "" {
-		c.logger.Info("Gemini API key not configured, GenAI features disabled")
-		return nil
-	}
-
-	c.genaiComponents = &GenAIComponents{}
-
-	// Intent Parser
-	intentParser, err := genai.NewIntentParser(ctx, c.cfg.GeminiAPIKey)
-	if err != nil {
-		return fmt.Errorf("intent parser: %w", err)
-	}
-	c.genaiComponents.IntentParser = intentParser
-	c.logger.Info("Intent parser enabled")
-
-	// Query Expander
-	queryExpander, err := genai.NewQueryExpander(ctx, c.cfg.GeminiAPIKey)
-	if err != nil {
-		return fmt.Errorf("query expander: %w", err)
-	}
-	c.genaiComponents.QueryExpander = queryExpander
-	c.logger.Info("Query expander enabled")
-
-	// BM25 Index (requires syllabi from database)
+	// Initialize BM25 Index (independent of Gemini API, uses local syllabi data)
 	syllabi, err := c.db.GetAllSyllabi(ctx)
 	if err != nil {
 		return fmt.Errorf("load syllabi for BM25: %w", err)
 	}
 
-	bm25Index := rag.NewBM25Index(c.logger)
+	c.bm25Index = rag.NewBM25Index(c.logger)
 	if len(syllabi) > 0 {
-		if err := bm25Index.Initialize(syllabi); err != nil {
+		if err := c.bm25Index.Initialize(syllabi); err != nil {
 			c.logger.WithError(err).Warn("BM25 index initialization failed")
 		} else {
-			c.logger.WithField("doc_count", bm25Index.Count()).Info("BM25 index initialized")
+			c.logger.WithField("doc_count", c.bm25Index.Count()).Info("BM25 index initialized")
 		}
 	} else {
-		c.logger.Warn("No syllabi found, BM25 index disabled")
+		c.logger.Warn("No syllabi found, BM25 search disabled")
 	}
-	c.genaiComponents.BM25Index = bm25Index
 
-	// Configure course handler with GenAI features
-	c.botHandlers.Course.SetBM25Index(bm25Index)
-	if queryExpander != nil {
-		c.botHandlers.Course.SetQueryExpander(queryExpander)
-		c.logger.Info("Course handler configured with query expander")
+	// Initialize Gemini-based features (requires API key)
+	if c.cfg.GeminiAPIKey == "" {
+		c.logger.Info("Gemini API key not configured, NLU and query expansion disabled")
+		return nil
 	}
+
+	// Intent Parser (NLU for unmatched messages)
+	intentParser, err := genai.NewIntentParser(ctx, c.cfg.GeminiAPIKey)
+	if err != nil {
+		return fmt.Errorf("intent parser: %w", err)
+	}
+	c.intentParser = intentParser
+	c.logger.Info("Intent parser enabled")
+
+	// Query Expander (improves BM25 search results)
+	queryExpander, err := genai.NewQueryExpander(ctx, c.cfg.GeminiAPIKey)
+	if err != nil {
+		return fmt.Errorf("query expander: %w", err)
+	}
+	c.queryExpander = queryExpander
+	c.logger.Info("Query expander enabled")
 
 	c.logger.Info("GenAI features enabled")
 	return nil
 }
 
-// initWebhook creates the webhook handler with all dependencies.
-func (c *Container) initWebhook(ctx context.Context) error {
-	// Build bot config from app config
+// initWebhook creates and returns the webhook handler with all dependencies.
+func (c *Container) initWebhook(ctx context.Context) (*webhook.Handler, error) {
+	// Build registry and register handlers in priority order
+	registry := bot.NewRegistry()
+	registry.Register(c.contactHandler) // Priority 1
+	registry.Register(c.courseHandler)  // Priority 2
+	registry.Register(c.idHandler)      // Priority 3
+
+	// Build bot config
 	botCfg, err := config.LoadBotConfig()
 	if err != nil {
-		return fmt.Errorf("load bot config: %w", err)
+		return nil, fmt.Errorf("load bot config: %w", err)
 	}
-	// Override with app config values if they differ from defaults
 	if c.cfg.WebhookTimeout != 0 {
 		botCfg.WebhookTimeout = c.cfg.WebhookTimeout
 	}
@@ -278,63 +250,80 @@ func (c *Container) initWebhook(ctx context.Context) error {
 		webhook.WithBotConfig(botCfg),
 		webhook.WithStickerManager(c.stickerManager),
 	}
-
-	// Add intent parser if available
-	if c.genaiComponents != nil && c.genaiComponents.IntentParser != nil {
-		opts = append(opts, webhook.WithIntentParser(c.genaiComponents.IntentParser))
+	if c.intentParser != nil {
+		opts = append(opts, webhook.WithIntentParser(c.intentParser))
 	}
 
 	// Create webhook handler
 	handler, err := webhook.NewHandler(
 		c.cfg.LineChannelSecret,
 		c.cfg.LineChannelToken,
-		c.botRegistry,
+		registry,
 		c.metrics,
 		c.logger,
 		opts...,
 	)
 	if err != nil {
-		return fmt.Errorf("webhook handler creation: %w", err)
+		return nil, fmt.Errorf("create handler: %w", err)
 	}
 
-	// Configure course handler with LLM rate limiter (for query expansion)
-	if c.genaiComponents != nil && c.genaiComponents.QueryExpander != nil {
-		c.botHandlers.Course.SetLLMRateLimiter(
-			handler.GetLLMRateLimiter(),
-			c.cfg.LLMRateLimitPerHour,
+	// Add LLM rate limiter to course handler if query expander is available
+	if c.queryExpander != nil {
+		courseOpts := []course.HandlerOption{
+			course.WithBM25Index(c.bm25Index),
+			course.WithQueryExpander(c.queryExpander),
+			course.WithLLMRateLimiter(handler.GetLLMRateLimiter(), c.cfg.LLMRateLimitPerHour),
+		}
+
+		c.courseHandler = course.NewHandler(
+			c.db,
+			c.scraperClient,
+			c.metrics,
+			c.logger,
+			c.stickerManager,
+			courseOpts...,
 		)
-		c.logger.Info("Course handler configured with LLM rate limiter")
+
+		// Recreate registry with updated course handler
+		registry = bot.NewRegistry()
+		registry.Register(c.contactHandler)
+		registry.Register(c.courseHandler)
+		registry.Register(c.idHandler)
+
+		// Recreate webhook handler with updated registry
+		handler, err = webhook.NewHandler(
+			c.cfg.LineChannelSecret,
+			c.cfg.LineChannelToken,
+			registry,
+			c.metrics,
+			c.logger,
+			opts...,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("recreate handler: %w", err)
+		}
 	}
 
-	c.webhookHandler = handler
 	c.logger.Info("Webhook handler initialized")
-	return nil
+	return handler, nil
 }
 
 // Close gracefully shuts down all services in reverse initialization order.
-// Returns aggregated errors if multiple components fail to close.
 func (c *Container) Close() error {
-	c.logger.Info("Closing container...")
+	c.logger.Info("Closing services...")
 	var errs []error
 
-	// Stop webhook background tasks
-	if c.webhookHandler != nil {
-		c.webhookHandler.Stop()
-	}
-
 	// Close GenAI components
-	if c.genaiComponents != nil {
-		if c.genaiComponents.IntentParser != nil {
-			if err := c.genaiComponents.IntentParser.Close(); err != nil {
-				c.logger.WithError(err).Error("Failed to close intent parser")
-				errs = append(errs, fmt.Errorf("intent parser: %w", err))
-			}
+	if c.queryExpander != nil {
+		if err := c.queryExpander.Close(); err != nil {
+			c.logger.WithError(err).Error("Failed to close query expander")
+			errs = append(errs, fmt.Errorf("query expander: %w", err))
 		}
-		if c.genaiComponents.QueryExpander != nil {
-			if err := c.genaiComponents.QueryExpander.Close(); err != nil {
-				c.logger.WithError(err).Error("Failed to close query expander")
-				errs = append(errs, fmt.Errorf("query expander: %w", err))
-			}
+	}
+	if c.intentParser != nil {
+		if err := c.intentParser.Close(); err != nil {
+			c.logger.WithError(err).Error("Failed to close intent parser")
+			errs = append(errs, fmt.Errorf("intent parser: %w", err))
 		}
 	}
 
@@ -350,6 +339,6 @@ func (c *Container) Close() error {
 		return fmt.Errorf("shutdown errors: %v", errs)
 	}
 
-	c.logger.Info("Container closed successfully")
+	c.logger.Info("Services closed")
 	return nil
 }

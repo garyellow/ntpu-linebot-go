@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/config"
+	"github.com/garyellow/ntpu-linebot-go/internal/genai"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 	"github.com/garyellow/ntpu-linebot-go/internal/rag"
@@ -25,35 +26,31 @@ import (
 )
 
 // Application represents a fully-configured application with all dependencies injected.
-// This implements Pure Dependency Injection - no service locator, all deps are constructor-injected.
 type Application struct {
-	// Configuration
 	cfg    *config.Config
 	logger *logger.Logger
 
-	// Core services
+	// Core services (for lifecycle management)
 	db             *storage.DB
 	metrics        *metrics.Metrics
 	registry       *prometheus.Registry
 	scraperClient  *scraper.Client
 	stickerManager *sticker.Manager
 
-	// Webhook handler (aggregates bot handlers)
+	// Webhook handler
 	webhookHandler *webhook.Handler
 
-	// GenAI components (optional)
-	genaiComponents *GenAIComponents
-
-	// HTTP server components
+	// HTTP server
 	router *gin.Engine
 	server *http.Server
 
-	// Container for lifecycle management (Close method)
-	container *Container
+	// GenAI components (for lifecycle management)
+	bm25Index     *rag.BM25Index
+	intentParser  genai.IntentParser
+	queryExpander *genai.QueryExpander
 }
 
 // NewApplication creates a new Application with all dependencies injected.
-// This is called by Container.Initialize() after all components are assembled.
 func NewApplication(
 	cfg *config.Config,
 	logger *logger.Logger,
@@ -63,10 +60,10 @@ func NewApplication(
 	scraperClient *scraper.Client,
 	stickerManager *sticker.Manager,
 	webhookHandler *webhook.Handler,
-	genaiComponents *GenAIComponents,
-	container *Container,
+	bm25Index *rag.BM25Index,
+	intentParser genai.IntentParser,
+	queryExpander *genai.QueryExpander,
 ) *Application {
-	// Setup Gin
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -74,22 +71,21 @@ func NewApplication(
 	router.Use(loggingMiddleware(logger))
 
 	app := &Application{
-		cfg:             cfg,
-		logger:          logger,
-		db:              db,
-		metrics:         metrics,
-		registry:        registry,
-		scraperClient:   scraperClient,
-		stickerManager:  stickerManager,
-		webhookHandler:  webhookHandler,
-		genaiComponents: genaiComponents,
-		router:          router,
-		container:       container,
+		cfg:            cfg,
+		logger:         logger,
+		db:             db,
+		metrics:        metrics,
+		registry:       registry,
+		scraperClient:  scraperClient,
+		stickerManager: stickerManager,
+		webhookHandler: webhookHandler,
+		router:         router,
+		bm25Index:      bm25Index,
+		intentParser:   intentParser,
+		queryExpander:  queryExpander,
 	}
 
-	// Setup routes (direct dependency access, no service locator)
 	app.setupRoutes()
-
 	return app
 }
 
@@ -137,13 +133,20 @@ func (a *Application) Run() error {
 	// Shutdown HTTP server
 	if err := a.server.Shutdown(shutdownCtx); err != nil {
 		log.WithError(err).Error("Server forced to shutdown")
-		return fmt.Errorf("server forced to shutdown: %w", err)
+		return fmt.Errorf("server shutdown: %w", err)
 	}
 
-	// Close container (closes all dependencies)
-	if err := a.container.Close(); err != nil {
-		log.WithError(err).Error("Failed to close container")
-		return fmt.Errorf("container close: %w", err)
+	// Close GenAI components
+	if a.queryExpander != nil {
+		_ = a.queryExpander.Close()
+	}
+	if a.intentParser != nil {
+		_ = a.intentParser.Close()
+	}
+
+	// Close database
+	if err := a.db.Close(); err != nil {
+		log.WithError(err).Error("Failed to close database")
 	}
 
 	log.Info("Server exited")
@@ -240,12 +243,6 @@ func (a *Application) setupRoutes() {
 func (a *Application) startBackgroundJobs(ctx context.Context) {
 	log := a.logger
 
-	// Get BM25 index if available
-	var bm25Index *rag.BM25Index
-	if a.genaiComponents != nil {
-		bm25Index = a.genaiComponents.BM25Index
-	}
-
 	log.Info("Starting background jobs...")
 
 	// Cache cleanup (every 12 hours)
@@ -255,10 +252,10 @@ func (a *Application) startBackgroundJobs(ctx context.Context) {
 	go a.refreshStickers(ctx)
 
 	// Proactive warmup (daily at 3:00 AM)
-	go a.proactiveWarmup(ctx, bm25Index)
+	go a.proactiveWarmup(ctx)
 
 	// Cache size metrics (every 5 minutes)
-	go a.updateCacheSizeMetrics(ctx, bm25Index)
+	go a.updateCacheSizeMetrics(ctx)
 }
 
 // cleanupExpiredCache periodically removes expired cache entries.
@@ -384,7 +381,7 @@ func (a *Application) performStickerRefresh(ctx context.Context) {
 }
 
 // proactiveWarmup performs daily cache warming at 3:00 AM.
-func (a *Application) proactiveWarmup(ctx context.Context, bm25Index *rag.BM25Index) {
+func (a *Application) proactiveWarmup(ctx context.Context) {
 	for {
 		// Calculate next 3:00 AM
 		now := time.Now()
@@ -402,13 +399,13 @@ func (a *Application) proactiveWarmup(ctx context.Context, bm25Index *rag.BM25In
 		case <-ctx.Done():
 			return
 		case <-time.After(waitDuration):
-			a.performProactiveWarmup(ctx, bm25Index)
+			a.performProactiveWarmup(ctx)
 		}
 	}
 }
 
 // performProactiveWarmup executes proactive warmup.
-func (a *Application) performProactiveWarmup(ctx context.Context, bm25Index *rag.BM25Index) {
+func (a *Application) performProactiveWarmup(ctx context.Context) {
 	a.logger.Info("Starting proactive warmup...")
 	startTime := time.Now()
 
@@ -417,7 +414,7 @@ func (a *Application) performProactiveWarmup(ctx context.Context, bm25Index *rag
 		Modules:   warmup.ParseModules(a.cfg.WarmupModules),
 		Reset:     false,
 		Metrics:   a.metrics,
-		BM25Index: bm25Index,
+		BM25Index: a.bm25Index,
 	}
 
 	stats, err := warmup.Run(ctx, a.db, a.scraperClient, a.stickerManager, a.logger, opts)
@@ -431,7 +428,7 @@ func (a *Application) performProactiveWarmup(ctx context.Context, bm25Index *rag
 }
 
 // updateCacheSizeMetrics periodically updates cache size metrics.
-func (a *Application) updateCacheSizeMetrics(ctx context.Context, bm25Index *rag.BM25Index) {
+func (a *Application) updateCacheSizeMetrics(ctx context.Context) {
 	ticker := time.NewTicker(5 * time.Minute) // Update every 5 minutes
 	defer ticker.Stop()
 
@@ -440,7 +437,7 @@ func (a *Application) updateCacheSizeMetrics(ctx context.Context, bm25Index *rag
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			a.performCacheSizeMetricsUpdate(ctx, bm25Index)
+			a.performCacheSizeMetricsUpdate(ctx)
 		}
 	}
 }
@@ -448,7 +445,7 @@ func (a *Application) updateCacheSizeMetrics(ctx context.Context, bm25Index *rag
 // performCacheSizeMetricsUpdate updates cache size metrics.
 // Note: Cache size metrics are currently tracked via Count methods in each module.
 // If you want explicit Prometheus gauges, add UpdateCacheSize to metrics.Metrics.
-func (a *Application) performCacheSizeMetricsUpdate(ctx context.Context, bm25Index *rag.BM25Index) {
+func (a *Application) performCacheSizeMetricsUpdate(ctx context.Context) {
 	studentCount, _ := a.db.CountStudents(ctx)
 	contactCount, _ := a.db.CountContacts(ctx)
 	courseCount, _ := a.db.CountCourses(ctx)
@@ -464,8 +461,9 @@ func (a *Application) performCacheSizeMetricsUpdate(ctx context.Context, bm25Ind
 		"stickers": stickerCount,
 	}).Debug("Cache size metrics updated")
 
-	if bm25Index != nil && bm25Index.IsEnabled() {
-		a.logger.WithField("bm25_docs", bm25Index.Count()).Debug("BM25 index size")
+	// Log BM25 index size if available
+	if a.bm25Index != nil && a.bm25Index.IsEnabled() {
+		a.logger.WithField("bm25_docs", a.bm25Index.Count()).Debug("BM25 index size")
 	}
 }
 

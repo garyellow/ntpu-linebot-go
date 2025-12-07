@@ -23,10 +23,9 @@ import (
 )
 
 // Handler handles student ID related queries.
-// It uses repository interface for data access, enabling clean separation
-// between business logic and data persistence.
+// It depends on *storage.DB directly for data access.
 type Handler struct {
-	repo           storage.StudentRepository
+	db             *storage.DB
 	scraper        *scraper.Client
 	metrics        *metrics.Metrics
 	logger         *logger.Logger
@@ -76,14 +75,22 @@ var (
 	allDeptCodeText = "所有系代碼"
 )
 
-// NewHandler creates a new ID handler using functional options pattern.
-// This provides flexibility in configuration and makes the API more maintainable.
-func NewHandler(opts ...HandlerOption) *Handler {
-	h := &Handler{}
-	for _, opt := range opts {
-		opt(h)
+// NewHandler creates a new ID handler with required dependencies.
+// All parameters are mandatory for proper handler operation.
+func NewHandler(
+	db *storage.DB,
+	scraper *scraper.Client,
+	metrics *metrics.Metrics,
+	logger *logger.Logger,
+	stickerManager *sticker.Manager,
+) *Handler {
+	return &Handler{
+		db:             db,
+		scraper:        scraper,
+		metrics:        metrics,
+		logger:         logger,
+		stickerManager: stickerManager,
 	}
-	return h
 }
 
 // Intent names for NLU dispatcher
@@ -533,7 +540,7 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	// Check cache first
-	student, err := h.repo.GetStudentByID(ctx, studentID)
+	student, err := h.db.GetStudentByID(ctx, studentID)
 	if err != nil {
 		log.WithError(err).Error("Failed to query cache")
 		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
@@ -567,7 +574,7 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	}
 
 	// Save to cache
-	if err := h.repo.SaveStudent(ctx, student); err != nil {
+	if err := h.db.SaveStudent(ctx, student); err != nil {
 		log.WithError(err).Warn("Failed to save student to cache")
 	}
 
@@ -592,7 +599,7 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	// Step 1: Try SQL LIKE search first (fast path for exact substrings)
-	students, err := h.repo.SearchStudentsByName(ctx, name)
+	students, err := h.db.SearchStudentsByName(ctx, name)
 	if err != nil {
 		log.WithError(err).Error("Failed to search students by name")
 		return []messaging_api.MessageInterface{
@@ -602,7 +609,7 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 
 	// Step 2: ALWAYS try fuzzy character-set matching to find additional results
 	// This catches cases like "王明" -> "王小明" that SQL LIKE misses
-	allStudents, err := h.repo.GetAllStudents(ctx)
+	allStudents, err := h.db.GetAllStudents(ctx)
 	if err == nil && len(allStudents) > 0 {
 		for _, s := range allStudents {
 			if bot.ContainsAllRunes(s.Name, name) {
@@ -984,7 +991,7 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 		queryDeptName = deptName + "系"
 	}
 
-	students, err := h.repo.GetStudentsByDepartment(ctx, queryDeptName, year)
+	students, err := h.db.GetStudentsByDepartment(ctx, queryDeptName, year)
 	if err != nil {
 		log.WithError(err).Error("Failed to search students by year and department")
 		return []messaging_api.MessageInterface{
@@ -1011,7 +1018,7 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 			h.metrics.RecordScraperRequest(ModuleName, "success", time.Since(startTime).Seconds())
 			// Save to cache and convert to value slice
 			for _, s := range scrapedStudents {
-				if err := h.repo.SaveStudent(ctx, s); err != nil {
+				if err := h.db.SaveStudent(ctx, s); err != nil {
 					log.WithError(err).Warn("Failed to save student to cache")
 				}
 				students = append(students, *s)
