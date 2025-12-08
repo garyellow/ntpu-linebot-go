@@ -105,27 +105,25 @@ var (
 )
 
 // NewHandler creates a new course handler with required dependencies.
+// bm25Index and queryExpander are optional (can be nil).
 func NewHandler(
 	db *storage.DB,
 	scraper *scraper.Client,
 	metrics *metrics.Metrics,
 	logger *logger.Logger,
 	stickerManager *sticker.Manager,
-	opts ...HandlerOption,
+	bm25Index *rag.BM25Index,
+	queryExpander *genai.QueryExpander,
 ) *Handler {
-	h := &Handler{
+	return &Handler{
 		db:             db,
 		scraper:        scraper,
 		metrics:        metrics,
 		logger:         logger,
 		stickerManager: stickerManager,
+		bm25Index:      bm25Index,
+		queryExpander:  queryExpander,
 	}
-
-	for _, opt := range opts {
-		opt(h)
-	}
-
-	return h
 }
 
 // IsBM25SearchEnabled returns true if BM25 search is enabled.

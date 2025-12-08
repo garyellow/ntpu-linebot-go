@@ -32,7 +32,7 @@ func setupTestHandler(t *testing.T) *Handler {
 	log := logger.New("info")
 	stickerMgr := sticker.NewManager(db, scraperClient, log)
 
-	return NewHandler(db, scraperClient, m, log, stickerMgr)
+	return NewHandler(db, scraperClient, m, log, stickerMgr, nil, nil)
 }
 
 func TestCanHandle(t *testing.T) {

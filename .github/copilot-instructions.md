@@ -5,21 +5,21 @@ LINE chatbot for NTPU (National Taipei University) providing student ID lookup, 
 ## 🎯 Architecture Principles
 
 **Core Design:**
-1. **Pure Dependency Injection** - Constructor-based injection, functional options only when 3+ optional parameters
+1. **Pure Dependency Injection** - Constructor-based injection with all dependencies explicit
 2. **Direct Dependencies** - Handlers use `*storage.DB` directly, interfaces only when truly needed
-3. **Typed Error Handling** - Sentinel errors and custom error types with wrapping
+3. **Typed Error Handling** - Sentinel errors (`errors.ErrNotFound`) with standard wrapping
 4. **Centralized Configuration** - Bot config with load-time validation
 5. **Context Management** - `ctxpkg.PreserveTracing()` for safe async operations with tracing
 6. **Simplified Registry** - Direct dispatch without middleware overhead
 7. **Clean Initialization** - Core → GenAI → Handlers → Webhook (no recreation)
 
 **Code Style:**
-- **Pure DI**: All dependencies via constructors
+- **Pure DI**: All dependencies via constructors (no functional options)
 - **Concrete Types**: Handlers depend on `*storage.DB` directly (no mocking needed)
-- **Interface Placement**: Defined inline where needed (Go convention: small interfaces)
-- **Functional Options**: Only when 3+ optional parameters (webhook, course handlers)
+- **Interface Placement**: Defined inline where needed (Go convention: accept interfaces, return structs)
+- **Optional Parameters**: Pass nil for optional dependencies (e.g., `bm25Index`, `intentParser`)
 - **Context Values**: Minimal usage for request tracing only (userID, chatID, requestID)
-- **Error Handling**: Typed errors with wrapping for context
+- **Error Handling**: Sentinel errors with standard `fmt.Errorf` wrapping
 - **Constants**: Centralized in config package
 - **Async Operations**: `ctxpkg.PreserveTracing()` for safe detached contexts (avoids memory leaks)
 - **Validation**: Load-time config validation, runtime parameter checks
@@ -69,13 +69,13 @@ LINE Webhook → Gin Handler
 2. **Create handler in app.initBotHandlers()** with required dependencies
 3. **Register in app.initWebhook()** via `registry.Register(handler)`
 4. **Use prefix convention** for postback routing (e.g., `"course:"`, `"id:"`, `"contact:"`)
-5. **Functional options** only if 3+ optional parameters (create `options.go`)
+5. **Direct constructors** - Pass all dependencies (including optional nil values) directly in constructor
 6. **Warmup support** is automatic if module implements cache warming
 
 **Handler constructor patterns**:
-- **Simple** (id, contact): Direct parameters, no options
-- **Complex** (course): Functional options for 3+ optional GenAI features
-- **Setter injection**: Use `SetXXX()` for dependencies created after handler (e.g., `SetLLMRateLimiter()`)
+- **All handlers**: Direct constructors with all dependencies as parameters
+- **Optional dependencies**: Pass nil if feature disabled (e.g., `bm25Index`, `queryExpander`)
+- **Setter injection**: Use `SetXXX()` only for circular dependencies (e.g., `SetLLMRateLimiter()`)
 
 **Module-specific features**:
 

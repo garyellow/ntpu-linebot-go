@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/garyellow/ntpu-linebot-go/internal/config"
+
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	"github.com/garyellow/ntpu-linebot-go/internal/bot/contact"
 	"github.com/garyellow/ntpu-linebot-go/internal/bot/course"
@@ -46,7 +48,7 @@ func setupTestHandler(t *testing.T) *Handler {
 	// Create bot handlers with direct constructor injection
 	idHandler := id.NewHandler(db, scraperClient, m, log, stickerManager)
 	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerManager, 100)
-	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerManager)
+	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerManager, nil, nil)
 
 	// Create bot registry
 	botRegistry := bot.NewRegistry()
@@ -54,17 +56,23 @@ func setupTestHandler(t *testing.T) *Handler {
 	botRegistry.Register(courseHandler)
 	botRegistry.Register(idHandler)
 
-	// Create handler using functional options
+	// Create bot config for testing
+	botCfg := config.DefaultBotConfig()
+	botCfg.WebhookTimeout = 30 * time.Second
+	botCfg.UserRateLimitTokens = 6.0
+	botCfg.UserRateLimitRefillRate = 1.0 / 5.0
+	botCfg.LLMRateLimitPerHour = 50.0
+
+	// Create handler with direct constructor
 	handler, err := NewHandler(
 		"test_channel_secret",
 		"test_channel_token",
 		botRegistry,
+		botCfg,
 		m,
 		log,
-		WithStickerManager(stickerManager),
-		WithWebhookTimeout(30*time.Second),
-		WithUserRateLimit(6.0, 1.0/5.0),
-		WithLLMRateLimit(50.0),
+		stickerManager,
+		nil, // intentParser
 	)
 	if err != nil {
 		t.Fatalf("Failed to create handler: %v", err)

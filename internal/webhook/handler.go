@@ -54,63 +54,42 @@ type Handler struct {
 	intentParser *genai.GeminiIntentParser
 }
 
-// NewHandler creates a new webhook handler using functional options pattern.
-// Required parameters: channelSecret, channelToken, registry, metrics, logger
-// Optional parameters: Configure via HandlerOption functions (see options.go)
-//
-// Example:
-//
-//	handler, err := webhook.NewHandler(
-//	    cfg.LineChannelSecret,
-//	    cfg.LineChannelToken,
-//	    registry, m, log,
-//	    webhook.WithBotConfig(botCfg),
-//	    webhook.WithIntentParser(intentParser),
-//	)
+// NewHandler creates a new webhook handler.
+// All parameters except intentParser and stickerManager are required.
 func NewHandler(
 	channelSecret, channelToken string,
 	registry *bot.Registry,
+	botCfg *config.BotConfig,
 	m *metrics.Metrics,
 	log *logger.Logger,
-	opts ...HandlerOption,
+	stickerManager *sticker.Manager,
+	intentParser *genai.GeminiIntentParser,
 ) (*Handler, error) {
-	// Create messaging API client
 	client, err := messaging_api.NewMessagingApiAPI(channelToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create messaging API client: %w", err)
 	}
 
-	// Apply default configuration
-	defaultCfg := config.DefaultBotConfig()
 	h := &Handler{
 		channelSecret:           channelSecret,
 		client:                  client,
 		metrics:                 m,
 		logger:                  log,
 		registry:                registry,
-		webhookTimeout:          defaultCfg.WebhookTimeout,
-		maxMessagesPerReply:     defaultCfg.MaxMessagesPerReply,
-		maxEventsPerWebhook:     defaultCfg.MaxEventsPerWebhook,
-		minReplyTokenLength:     defaultCfg.MinReplyTokenLength,
-		userRateLimitTokens:     defaultCfg.UserRateLimitTokens,
-		userRateLimitRefillRate: defaultCfg.UserRateLimitRefillRate,
-		llmRateLimitPerHour:     defaultCfg.LLMRateLimitPerHour,
+		stickerManager:          stickerManager,
+		intentParser:            intentParser,
+		webhookTimeout:          botCfg.WebhookTimeout,
+		maxMessagesPerReply:     botCfg.MaxMessagesPerReply,
+		maxEventsPerWebhook:     botCfg.MaxEventsPerWebhook,
+		minReplyTokenLength:     botCfg.MinReplyTokenLength,
+		userRateLimitTokens:     botCfg.UserRateLimitTokens,
+		userRateLimitRefillRate: botCfg.UserRateLimitRefillRate,
+		llmRateLimitPerHour:     botCfg.LLMRateLimitPerHour,
 	}
 
-	// Apply functional options (allows overriding defaults)
-	for _, opt := range opts {
-		opt(h)
-	}
-
-	// Initialize rate limiters AFTER options are applied
-	// LINE API rate limits: https://developers.line.biz/en/reference/messaging-api/#rate-limits
-	h.rateLimiter = NewRateLimiter(defaultCfg.GlobalRateLimitRPS, defaultCfg.GlobalRateLimitRPS)
+	h.rateLimiter = NewRateLimiter(botCfg.GlobalRateLimitRPS, botCfg.GlobalRateLimitRPS)
 	h.userLimiter = NewUserRateLimiter(5*time.Minute, m)
-
-	// LLM rate limiter (if not set via options)
-	if h.llmLimiter == nil {
-		h.llmLimiter = ratelimit.NewLLMRateLimiter(h.llmRateLimitPerHour, 5*time.Minute, m)
-	}
+	h.llmLimiter = ratelimit.NewLLMRateLimiter(botCfg.LLMRateLimitPerHour, 5*time.Minute, m)
 
 	return h, nil
 }
@@ -131,12 +110,6 @@ func (h *Handler) Stop() {
 // ensuring unified LLM quota management across all AI features.
 func (h *Handler) GetLLMRateLimiter() *ratelimit.LLMRateLimiter {
 	return h.llmLimiter
-}
-
-// SetIntentParser sets the NLU intent parser for the handler.
-// This is optional - if not set, the handler falls back to keyword matching only.
-func (h *Handler) SetIntentParser(parser *genai.GeminiIntentParser) {
-	h.intentParser = parser
 }
 
 // Handle processes incoming webhook requests following LINE Best Practice:

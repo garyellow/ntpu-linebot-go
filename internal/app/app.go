@@ -208,15 +208,7 @@ func initHandlers(
 	queryExpander *genai.QueryExpander,
 ) []bot.Handler {
 	idHandler := id.NewHandler(db, scraperClient, m, log, stickerMgr)
-
-	courseOpts := make([]course.HandlerOption, 0, 2)
-	if bm25Index != nil {
-		courseOpts = append(courseOpts, course.WithBM25Index(bm25Index))
-	}
-	if queryExpander != nil {
-		courseOpts = append(courseOpts, course.WithQueryExpander(queryExpander))
-	}
-	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerMgr, courseOpts...)
+	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerMgr, bm25Index, queryExpander)
 
 	botCfg := config.DefaultBotConfig()
 	contactHandler := contact.NewHandler(
@@ -262,21 +254,15 @@ func initWebhook(
 		botCfg.LLMRateLimitPerHour = cfg.LLMRateLimitPerHour
 	}
 
-	opts := []webhook.HandlerOption{
-		webhook.WithBotConfig(botCfg),
-		webhook.WithStickerManager(stickerMgr),
-	}
-	if intentParser != nil {
-		opts = append(opts, webhook.WithIntentParser(intentParser))
-	}
-
 	handler, err := webhook.NewHandler(
 		cfg.LineChannelSecret,
 		cfg.LineChannelToken,
 		registry,
+		botCfg,
 		m,
 		log,
-		opts...,
+		stickerMgr,
+		intentParser,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create handler: %w", err)
