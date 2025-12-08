@@ -16,116 +16,81 @@ import (
 )
 
 // DB wraps SQLite database connections with read/write separation.
-//
-// SQLite with WAL mode allows concurrent reads but only one writer at a time.
-// By separating read and write connections:
-//   - Writer: Single connection to avoid SQLITE_BUSY errors
-//   - Readers: Multiple connections for parallel read queries
-//
-// This pattern is recommended for Go applications using database/sql with SQLite.
-// See: https://github.com/mattn/go-sqlite3/issues/274
+// Writer uses a single connection to avoid SQLITE_BUSY errors.
+// Reader uses multiple connections for parallel queries.
 type DB struct {
-	writer   *sql.DB       // Single connection for writes (MaxOpenConns=1)
-	reader   *sql.DB       // Multiple connections for reads
-	path     string        // Database file path
-	cacheTTL time.Duration // Cache time-to-live for all data
+	writer   *sql.DB
+	reader   *sql.DB
+	path     string
+	cacheTTL time.Duration
 }
 
 // New creates a new database with read/write separation and initializes the schema.
-// cacheTTL specifies how long cached data remains valid before expiring.
-//
-// Connection architecture:
-//   - Writer: 1 connection with immediate transaction lock
-//   - Reader: 10 connections in read-only mode for parallel queries
-//
-// Note: In-memory databases use shared cache mode to allow read/write separation
 func New(ctx context.Context, dbPath string, cacheTTL time.Duration) (*DB, error) {
-	// Ensure directory exists (skip for in-memory database)
 	if dbPath != ":memory:" {
 		dir := filepath.Dir(dbPath)
-		// Only create directory if it's not empty and not current directory
 		if dir != "" && dir != "." {
 			if err := os.MkdirAll(dir, 0o750); err != nil {
-				return nil, fmt.Errorf("failed to create database directory: %w", err)
+				return nil, fmt.Errorf("create database directory: %w", err)
 			}
 		}
 	}
 
-	// For in-memory databases, use shared cache mode so multiple connections
-	// can access the same database. Without this, each connection gets its
-	// own private database instance.
 	isMemory := dbPath == ":memory:"
 
-	// Open writer connection (single connection for all writes)
-	// Using _txlock=immediate ensures write transactions acquire lock immediately
-	var writerDSN string
+	var writerDSN, readerDSN string
 	if isMemory {
-		// file::memory:?cache=shared creates a shared in-memory database
 		writerDSN = "file::memory:?cache=shared&_txlock=immediate"
+		readerDSN = "file::memory:?cache=shared&mode=ro"
 	} else {
 		writerDSN = dbPath + "?_txlock=immediate"
-	}
-	writer, err := sql.Open("sqlite", writerDSN)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open writer connection: %w", err)
+		readerDSN = dbPath + "?mode=ro"
 	}
 
-	// CRITICAL: Writer must have MaxOpenConns=1 to prevent SQLITE_BUSY
+	writer, err := sql.Open("sqlite", writerDSN)
+	if err != nil {
+		return nil, fmt.Errorf("open writer: %w", err)
+	}
+
 	writer.SetMaxOpenConns(1)
 	writer.SetMaxIdleConns(1)
 	writer.SetConnMaxLifetime(config.DatabaseConnMaxLifetime)
 
-	// Configure writer connection
 	if err := configureConnection(ctx, writer, false); err != nil {
-		_ = writer.Close()
-		return nil, fmt.Errorf("failed to configure writer: %w", err)
+		writer.Close()
+		return nil, fmt.Errorf("configure writer: %w", err)
 	}
 
-	// Test writer connection
 	if err := writer.PingContext(ctx); err != nil {
-		_ = writer.Close()
-		return nil, fmt.Errorf("failed to ping writer: %w", err)
+		writer.Close()
+		return nil, fmt.Errorf("ping writer: %w", err)
 	}
 
-	// Initialize schema using writer connection BEFORE opening reader
-	// This is critical for in-memory databases: the reader connection in read-only mode
-	// cannot access the database until schema exists via the writer connection
 	if err := InitSchema(ctx, writer); err != nil {
-		_ = writer.Close()
-		return nil, fmt.Errorf("failed to initialize schema: %w", err)
+		writer.Close()
+		return nil, fmt.Errorf("initialize schema: %w", err)
 	}
 
-	// Open reader connection pool (multiple connections for parallel reads)
-	var readerDSN string
-	if isMemory {
-		// Same shared cache for in-memory database, but in read-only mode
-		readerDSN = "file::memory:?cache=shared&mode=ro"
-	} else {
-		readerDSN = dbPath + "?mode=ro"
-	}
 	reader, err := sql.Open("sqlite", readerDSN)
 	if err != nil {
-		_ = writer.Close()
-		return nil, fmt.Errorf("failed to open reader connection: %w", err)
+		writer.Close()
+		return nil, fmt.Errorf("open reader: %w", err)
 	}
 
-	// Reader can have multiple connections for parallel queries
 	reader.SetMaxOpenConns(10)
 	reader.SetMaxIdleConns(5)
 	reader.SetConnMaxLifetime(config.DatabaseConnMaxLifetime)
 
-	// Configure reader connection
 	if err := configureConnection(ctx, reader, true); err != nil {
-		_ = writer.Close()
-		_ = reader.Close()
-		return nil, fmt.Errorf("failed to configure reader: %w", err)
+		writer.Close()
+		reader.Close()
+		return nil, fmt.Errorf("configure reader: %w", err)
 	}
 
-	// Test reader connection
 	if err := reader.PingContext(ctx); err != nil {
-		_ = writer.Close()
-		_ = reader.Close()
-		return nil, fmt.Errorf("failed to ping reader: %w", err)
+		writer.Close()
+		reader.Close()
+		return nil, fmt.Errorf("ping reader: %w", err)
 	}
 
 	db := &DB{
@@ -138,15 +103,11 @@ func New(ctx context.Context, dbPath string, cacheTTL time.Duration) (*DB, error
 	return db, nil
 }
 
-// configureConnection sets up SQLite pragmas for optimal performance
 func configureConnection(ctx context.Context, conn *sql.DB, readOnly bool) error {
-
-	// Enable WAL mode for better concurrency (readers don't block writer)
 	if _, err := conn.ExecContext(ctx, "PRAGMA journal_mode=WAL"); err != nil {
-		return fmt.Errorf("failed to enable WAL mode: %w", err)
+		return fmt.Errorf("enable WAL: %w", err)
 	}
 
-	// Set busy timeout to handle concurrent access during warmup
 	busyTimeoutMs := int(config.DatabaseBusyTimeout.Milliseconds())
 	if _, err := conn.ExecContext(ctx, fmt.Sprintf("PRAGMA busy_timeout=%d", busyTimeoutMs)); err != nil {
 		return fmt.Errorf("failed to set busy timeout: %w", err)
@@ -169,17 +130,17 @@ func configureConnection(ctx context.Context, conn *sql.DB, readOnly bool) error
 }
 
 // Close closes both reader and writer database connections.
-// Returns all errors joined together (Go 1.20+).
+// Returns all errors joined together.
 func (db *DB) Close() error {
 	var errs []error
 	if db.reader != nil {
 		if err := db.reader.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to close reader: %w", err))
+			errs = append(errs, fmt.Errorf("close reader: %w", err))
 		}
 	}
 	if db.writer != nil {
 		if err := db.writer.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to close writer: %w", err))
+			errs = append(errs, fmt.Errorf("close writer: %w", err))
 		}
 	}
 	return errors.Join(errs...)
@@ -202,29 +163,9 @@ func (db *DB) Path() string {
 	return db.path
 }
 
-// Begin starts a new write transaction on the writer connection
-func (db *DB) Begin() (*sql.Tx, error) {
-	return db.writer.BeginTx(context.Background(), nil)
-}
-
-// Exec executes a write query (INSERT, UPDATE, DELETE) on the writer connection
-func (db *DB) Exec(query string, args ...any) (sql.Result, error) {
-	return db.writer.ExecContext(context.Background(), query, args...)
-}
-
 // ExecContext executes a write query with context on the writer connection
 func (db *DB) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	return db.writer.ExecContext(ctx, query, args...)
-}
-
-// Query executes a read query on the reader connection pool
-func (db *DB) Query(query string, args ...any) (*sql.Rows, error) {
-	return db.reader.QueryContext(context.Background(), query, args...)
-}
-
-// QueryRow executes a read query that returns at most one row on the reader connection
-func (db *DB) QueryRow(query string, args ...any) *sql.Row {
-	return db.reader.QueryRowContext(context.Background(), query, args...)
 }
 
 // GetCacheTTL returns the configured cache TTL
@@ -238,23 +179,14 @@ func (db *DB) getTTLTimestamp() int64 {
 	return time.Now().Unix() - int64(db.cacheTTL.Seconds())
 }
 
-// Ready checks if the database is ready to serve requests.
+// Ping checks if the database is ready to serve requests.
 // This performs a ping on both reader and writer connections to verify connectivity.
 // Use this for Kubernetes readiness probes or health checks.
-//
-// Returns nil if both connections are healthy, or an error describing the failure.
-func (db *DB) Ready(ctx context.Context) error {
-	// Check writer connection
-	if err := db.writer.PingContext(ctx); err != nil {
-		return fmt.Errorf("writer connection unhealthy: %w", err)
-	}
-
-	// Check reader connection
-	if err := db.reader.PingContext(ctx); err != nil {
-		return fmt.Errorf("reader connection unhealthy: %w", err)
-	}
-
-	return nil
+func (db *DB) Ping(ctx context.Context) error {
+	return errors.Join(
+		db.writer.PingContext(ctx),
+		db.reader.PingContext(ctx),
+	)
 }
 
 // ExecBatchContext executes a batch of operations within a single transaction with context support.

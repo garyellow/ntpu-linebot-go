@@ -68,7 +68,7 @@ func NewHandler(
 ) (*Handler, error) {
 	client, err := messaging_api.NewMessagingApiAPI(channelToken)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create messaging API client: %w", err)
+		return nil, fmt.Errorf("create messaging API client: %w", err)
 	}
 
 	h := &Handler{

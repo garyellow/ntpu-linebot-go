@@ -8,18 +8,6 @@ import (
 	"time"
 )
 
-// Ping verifies that the database connection is alive.
-// This is a lightweight check that only verifies connectivity.
-func (db *DB) Ping(ctx context.Context) error {
-	if err := db.reader.PingContext(ctx); err != nil {
-		return fmt.Errorf("reader ping failed: %w", err)
-	}
-	if err := db.writer.PingContext(ctx); err != nil {
-		return fmt.Errorf("writer ping failed: %w", err)
-	}
-	return nil
-}
-
 // SaveStudent inserts or updates a student record
 func (db *DB) SaveStudent(ctx context.Context, student *Student) error {
 	query := `
@@ -66,7 +54,7 @@ func (db *DB) SaveStudentsBatch(ctx context.Context, students []*Student) error 
 	})
 }
 
-// GetStudentByID retrieves a student by ID and validates cache freshness (7 days = 168 hours)
+// GetStudentByID retrieves a student by ID and validates cache freshness.
 func (db *DB) GetStudentByID(ctx context.Context, id string) (*Student, error) {
 	query := `SELECT id, name, department, year, cached_at FROM students WHERE id = ?`
 
@@ -83,82 +71,66 @@ func (db *DB) GetStudentByID(ctx context.Context, id string) (*Student, error) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to get student by ID: %w", err)
+		return nil, fmt.Errorf("query student: %w", err)
 	}
 
-	// Check TTL using configured cache duration
 	ttl := int64(db.cacheTTL.Seconds())
 	if student.CachedAt+ttl <= time.Now().Unix() {
-		return nil, nil // Cache expired
+		return nil, nil
 	}
 
 	return &student, nil
 }
 
-// SearchStudentsByName searches students by partial name match (max 500 results)
-// Only returns non-expired cache entries based on configured TTL
+// SearchStudentsByName searches students by partial name match.
 func (db *DB) SearchStudentsByName(ctx context.Context, name string) ([]Student, error) {
-	// Validate input to prevent SQL injection (even though we use prepared statements)
 	if len(name) > 100 {
 		return nil, fmt.Errorf("search term too long")
 	}
 
-	// Sanitize search term to prevent SQL LIKE special character issues
 	sanitized := sanitizeSearchTerm(name)
-
-	// Add TTL filter to prevent returning stale data
 	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT id, name, department, year, cached_at FROM students WHERE name LIKE ? ESCAPE '\' AND cached_at > ? ORDER BY year DESC, id DESC LIMIT 500`
 
 	rows, err := db.reader.QueryContext(ctx, query, "%"+sanitized+"%", ttlTimestamp)
 	if err != nil {
-		return nil, fmt.Errorf("failed to search students by name: %w", err)
+		return nil, fmt.Errorf("query students: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 
 	var students []Student
 	for rows.Next() {
 		var student Student
 		if err := rows.Scan(&student.ID, &student.Name, &student.Department, &student.Year, &student.CachedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan student row: %w", err)
+			return nil, fmt.Errorf("scan student: %w", err)
 		}
 		students = append(students, student)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating student rows: %w", err)
-	}
-
-	return students, nil
+	return students, rows.Err()
 }
 
 // GetStudentsByDepartment retrieves students by year and department.
-// Only returns non-expired cache entries based on configured TTL
 func (db *DB) GetStudentsByDepartment(ctx context.Context, dept string, year int) ([]Student, error) {
-	// Add TTL filter to prevent returning stale data
 	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT id, name, department, year, cached_at FROM students WHERE year = ? AND department = ? AND cached_at > ?`
 
 	rows, err := db.reader.QueryContext(ctx, query, year, dept, ttlTimestamp)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get students by year and department: %w", err)
+		return nil, fmt.Errorf("query students: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 
 	var students []Student
 	for rows.Next() {
 		var student Student
 		if err := rows.Scan(&student.ID, &student.Name, &student.Department, &student.Year, &student.CachedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan student row: %w", err)
+			return nil, fmt.Errorf("scan student: %w", err)
 		}
 		students = append(students, student)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating student rows: %w", err)
-	}
-
-	return students, nil
+	return students, rows.Err()
 }
 
 // DeleteExpiredStudents removes students older than the specified TTL

@@ -32,21 +32,17 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// Application represents a fully-configured application managing the complete lifecycle.
+// Application manages the application lifecycle and dependencies.
 type Application struct {
-	cfg    *config.Config
-	logger *logger.Logger
-
+	cfg            *config.Config
+	logger         *logger.Logger
 	db             *storage.DB
 	metrics        *metrics.Metrics
 	registry       *prometheus.Registry
 	scraperClient  *scraper.Client
 	stickerManager *sticker.Manager
 	webhookHandler *webhook.Handler
-
-	router *gin.Engine
-	server *http.Server
-
+	server         *http.Server
 	bm25Index      *rag.BM25Index
 	intentParser   *genai.GeminiIntentParser
 	queryExpander  *genai.QueryExpander
@@ -54,21 +50,60 @@ type Application struct {
 }
 
 // Initialize creates and initializes a new application with all dependencies.
-// This replaces the Container pattern with a single initialization function.
 func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	log := logger.New(cfg.LogLevel)
 	log.Info("Initializing application...")
 
-	// Initialize core services
-	db, registry, m, scraperClient, stickerMgr, err := initCore(ctx, cfg, log)
+	db, err := storage.New(ctx, cfg.SQLitePath(), cfg.CacheTTL)
 	if err != nil {
-		return nil, fmt.Errorf("core services: %w", err)
+		return nil, fmt.Errorf("database: %w", err)
+	}
+	log.WithField("path", cfg.SQLitePath()).WithField("cache_ttl", cfg.CacheTTL).Info("Database connected")
+
+	registry := prometheus.NewRegistry()
+	registry.MustRegister(
+		collectors.NewGoCollector(),
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
+		collectors.NewBuildInfoCollector(),
+	)
+	m := metrics.New(registry)
+
+	scraperClient := scraper.NewClient(cfg.ScraperTimeout, cfg.ScraperMaxRetries)
+	stickerMgr := sticker.NewManager(db, scraperClient, log)
+
+	syllabi, err := db.GetAllSyllabi(ctx)
+	if err != nil {
+		log.WithError(err).Warn("Failed to load syllabi for BM25")
+		syllabi = nil
 	}
 
-	// Initialize GenAI features (optional)
-	bm25Index, intentParser, queryExpander := initGenAI(ctx, cfg, db, log)
+	bm25Index := rag.NewBM25Index(log)
+	if len(syllabi) > 0 {
+		if err := bm25Index.Initialize(syllabi); err != nil {
+			log.WithError(err).Warn("BM25 initialization failed")
+		} else {
+			log.WithField("doc_count", bm25Index.Count()).Info("BM25 index initialized")
+		}
+	} else {
+		log.Warn("No syllabi found, BM25 search disabled")
+	}
 
-	// Initialize LLM rate limiter for bot handlers
+	var intentParser *genai.GeminiIntentParser
+	var queryExpander *genai.QueryExpander
+	if cfg.GeminiAPIKey != "" {
+		if intentParser, err = genai.NewIntentParser(ctx, cfg.GeminiAPIKey); err != nil {
+			log.WithError(err).Warn("Intent parser initialization failed")
+		}
+		if queryExpander, err = genai.NewQueryExpander(ctx, cfg.GeminiAPIKey); err != nil {
+			log.WithError(err).Warn("Query expander initialization failed")
+		}
+		if intentParser != nil || queryExpander != nil {
+			log.Info("GenAI features enabled")
+		}
+	} else {
+		log.Info("Gemini API key not configured, NLU and query expansion disabled")
+	}
+
 	botCfg, err := config.LoadBotConfig()
 	if err != nil {
 		return nil, fmt.Errorf("load bot config: %w", err)
@@ -76,18 +111,35 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	if cfg.LLMRateLimitPerHour != 0 {
 		botCfg.LLMRateLimitPerHour = cfg.LLMRateLimitPerHour
 	}
+	if cfg.WebhookTimeout != 0 {
+		botCfg.WebhookTimeout = cfg.WebhookTimeout
+	}
+	if cfg.UserRateLimitTokens != 0 {
+		botCfg.UserRateLimitTokens = cfg.UserRateLimitTokens
+	}
+	if cfg.UserRateLimitRefillRate != 0 {
+		botCfg.UserRateLimitRefillRate = cfg.UserRateLimitRefillRate
+	}
+
 	llmRateLimiter := ratelimit.NewLLMRateLimiter(botCfg.LLMRateLimitPerHour, 5*time.Minute, m)
 
-	// Initialize bot handlers
-	handlers := initHandlers(db, scraperClient, m, log, stickerMgr, bm25Index, queryExpander, llmRateLimiter)
+	idHandler := id.NewHandler(db, scraperClient, m, log, stickerMgr)
+	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerMgr, bm25Index, queryExpander, llmRateLimiter)
+	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerMgr, botCfg.MaxContactsPerSearch)
 
-	// Initialize webhook
-	webhookHandler, err := initWebhook(ctx, cfg, handlers, m, log, stickerMgr, intentParser, llmRateLimiter)
+	botRegistry := bot.NewRegistry()
+	botRegistry.Register(contactHandler)
+	botRegistry.Register(courseHandler)
+	botRegistry.Register(idHandler)
+
+	webhookHandler, err := webhook.NewHandler(
+		cfg.LineChannelSecret, cfg.LineChannelToken,
+		botRegistry, botCfg, m, log, stickerMgr, intentParser, llmRateLimiter,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("webhook: %w", err)
 	}
 
-	// Setup HTTP server
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -103,14 +155,16 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		scraperClient:  scraperClient,
 		stickerManager: stickerMgr,
 		webhookHandler: webhookHandler,
-		router:         router,
 		bm25Index:      bm25Index,
 		intentParser:   intentParser,
 		queryExpander:  queryExpander,
 		llmRateLimiter: llmRateLimiter,
 	}
 
-	app.setupRoutes()
+	router.GET("/health", app.healthCheck)
+	router.POST("/webhook", webhookHandler.Handle)
+	router.GET("/metrics", gin.WrapH(promhttp.HandlerFor(registry, promhttp.HandlerOpts{})))
+
 	app.server = &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           router,
@@ -122,170 +176,6 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 
 	log.Info("Initialization complete")
 	return app, nil
-}
-
-// initCore initializes core services required by all modules.
-func initCore(ctx context.Context, cfg *config.Config, log *logger.Logger) (
-	*storage.DB,
-	*prometheus.Registry,
-	*metrics.Metrics,
-	*scraper.Client,
-	*sticker.Manager,
-	error,
-) {
-	db, err := storage.New(ctx, cfg.SQLitePath(), cfg.CacheTTL)
-	if err != nil {
-		return nil, nil, nil, nil, nil, fmt.Errorf("database: %w", err)
-	}
-	log.WithField("path", cfg.SQLitePath()).
-		WithField("cache_ttl", cfg.CacheTTL).
-		Info("Database connected")
-
-	registry := prometheus.NewRegistry()
-	registry.MustRegister(
-		collectors.NewGoCollector(),
-		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
-		collectors.NewBuildInfoCollector(),
-	)
-	m := metrics.New(registry)
-
-	scraperClient := scraper.NewClient(cfg.ScraperTimeout, cfg.ScraperMaxRetries)
-	stickerMgr := sticker.NewManager(db, scraperClient, log)
-
-	log.Info("Core services initialized")
-	return db, registry, m, scraperClient, stickerMgr, nil
-}
-
-// initGenAI initializes optional GenAI features.
-// Returns nil values if features are disabled (no error).
-func initGenAI(
-	ctx context.Context,
-	cfg *config.Config,
-	db *storage.DB,
-	log *logger.Logger,
-) (*rag.BM25Index, *genai.GeminiIntentParser, *genai.QueryExpander) {
-	// Initialize BM25 index (independent of Gemini API)
-	syllabi, err := db.GetAllSyllabi(ctx)
-	if err != nil {
-		log.WithError(err).Warn("Failed to load syllabi for BM25")
-		return nil, nil, nil
-	}
-
-	bm25Index := rag.NewBM25Index(log)
-	if len(syllabi) == 0 {
-		log.Warn("No syllabi found, BM25 search disabled")
-		return bm25Index, nil, nil
-	}
-
-	if err := bm25Index.Initialize(syllabi); err != nil {
-		log.WithError(err).Warn("BM25 initialization failed")
-		return bm25Index, nil, nil
-	}
-
-	log.WithField("doc_count", bm25Index.Count()).Info("BM25 index initialized")
-
-	// Initialize Gemini-powered features
-	if cfg.GeminiAPIKey == "" {
-		log.Info("Gemini API key not configured, NLU and query expansion disabled")
-		return bm25Index, nil, nil
-	}
-
-	intentParser, err := genai.NewIntentParser(ctx, cfg.GeminiAPIKey)
-	if err != nil {
-		log.WithError(err).Warn("Intent parser initialization failed")
-		return bm25Index, nil, nil
-	}
-
-	queryExpander, err := genai.NewQueryExpander(ctx, cfg.GeminiAPIKey)
-	if err != nil {
-		log.WithError(err).Warn("Query expander initialization failed")
-		return bm25Index, intentParser, nil
-	}
-
-	log.Info("GenAI features enabled (NLU + query expansion)")
-	return bm25Index, intentParser, queryExpander
-}
-
-// initHandlers creates all bot handlers.
-func initHandlers(
-	db *storage.DB,
-	scraperClient *scraper.Client,
-	m *metrics.Metrics,
-	log *logger.Logger,
-	stickerMgr *sticker.Manager,
-	bm25Index *rag.BM25Index,
-	queryExpander *genai.QueryExpander,
-	llmRateLimiter *ratelimit.LLMRateLimiter,
-) []bot.Handler {
-	idHandler := id.NewHandler(db, scraperClient, m, log, stickerMgr)
-	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerMgr, bm25Index, queryExpander, llmRateLimiter)
-
-	botCfg := config.DefaultBotConfig()
-	contactHandler := contact.NewHandler(
-		db, scraperClient, m, log, stickerMgr,
-		botCfg.MaxContactsPerSearch,
-	)
-
-	log.Info("Bot handlers initialized")
-	return []bot.Handler{contactHandler, courseHandler, idHandler}
-}
-
-// initWebhook creates the webhook handler.
-func initWebhook(
-	ctx context.Context,
-	cfg *config.Config,
-	handlers []bot.Handler,
-	m *metrics.Metrics,
-	log *logger.Logger,
-	stickerMgr *sticker.Manager,
-	intentParser *genai.GeminiIntentParser,
-	llmRateLimiter *ratelimit.LLMRateLimiter,
-) (*webhook.Handler, error) {
-	registry := bot.NewRegistry()
-	for _, h := range handlers {
-		registry.Register(h)
-	}
-
-	botCfg, err := config.LoadBotConfig()
-	if err != nil {
-		return nil, fmt.Errorf("load bot config: %w", err)
-	}
-
-	// Apply environment overrides
-	if cfg.WebhookTimeout != 0 {
-		botCfg.WebhookTimeout = cfg.WebhookTimeout
-	}
-	if cfg.UserRateLimitTokens != 0 {
-		botCfg.UserRateLimitTokens = cfg.UserRateLimitTokens
-	}
-	if cfg.UserRateLimitRefillRate != 0 {
-		botCfg.UserRateLimitRefillRate = cfg.UserRateLimitRefillRate
-	}
-
-	handler, err := webhook.NewHandler(
-		cfg.LineChannelSecret,
-		cfg.LineChannelToken,
-		registry,
-		botCfg,
-		m,
-		log,
-		stickerMgr,
-		intentParser,
-		llmRateLimiter,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create handler: %w", err)
-	}
-
-	log.Info("Webhook handler initialized")
-	return handler, nil
-}
-
-// setupRoutes configures HTTP routes.
-func (a *Application) setupRoutes() {
-	a.router.GET("/health", a.healthCheck)
-	a.router.POST("/webhook", a.webhookHandler.Handle)
-	a.router.GET("/metrics", gin.WrapH(promhttp.HandlerFor(a.registry, promhttp.HandlerOpts{})))
 }
 
 // healthCheck returns service health status.

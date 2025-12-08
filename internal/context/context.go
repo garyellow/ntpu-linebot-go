@@ -88,16 +88,13 @@ func GetRequestID(ctx context.Context) (string, bool) {
 // from the parent context. This is safe for asynchronous operations where the
 // parent context may be canceled or its values may become invalid.
 //
-// Unlike context.WithoutCancel (Go 1.21+), this function:
-//  1. Creates a truly independent context (no reference to parent)
-//  2. Only copies necessary tracing values (userID, chatID, requestID)
-//  3. Prevents memory leaks from holding parent context references
-//  4. Avoids issues with parent values being flushed/closed
+// Unlike context.WithoutCancel (Go 1.21+), this function creates a truly
+// independent context with only the necessary tracing values copied from the
+// parent. This prevents memory leaks from holding parent context references
+// and avoids issues with parent values being flushed or closed.
 //
 // Use this when spawning goroutines that need tracing but should not be
 // affected by parent context cancellation (e.g., LINE webhook async processing).
-//
-// Reference: https://github.com/golang/go/issues/64478
 func PreserveTracing(ctx context.Context) context.Context {
 	newCtx := context.Background()
 

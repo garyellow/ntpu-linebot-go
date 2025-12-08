@@ -8,63 +8,45 @@ import (
 	"time"
 )
 
-// BotConfig centralizes all bot module configuration.
-// This improves maintainability by keeping all constants in one place.
+// BotConfig centralizes bot module configuration.
 type BotConfig struct {
-	// Webhook configuration
-	WebhookTimeout      time.Duration
-	MaxMessagesPerReply int
-	MaxEventsPerWebhook int
-	MinReplyTokenLength int
-	MaxMessageLength    int
-	MaxPostbackDataSize int
-
-	// Rate limiting configuration
+	WebhookTimeout          time.Duration
+	MaxMessagesPerReply     int
+	MaxEventsPerWebhook     int
+	MinReplyTokenLength     int
+	MaxMessageLength        int
+	MaxPostbackDataSize     int
 	UserRateLimitTokens     float64
 	UserRateLimitRefillRate float64
 	LLMRateLimitPerHour     float64
 	GlobalRateLimitRPS      float64
-
-	// Course module configuration
-	MaxCoursesPerSearch  int
-	MaxTitleDisplayChars int
-
-	// ID module configuration
-	MaxStudentsPerSearch int
-	ValidYearStart       int
-	ValidYearEnd         int
-
-	// Contact module configuration
-	MaxContactsPerSearch int
+	MaxCoursesPerSearch     int
+	MaxTitleDisplayChars    int
+	MaxStudentsPerSearch    int
+	ValidYearStart          int
+	ValidYearEnd            int
+	MaxContactsPerSearch    int
 }
 
 // DefaultBotConfig returns default configuration values.
-// LINE API limits: https://developers.line.biz/en/reference/messaging-api/#rate-limits
 func DefaultBotConfig() *BotConfig {
 	return &BotConfig{
-		// Webhook (from LINE API constraints)
-		WebhookTimeout:      WebhookProcessing, // 25 seconds from timeouts.go
-		MaxMessagesPerReply: 5,                 // LINE API limit
-		MaxEventsPerWebhook: 100,               // LINE API limit
-		MinReplyTokenLength: 10,
-		MaxMessageLength:    20000, // LINE API limit
-		MaxPostbackDataSize: 300,   // LINE API limit
-
-		// Rate limiting (based on LINE API limits)
-		UserRateLimitTokens:     6.0,  // 6 tokens per user
-		UserRateLimitRefillRate: 0.2,  // 1 token per 5 seconds
-		LLMRateLimitPerHour:     10.0, // 10 LLM requests per user per hour
-		GlobalRateLimitRPS:      80.0, // 80 RPS (LINE API: 100 RPS, we use 80 for safety)
-
-		// Module limits (optimized for UX)
-		MaxCoursesPerSearch:  40,  // 4 carousels @ 10 bubbles each
-		MaxTitleDisplayChars: 60,  // Optimal display length
-		MaxStudentsPerSearch: 500, // Prevent overwhelming responses
-		MaxContactsPerSearch: 100, // Reasonable contact list size
-
-		// ID module year range (NTPU specific)
-		ValidYearStart: 95,  // 95 學年度
-		ValidYearEnd:   112, // 112 學年度
+		WebhookTimeout:          WebhookProcessing,
+		MaxMessagesPerReply:     5,
+		MaxEventsPerWebhook:     100,
+		MinReplyTokenLength:     10,
+		MaxMessageLength:        20000,
+		MaxPostbackDataSize:     300,
+		UserRateLimitTokens:     6.0,
+		UserRateLimitRefillRate: 0.2,
+		LLMRateLimitPerHour:     10.0,
+		GlobalRateLimitRPS:      80.0,
+		MaxCoursesPerSearch:     40,
+		MaxTitleDisplayChars:    60,
+		MaxStudentsPerSearch:    500,
+		MaxContactsPerSearch:    100,
+		ValidYearStart:          95,
+		ValidYearEnd:            112,
 	}
 }
 

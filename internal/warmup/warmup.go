@@ -78,7 +78,6 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 
 	// Start independent modules concurrently
 	for _, module := range independentModules {
-		module := module
 		if ctx.Err() != nil {
 			return stats, fmt.Errorf("warmup canceled: %w", ctx.Err())
 		}

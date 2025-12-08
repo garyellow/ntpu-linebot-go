@@ -53,7 +53,7 @@ func createStudentsTable(ctx context.Context, db *sql.DB) error {
 	`
 
 	if _, err := db.ExecContext(ctx, query); err != nil {
-		return fmt.Errorf("failed to create students table: %w", err)
+		return fmt.Errorf("create students table: %w", err)
 	}
 
 	return nil
@@ -83,7 +83,7 @@ func createContactsTable(ctx context.Context, db *sql.DB) error {
 	`
 
 	if _, err := db.ExecContext(ctx, query); err != nil {
-		return fmt.Errorf("failed to create contacts table: %w", err)
+		return fmt.Errorf("create contacts table: %w", err)
 	}
 
 	return nil
@@ -112,7 +112,7 @@ func createCoursesTable(ctx context.Context, db *sql.DB) error {
 	`
 
 	if _, err := db.ExecContext(ctx, query); err != nil {
-		return fmt.Errorf("failed to create courses table: %w", err)
+		return fmt.Errorf("create courses table: %w", err)
 	}
 
 	return nil
@@ -129,11 +129,11 @@ func createStickersTable(ctx context.Context, db *sql.DB) error {
 	);
 	CREATE INDEX IF NOT EXISTS idx_stickers_source ON stickers(source);
 	CREATE INDEX IF NOT EXISTS idx_stickers_cached_at ON stickers(cached_at);
-	CREATE INDEX IF NOT EXISTS idx_stickers_success_rate ON stickers(success_count DESC, failure_count ASC);
+	CREATE INDEX IF NOT EXISTS idx_stickers_source ON stickers(source);
 	`
 
 	if _, err := db.ExecContext(ctx, query); err != nil {
-		return fmt.Errorf("failed to create stickers table: %w", err)
+		return fmt.Errorf("create stickers table: %w", err)
 	}
 
 	return nil
@@ -165,7 +165,7 @@ func createHistoricalCoursesTable(ctx context.Context, db *sql.DB) error {
 	`
 
 	if _, err := db.ExecContext(ctx, query); err != nil {
-		return fmt.Errorf("failed to create historical_courses table: %w", err)
+		return fmt.Errorf("create historical_courses table: %w", err)
 	}
 
 	return nil
@@ -201,7 +201,7 @@ func createSyllabiTable(ctx context.Context, db *sql.DB) error {
 	`
 
 	if _, err := db.ExecContext(ctx, query); err != nil {
-		return fmt.Errorf("failed to create syllabi table: %w", err)
+		return fmt.Errorf("create syllabi table: %w", err)
 	}
 
 	return nil
