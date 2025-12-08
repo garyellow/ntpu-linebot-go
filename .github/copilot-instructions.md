@@ -271,9 +271,8 @@ Fallback → getHelpMessage() + Warning Log
 
 ## Key File Locations
 
-- **Entry point**: `cmd/server/main.go` - Application entry point (minimalist, ~28 lines)
-- **Application class**: `internal/container/application.go` - Pure DI with HTTP server, routes, middleware, background jobs
-- **Dependency container**: `internal/container/container.go` - Initialization lifecycle management
+- **Entry point**: `cmd/server/main.go` - Application entry point (minimalist)
+- **Application**: `internal/app/app.go` - Application lifecycle with DI, HTTP server, routes, middleware, background jobs
 - **Webhook handler**: `internal/webhook/handler.go:Handle()` (async processing)
 - **Warmup module**: `internal/warmup/warmup.go` (background cache warming)
 - **Bot module interface**: `internal/bot/handler.go`

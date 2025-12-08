@@ -46,6 +46,7 @@ services:
       - WARMUP_MODULES=${WARMUP_MODULES:-sticker,id,contact,course,syllabus}
       - USER_RATE_LIMIT_TOKENS=${USER_RATE_LIMIT_TOKENS:-6}
       - USER_RATE_LIMIT_REFILL_RATE=${USER_RATE_LIMIT_REFILL_RATE:-0.2}
+      - LLM_RATE_LIMIT_PER_HOUR=${LLM_RATE_LIMIT_PER_HOUR:-50}
     security_opt:
       - no-new-privileges:true
     # Read-only filesystem for enhanced security

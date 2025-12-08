@@ -5,7 +5,7 @@ package contact
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -584,48 +584,67 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 	// Sort contacts based on type:
 	// - Organizations: by hierarchy level (top-level units first, i.e., units without superior field come first)
 	// - Individuals: by match count (descending), then name, title, organization
-	sort.SliceStable(contacts, func(i, j int) bool {
+	slices.SortStableFunc(contacts, func(a, b storage.Contact) int {
 		// Organization comes before individual
-		if contacts[i].Type == "organization" && contacts[j].Type != "organization" {
-			return true
+		aIsOrg := a.Type == "organization"
+		bIsOrg := b.Type == "organization"
+		if aIsOrg && !bIsOrg {
+			return -1
 		}
-		if contacts[i].Type != "organization" && contacts[j].Type == "organization" {
-			return false
+		if !aIsOrg && bIsOrg {
+			return 1
 		}
 
 		// Both are organizations: sort by hierarchy level (superior units first)
 		// Units without superior come first (top-level), then units with superior
-		if contacts[i].Type == "organization" && contacts[j].Type == "organization" {
-			// Unit without superior (top-level) comes before unit with superior
-			iHasSuperior := contacts[i].Superior != ""
-			jHasSuperior := contacts[j].Superior != ""
-			if !iHasSuperior && jHasSuperior {
-				return true
+		if aIsOrg && bIsOrg {
+			aHasSuperior := a.Superior != ""
+			bHasSuperior := b.Superior != ""
+			if !aHasSuperior && bHasSuperior {
+				return -1
 			}
-			if iHasSuperior && !jHasSuperior {
-				return false
+			if aHasSuperior && !bHasSuperior {
+				return 1
 			}
 			// Same level: sort by name
-			return contacts[i].Name < contacts[j].Name
+			if a.Name < b.Name {
+				return -1
+			}
+			if a.Name > b.Name {
+				return 1
+			}
+			return 0
 		}
 
 		// Both are individuals: sort by match count, then name, title, organization
 		if searchTerm != "" {
-			iMatchCount := countMatchRunes(contacts[i], searchTerm)
-			jMatchCount := countMatchRunes(contacts[j], searchTerm)
-			if iMatchCount != jMatchCount {
-				return iMatchCount > jMatchCount // Higher match count first
+			aMatchCount := countMatchRunes(a, searchTerm)
+			bMatchCount := countMatchRunes(b, searchTerm)
+			if aMatchCount != bMatchCount {
+				return bMatchCount - aMatchCount // Higher match count first
 			}
 		}
 
 		// Same match count or no search term: sort by name, then title, then organization
-		if contacts[i].Name != contacts[j].Name {
-			return contacts[i].Name < contacts[j].Name
+		if a.Name != b.Name {
+			if a.Name < b.Name {
+				return -1
+			}
+			return 1
 		}
-		if contacts[i].Title != contacts[j].Title {
-			return contacts[i].Title < contacts[j].Title
+		if a.Title != b.Title {
+			if a.Title < b.Title {
+				return -1
+			}
+			return 1
 		}
-		return contacts[i].Organization < contacts[j].Organization
+		if a.Organization < b.Organization {
+			return -1
+		}
+		if a.Organization > b.Organization {
+			return 1
+		}
+		return 0
 	})
 
 	sender := lineutil.GetSender(senderName, h.stickerManager)
