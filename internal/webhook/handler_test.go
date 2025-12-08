@@ -48,7 +48,7 @@ func setupTestHandler(t *testing.T) *Handler {
 	// Create bot handlers with direct constructor injection
 	idHandler := id.NewHandler(db, scraperClient, m, log, stickerManager)
 	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerManager, 100)
-	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerManager, nil, nil)
+	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerManager, nil, nil, nil)
 
 	// Create bot registry
 	botRegistry := bot.NewRegistry()
@@ -73,6 +73,7 @@ func setupTestHandler(t *testing.T) *Handler {
 		log,
 		stickerManager,
 		nil, // intentParser
+		nil, // llmRateLimiter
 	)
 	if err != nil {
 		t.Fatalf("Failed to create handler: %v", err)

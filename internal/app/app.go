@@ -19,6 +19,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 	"github.com/garyellow/ntpu-linebot-go/internal/rag"
+	"github.com/garyellow/ntpu-linebot-go/internal/ratelimit"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
@@ -50,9 +51,10 @@ type Application struct {
 	server *http.Server
 
 	// GenAI components (for lifecycle management)
-	bm25Index     *rag.BM25Index
-	intentParser  *genai.GeminiIntentParser
-	queryExpander *genai.QueryExpander
+	bm25Index      *rag.BM25Index
+	intentParser   *genai.GeminiIntentParser
+	queryExpander  *genai.QueryExpander
+	llmRateLimiter *ratelimit.LLMRateLimiter
 }
 
 // Initialize creates and initializes a new application with all dependencies.
@@ -70,11 +72,21 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	// Initialize GenAI features (optional)
 	bm25Index, intentParser, queryExpander := initGenAI(ctx, cfg, db, log)
 
+	// Initialize LLM rate limiter for bot handlers
+	botCfg, err := config.LoadBotConfig()
+	if err != nil {
+		return nil, fmt.Errorf("load bot config: %w", err)
+	}
+	if cfg.LLMRateLimitPerHour != 0 {
+		botCfg.LLMRateLimitPerHour = cfg.LLMRateLimitPerHour
+	}
+	llmRateLimiter := ratelimit.NewLLMRateLimiter(botCfg.LLMRateLimitPerHour, 5*time.Minute, m)
+
 	// Initialize bot handlers
-	handlers := initHandlers(db, scraperClient, m, log, stickerMgr, bm25Index, queryExpander)
+	handlers := initHandlers(db, scraperClient, m, log, stickerMgr, bm25Index, queryExpander, llmRateLimiter)
 
 	// Initialize webhook
-	webhookHandler, err := initWebhook(ctx, cfg, handlers, m, log, stickerMgr, intentParser)
+	webhookHandler, err := initWebhook(ctx, cfg, handlers, m, log, stickerMgr, intentParser, llmRateLimiter)
 	if err != nil {
 		return nil, fmt.Errorf("webhook: %w", err)
 	}
@@ -99,6 +111,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		bm25Index:      bm25Index,
 		intentParser:   intentParser,
 		queryExpander:  queryExpander,
+		llmRateLimiter: llmRateLimiter,
 	}
 
 	app.setupRoutes()
@@ -206,9 +219,10 @@ func initHandlers(
 	stickerMgr *sticker.Manager,
 	bm25Index *rag.BM25Index,
 	queryExpander *genai.QueryExpander,
+	llmRateLimiter *ratelimit.LLMRateLimiter,
 ) []bot.Handler {
 	idHandler := id.NewHandler(db, scraperClient, m, log, stickerMgr)
-	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerMgr, bm25Index, queryExpander)
+	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerMgr, bm25Index, queryExpander, llmRateLimiter)
 
 	botCfg := config.DefaultBotConfig()
 	contactHandler := contact.NewHandler(
@@ -229,6 +243,7 @@ func initWebhook(
 	log *logger.Logger,
 	stickerMgr *sticker.Manager,
 	intentParser *genai.GeminiIntentParser,
+	llmRateLimiter *ratelimit.LLMRateLimiter,
 ) (*webhook.Handler, error) {
 	registry := bot.NewRegistry()
 	for _, h := range handlers {
@@ -250,9 +265,6 @@ func initWebhook(
 	if cfg.UserRateLimitRefillRate != 0 {
 		botCfg.UserRateLimitRefillRate = cfg.UserRateLimitRefillRate
 	}
-	if cfg.LLMRateLimitPerHour != 0 {
-		botCfg.LLMRateLimitPerHour = cfg.LLMRateLimitPerHour
-	}
 
 	handler, err := webhook.NewHandler(
 		cfg.LineChannelSecret,
@@ -263,17 +275,10 @@ func initWebhook(
 		log,
 		stickerMgr,
 		intentParser,
+		llmRateLimiter,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create handler: %w", err)
-	}
-
-	// Inject LLM rate limiter into course handler
-	for _, h := range handlers {
-		if ch, ok := h.(*course.Handler); ok {
-			ch.SetLLMRateLimiter(handler.GetLLMRateLimiter())
-			break
-		}
 	}
 
 	log.Info("Webhook handler initialized")
@@ -364,6 +369,10 @@ func (a *Application) shutdown() error {
 		if err := a.intentParser.Close(); err != nil {
 			a.logger.WithError(err).Error("Intent parser close error")
 		}
+	}
+
+	if a.llmRateLimiter != nil {
+		a.llmRateLimiter.Stop()
 	}
 
 	if err := a.db.Close(); err != nil {

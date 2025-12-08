@@ -5,13 +5,13 @@ LINE chatbot for NTPU (National Taipei University) providing student ID lookup, 
 ## 🎯 Architecture Principles
 
 **Core Design:**
-1. **Pure Dependency Injection** - Constructor-based injection with all dependencies explicit
+1. **Pure Dependency Injection** - Constructor-based injection with all dependencies explicit at construction time
 2. **Direct Dependencies** - Handlers use `*storage.DB` directly, interfaces only when truly needed
 3. **Typed Error Handling** - Sentinel errors (`errors.ErrNotFound`) with standard wrapping
 4. **Centralized Configuration** - Bot config with load-time validation
 5. **Context Management** - `ctxpkg.PreserveTracing()` for safe async operations with tracing
 6. **Simplified Registry** - Direct dispatch without middleware overhead
-7. **Clean Initialization** - Core → GenAI → Handlers → Webhook (no recreation)
+7. **Clean Initialization** - Core → GenAI → LLMRateLimiter → Handlers → Webhook (linear flow)
 
 **Code Style:**
 - **Pure DI**: All dependencies via constructors (no functional options)
@@ -74,8 +74,8 @@ LINE Webhook → Gin Handler
 
 **Handler constructor patterns**:
 - **All handlers**: Direct constructors with all dependencies as parameters
-- **Optional dependencies**: Pass nil if feature disabled (e.g., `bm25Index`, `queryExpander`)
-- **Setter injection**: Use `SetXXX()` only for circular dependencies (e.g., `SetLLMRateLimiter()`)
+- **Optional dependencies**: Pass nil if feature disabled (e.g., `bm25Index`, `queryExpander`, `llmRateLimiter`)
+- **No setter injection**: All dependencies passed at construction time to avoid circular dependencies
 
 **Module-specific features**:
 

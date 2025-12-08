@@ -55,7 +55,7 @@ type Handler struct {
 }
 
 // NewHandler creates a new webhook handler.
-// All parameters except intentParser and stickerManager are required.
+// Optional parameters: intentParser, stickerManager, llmRateLimiter (can be nil).
 func NewHandler(
 	channelSecret, channelToken string,
 	registry *bot.Registry,
@@ -64,6 +64,7 @@ func NewHandler(
 	log *logger.Logger,
 	stickerManager *sticker.Manager,
 	intentParser *genai.GeminiIntentParser,
+	llmRateLimiter *ratelimit.LLMRateLimiter,
 ) (*Handler, error) {
 	client, err := messaging_api.NewMessagingApiAPI(channelToken)
 	if err != nil {
@@ -78,6 +79,7 @@ func NewHandler(
 		registry:                registry,
 		stickerManager:          stickerManager,
 		intentParser:            intentParser,
+		llmLimiter:              llmRateLimiter,
 		webhookTimeout:          botCfg.WebhookTimeout,
 		maxMessagesPerReply:     botCfg.MaxMessagesPerReply,
 		maxEventsPerWebhook:     botCfg.MaxEventsPerWebhook,
@@ -89,7 +91,6 @@ func NewHandler(
 
 	h.rateLimiter = NewRateLimiter(botCfg.GlobalRateLimitRPS, botCfg.GlobalRateLimitRPS)
 	h.userLimiter = NewUserRateLimiter(5*time.Minute, m)
-	h.llmLimiter = ratelimit.NewLLMRateLimiter(botCfg.LLMRateLimitPerHour, 5*time.Minute, m)
 
 	return h, nil
 }
@@ -103,13 +104,6 @@ func (h *Handler) Stop() {
 	if h.llmLimiter != nil {
 		h.llmLimiter.Stop()
 	}
-}
-
-// GetLLMRateLimiter returns the LLM rate limiter for sharing with bot modules.
-// This allows course handler to use the same limiter for query expansion,
-// ensuring unified LLM quota management across all AI features.
-func (h *Handler) GetLLMRateLimiter() *ratelimit.LLMRateLimiter {
-	return h.llmLimiter
 }
 
 // Handle processes incoming webhook requests following LINE Best Practice:
@@ -840,6 +834,11 @@ func (h *Handler) handleWithNLU(ctx context.Context, text string, source webhook
 	return h.dispatchIntent(ctx, result)
 }
 
+// intentDispatcher defines the interface for bot handlers that support NLU intent dispatching.
+type intentDispatcher interface {
+	DispatchIntent(ctx context.Context, intent string, params map[string]string) ([]messaging_api.MessageInterface, error)
+}
+
 // dispatchIntent dispatches the parsed intent to the appropriate handler.
 func (h *Handler) dispatchIntent(ctx context.Context, result *genai.ParseResult) ([]messaging_api.MessageInterface, error) {
 	if result.Module == "help" {
@@ -850,11 +849,6 @@ func (h *Handler) dispatchIntent(ctx context.Context, result *genai.ParseResult)
 	if handler == nil {
 		h.logger.WithField("module", result.Module).Warn("Unknown module from NLU")
 		return h.getHelpMessage(), nil
-	}
-
-	// All handlers support DispatchIntent method
-	type intentDispatcher interface {
-		DispatchIntent(ctx context.Context, intent string, params map[string]string) ([]messaging_api.MessageInterface, error)
 	}
 
 	dispatcher, ok := handler.(intentDispatcher)

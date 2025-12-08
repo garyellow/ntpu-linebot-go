@@ -30,16 +30,15 @@ import (
 
 // Handler handles course-related queries.
 // It depends on *storage.DB directly for data access.
-// Interfaces are only used for external dependencies (scraper, metrics).
 type Handler struct {
-	db             *storage.DB // Database for course and syllabus data
+	db             *storage.DB
 	scraper        *scraper.Client
 	metrics        *metrics.Metrics
 	logger         *logger.Logger
 	stickerManager *sticker.Manager
-	bm25Index      *rag.BM25Index            // Optional: for BM25 search (nil if disabled)
-	queryExpander  *genai.QueryExpander      // Optional: for query expansion (nil if disabled)
-	llmRateLimiter *ratelimit.LLMRateLimiter // Optional: for LLM rate limiting (nil if disabled)
+	bm25Index      *rag.BM25Index
+	queryExpander  *genai.QueryExpander
+	llmRateLimiter *ratelimit.LLMRateLimiter
 }
 
 // Name returns the module name
@@ -105,7 +104,7 @@ var (
 )
 
 // NewHandler creates a new course handler with required dependencies.
-// bm25Index and queryExpander are optional (can be nil).
+// Optional dependencies (bm25Index, queryExpander, llmRateLimiter) can be nil.
 func NewHandler(
 	db *storage.DB,
 	scraper *scraper.Client,
@@ -114,6 +113,7 @@ func NewHandler(
 	stickerManager *sticker.Manager,
 	bm25Index *rag.BM25Index,
 	queryExpander *genai.QueryExpander,
+	llmRateLimiter *ratelimit.LLMRateLimiter,
 ) *Handler {
 	return &Handler{
 		db:             db,
@@ -123,19 +123,13 @@ func NewHandler(
 		stickerManager: stickerManager,
 		bm25Index:      bm25Index,
 		queryExpander:  queryExpander,
+		llmRateLimiter: llmRateLimiter,
 	}
 }
 
 // IsBM25SearchEnabled returns true if BM25 search is enabled.
 func (h *Handler) IsBM25SearchEnabled() bool {
 	return h.bm25Index != nil && h.bm25Index.IsEnabled()
-}
-
-// SetLLMRateLimiter sets the LLM rate limiter after handler construction.
-// This is called by the container after webhook handler is created,
-// because the limiter is owned by the webhook handler.
-func (h *Handler) SetLLMRateLimiter(limiter *ratelimit.LLMRateLimiter) {
-	h.llmRateLimiter = limiter
 }
 
 // Intent names for NLU dispatcher
