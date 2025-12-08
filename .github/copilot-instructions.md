@@ -86,9 +86,6 @@ LINE Webhook → Gin Handler
 - **Query expansion**: LLM-based expansion for short queries and technical abbreviations (AWS→雲端運算, AI→人工智慧)
 - **Detached context**: Uses `ctxpkg.PreserveTracing()` to prevent request context cancellation from aborting API calls (safer than WithoutCancel)
 - **Fallback**: Precise search → BM25 smart search (when no results and BM25Index enabled)
-- **UX terminology**: Uses "精確搜尋" (precise) for keyword search, "智慧搜尋" (smart) for BM25 search雲端運算, AI→人工智慧)
-- **Detached context**: Uses `context.WithoutCancel()` to prevent request context cancellation from aborting API calls
-- **Fallback**: Precise search → BM25 smart search (when no results and BM25Index enabled)
 - **UX terminology**: Uses "精確搜尋" (precise) for keyword search, "智慧搜尋" (smart) for BM25 search
 
 **Contact Module**: Emergency phones (hardcoded), multilingual keywords, organization/individual contacts, Flex Message cards

@@ -36,21 +36,16 @@ type Application struct {
 	cfg    *config.Config
 	logger *logger.Logger
 
-	// Core services
 	db             *storage.DB
 	metrics        *metrics.Metrics
 	registry       *prometheus.Registry
 	scraperClient  *scraper.Client
 	stickerManager *sticker.Manager
-
-	// Webhook handler
 	webhookHandler *webhook.Handler
 
-	// HTTP server
 	router *gin.Engine
 	server *http.Server
 
-	// GenAI components (for lifecycle management)
 	bm25Index      *rag.BM25Index
 	intentParser   *genai.GeminiIntentParser
 	queryExpander  *genai.QueryExpander
@@ -176,15 +171,17 @@ func initGenAI(
 	}
 
 	bm25Index := rag.NewBM25Index(log)
-	if len(syllabi) > 0 {
-		if err := bm25Index.Initialize(syllabi); err != nil {
-			log.WithError(err).Warn("BM25 initialization failed")
-		} else {
-			log.WithField("doc_count", bm25Index.Count()).Info("BM25 index initialized")
-		}
-	} else {
+	if len(syllabi) == 0 {
 		log.Warn("No syllabi found, BM25 search disabled")
+		return bm25Index, nil, nil
 	}
+
+	if err := bm25Index.Initialize(syllabi); err != nil {
+		log.WithError(err).Warn("BM25 initialization failed")
+		return bm25Index, nil, nil
+	}
+
+	log.WithField("doc_count", bm25Index.Count()).Info("BM25 index initialized")
 
 	// Initialize Gemini-powered features
 	if cfg.GeminiAPIKey == "" {
@@ -197,16 +194,14 @@ func initGenAI(
 		log.WithError(err).Warn("Intent parser initialization failed")
 		return bm25Index, nil, nil
 	}
-	log.Info("Intent parser enabled")
 
 	queryExpander, err := genai.NewQueryExpander(ctx, cfg.GeminiAPIKey)
 	if err != nil {
 		log.WithError(err).Warn("Query expander initialization failed")
 		return bm25Index, intentParser, nil
 	}
-	log.Info("Query expander enabled")
 
-	log.Info("GenAI features enabled")
+	log.Info("GenAI features enabled (NLU + query expansion)")
 	return bm25Index, intentParser, queryExpander
 }
 
@@ -359,25 +354,25 @@ func (a *Application) shutdown() error {
 		a.logger.WithError(err).Error("Server shutdown error")
 	}
 
+	// Close components in reverse initialization order
 	if a.queryExpander != nil {
 		if err := a.queryExpander.Close(); err != nil {
-			a.logger.WithError(err).Error("Query expander close error")
+			a.logger.WithError(err).WithField("component", "query_expander").Error("Component close error")
 		}
 	}
 
 	if a.intentParser != nil {
 		if err := a.intentParser.Close(); err != nil {
-			a.logger.WithError(err).Error("Intent parser close error")
+			a.logger.WithError(err).WithField("component", "intent_parser").Error("Component close error")
 		}
+	}
+
+	if err := a.db.Close(); err != nil {
+		a.logger.WithError(err).WithField("component", "database").Error("Component close error")
 	}
 
 	if a.llmRateLimiter != nil {
 		a.llmRateLimiter.Stop()
-	}
-
-	if err := a.db.Close(); err != nil {
-		a.logger.WithError(err).Error("Database close error")
-		return err
 	}
 
 	a.logger.Info("Shutdown complete")

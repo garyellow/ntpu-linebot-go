@@ -2,6 +2,7 @@ package bot
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -50,7 +51,6 @@ func DecodePostback(data string) (*PostbackData, error) {
 
 // LegacyDecodePostback handles old string-based format for backward compatibility.
 // Format: "module:action$param1$param2"
-// This should be removed once all messages are migrated to JSON format.
 func LegacyDecodePostback(data string) (*PostbackData, error) {
 	parts := strings.SplitN(data, ":", 2)
 	if len(parts) != 2 {
@@ -94,5 +94,5 @@ func ParsePostback(data string) (*PostbackData, error) {
 		return pb, nil
 	}
 
-	return nil, fmt.Errorf("failed to parse postback (JSON: %w, Legacy: %w)", err, legacyErr)
+	return nil, fmt.Errorf("invalid postback format: %w", errors.Join(err, legacyErr))
 }

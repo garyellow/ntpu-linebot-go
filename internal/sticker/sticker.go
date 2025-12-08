@@ -31,11 +31,10 @@ type Manager struct {
 // NewManager creates a new sticker manager with database persistence
 func NewManager(db *storage.DB, client *scraper.Client, log *logger.Logger) *Manager {
 	return &Manager{
-		stickers: make([]string, 0),
-		loaded:   false,
-		db:       db,
-		client:   client,
-		logger:   log,
+		loaded: false,
+		db:     db,
+		client: client,
+		logger: log,
 	}
 }
 
@@ -98,7 +97,7 @@ func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
 					results <- result{source: "spy_family", err: fmt.Errorf("panic: %v", r)}
 				}
 			}()
-			stickers, err := m.fetchWithRetry(ctx, u, "spy_family", m.fetchSpyFamilyStickers, 3)
+			stickers, err := m.fetchWithRetry(ctx, u, m.fetchSpyFamilyStickers, 3)
 			results <- result{stickers: stickers, source: "spy_family", err: err}
 		}(url)
 	}
@@ -111,12 +110,12 @@ func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
 				results <- result{source: "ichigo", err: fmt.Errorf("panic: %v", r)}
 			}
 		}()
-		stickers, err := m.fetchWithRetry(ctx, ichigoURL, "ichigo", m.fetchIchigoStickers, 3)
+		stickers, err := m.fetchWithRetry(ctx, ichigoURL, m.fetchIchigoStickers, 3)
 		results <- result{stickers: stickers, source: "ichigo", err: err}
 	}()
 
 	// Collect results
-	allStickers := make([]string, 0)
+	var allStickers []string
 	successCount := 0
 	errorCount := 0
 
@@ -182,7 +181,7 @@ func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
 }
 
 // fetchWithRetry retries fetching with exponential backoff
-func (m *Manager) fetchWithRetry(ctx context.Context, url, _ string, fetchFunc func(context.Context, *scraper.Client, string) ([]string, error), maxRetries int) ([]string, error) {
+func (m *Manager) fetchWithRetry(ctx context.Context, url string, fetchFunc func(context.Context, *scraper.Client, string) ([]string, error), maxRetries int) ([]string, error) {
 	var lastErr error
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
@@ -236,7 +235,7 @@ func (m *Manager) fetchSpyFamilyStickers(ctx context.Context, client *scraper.Cl
 		return nil, fmt.Errorf("failed to fetch Spy Family stickers from %s: %w", url, err)
 	}
 
-	stickers := make([]string, 0)
+	var stickers []string
 	baseURL := "https://spy-family.net/tvseries/"
 
 	doc.Find("ul.icondlLists a[href$='.png']").Each(func(i int, s *goquery.Selection) {

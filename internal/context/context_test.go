@@ -6,29 +6,42 @@ import (
 )
 
 func TestUserIDContext(t *testing.T) {
-	ctx := context.Background()
+	t.Parallel()
 
-	// Test empty context with GetUserID
-	if userID := GetUserID(ctx); userID != "" {
-		t.Errorf("Expected empty string, got %s", userID)
-	}
+	t.Run("empty context", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+		if userID := GetUserID(ctx); userID != "" {
+			t.Errorf("Expected empty string, got %s", userID)
+		}
+	})
 
-	// Test WithUserID and GetUserID
-	expectedUserID := "U1234567890"
-	ctx = WithUserID(ctx, expectedUserID)
-	userID := GetUserID(ctx)
-	if userID != expectedUserID {
-		t.Errorf("Expected userID %s, got %s", expectedUserID, userID)
-	}
+	t.Run("with user ID", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+		expectedUserID := "U1234567890"
+		ctx = WithUserID(ctx, expectedUserID)
+		userID := GetUserID(ctx)
+		if userID != expectedUserID {
+			t.Errorf("Expected userID %s, got %s", expectedUserID, userID)
+		}
+	})
 
-	// Test MustGetUserID
-	userID2 := MustGetUserID(ctx)
-	if userID2 != expectedUserID {
-		t.Errorf("Expected userID %s, got %s", expectedUserID, userID2)
-	}
+	t.Run("must get user ID", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+		expectedUserID := "U1234567890"
+		ctx = WithUserID(ctx, expectedUserID)
+		userID := MustGetUserID(ctx)
+		if userID != expectedUserID {
+			t.Errorf("Expected userID %s, got %s", expectedUserID, userID)
+		}
+	})
 }
 
 func TestMustGetUserID_Panic(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	defer func() {
@@ -41,29 +54,42 @@ func TestMustGetUserID_Panic(t *testing.T) {
 }
 
 func TestChatIDContext(t *testing.T) {
-	ctx := context.Background()
+	t.Parallel()
 
-	// Test empty context with GetChatID
-	if chatID := GetChatID(ctx); chatID != "" {
-		t.Errorf("Expected empty string, got %s", chatID)
-	}
+	t.Run("empty context", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+		if chatID := GetChatID(ctx); chatID != "" {
+			t.Errorf("Expected empty string, got %s", chatID)
+		}
+	})
 
-	// Test WithChatID and GetChatID
-	expectedChatID := "C1234567890"
-	ctx = WithChatID(ctx, expectedChatID)
-	chatID := GetChatID(ctx)
-	if chatID != expectedChatID {
-		t.Errorf("Expected chatID %s, got %s", expectedChatID, chatID)
-	}
+	t.Run("with chat ID", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+		expectedChatID := "C1234567890"
+		ctx = WithChatID(ctx, expectedChatID)
+		chatID := GetChatID(ctx)
+		if chatID != expectedChatID {
+			t.Errorf("Expected chatID %s, got %s", expectedChatID, chatID)
+		}
+	})
 
-	// Test MustGetChatID
-	chatID2 := MustGetChatID(ctx)
-	if chatID2 != expectedChatID {
-		t.Errorf("Expected chatID %s, got %s", expectedChatID, chatID2)
-	}
+	t.Run("must get chat ID", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+		expectedChatID := "C1234567890"
+		ctx = WithChatID(ctx, expectedChatID)
+		chatID := MustGetChatID(ctx)
+		if chatID != expectedChatID {
+			t.Errorf("Expected chatID %s, got %s", expectedChatID, chatID)
+		}
+	})
 }
 
 func TestMustGetChatID_Panic(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	defer func() {
@@ -76,23 +102,29 @@ func TestMustGetChatID_Panic(t *testing.T) {
 }
 
 func TestRequestIDContext(t *testing.T) {
-	ctx := context.Background()
+	t.Parallel()
 
-	// Test empty context
-	if requestID, ok := GetRequestID(ctx); ok || requestID != "" {
-		t.Error("Expected GetRequestID to return empty string and false for empty context")
-	}
+	t.Run("empty context", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+		if requestID, ok := GetRequestID(ctx); ok || requestID != "" {
+			t.Error("Expected GetRequestID to return empty string and false for empty context")
+		}
+	})
 
-	// Test WithRequestID and GetRequestID
-	expectedRequestID := "req-12345"
-	ctx = WithRequestID(ctx, expectedRequestID)
-	requestID, ok := GetRequestID(ctx)
-	if !ok {
-		t.Error("Expected GetRequestID to return true")
-	}
-	if requestID != expectedRequestID {
-		t.Errorf("Expected requestID %s, got %s", expectedRequestID, requestID)
-	}
+	t.Run("with request ID", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+		expectedRequestID := "req-12345"
+		ctx = WithRequestID(ctx, expectedRequestID)
+		requestID, ok := GetRequestID(ctx)
+		if !ok {
+			t.Error("Expected GetRequestID to return true")
+		}
+		if requestID != expectedRequestID {
+			t.Errorf("Expected requestID %s, got %s", expectedRequestID, requestID)
+		}
+	})
 }
 
 func TestModuleContext(t *testing.T) {

@@ -4,6 +4,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -98,38 +99,44 @@ func Load() (*Config, error) {
 
 // Validate checks if required configuration values are set
 func (c *Config) Validate() error {
+	var errs []error
+
 	if c.LineChannelToken == "" {
-		return fmt.Errorf("LINE_CHANNEL_ACCESS_TOKEN is required")
+		errs = append(errs, fmt.Errorf("LINE_CHANNEL_ACCESS_TOKEN is required"))
 	}
 	if c.LineChannelSecret == "" {
-		return fmt.Errorf("LINE_CHANNEL_SECRET is required")
+		errs = append(errs, fmt.Errorf("LINE_CHANNEL_SECRET is required"))
 	}
 	if c.Port == "" {
-		return fmt.Errorf("PORT is required")
+		errs = append(errs, fmt.Errorf("PORT is required"))
 	}
 	if c.WebhookTimeout <= 0 {
-		return fmt.Errorf("WEBHOOK_TIMEOUT must be positive")
+		errs = append(errs, fmt.Errorf("WEBHOOK_TIMEOUT must be positive, got %v", c.WebhookTimeout))
 	}
 	if c.UserRateLimitTokens <= 0 {
-		return fmt.Errorf("USER_RATE_LIMIT_TOKENS must be positive")
+		errs = append(errs, fmt.Errorf("USER_RATE_LIMIT_TOKENS must be positive, got %v", c.UserRateLimitTokens))
 	}
 	if c.UserRateLimitRefillRate <= 0 {
-		return fmt.Errorf("USER_RATE_LIMIT_REFILL_RATE must be positive")
+		errs = append(errs, fmt.Errorf("USER_RATE_LIMIT_REFILL_RATE must be positive, got %v", c.UserRateLimitRefillRate))
 	}
 	if c.LLMRateLimitPerHour <= 0 {
-		return fmt.Errorf("LLM_RATE_LIMIT_PER_HOUR must be positive")
+		errs = append(errs, fmt.Errorf("LLM_RATE_LIMIT_PER_HOUR must be positive, got %v", c.LLMRateLimitPerHour))
 	}
 	if c.DataDir == "" {
-		return fmt.Errorf("DATA_DIR is required")
+		errs = append(errs, fmt.Errorf("DATA_DIR is required"))
 	}
 	if c.CacheTTL <= 0 {
-		return fmt.Errorf("CACHE_TTL must be positive")
+		errs = append(errs, fmt.Errorf("CACHE_TTL must be positive, got %v", c.CacheTTL))
 	}
 	if c.ScraperTimeout <= 0 {
-		return fmt.Errorf("SCRAPER_TIMEOUT must be positive")
+		errs = append(errs, fmt.Errorf("SCRAPER_TIMEOUT must be positive, got %v", c.ScraperTimeout))
 	}
 	if c.ScraperMaxRetries < 0 {
-		return fmt.Errorf("SCRAPER_MAX_RETRIES cannot be negative")
+		errs = append(errs, fmt.Errorf("SCRAPER_MAX_RETRIES cannot be negative, got %d", c.ScraperMaxRetries))
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
 	}
 	return nil
 }

@@ -153,7 +153,7 @@ func ScrapeStudentsByYear(ctx context.Context, client *scraper.Client, year int,
 		return nil, fmt.Errorf("context canceled before scraping students: %w", err)
 	}
 
-	students := make([]*storage.Student, 0)
+	var students []*storage.Student
 
 	// Get working base URL with failover support
 	baseURL, err := lmsCache(ctx, client)

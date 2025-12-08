@@ -45,14 +45,6 @@ func (e *ValidationError) Error() string {
 	return fmt.Sprintf("validation failed on %s: %s", e.Field, e.Message)
 }
 
-// NewValidationError creates a new validation error.
-func NewValidationError(field, message string) *ValidationError {
-	return &ValidationError{
-		Field:   field,
-		Message: message,
-	}
-}
-
 // ScraperError represents web scraping failures with context.
 type ScraperError struct {
 	URL        string
@@ -69,13 +61,4 @@ func (e *ScraperError) Error() string {
 
 func (e *ScraperError) Unwrap() error {
 	return e.Err
-}
-
-// NewScraperError creates a new scraper error.
-func NewScraperError(url string, statusCode int, err error) *ScraperError {
-	return &ScraperError{
-		URL:        url,
-		StatusCode: statusCode,
-		Err:        err,
-	}
 }

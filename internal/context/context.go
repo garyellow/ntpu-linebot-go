@@ -7,15 +7,12 @@ import (
 	"context"
 )
 
-// contextKey is a private type to prevent context key collisions.
-// Using an unexported type ensures that keys defined in this package
-// cannot conflict with keys defined in other packages.
-type contextKey int
+type contextKey string
 
 const (
-	userIDKey contextKey = iota
-	chatIDKey
-	requestIDKey
+	userIDKey    contextKey = "context.userID"
+	chatIDKey    contextKey = "context.chatID"
+	requestIDKey contextKey = "context.requestID"
 )
 
 // WithUserID adds a user ID to the context.

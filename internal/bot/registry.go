@@ -16,8 +16,8 @@ type Registry struct {
 // NewRegistry creates a new handler registry with pre-allocated capacity.
 func NewRegistry() *Registry {
 	return &Registry{
-		handlers:   make([]Handler, 0, 3), // Pre-allocate for typical handler count
-		handlerMap: make(map[string]Handler, 3),
+		handlers:   make([]Handler, 0, 4), // Pre-allocate for current handlers (id, course, contact) + future growth
+		handlerMap: make(map[string]Handler, 4),
 	}
 }
 

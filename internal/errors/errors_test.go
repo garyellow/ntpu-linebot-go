@@ -46,6 +46,7 @@ func TestSentinelErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := errors.Is(tt.err, tt.sentinel)
 			if result != tt.shouldMatch {
 				t.Errorf("errors.Is() = %v, want %v", result, tt.shouldMatch)
@@ -55,7 +56,11 @@ func TestSentinelErrors(t *testing.T) {
 }
 
 func TestValidationError(t *testing.T) {
-	err := NewValidationError("email", "invalid format")
+	t.Parallel()
+	err := &ValidationError{
+		Field:   "email",
+		Message: "invalid format",
+	}
 
 	if err.Field != "email" {
 		t.Errorf("expected field 'email', got '%s'", err.Field)
@@ -72,8 +77,13 @@ func TestValidationError(t *testing.T) {
 }
 
 func TestScraperError(t *testing.T) {
+	t.Parallel()
 	baseErr := errors.New("connection timeout")
-	err := NewScraperError("https://example.com", 500, baseErr)
+	err := &ScraperError{
+		URL:        "https://example.com",
+		StatusCode: 500,
+		Err:        baseErr,
+	}
 
 	if err.URL != "https://example.com" {
 		t.Errorf("expected URL 'https://example.com', got '%s'", err.URL)
@@ -92,8 +102,11 @@ func TestScraperError(t *testing.T) {
 		t.Error("expected non-empty error message")
 	}
 
-	// Test without status code
-	err2 := NewScraperError("https://example.com", 0, baseErr)
+	err2 := &ScraperError{
+		URL:        "https://example.com",
+		StatusCode: 0,
+		Err:        baseErr,
+	}
 	errMsg2 := err2.Error()
 	if errMsg2 == "" {
 		t.Error("expected non-empty error message")

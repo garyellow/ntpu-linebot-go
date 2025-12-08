@@ -22,15 +22,15 @@ type Contact struct {
 	UID          string `json:"uid"`
 	Type         string `json:"type"` // "individual" or "organization"
 	Name         string `json:"name"`
-	NameEn       string `json:"name_en,omitempty"` // English name (if different from Chinese)
-	Organization string `json:"organization,omitempty"`
-	Title        string `json:"title,omitempty"`
-	Extension    string `json:"extension,omitempty"`
-	Email        string `json:"email,omitempty"`
-	Phone        string `json:"phone,omitempty"`
-	Website      string `json:"website,omitempty"`
-	Location     string `json:"location,omitempty"`
-	Superior     string `json:"superior,omitempty"`
+	NameEn       string `json:"name_en,omitzero"`
+	Organization string `json:"organization,omitzero"`
+	Title        string `json:"title,omitzero"`
+	Extension    string `json:"extension,omitzero"`
+	Email        string `json:"email,omitzero"`
+	Phone        string `json:"phone,omitzero"`
+	Website      string `json:"website,omitzero"`
+	Location     string `json:"location,omitzero"`
+	Superior     string `json:"superior,omitzero"`
 	CachedAt     int64  `json:"cached_at"`
 }
 
@@ -42,11 +42,11 @@ type Course struct {
 	No          string   `json:"no"`
 	Title       string   `json:"title"`
 	Teachers    []string `json:"teachers"`
-	TeacherURLs []string `json:"teacher_urls,omitempty"` // Teacher course table URLs
+	TeacherURLs []string `json:"teacher_urls,omitzero"`
 	Times       []string `json:"times"`
 	Locations   []string `json:"locations"`
-	DetailURL   string   `json:"detail_url,omitempty"`
-	Note        string   `json:"note,omitempty"`
+	DetailURL   string   `json:"detail_url,omitzero"`
+	Note        string   `json:"note,omitzero"`
 	CachedAt    int64    `json:"cached_at"`
 }
 
