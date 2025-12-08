@@ -1,94 +1,9 @@
 // Package config provides centralized configuration management for bot modules.
 package config
 
-import (
-	"fmt"
-	"os"
-	"strconv"
-	"time"
-)
+import "fmt"
 
-// BotConfig centralizes bot module configuration.
-type BotConfig struct {
-	WebhookTimeout          time.Duration
-	MaxMessagesPerReply     int
-	MaxEventsPerWebhook     int
-	MinReplyTokenLength     int
-	MaxMessageLength        int
-	MaxPostbackDataSize     int
-	UserRateLimitTokens     float64
-	UserRateLimitRefillRate float64
-	LLMRateLimitPerHour     float64
-	GlobalRateLimitRPS      float64
-	MaxCoursesPerSearch     int
-	MaxTitleDisplayChars    int
-	MaxStudentsPerSearch    int
-	ValidYearStart          int
-	ValidYearEnd            int
-	MaxContactsPerSearch    int
-}
-
-// DefaultBotConfig returns default configuration values.
-func DefaultBotConfig() *BotConfig {
-	return &BotConfig{
-		WebhookTimeout:          WebhookProcessing,
-		MaxMessagesPerReply:     5,
-		MaxEventsPerWebhook:     100,
-		MinReplyTokenLength:     10,
-		MaxMessageLength:        20000,
-		MaxPostbackDataSize:     300,
-		UserRateLimitTokens:     6.0,
-		UserRateLimitRefillRate: 0.2,
-		LLMRateLimitPerHour:     10.0,
-		GlobalRateLimitRPS:      80.0,
-		MaxCoursesPerSearch:     40,
-		MaxTitleDisplayChars:    60,
-		MaxStudentsPerSearch:    500,
-		MaxContactsPerSearch:    100,
-		ValidYearStart:          95,
-		ValidYearEnd:            112,
-	}
-}
-
-// LoadBotConfig loads configuration from environment variables.
-// Falls back to defaults if environment variables are not set.
-// Validates configuration before returning.
-func LoadBotConfig() (*BotConfig, error) {
-	cfg := DefaultBotConfig()
-
-	// Allow environment variable overrides
-	if v := os.Getenv("BOT_MAX_COURSES"); v != "" {
-		if val, err := strconv.Atoi(v); err == nil && val > 0 {
-			cfg.MaxCoursesPerSearch = val
-		}
-	}
-
-	if v := os.Getenv("BOT_MAX_STUDENTS"); v != "" {
-		if val, err := strconv.Atoi(v); err == nil && val > 0 {
-			cfg.MaxStudentsPerSearch = val
-		}
-	}
-
-	if v := os.Getenv("BOT_LLM_RATE_LIMIT"); v != "" {
-		if val, err := strconv.ParseFloat(v, 64); err == nil && val > 0 {
-			cfg.LLMRateLimitPerHour = val
-		}
-	}
-
-	if v := os.Getenv("BOT_GLOBAL_RPS"); v != "" {
-		if val, err := strconv.ParseFloat(v, 64); err == nil && val > 0 {
-			cfg.GlobalRateLimitRPS = val
-		}
-	}
-
-	if err := cfg.Validate(); err != nil {
-		return nil, fmt.Errorf("config validation failed: %w", err)
-	}
-
-	return cfg, nil
-}
-
-// Validate checks if the configuration is valid.
+// Validate checks if the bot configuration is valid.
 // Returns error describing validation failures.
 func (c *BotConfig) Validate() error {
 	if c.WebhookTimeout <= 0 {

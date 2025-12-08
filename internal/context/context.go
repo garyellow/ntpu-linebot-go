@@ -84,17 +84,26 @@ func GetRequestID(ctx context.Context) (string, bool) {
 	return requestID, ok
 }
 
-// PreserveTracing creates a new detached context that preserves tracing values
-// from the parent context. This is safe for asynchronous operations where the
-// parent context may be canceled or its values may become invalid.
+// MustGetRequestID retrieves the request ID from the context.
+// Panics if the request ID is not found.
+func MustGetRequestID(ctx context.Context) string {
+	requestID, ok := ctx.Value(requestIDKey).(string)
+	if !ok || requestID == "" {
+		panic("context: requestID not found")
+	}
+	return requestID
+}
+
+// PreserveTracing creates a detached context that preserves tracing values.
+// The new context is independent of the parent's cancellation and deadlines.
 //
-// Unlike context.WithoutCancel (Go 1.21+), this function creates a truly
-// independent context with only the necessary tracing values copied from the
-// parent. This prevents memory leaks from holding parent context references
-// and avoids issues with parent values being flushed or closed.
+// This is safer than context.WithoutCancel for long-running operations because:
+// 1. No parent context reference is held (prevents memory leaks)
+// 2. Only essential tracing values are copied
+// 3. Parent value mutations don't affect the new context
 //
-// Use this when spawning goroutines that need tracing but should not be
-// affected by parent context cancellation (e.g., LINE webhook async processing).
+// Use for async operations that need tracing but must outlive the parent context
+// (e.g., LINE webhook processing that continues after HTTP response is sent).
 func PreserveTracing(ctx context.Context) context.Context {
 	newCtx := context.Background()
 

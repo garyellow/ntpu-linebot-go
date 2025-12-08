@@ -11,6 +11,9 @@ import (
 	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
+	"github.com/garyellow/ntpu-linebot-go/internal/bot/contact"
+	"github.com/garyellow/ntpu-linebot-go/internal/bot/course"
+	"github.com/garyellow/ntpu-linebot-go/internal/bot/id"
 	"github.com/garyellow/ntpu-linebot-go/internal/config"
 	ctxpkg "github.com/garyellow/ntpu-linebot-go/internal/context"
 	"github.com/garyellow/ntpu-linebot-go/internal/genai"
@@ -408,7 +411,7 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 	if len(text) == 0 {
 		return nil, nil // Empty message, ignore
 	}
-	maxLen := config.DefaultBotConfig().MaxMessageLength
+	maxLen := 20000 // LINE API limit
 	if len(text) > maxLen {
 		h.logger.Warnf("Text message too long: %d characters", len(text))
 		sender := lineutil.GetSender("系統小幫手", h.stickerManager)
@@ -834,11 +837,6 @@ func (h *Handler) handleWithNLU(ctx context.Context, text string, source webhook
 	return h.dispatchIntent(ctx, result)
 }
 
-// intentDispatcher defines the interface for bot handlers that support NLU intent dispatching.
-type intentDispatcher interface {
-	DispatchIntent(ctx context.Context, intent string, params map[string]string) ([]messaging_api.MessageInterface, error)
-}
-
 // dispatchIntent dispatches the parsed intent to the appropriate handler.
 func (h *Handler) dispatchIntent(ctx context.Context, result *genai.ParseResult) ([]messaging_api.MessageInterface, error) {
 	if result.Module == "help" {
@@ -851,18 +849,42 @@ func (h *Handler) dispatchIntent(ctx context.Context, result *genai.ParseResult)
 		return h.getHelpMessage(), nil
 	}
 
-	dispatcher, ok := handler.(intentDispatcher)
-	if !ok {
-		h.logger.WithField("module", result.Module).Warn("Handler missing DispatchIntent method")
+	// Dispatch to concrete handler type using switch for explicit routing
+	switch result.Module {
+	case "course":
+		if ch, ok := handler.(*course.Handler); ok {
+			msgs, err := ch.DispatchIntent(ctx, result.Intent, result.Params)
+			if err != nil {
+				h.logger.WithError(err).WithField("intent", result.Intent).Warn("Course dispatch failed")
+				return h.getHelpMessage(), nil
+			}
+			return msgs, nil
+		}
+	case "id":
+		if ih, ok := handler.(*id.Handler); ok {
+			msgs, err := ih.DispatchIntent(ctx, result.Intent, result.Params)
+			if err != nil {
+				h.logger.WithError(err).WithField("intent", result.Intent).Warn("ID dispatch failed")
+				return h.getHelpMessage(), nil
+			}
+			return msgs, nil
+		}
+	case "contact":
+		if coh, ok := handler.(*contact.Handler); ok {
+			msgs, err := coh.DispatchIntent(ctx, result.Intent, result.Params)
+			if err != nil {
+				h.logger.WithError(err).WithField("intent", result.Intent).Warn("Contact dispatch failed")
+				return h.getHelpMessage(), nil
+			}
+			return msgs, nil
+		}
+	default:
+		h.logger.WithField("module", result.Module).Warn("Unsupported module for NLU dispatch")
 		return h.getHelpMessage(), nil
 	}
 
-	msgs, err := dispatcher.DispatchIntent(ctx, result.Intent, result.Params)
-	if err != nil {
-		h.logger.WithError(err).WithField("intent", result.Intent).Warn("Dispatch failed")
-		return h.getHelpMessage(), nil
-	}
-	return msgs, nil
+	h.logger.WithField("module", result.Module).Error("Type assertion failed for registered handler")
+	return h.getHelpMessage(), nil
 }
 
 // getDetailedInstructionMessages returns detailed instruction messages
@@ -875,11 +897,8 @@ func (h *Handler) getDetailedInstructionMessages() []messaging_api.MessageInterf
 
 	smartEnabled := false
 	if ch := h.registry.GetHandler("course"); ch != nil {
-		type smartSearcher interface {
-			IsBM25SearchEnabled() bool
-		}
-		if ss, ok := ch.(smartSearcher); ok {
-			smartEnabled = ss.IsBM25SearchEnabled()
+		if courseHandler, ok := ch.(*course.Handler); ok {
+			smartEnabled = courseHandler.IsBM25SearchEnabled()
 		}
 	}
 

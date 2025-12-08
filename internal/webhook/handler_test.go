@@ -57,18 +57,31 @@ func setupTestHandler(t *testing.T) *Handler {
 	botRegistry.Register(idHandler)
 
 	// Create bot config for testing
-	botCfg := config.DefaultBotConfig()
-	botCfg.WebhookTimeout = 30 * time.Second
-	botCfg.UserRateLimitTokens = 6.0
-	botCfg.UserRateLimitRefillRate = 1.0 / 5.0
-	botCfg.LLMRateLimitPerHour = 50.0
+	botCfg := config.BotConfig{
+		WebhookTimeout:          30 * time.Second,
+		UserRateLimitTokens:     6.0,
+		UserRateLimitRefillRate: 1.0 / 5.0,
+		LLMRateLimitPerHour:     50.0,
+		GlobalRateLimitRPS:      80.0,
+		MaxMessagesPerReply:     5,
+		MaxEventsPerWebhook:     100,
+		MinReplyTokenLength:     10,
+		MaxMessageLength:        20000,
+		MaxPostbackDataSize:     300,
+		MaxCoursesPerSearch:     40,
+		MaxTitleDisplayChars:    60,
+		MaxStudentsPerSearch:    500,
+		MaxContactsPerSearch:    100,
+		ValidYearStart:          95,
+		ValidYearEnd:            112,
+	}
 
 	// Create handler with direct constructor
 	handler, err := NewHandler(
 		"test_channel_secret",
 		"test_channel_token",
 		botRegistry,
-		botCfg,
+		&botCfg,
 		m,
 		log,
 		stickerManager,

@@ -104,28 +104,11 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		log.Info("Gemini API key not configured, NLU and query expansion disabled")
 	}
 
-	botCfg, err := config.LoadBotConfig()
-	if err != nil {
-		return nil, fmt.Errorf("load bot config: %w", err)
-	}
-	if cfg.LLMRateLimitPerHour != 0 {
-		botCfg.LLMRateLimitPerHour = cfg.LLMRateLimitPerHour
-	}
-	if cfg.WebhookTimeout != 0 {
-		botCfg.WebhookTimeout = cfg.WebhookTimeout
-	}
-	if cfg.UserRateLimitTokens != 0 {
-		botCfg.UserRateLimitTokens = cfg.UserRateLimitTokens
-	}
-	if cfg.UserRateLimitRefillRate != 0 {
-		botCfg.UserRateLimitRefillRate = cfg.UserRateLimitRefillRate
-	}
-
-	llmRateLimiter := ratelimit.NewLLMRateLimiter(botCfg.LLMRateLimitPerHour, 5*time.Minute, m)
+	llmRateLimiter := ratelimit.NewLLMRateLimiter(cfg.Bot.LLMRateLimitPerHour, 5*time.Minute, m)
 
 	idHandler := id.NewHandler(db, scraperClient, m, log, stickerMgr)
 	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerMgr, bm25Index, queryExpander, llmRateLimiter)
-	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerMgr, botCfg.MaxContactsPerSearch)
+	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerMgr, cfg.Bot.MaxContactsPerSearch)
 
 	botRegistry := bot.NewRegistry()
 	botRegistry.Register(contactHandler)
@@ -134,7 +117,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 
 	webhookHandler, err := webhook.NewHandler(
 		cfg.LineChannelSecret, cfg.LineChannelToken,
-		botRegistry, botCfg, m, log, stickerMgr, intentParser, llmRateLimiter,
+		botRegistry, &cfg.Bot, m, log, stickerMgr, intentParser, llmRateLimiter,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("webhook: %w", err)
@@ -210,24 +193,35 @@ func (a *Application) getFeatures() map[string]bool {
 
 // Run starts the HTTP server and background jobs.
 func (a *Application) Run() error {
-	// Start background jobs
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	a.startBackgroundJobs(ctx)
+	a.startHTTPServer()
+
+	return a.waitForShutdown()
+}
+
+// startBackgroundJobs starts all background goroutines.
+func (a *Application) startBackgroundJobs(ctx context.Context) {
 	go a.performCacheCleanup(ctx)
 	go a.refreshStickers(ctx)
 	go a.proactiveWarmup(ctx)
 	go a.updateCacheSizeMetrics(ctx)
+}
 
-	// Start HTTP server
+// startHTTPServer starts the HTTP server in a goroutine.
+func (a *Application) startHTTPServer() {
 	go func() {
 		a.logger.WithField("port", a.cfg.Port).Info("Starting HTTP server")
 		if err := a.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			a.logger.WithError(err).Fatal("HTTP server error")
 		}
 	}()
+}
 
-	// Wait for interrupt signal
+// waitForShutdown blocks until shutdown signal is received.
+func (a *Application) waitForShutdown() error {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit

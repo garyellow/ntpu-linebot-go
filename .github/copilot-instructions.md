@@ -66,8 +66,8 @@ LINE Webhook → Gin Handler
 **When adding new modules**:
 
 1. **Implement `bot.Handler` interface** (`internal/bot/handler.go`)
-2. **Create handler in app.initBotHandlers()** with required dependencies
-3. **Register in app.initWebhook()** via `registry.Register(handler)`
+2. **Create handler in app.Initialize()** with required dependencies
+3. **Register via `registry.Register(handler)` before creating webhook handler
 4. **Use prefix convention** for postback routing (e.g., `"course:"`, `"id:"`, `"contact:"`)
 5. **Direct constructors** - Pass all dependencies (including optional nil values) directly in constructor
 6. **Warmup support** is automatic if module implements cache warming
@@ -76,6 +76,7 @@ LINE Webhook → Gin Handler
 - **All handlers**: Direct constructors with all dependencies as parameters
 - **Optional dependencies**: Pass nil if feature disabled (e.g., `bm25Index`, `queryExpander`, `llmRateLimiter`)
 - **No setter injection**: All dependencies passed at construction time to avoid circular dependencies
+- **BotConfig**: Embedded in main Config as `cfg.Bot` (no separate constructor needed)
 
 **Module-specific features**:
 

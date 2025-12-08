@@ -7,8 +7,8 @@
 ```bash
 cd deployments
 cp .env.example .env
-# 編輯 .env 填入 LINE_CHANNEL_ACCESS_TOKEN 和 LINE_CHANNEL_SECRET
-docker compose pull  # 從 Docker Hub 拉取最新映像
+# 編輯 .env 填入必要參數
+docker compose pull
 docker compose up -d
 ```
 

@@ -40,14 +40,35 @@ type Config struct {
 	// Warmup Configuration
 	WarmupModules string // Comma-separated list of modules to warmup (default: "sticker,id,contact,course"). Add "syllabus" to enable syllabus warmup (requires GEMINI_API_KEY)
 
-	// Webhook Configuration
-	// See config/timeouts.go for detailed explanation of why 60s is used
-	WebhookTimeout time.Duration // Timeout for webhook bot processing
+	// Bot Configuration (embedded)
+	Bot BotConfig
+}
 
-	// Rate Limit Configuration
+// BotConfig holds bot-specific configuration
+type BotConfig struct {
+	// Timeouts
+	WebhookTimeout time.Duration // Timeout for webhook bot processing (see config/timeouts.go)
+
+	// Rate Limits
 	UserRateLimitTokens     float64 // Maximum tokens per user (default: 6)
-	UserRateLimitRefillRate float64 // Tokens refill rate per second (default: 1/5, i.e., 1 token per 5 seconds)
+	UserRateLimitRefillRate float64 // Tokens refill rate per second (default: 1/5)
 	LLMRateLimitPerHour     float64 // Maximum LLM requests per user per hour (default: 50)
+	GlobalRateLimitRPS      float64 // Global rate limit in requests per second (default: 80)
+
+	// LINE API Constraints
+	MaxMessagesPerReply int // Maximum messages per reply (LINE API limit: 5)
+	MaxEventsPerWebhook int // Maximum events per webhook (default: 100)
+	MinReplyTokenLength int // Minimum reply token length (default: 10)
+	MaxMessageLength    int // Maximum message length (LINE API limit: 20000)
+	MaxPostbackDataSize int // Maximum postback data size (LINE API limit: 300)
+
+	// Business Limits
+	MaxCoursesPerSearch  int // Maximum courses per search (default: 40)
+	MaxTitleDisplayChars int // Maximum title display characters (default: 60)
+	MaxStudentsPerSearch int // Maximum students per search (default: 500)
+	MaxContactsPerSearch int // Maximum contacts per search (default: 100)
+	ValidYearStart       int // Valid year range start (default: 95)
+	ValidYearEnd         int // Valid year range end (default: 112)
 }
 
 // Load reads configuration from environment variables
@@ -71,22 +92,34 @@ func Load() (*Config, error) {
 
 		// Data Configuration
 		DataDir:  getEnv("DATA_DIR", getDefaultDataDir()),
-		CacheTTL: getDurationEnv("CACHE_TTL", 168*time.Hour), // Hard TTL: 7 days (資料過期後強制刪除)
+		CacheTTL: getDurationEnv("CACHE_TTL", 168*time.Hour), // Hard TTL: 7 days
 
 		// Scraper Configuration
-		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", ScraperRequest), // HTTP request timeout
-		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 5),               // Retry with exponential backoff
+		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", ScraperRequest),
+		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 5),
 
 		// Warmup Configuration
 		WarmupModules: getEnv("WARMUP_MODULES", "sticker,id,contact,course"),
 
-		// Webhook Configuration
-		WebhookTimeout: getDurationEnv("WEBHOOK_TIMEOUT", WebhookProcessing),
-
-		// Rate Limit Configuration
-		UserRateLimitTokens:     getFloatEnv("USER_RATE_LIMIT_TOKENS", 6.0),
-		UserRateLimitRefillRate: getFloatEnv("USER_RATE_LIMIT_REFILL_RATE", 1.0/5.0),
-		LLMRateLimitPerHour:     getFloatEnv("LLM_RATE_LIMIT_PER_HOUR", 50.0),
+		// Bot Configuration
+		Bot: BotConfig{
+			WebhookTimeout:          getDurationEnv("WEBHOOK_TIMEOUT", WebhookProcessing),
+			UserRateLimitTokens:     getFloatEnv("USER_RATE_LIMIT_TOKENS", 6.0),
+			UserRateLimitRefillRate: getFloatEnv("USER_RATE_LIMIT_REFILL_RATE", 1.0/5.0),
+			LLMRateLimitPerHour:     getFloatEnv("LLM_RATE_LIMIT_PER_HOUR", 50.0),
+			GlobalRateLimitRPS:      80.0,
+			MaxMessagesPerReply:     5,
+			MaxEventsPerWebhook:     100,
+			MinReplyTokenLength:     10,
+			MaxMessageLength:        20000,
+			MaxPostbackDataSize:     300,
+			MaxCoursesPerSearch:     40,
+			MaxTitleDisplayChars:    60,
+			MaxStudentsPerSearch:    500,
+			MaxContactsPerSearch:    100,
+			ValidYearStart:          95,
+			ValidYearEnd:            112,
+		},
 	}
 
 	// Validate configuration
@@ -110,17 +143,8 @@ func (c *Config) Validate() error {
 	if c.Port == "" {
 		errs = append(errs, fmt.Errorf("PORT is required"))
 	}
-	if c.WebhookTimeout <= 0 {
-		errs = append(errs, fmt.Errorf("WEBHOOK_TIMEOUT must be positive, got %v", c.WebhookTimeout))
-	}
-	if c.UserRateLimitTokens <= 0 {
-		errs = append(errs, fmt.Errorf("USER_RATE_LIMIT_TOKENS must be positive, got %v", c.UserRateLimitTokens))
-	}
-	if c.UserRateLimitRefillRate <= 0 {
-		errs = append(errs, fmt.Errorf("USER_RATE_LIMIT_REFILL_RATE must be positive, got %v", c.UserRateLimitRefillRate))
-	}
-	if c.LLMRateLimitPerHour <= 0 {
-		errs = append(errs, fmt.Errorf("LLM_RATE_LIMIT_PER_HOUR must be positive, got %v", c.LLMRateLimitPerHour))
+	if err := c.Bot.Validate(); err != nil {
+		errs = append(errs, fmt.Errorf("bot config: %w", err))
 	}
 	if c.DataDir == "" {
 		errs = append(errs, fmt.Errorf("DATA_DIR is required"))
