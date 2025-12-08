@@ -8,7 +8,7 @@ import (
 
 func setupTestDB(t *testing.T) *DB {
 	// Use in-memory SQLite database for testing with 7-day TTL
-	db, err := New(":memory:", 168*time.Hour)
+	db, err := New(context.Background(), ":memory:", 168*time.Hour)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}

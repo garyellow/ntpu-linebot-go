@@ -2,6 +2,7 @@
 package errors
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -68,7 +69,8 @@ func GetUserMessage(err error) string {
 	if err == nil {
 		return ""
 	}
-	if wrapped, ok := err.(*WrappedError); ok {
+	wrapped := &WrappedError{}
+	if errors.As(err, &wrapped) {
 		return wrapped.UserMessage
 	}
 	return err.Error()

@@ -132,7 +132,7 @@ func (db *DB) SearchStudentsByName(ctx context.Context, name string) ([]Student,
 	return students, nil
 }
 
-// GetStudentsByYearDept retrieves students by year and department
+// GetStudentsByDepartment retrieves students by year and department.
 // Only returns non-expired cache entries based on configured TTL
 func (db *DB) GetStudentsByDepartment(ctx context.Context, dept string, year int) ([]Student, error) {
 	// Add TTL filter to prevent returning stale data

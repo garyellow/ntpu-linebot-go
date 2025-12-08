@@ -19,7 +19,7 @@ func setupTestHandler(t *testing.T) *Handler {
 	t.Helper()
 
 	// Create test database
-	db, err := storage.New(":memory:", 168*time.Hour)
+	db, err := storage.New(context.Background(), ":memory:", 168*time.Hour)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}

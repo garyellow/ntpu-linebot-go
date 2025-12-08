@@ -42,6 +42,7 @@ func (h *Handler) PostbackPrefix() string {
 	return ModuleName + ":"
 }
 
+// Module constants
 const (
 	ModuleName = "contact" // Module identifier for registration
 	senderName = "聯繫小幫手"

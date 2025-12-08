@@ -39,7 +39,7 @@ type DB struct {
 //   - Reader: 10 connections in read-only mode for parallel queries
 //
 // Note: In-memory databases use shared cache mode to allow read/write separation
-func New(dbPath string, cacheTTL time.Duration) (*DB, error) {
+func New(ctx context.Context, dbPath string, cacheTTL time.Duration) (*DB, error) {
 	// Ensure directory exists (skip for in-memory database)
 	if dbPath != ":memory:" {
 		dir := filepath.Dir(dbPath)
@@ -76,13 +76,13 @@ func New(dbPath string, cacheTTL time.Duration) (*DB, error) {
 	writer.SetConnMaxLifetime(config.DatabaseConnMaxLifetime)
 
 	// Configure writer connection
-	if err := configureConnection(writer, false); err != nil {
+	if err := configureConnection(ctx, writer, false); err != nil {
 		_ = writer.Close()
 		return nil, fmt.Errorf("failed to configure writer: %w", err)
 	}
 
 	// Test writer connection
-	if err := writer.PingContext(context.Background()); err != nil {
+	if err := writer.PingContext(ctx); err != nil {
 		_ = writer.Close()
 		return nil, fmt.Errorf("failed to ping writer: %w", err)
 	}
@@ -90,7 +90,7 @@ func New(dbPath string, cacheTTL time.Duration) (*DB, error) {
 	// Initialize schema using writer connection BEFORE opening reader
 	// This is critical for in-memory databases: the reader connection in read-only mode
 	// cannot access the database until schema exists via the writer connection
-	if err := InitSchema(writer); err != nil {
+	if err := InitSchema(ctx, writer); err != nil {
 		_ = writer.Close()
 		return nil, fmt.Errorf("failed to initialize schema: %w", err)
 	}
@@ -115,14 +115,14 @@ func New(dbPath string, cacheTTL time.Duration) (*DB, error) {
 	reader.SetConnMaxLifetime(config.DatabaseConnMaxLifetime)
 
 	// Configure reader connection
-	if err := configureConnection(reader, true); err != nil {
+	if err := configureConnection(ctx, reader, true); err != nil {
 		_ = writer.Close()
 		_ = reader.Close()
 		return nil, fmt.Errorf("failed to configure reader: %w", err)
 	}
 
 	// Test reader connection
-	if err := reader.PingContext(context.Background()); err != nil {
+	if err := reader.PingContext(ctx); err != nil {
 		_ = writer.Close()
 		_ = reader.Close()
 		return nil, fmt.Errorf("failed to ping reader: %w", err)
@@ -139,8 +139,7 @@ func New(dbPath string, cacheTTL time.Duration) (*DB, error) {
 }
 
 // configureConnection sets up SQLite pragmas for optimal performance
-func configureConnection(conn *sql.DB, readOnly bool) error {
-	ctx := context.Background()
+func configureConnection(ctx context.Context, conn *sql.DB, readOnly bool) error {
 
 	// Enable WAL mode for better concurrency (readers don't block writer)
 	if _, err := conn.ExecContext(ctx, "PRAGMA journal_mode=WAL"); err != nil {

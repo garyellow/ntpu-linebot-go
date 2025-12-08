@@ -121,3 +121,73 @@ func TestContextChaining(t *testing.T) {
 		t.Error("RequestID not preserved in chained context")
 	}
 }
+
+func TestPreserveTracing(t *testing.T) {
+	t.Run("preserves all tracing values", func(t *testing.T) {
+		parentCtx := context.Background()
+		parentCtx = WithUserID(parentCtx, "user123")
+		parentCtx = WithChatID(parentCtx, "chat456")
+		parentCtx = WithRequestID(parentCtx, "req789")
+
+		detachedCtx := PreserveTracing(parentCtx)
+
+		if userID := GetUserID(detachedCtx); userID != "user123" {
+			t.Errorf("Expected userID 'user123', got %q", userID)
+		}
+		if chatID := GetChatID(detachedCtx); chatID != "chat456" {
+			t.Errorf("Expected chatID 'chat456', got %q", chatID)
+		}
+		if requestID, ok := GetRequestID(detachedCtx); !ok || requestID != "req789" {
+			t.Errorf("Expected requestID 'req789', got %q (ok=%v)", requestID, ok)
+		}
+	})
+
+	t.Run("handles partial values", func(t *testing.T) {
+		partialCtx := context.Background()
+		partialCtx = WithUserID(partialCtx, "user_only")
+		detachedPartial := PreserveTracing(partialCtx)
+
+		if userID := GetUserID(detachedPartial); userID != "user_only" {
+			t.Errorf("Expected userID 'user_only', got %q", userID)
+		}
+		if chatID := GetChatID(detachedPartial); chatID != "" {
+			t.Errorf("Expected empty chatID, got %q", chatID)
+		}
+	})
+
+	t.Run("handles empty context", func(t *testing.T) {
+		emptyDetached := PreserveTracing(context.Background())
+
+		if userID := GetUserID(emptyDetached); userID != "" {
+			t.Errorf("Expected empty userID, got %q", userID)
+		}
+		if chatID := GetChatID(emptyDetached); chatID != "" {
+			t.Errorf("Expected empty chatID, got %q", chatID)
+		}
+		if requestID, ok := GetRequestID(emptyDetached); ok || requestID != "" {
+			t.Errorf("Expected empty requestID, got %q (ok=%v)", requestID, ok)
+		}
+	})
+
+	t.Run("creates independent context (cancellation)", func(t *testing.T) {
+		cancelCtx, cancel := context.WithCancel(WithUserID(context.Background(), "user_cancel"))
+		detachedCancel := PreserveTracing(cancelCtx)
+
+		cancel() // Cancel parent
+
+		// Parent should be canceled
+		if err := cancelCtx.Err(); err == nil {
+			t.Error("Expected parent context to be canceled")
+		}
+
+		// Detached child should NOT be canceled
+		if err := detachedCancel.Err(); err != nil {
+			t.Errorf("Expected detached context to be active, got error: %v", err)
+		}
+
+		// But values should still be preserved
+		if userID := GetUserID(detachedCancel); userID != "user_cancel" {
+			t.Errorf("Expected userID 'user_cancel', got %q", userID)
+		}
+	})
+}

@@ -4,15 +4,14 @@
 
 ## 功能
 
-- **IntentParser** (interface): NLU 意圖解析器介面
-- **GeminiIntentParser** (implementation): Gemini Function Calling 實作
+- **GeminiIntentParser**: NLU 意圖解析器（Gemini Function Calling 實作）
 - **QueryExpander**: 查詢擴展器（同義詞、縮寫、翻譯）
 
 ## 檔案結構
 
 ```
 internal/genai/
-├── types.go          # 共享類型定義 (ParseResult, IntentParser interface)
+├── types.go          # 共享類型定義 (ParseResult)
 ├── intent.go         # GeminiIntentParser 實作 (Gemini Function Calling)
 ├── functions.go      # Function Calling 函數定義
 ├── prompts.go        # 系統提示詞

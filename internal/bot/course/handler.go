@@ -13,6 +13,7 @@ import (
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	"github.com/garyellow/ntpu-linebot-go/internal/config"
+	ctxpkg "github.com/garyellow/ntpu-linebot-go/internal/context"
 	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
 	"github.com/garyellow/ntpu-linebot-go/internal/genai"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
@@ -643,9 +644,9 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 		log.Infof("No keyword results for %s, trying BM25 search...", searchTerm)
 
 		// Use detached context for smart search operations.
-		// WithoutCancel() preserves parent context values (request ID, user ID)
-		// for tracing while preventing cancellation from parent timeout.
-		searchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), config.SmartSearchTimeout)
+		// PreserveTracing() creates independent context to prevent parent cancellation
+		// from aborting LLM API calls (Gemini Query Expansion may take several seconds).
+		searchCtx, cancel := context.WithTimeout(ctxpkg.PreserveTracing(ctx), config.SmartSearchTimeout)
 		defer cancel()
 		smartResults, err := h.bm25Index.SearchCourses(searchCtx, searchTerm, 5)
 
@@ -1158,10 +1159,11 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 	searchType := "bm25"
 
 	// Use detached context for API calls (Query Expansion LLM + BM25 search).
-	// WithoutCancel() preserves parent context values (request ID, user ID, chat ID)
+	// PreserveTracing() preserves tracing values (request ID, user ID, chat ID)
 	// for observability while preventing cancellation from parent timeout.
 	// This ensures LLM API calls complete even if HTTP request is canceled.
-	searchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), config.SmartSearchTimeout)
+	// Safer than WithoutCancel (avoids memory leaks from parent references).
+	searchCtx, cancel := context.WithTimeout(ctxpkg.PreserveTracing(ctx), config.SmartSearchTimeout)
 	defer cancel()
 
 	// Expand query for better search results (adds synonyms, translations, related terms)

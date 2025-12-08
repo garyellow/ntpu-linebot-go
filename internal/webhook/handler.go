@@ -51,7 +51,7 @@ type Handler struct {
 	llmRateLimitPerHour     float64 // LLM requests per user per hour
 
 	// NLU intent parser (optional - requires Gemini API key)
-	intentParser genai.IntentParser
+	intentParser *genai.GeminiIntentParser
 }
 
 // NewHandler creates a new webhook handler using functional options pattern.
@@ -135,7 +135,7 @@ func (h *Handler) GetLLMRateLimiter() *ratelimit.LLMRateLimiter {
 
 // SetIntentParser sets the NLU intent parser for the handler.
 // This is optional - if not set, the handler falls back to keyword matching only.
-func (h *Handler) SetIntentParser(parser genai.IntentParser) {
+func (h *Handler) SetIntentParser(parser *genai.GeminiIntentParser) {
 	h.intentParser = parser
 }
 
@@ -473,19 +473,21 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 	}
 
 	// Create context with timeout for bot processing.
-	// Use context.WithoutCancel() (Go 1.21+) to preserve parent context Values
-	// (request ID, user ID) for logging/tracing while preventing cancellation propagation.
+	// Use PreserveTracing() to create a detached context that preserves tracing
+	// values (userID, chatID, requestID) while being independent of parent cancellation.
 	//
-	// Why context.WithoutCancel() instead of context.Background():
-	// 1. Preserves request tracing data (request ID, user ID) for correlation
-	// 2. Prevents cancellation when LINE server closes connection
-	// 3. Enables full observability across the async operation
+	// This is safer than context.WithoutCancel() because:
+	// - Creates truly independent context (no parent reference → no memory leak)
+	// - Only copies necessary values (not entire parent chain)
+	// - Avoids issues with parent values being flushed/closed
 	//
 	// Why we need detached cancellation:
 	// 1. LINE may close the connection before we finish processing
 	// 2. We still want to send the reply via the reply token (valid ~20 min)
 	// 3. Partial work (started DB queries) shouldn't be wasted
-	processCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), h.webhookTimeout)
+	//
+	// Reference: https://github.com/golang/go/issues/64478
+	processCtx, cancel := context.WithTimeout(ctxpkg.PreserveTracing(ctx), h.webhookTimeout)
 	defer cancel()
 
 	// Dispatch to appropriate bot module based on CanHandle
@@ -538,8 +540,8 @@ func (h *Handler) handlePostbackEvent(ctx context.Context, event webhook.Postbac
 	}
 
 	// Create context with timeout for postback processing.
-	// Use context.WithoutCancel() to preserve tracing values (same reason as handleMessageEvent).
-	processCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), h.webhookTimeout)
+	// Use PreserveTracing() to create a detached context (same reason as handleMessageEvent).
+	processCtx, cancel := context.WithTimeout(ctxpkg.PreserveTracing(ctx), h.webhookTimeout)
 	defer cancel()
 
 	// Check module prefix or dispatch to all handlers

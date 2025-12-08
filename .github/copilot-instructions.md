@@ -9,7 +9,7 @@ LINE chatbot for NTPU (National Taipei University) providing student ID lookup, 
 2. **Direct Dependencies** - Handlers use `*storage.DB` directly, interfaces only when truly needed
 3. **Typed Error Handling** - Sentinel errors and custom error types with wrapping
 4. **Centralized Configuration** - Bot config with load-time validation
-5. **Context Management (Go 1.21+)** - `context.WithoutCancel()` for async operations
+5. **Context Management** - `ctxpkg.PreserveTracing()` for safe async operations with tracing
 6. **Simplified Registry** - Direct dispatch without middleware overhead
 7. **Clean Initialization** - Core → GenAI → Handlers → Webhook (no recreation)
 
@@ -18,10 +18,10 @@ LINE chatbot for NTPU (National Taipei University) providing student ID lookup, 
 - **Concrete Types**: Handlers depend on `*storage.DB` directly (no mocking needed)
 - **Interface Placement**: Defined inline where needed (Go convention: small interfaces)
 - **Functional Options**: Only when 3+ optional parameters (webhook, course handlers)
-- **Context Values**: Minimal usage for request tracing only
+- **Context Values**: Minimal usage for request tracing only (userID, chatID, requestID)
 - **Error Handling**: Typed errors with wrapping for context
 - **Constants**: Centralized in config package
-- **Async Operations**: `context.WithoutCancel()` preserves tracing
+- **Async Operations**: `ctxpkg.PreserveTracing()` for safe detached contexts (avoids memory leaks)
 - **Validation**: Load-time config validation, runtime parameter checks
 
 ## Architecture: Async Webhook Processing
@@ -49,22 +49,25 @@ LINE Webhook → Gin Handler
 **Critical Flow Details:**
 - **Async processing**: HTTP 200 returned immediately after signature verification (< 2s), events processed in goroutine
 - **LINE Best Practice**: Responds within 2s to prevent request_timeout errors, processes asynchronously to handle long operations
-- **Context handling**: Bot operations use `context.WithoutCancel()` (Go 1.21+) with 60s timeout
-  - **Why WithoutCancel()**: Preserves parent context Values (request ID, user ID) for tracing/logging
-  - **Why not Background()**: Background() creates clean context but loses all tracing data
-  - **Cancellation independence**: Child timeout is independent from HTTP request lifecycle
+- **Context handling**: Bot operations use `ctxpkg.PreserveTracing()` with 60s timeout
+  - **PreserveTracing()**: Creates new context with only necessary tracing values (userID, chatID, requestID)
+  - **Why not WithoutCancel()**: Avoids memory leaks from parent references (see Go issue #64478)
+  - **Why not Background()**: Background() loses all tracing data needed for log correlation
+  - **Cancellation independence**: Detached context timeout is independent from HTTP request lifecycle
 - **Detached context rationale**: LINE may close connection before processing completes; detached cancellation ensures DB queries and scraping finish, reply token remains valid (~20 min)
 - **Observability**: Request ID and user ID flow through entire async operation for log correlation
 - **Message batching**: LINE allows max 5 messages per reply; webhook auto-truncates to 4 + warning
-- **Reference**: https://developers.line.biz/en/docs/partner-docs/development-guidelines/
+- **References**:
+  - LINE guidelines: https://developers.line.biz/en/docs/partner-docs/development-guidelines/
+  - Context safety: https://github.com/golang/go/issues/64478
 
 ## Bot Module Registration Pattern
 
 **When adding new modules**:
 
 1. **Implement `bot.Handler` interface** (`internal/bot/handler.go`)
-2. **Create handler in Container.initBotHandlers()** with required dependencies
-3. **Register in Container.initWebhook()** via `registry.Register(handler)`
+2. **Create handler in app.initBotHandlers()** with required dependencies
+3. **Register in app.initWebhook()** via `registry.Register(handler)`
 4. **Use prefix convention** for postback routing (e.g., `"course:"`, `"id:"`, `"contact:"`)
 5. **Functional options** only if 3+ optional parameters (create `options.go`)
 6. **Warmup support** is automatic if module implements cache warming
@@ -76,14 +79,14 @@ LINE Webhook → Gin Handler
 
 **Module-specific features**:
 
-**ID Module**: Year query range (95-112, name search 101-112), department selection flow, student search (max 500 results), Flex Message cards
-
-**Course Module**: Smart semester detection (`semester.go`), UID regex (`(?i)\\d{3,4}[umnp]\\d{4}`), max 40 results, Flex Message carousels
 - **Precise search**: `課程` keyword triggers SQL LIKE + fuzzy search on course title and teachers
 - **Smart search**: `找課` keyword triggers BM25 + Query Expansion search using syllabus content (requires `GEMINI_API_KEY` for Query Expansion)
 - **BM25 search**: Keyword-based search with Chinese tokenization (unigram for CJK)
 - **Confidence scoring**: Rank-based confidence (not similarity). Higher rank = higher confidence.
 - **Query expansion**: LLM-based expansion for short queries and technical abbreviations (AWS→雲端運算, AI→人工智慧)
+- **Detached context**: Uses `ctxpkg.PreserveTracing()` to prevent request context cancellation from aborting API calls (safer than WithoutCancel)
+- **Fallback**: Precise search → BM25 smart search (when no results and BM25Index enabled)
+- **UX terminology**: Uses "精確搜尋" (precise) for keyword search, "智慧搜尋" (smart) for BM25 search雲端運算, AI→人工智慧)
 - **Detached context**: Uses `context.WithoutCancel()` to prevent request context cancellation from aborting API calls
 - **Fallback**: Precise search → BM25 smart search (when no results and BM25Index enabled)
 - **UX terminology**: Uses "精確搜尋" (precise) for keyword search, "智慧搜尋" (smart) for BM25 search
@@ -264,9 +267,8 @@ Fallback → getHelpMessage() + Warning Log
 - Fallback strategy: NLU failure → help message with warning log
 - Metrics: `ntpu_llm_total{operation="nlu"}`, `ntpu_llm_duration_seconds{operation="nlu"}`
 
-**Interface Pattern**:
-- `genai.IntentParser`: Interface defining Parse(), IsEnabled(), Close()
-- `genai.GeminiIntentParser`: Gemini-based implementation of IntentParser
+**Implementation Pattern**:
+- `genai.GeminiIntentParser`: Gemini Function Calling implementation with Parse(), IsEnabled(), Close()
 - `genai.ParseResult`: Module, Intent, Params, ClarificationText, FunctionName
 - webhook imports genai package directly (no adapter needed)
 

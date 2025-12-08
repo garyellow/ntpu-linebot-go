@@ -1,3 +1,4 @@
+// Package main is the entry point for the NTPU LineBot server.
 package main
 
 import (
@@ -5,29 +6,24 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/garyellow/ntpu-linebot-go/internal/app"
 	"github.com/garyellow/ntpu-linebot-go/internal/config"
-	"github.com/garyellow/ntpu-linebot-go/internal/container"
 )
 
 func main() {
-	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Create container and initialize all dependencies
-	// Container.Initialize() returns a fully-configured Application (Pure DI)
-	c := container.New(cfg)
-	app, err := c.Initialize(context.Background())
+	application, err := app.Initialize(context.Background(), cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialize application: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Run the application
-	if err := app.Run(); err != nil {
+	if err := application.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Application error: %v\n", err)
 		os.Exit(1)
 	}

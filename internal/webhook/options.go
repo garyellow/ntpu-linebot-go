@@ -60,7 +60,7 @@ func WithStickerManager(sm *sticker.Manager) HandlerOption {
 }
 
 // WithIntentParser sets the NLU intent parser.
-func WithIntentParser(parser genai.IntentParser) HandlerOption {
+func WithIntentParser(parser *genai.GeminiIntentParser) HandlerOption {
 	return func(h *Handler) {
 		h.intentParser = parser
 	}

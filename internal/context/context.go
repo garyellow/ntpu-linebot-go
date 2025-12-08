@@ -86,3 +86,33 @@ func GetRequestID(ctx context.Context) (string, bool) {
 	requestID, ok := ctx.Value(requestIDKey).(string)
 	return requestID, ok
 }
+
+// PreserveTracing creates a new detached context that preserves tracing values
+// from the parent context. This is safe for asynchronous operations where the
+// parent context may be canceled or its values may become invalid.
+//
+// Unlike context.WithoutCancel (Go 1.21+), this function:
+//  1. Creates a truly independent context (no reference to parent)
+//  2. Only copies necessary tracing values (userID, chatID, requestID)
+//  3. Prevents memory leaks from holding parent context references
+//  4. Avoids issues with parent values being flushed/closed
+//
+// Use this when spawning goroutines that need tracing but should not be
+// affected by parent context cancellation (e.g., LINE webhook async processing).
+//
+// Reference: https://github.com/golang/go/issues/64478
+func PreserveTracing(ctx context.Context) context.Context {
+	newCtx := context.Background()
+
+	if userID := GetUserID(ctx); userID != "" {
+		newCtx = WithUserID(newCtx, userID)
+	}
+	if chatID := GetChatID(ctx); chatID != "" {
+		newCtx = WithChatID(newCtx, chatID)
+	}
+	if requestID, ok := GetRequestID(ctx); ok && requestID != "" {
+		newCtx = WithRequestID(newCtx, requestID)
+	}
+
+	return newCtx
+}
