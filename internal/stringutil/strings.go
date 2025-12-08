@@ -15,25 +15,6 @@ func IsNumeric(s string) bool {
 	return true
 }
 
-// ContainsAllRunes checks if string s contains all runes in the required slice.
-// This is useful for fuzzy matching where all characters must be present.
-func ContainsAllRunes(s string, required []rune) bool {
-	sRunes := []rune(s)
-	for _, req := range required {
-		found := false
-		for _, sr := range sRunes {
-			if sr == req {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-	return true
-}
-
 // TrimAndNormalize trims whitespace and normalizes internal spacing.
 // Multiple spaces are collapsed into single spaces.
 func TrimAndNormalize(s string) string {

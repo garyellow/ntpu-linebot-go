@@ -16,6 +16,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
+	"github.com/sirupsen/logrus"
 )
 
 // Manager manages sticker URLs for LINE bot avatars with SQLite persistence
@@ -171,7 +172,7 @@ func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
 	m.loaded = true
 	m.mu.Unlock()
 
-	m.logger.WithFields(map[string]interface{}{
+	m.logger.WithFields(logrus.Fields{
 		"count":   len(allStickers),
 		"success": successCount,
 		"failed":  errorCount,
@@ -188,7 +189,7 @@ func (m *Manager) fetchWithRetry(ctx context.Context, url string, fetchFunc func
 		if attempt > 0 {
 			// Exponential backoff: 1s, 2s, 4s
 			backoff := time.Duration(math.Pow(2, float64(attempt))) * time.Second
-			m.logger.WithFields(map[string]interface{}{
+			m.logger.WithFields(logrus.Fields{
 				"attempt": attempt + 1,
 				"url":     url,
 				"backoff": backoff,

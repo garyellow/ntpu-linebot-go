@@ -29,6 +29,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sirupsen/logrus"
 )
 
 // Application represents a fully-configured application managing the complete lifecycle.
@@ -536,7 +537,7 @@ func (a *Application) updateCacheSizeMetrics(ctx context.Context) {
 			syllabiCount, _ := a.db.CountSyllabi(ctx)
 			stickerCount := a.stickerManager.Count()
 
-			a.logger.WithFields(map[string]interface{}{
+			a.logger.WithFields(logrus.Fields{
 				"students": studentCount,
 				"contacts": contactCount,
 				"courses":  courseCount,

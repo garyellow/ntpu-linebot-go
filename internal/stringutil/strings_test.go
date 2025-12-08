@@ -26,27 +26,3 @@ func TestIsNumeric(t *testing.T) {
 		})
 	}
 }
-
-func TestContainsAllRunes(t *testing.T) {
-	tests := []struct {
-		name     string
-		s        string
-		required []rune
-		want     bool
-	}{
-		{"All present", "王小明", []rune("王明"), true},
-		{"Missing char", "王小", []rune("王明"), false},
-		{"Empty required", "test", []rune(""), true},
-		{"Empty string", "", []rune("test"), false},
-		{"Exact match", "abc", []rune("abc"), true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := ContainsAllRunes(tt.s, tt.required)
-			if got != tt.want {
-				t.Errorf("ContainsAllRunes(%q, %v) = %v, want %v", tt.s, tt.required, got, tt.want)
-			}
-		})
-	}
-}

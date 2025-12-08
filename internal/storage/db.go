@@ -208,22 +208,22 @@ func (db *DB) Begin() (*sql.Tx, error) {
 }
 
 // Exec executes a write query (INSERT, UPDATE, DELETE) on the writer connection
-func (db *DB) Exec(query string, args ...interface{}) (sql.Result, error) {
+func (db *DB) Exec(query string, args ...any) (sql.Result, error) {
 	return db.writer.ExecContext(context.Background(), query, args...)
 }
 
 // ExecContext executes a write query with context on the writer connection
-func (db *DB) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+func (db *DB) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	return db.writer.ExecContext(ctx, query, args...)
 }
 
 // Query executes a read query on the reader connection pool
-func (db *DB) Query(query string, args ...interface{}) (*sql.Rows, error) {
+func (db *DB) Query(query string, args ...any) (*sql.Rows, error) {
 	return db.reader.QueryContext(context.Background(), query, args...)
 }
 
 // QueryRow executes a read query that returns at most one row on the reader connection
-func (db *DB) QueryRow(query string, args ...interface{}) *sql.Row {
+func (db *DB) QueryRow(query string, args ...any) *sql.Row {
 	return db.reader.QueryRowContext(context.Background(), query, args...)
 }
 
