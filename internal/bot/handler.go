@@ -39,3 +39,10 @@ type Handler interface {
 	// Returns a slice of LINE messages (max 5 messages per reply per LINE API).
 	HandlePostback(ctx context.Context, data string) []messaging_api.MessageInterface
 }
+
+// NLUHandler defines the interface for modules that support NLU intent dispatching.
+type NLUHandler interface {
+	Handler
+	// DispatchIntent dispatches a parsed NLU intent to the handler.
+	DispatchIntent(ctx context.Context, intent string, params map[string]string) ([]messaging_api.MessageInterface, error)
+}

@@ -65,3 +65,9 @@ func (r *Registry) GetHandler(name string) Handler {
 func (r *Registry) Handlers() []Handler {
 	return r.handlers
 }
+
+// Clear removes all registered handlers.
+func (r *Registry) Clear() {
+	r.handlers = r.handlers[:0]
+	clear(r.handlerMap)
+}

@@ -1,6 +1,5 @@
-// Package webhook provides LINE webhook handling and message dispatching.
-// This file contains functions for detecting and processing @Bot mentions.
-package webhook
+// Package bot provides the core bot logic and message processing.
+package bot
 
 import (
 	"slices"

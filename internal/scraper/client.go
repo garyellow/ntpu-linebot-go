@@ -32,21 +32,8 @@ type Client struct {
 // NewClient creates a new scraper client with URL failover support
 // timeout: HTTP request timeout (e.g., 60s)
 // maxRetries: max retry attempts with exponential backoff (e.g., 3)
-func NewClient(timeout time.Duration, maxRetries int) *Client {
-	// Define failover URLs for NTPU services
-	baseURLs := map[string][]string{
-		"lms": {
-			"http://120.126.197.52",
-			"https://120.126.197.52",
-			"https://lms.ntpu.edu.tw",
-		},
-		"sea": {
-			"http://120.126.197.7",
-			"https://120.126.197.7",
-			"https://sea.cc.ntpu.edu.tw",
-		},
-	}
-
+// baseURLs: map of domain to list of base URLs for failover
+func NewClient(timeout time.Duration, maxRetries int, baseURLs map[string][]string) *Client {
 	return &Client{
 		httpClient: &http.Client{
 			Timeout: timeout,

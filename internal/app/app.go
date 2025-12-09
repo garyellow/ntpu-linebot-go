@@ -11,13 +11,13 @@ import (
 	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
-	"github.com/garyellow/ntpu-linebot-go/internal/bot/contact"
-	"github.com/garyellow/ntpu-linebot-go/internal/bot/course"
-	"github.com/garyellow/ntpu-linebot-go/internal/bot/id"
 	"github.com/garyellow/ntpu-linebot-go/internal/config"
 	"github.com/garyellow/ntpu-linebot-go/internal/genai"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
+	"github.com/garyellow/ntpu-linebot-go/internal/modules/contact"
+	"github.com/garyellow/ntpu-linebot-go/internal/modules/course"
+	"github.com/garyellow/ntpu-linebot-go/internal/modules/id"
 	"github.com/garyellow/ntpu-linebot-go/internal/rag"
 	"github.com/garyellow/ntpu-linebot-go/internal/ratelimit"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
@@ -29,7 +29,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/sirupsen/logrus"
 )
 
 // Application manages the application lifecycle and dependencies.
@@ -47,6 +46,7 @@ type Application struct {
 	intentParser   *genai.GeminiIntentParser
 	queryExpander  *genai.QueryExpander
 	llmRateLimiter *ratelimit.LLMRateLimiter
+	userLimiter    *ratelimit.UserRateLimiter
 }
 
 // Initialize creates and initializes a new application with all dependencies.
@@ -54,6 +54,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	log := logger.New(cfg.LogLevel)
 	log.Info("Initializing application...")
 
+	// === Core Infrastructure ===
 	db, err := storage.New(ctx, cfg.SQLitePath(), cfg.CacheTTL)
 	if err != nil {
 		return nil, fmt.Errorf("database: %w", err)
@@ -68,9 +69,10 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	)
 	m := metrics.New(registry)
 
-	scraperClient := scraper.NewClient(cfg.ScraperTimeout, cfg.ScraperMaxRetries)
+	scraperClient := scraper.NewClient(cfg.ScraperTimeout, cfg.ScraperMaxRetries, cfg.ScraperBaseURLs)
 	stickerMgr := sticker.NewManager(db, scraperClient, log)
 
+	// === RAG / BM25 Index ===
 	syllabi, err := db.GetAllSyllabi(ctx)
 	if err != nil {
 		log.WithError(err).Warn("Failed to load syllabi for BM25")
@@ -88,6 +90,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		log.Warn("No syllabi found, BM25 search disabled")
 	}
 
+	// === GenAI Features ===
 	var intentParser *genai.GeminiIntentParser
 	var queryExpander *genai.QueryExpander
 	if cfg.GeminiAPIKey != "" {
@@ -104,25 +107,48 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		log.Info("Gemini API key not configured, NLU and query expansion disabled")
 	}
 
-	llmRateLimiter := ratelimit.NewLLMRateLimiter(cfg.Bot.LLMRateLimitPerHour, 5*time.Minute, m)
+	// === Rate Limiters ===
+	llmRateLimiter := ratelimit.NewLLMRateLimiter(cfg.Bot.LLMRateLimitPerHour, config.RateLimiterCleanupInterval, m)
+	userLimiter := ratelimit.NewUserRateLimiter(config.RateLimiterCleanupInterval, m)
 
+	// === Bot Handlers ===
 	idHandler := id.NewHandler(db, scraperClient, m, log, stickerMgr)
 	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerMgr, bm25Index, queryExpander, llmRateLimiter)
 	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerMgr, cfg.Bot.MaxContactsPerSearch)
 
+	// === Bot Registry ===
 	botRegistry := bot.NewRegistry()
 	botRegistry.Register(contactHandler)
 	botRegistry.Register(courseHandler)
 	botRegistry.Register(idHandler)
 
-	webhookHandler, err := webhook.NewHandler(
-		cfg.LineChannelSecret, cfg.LineChannelToken,
-		botRegistry, &cfg.Bot, m, log, stickerMgr, intentParser, llmRateLimiter,
-	)
+	// === Processor ===
+	processor := bot.NewProcessor(bot.ProcessorConfig{
+		Registry:       botRegistry,
+		IntentParser:   intentParser,
+		LLMRateLimiter: llmRateLimiter,
+		UserLimiter:    userLimiter,
+		StickerManager: stickerMgr,
+		Logger:         log,
+		Metrics:        m,
+		BotConfig:      &cfg.Bot,
+	})
+
+	// === Webhook Handler ===
+	webhookHandler, err := webhook.NewHandler(webhook.HandlerConfig{
+		ChannelSecret:  cfg.LineChannelSecret,
+		ChannelToken:   cfg.LineChannelToken,
+		BotConfig:      &cfg.Bot,
+		Metrics:        m,
+		Logger:         log,
+		Processor:      processor,
+		StickerManager: stickerMgr,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("webhook: %w", err)
 	}
 
+	// === HTTP Router ===
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -142,6 +168,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		intentParser:   intentParser,
 		queryExpander:  queryExpander,
 		llmRateLimiter: llmRateLimiter,
+		userLimiter:    userLimiter,
 	}
 
 	router.GET("/health", app.healthCheck)
@@ -151,10 +178,10 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	app.server = &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           router,
-		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       90 * time.Second,
+		ReadHeaderTimeout: config.WebhookHTTPRead,
+		ReadTimeout:       config.WebhookHTTPRead,
+		WriteTimeout:      config.WebhookHTTPWrite,
+		IdleTimeout:       config.WebhookHTTPIdle,
 	}
 
 	log.Info("Initialization complete")
@@ -215,7 +242,7 @@ func (a *Application) startHTTPServer() {
 	go func() {
 		a.logger.WithField("port", a.cfg.Port).Info("Starting HTTP server")
 		if err := a.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			a.logger.WithError(err).Fatal("HTTP server error")
+			a.logger.WithError(err).Error("HTTP server error")
 		}
 	}()
 }
@@ -234,6 +261,11 @@ func (a *Application) waitForShutdown() error {
 func (a *Application) shutdown() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), a.cfg.ShutdownTimeout)
 	defer cancel()
+
+	// Wait for webhook handler to finish processing pending events
+	if err := a.webhookHandler.Shutdown(shutdownCtx); err != nil {
+		a.logger.WithError(err).Warn("Webhook handler shutdown timeout")
+	}
 
 	if err := a.server.Shutdown(shutdownCtx); err != nil {
 		a.logger.WithError(err).Error("Server shutdown error")
@@ -256,19 +288,28 @@ func (a *Application) shutdown() error {
 		a.logger.WithError(err).WithField("component", "database").Error("Component close error")
 	}
 
+	// Stop rate limiters
 	if a.llmRateLimiter != nil {
 		a.llmRateLimiter.Stop()
+	}
+	if a.userLimiter != nil {
+		a.userLimiter.Stop()
 	}
 
 	a.logger.Info("Shutdown complete")
 	return nil
 }
 
-// Background job methods (cache cleanup, sticker refresh, warmup, metrics)
-// These remain unchanged from your current implementation
-
+// performCacheCleanup runs periodic cache cleanup.
 func (a *Application) performCacheCleanup(ctx context.Context) {
-	ticker := time.NewTicker(12 * time.Hour)
+	// Initial delay to let server stabilize
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(config.CacheCleanupInitialDelay):
+	}
+
+	ticker := time.NewTicker(config.CacheCleanupInterval)
 	defer ticker.Stop()
 
 	for {
@@ -276,52 +317,66 @@ func (a *Application) performCacheCleanup(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			startTime := time.Now()
-			a.logger.Info("Starting cache cleanup...")
-
-			var totalDeleted int64
-			if deleted, err := a.db.DeleteExpiredStudents(ctx, a.cfg.CacheTTL); err != nil {
-				a.logger.WithError(err).Error("Failed to cleanup expired students")
-			} else {
-				totalDeleted += deleted
-			}
-
-			if deleted, err := a.db.DeleteExpiredContacts(ctx, a.cfg.CacheTTL); err != nil {
-				a.logger.WithError(err).Error("Failed to cleanup expired contacts")
-			} else {
-				totalDeleted += deleted
-			}
-
-			if deleted, err := a.db.DeleteExpiredCourses(ctx, a.cfg.CacheTTL); err != nil {
-				a.logger.WithError(err).Error("Failed to cleanup expired courses")
-			} else {
-				totalDeleted += deleted
-			}
-
-			if deleted, err := a.db.DeleteExpiredSyllabi(ctx, a.cfg.CacheTTL); err != nil {
-				a.logger.WithError(err).Error("Failed to cleanup expired syllabi")
-			} else {
-				totalDeleted += deleted
-			}
-
-			if deleted, err := a.db.CleanupExpiredStickers(ctx); err != nil {
-				a.logger.WithError(err).Error("Failed to cleanup expired stickers")
-			} else {
-				totalDeleted += deleted
-			}
-
-			if _, err := a.db.Writer().Exec("VACUUM"); err != nil {
-				a.logger.WithError(err).Warn("Failed to VACUUM database")
-			}
-
-			a.logger.WithField("deleted", totalDeleted).
-				WithField("duration_ms", time.Since(startTime).Milliseconds()).
-				Info("Cache cleanup completed")
+			a.runCacheCleanup(ctx)
 		}
 	}
 }
 
+// runCacheCleanup performs the actual cache cleanup operation.
+func (a *Application) runCacheCleanup(ctx context.Context) {
+	startTime := time.Now()
+	a.logger.Info("Starting cache cleanup...")
+
+	var totalDeleted int64
+
+	if deleted, err := a.db.DeleteExpiredStudents(ctx, a.cfg.CacheTTL); err != nil {
+		a.logger.WithError(err).Error("Failed to cleanup expired students")
+	} else {
+		totalDeleted += deleted
+	}
+
+	if deleted, err := a.db.DeleteExpiredContacts(ctx, a.cfg.CacheTTL); err != nil {
+		a.logger.WithError(err).Error("Failed to cleanup expired contacts")
+	} else {
+		totalDeleted += deleted
+	}
+
+	if deleted, err := a.db.DeleteExpiredCourses(ctx, a.cfg.CacheTTL); err != nil {
+		a.logger.WithError(err).Error("Failed to cleanup expired courses")
+	} else {
+		totalDeleted += deleted
+	}
+
+	if deleted, err := a.db.DeleteExpiredSyllabi(ctx, a.cfg.CacheTTL); err != nil {
+		a.logger.WithError(err).Error("Failed to cleanup expired syllabi")
+	} else {
+		totalDeleted += deleted
+	}
+
+	if deleted, err := a.db.CleanupExpiredStickers(ctx); err != nil {
+		a.logger.WithError(err).Error("Failed to cleanup expired stickers")
+	} else {
+		totalDeleted += deleted
+	}
+
+	// VACUUM to reclaim space
+	if _, err := a.db.Writer().Exec("VACUUM"); err != nil {
+		a.logger.WithError(err).Warn("Failed to VACUUM database")
+	}
+
+	duration := time.Since(startTime)
+	a.logger.WithField("deleted", totalDeleted).
+		WithField("duration_ms", duration.Milliseconds()).
+		Info("Cache cleanup completed")
+
+	if a.metrics != nil {
+		a.metrics.RecordJob("cache_cleanup", "all", duration.Seconds())
+	}
+}
+
+// refreshStickers runs periodic sticker refresh.
 func (a *Application) refreshStickers(ctx context.Context) {
+	// Initial delay
 	select {
 	case <-ctx.Done():
 		return
@@ -342,6 +397,7 @@ func (a *Application) refreshStickers(ctx context.Context) {
 	}
 }
 
+// performStickerRefresh performs the actual sticker refresh operation.
 func (a *Application) performStickerRefresh(ctx context.Context) {
 	a.logger.Info("Starting periodic sticker refresh...")
 	startTime := time.Now()
@@ -364,6 +420,7 @@ func (a *Application) performStickerRefresh(ctx context.Context) {
 	}
 }
 
+// proactiveWarmup runs daily warmup at 3:00 AM.
 func (a *Application) proactiveWarmup(ctx context.Context) {
 	for {
 		now := time.Now()
@@ -385,6 +442,7 @@ func (a *Application) proactiveWarmup(ctx context.Context) {
 	}
 }
 
+// performProactiveWarmup performs the actual warmup operation.
 func (a *Application) performProactiveWarmup(ctx context.Context) {
 	a.logger.Info("Starting proactive warmup...")
 	startTime := time.Now()
@@ -400,14 +458,19 @@ func (a *Application) performProactiveWarmup(ctx context.Context) {
 	if err != nil {
 		a.logger.WithError(err).Error("Proactive warmup failed")
 	} else {
-		a.logger.WithField("stats", stats).
+		a.logger.WithField("students", stats.Students.Load()).
+			WithField("contacts", stats.Contacts.Load()).
+			WithField("courses", stats.Courses.Load()).
+			WithField("syllabi", stats.Syllabi.Load()).
+			WithField("stickers", stats.Stickers.Load()).
 			WithField("duration_ms", time.Since(startTime).Milliseconds()).
 			Info("Proactive warmup completed")
 	}
 }
 
+// updateCacheSizeMetrics periodically updates cache size metrics.
 func (a *Application) updateCacheSizeMetrics(ctx context.Context) {
-	ticker := time.NewTicker(5 * time.Minute)
+	ticker := time.NewTicker(config.MetricsUpdateInterval)
 	defer ticker.Stop()
 
 	for {
@@ -415,27 +478,44 @@ func (a *Application) updateCacheSizeMetrics(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			studentCount, _ := a.db.CountStudents(ctx)
-			contactCount, _ := a.db.CountContacts(ctx)
-			courseCount, _ := a.db.CountCourses(ctx)
-			syllabiCount, _ := a.db.CountSyllabi(ctx)
-			stickerCount := a.stickerManager.Count()
-
-			a.logger.WithFields(logrus.Fields{
-				"students": studentCount,
-				"contacts": contactCount,
-				"courses":  courseCount,
-				"syllabi":  syllabiCount,
-				"stickers": stickerCount,
-			}).Debug("Cache size metrics updated")
-
-			if a.bm25Index != nil && a.bm25Index.IsEnabled() {
-				a.logger.WithField("bm25_docs", a.bm25Index.Count()).Debug("BM25 index size")
-			}
+			a.recordCacheSizeMetrics(ctx)
 		}
 	}
 }
 
+// recordCacheSizeMetrics records current cache sizes to metrics.
+func (a *Application) recordCacheSizeMetrics(ctx context.Context) {
+	studentCount, _ := a.db.CountStudents(ctx)
+	contactCount, _ := a.db.CountContacts(ctx)
+	courseCount, _ := a.db.CountCourses(ctx)
+	syllabiCount, _ := a.db.CountSyllabi(ctx)
+	stickerCount := a.stickerManager.Count()
+
+	a.logger.WithField("students", studentCount).
+		WithField("contacts", contactCount).
+		WithField("courses", courseCount).
+		WithField("syllabi", syllabiCount).
+		WithField("stickers", stickerCount).
+		Debug("Cache size metrics updated")
+
+	if a.bm25Index != nil && a.bm25Index.IsEnabled() {
+		a.logger.WithField("bm25_docs", a.bm25Index.Count()).Debug("BM25 index size")
+	}
+
+	// Update Prometheus gauges
+	if a.metrics != nil {
+		a.metrics.SetCacheSize("students", studentCount)
+		a.metrics.SetCacheSize("contacts", contactCount)
+		a.metrics.SetCacheSize("courses", courseCount)
+		a.metrics.SetCacheSize("syllabi", syllabiCount)
+		a.metrics.SetCacheSize("stickers", stickerCount)
+		if a.bm25Index != nil {
+			a.metrics.SetIndexSize("bm25", a.bm25Index.Count())
+		}
+	}
+}
+
+// securityHeadersMiddleware adds security headers to responses.
 func securityHeadersMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("X-Content-Type-Options", "nosniff")
@@ -446,6 +526,7 @@ func securityHeadersMiddleware() gin.HandlerFunc {
 	}
 }
 
+// loggingMiddleware logs HTTP requests.
 func loggingMiddleware(log *logger.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
@@ -468,7 +549,7 @@ func loggingMiddleware(log *logger.Logger) gin.HandlerFunc {
 		} else if status >= 400 {
 			entry.Warn("Client error")
 		} else {
-			entry.Info("Request")
+			entry.Debug("Request")
 		}
 	}
 }

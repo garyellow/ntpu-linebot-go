@@ -2,46 +2,47 @@ package logger
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"log/slog"
 	"testing"
 )
 
 func TestNew(t *testing.T) {
 	tests := []struct {
-		name     string
-		level    string
-		wantErr  bool
-		logLevel string
+		name       string
+		level      string
+		checkLevel slog.Level
 	}{
 		{
-			name:     "Valid debug level",
-			level:    "debug",
-			logLevel: "debug",
+			name:       "Valid debug level",
+			level:      "debug",
+			checkLevel: slog.LevelDebug,
 		},
 		{
-			name:     "Valid info level",
-			level:    "info",
-			logLevel: "info",
+			name:       "Valid info level",
+			level:      "info",
+			checkLevel: slog.LevelInfo,
 		},
 		{
-			name:     "Valid warn level",
-			level:    "warn",
-			logLevel: "warning",
+			name:       "Valid warn level",
+			level:      "warn",
+			checkLevel: slog.LevelWarn,
 		},
 		{
-			name:     "Valid error level",
-			level:    "error",
-			logLevel: "error",
+			name:       "Valid error level",
+			level:      "error",
+			checkLevel: slog.LevelError,
 		},
 		{
-			name:     "Invalid level defaults to info",
-			level:    "invalid",
-			logLevel: "info",
+			name:       "Invalid level defaults to info",
+			level:      "invalid",
+			checkLevel: slog.LevelInfo,
 		},
 		{
-			name:     "Empty level defaults to info",
-			level:    "",
-			logLevel: "info",
+			name:       "Empty level defaults to info",
+			level:      "",
+			checkLevel: slog.LevelInfo,
 		},
 	}
 
@@ -52,9 +53,8 @@ func TestNew(t *testing.T) {
 				t.Fatal("New() returned nil")
 			}
 
-			actualLevel := log.GetLevel().String()
-			if actualLevel != tt.logLevel {
-				t.Errorf("New(%q) log level = %q, want %q", tt.level, actualLevel, tt.logLevel)
+			if !log.Enabled(context.Background(), tt.checkLevel) {
+				t.Errorf("Logger should be enabled for level %v", tt.checkLevel)
 			}
 		})
 	}
@@ -62,8 +62,7 @@ func TestNew(t *testing.T) {
 
 func TestLogger_WithModule(t *testing.T) {
 	var buf bytes.Buffer
-	log := New("info")
-	log.SetOutput(&buf)
+	log := NewWithWriter("info", &buf)
 
 	log.WithModule("test_module").Info("test message")
 
@@ -79,8 +78,7 @@ func TestLogger_WithModule(t *testing.T) {
 
 func TestLogger_WithRequestID(t *testing.T) {
 	var buf bytes.Buffer
-	log := New("info")
-	log.SetOutput(&buf)
+	log := NewWithWriter("info", &buf)
 
 	log.WithRequestID("req-123").Info("test message")
 
@@ -96,8 +94,7 @@ func TestLogger_WithRequestID(t *testing.T) {
 
 func TestLogger_WithError(t *testing.T) {
 	var buf bytes.Buffer
-	log := New("info")
-	log.SetOutput(&buf)
+	log := NewWithWriter("info", &buf)
 
 	testErr := &testError{msg: "test error message"}
 	log.WithError(testErr).Error("operation failed")
@@ -112,27 +109,9 @@ func TestLogger_WithError(t *testing.T) {
 	}
 }
 
-func TestLogger_SetLevel(t *testing.T) {
-	log := New("info")
-
-	// Test valid level change
-	if err := log.SetLevel("debug"); err != nil {
-		t.Errorf("SetLevel(debug) error = %v, want nil", err)
-	}
-	if log.GetLevel().String() != "debug" {
-		t.Errorf("SetLevel(debug) level = %q, want %q", log.GetLevel().String(), "debug")
-	}
-
-	// Test invalid level
-	if err := log.SetLevel("invalid"); err == nil {
-		t.Error("SetLevel(invalid) error = nil, want error")
-	}
-}
-
 func TestLogger_JSONFormat(t *testing.T) {
 	var buf bytes.Buffer
-	log := New("info")
-	log.SetOutput(&buf)
+	log := NewWithWriter("info", &buf)
 
 	log.Info("test message")
 

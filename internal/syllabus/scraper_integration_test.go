@@ -17,7 +17,11 @@ func TestScrapeSyllabus_RealPage(t *testing.T) {
 	}
 
 	// Create a real scraper client
-	client := scraper.NewClient(30*time.Second, 3)
+	baseURLs := map[string][]string{
+		"lms": {"https://lms.ntpu.edu.tw"},
+		"sea": {"https://sea.cc.ntpu.edu.tw"},
+	}
+	client := scraper.NewClient(30*time.Second, 3, baseURLs)
 	s := NewScraper(client)
 
 	// Test with a known course URL (演算法, 114-1)
@@ -89,7 +93,11 @@ func TestScrapeSyllabus_DistinctSections(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
-	client := scraper.NewClient(30*time.Second, 3)
+	baseURLs := map[string][]string{
+		"lms": {"https://lms.ntpu.edu.tw"},
+		"sea": {"https://sea.cc.ntpu.edu.tw"},
+	}
+	client := scraper.NewClient(30*time.Second, 3, baseURLs)
 	s := NewScraper(client)
 
 	// Test with the algorithms course

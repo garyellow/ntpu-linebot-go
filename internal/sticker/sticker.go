@@ -16,7 +16,6 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
-	"github.com/sirupsen/logrus"
 )
 
 // Manager manages sticker URLs for LINE bot avatars with SQLite persistence
@@ -119,6 +118,8 @@ func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
 	var allStickers []string
 	successCount := 0
 	errorCount := 0
+	spyCount := 0
+	ichigoCount := 0
 
 	for i := 0; i < len(spyFamilyURLs)+1; i++ {
 		res := <-results
@@ -129,6 +130,14 @@ func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
 		}
 		successCount++
 		allStickers = append(allStickers, res.stickers...)
+
+		// Track counts by source
+		switch res.source {
+		case "spy_family":
+			spyCount += len(res.stickers)
+		case "ichigo":
+			ichigoCount += len(res.stickers)
+		}
 
 		// Save each sticker to database
 		for _, stickerURL := range res.stickers {
@@ -172,12 +181,12 @@ func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
 	m.loaded = true
 	m.mu.Unlock()
 
-	m.logger.WithFields(logrus.Fields{
-		"count":   len(allStickers),
-		"success": successCount,
-		"failed":  errorCount,
-	}).Info("Loaded stickers")
-
+	m.logger.WithFields(map[string]interface{}{
+		"total_fetched": len(allStickers),
+		"spy_family":    spyCount,
+		"ichigo":        ichigoCount,
+		"errors":        errorCount,
+	}).Info("Sticker fetch completed")
 	return nil
 }
 
@@ -189,7 +198,7 @@ func (m *Manager) fetchWithRetry(ctx context.Context, url string, fetchFunc func
 		if attempt > 0 {
 			// Exponential backoff: 1s, 2s, 4s
 			backoff := time.Duration(math.Pow(2, float64(attempt))) * time.Second
-			m.logger.WithFields(logrus.Fields{
+			m.logger.WithFields(map[string]interface{}{
 				"attempt": attempt + 1,
 				"url":     url,
 				"backoff": backoff,

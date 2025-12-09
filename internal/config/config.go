@@ -36,6 +36,7 @@ type Config struct {
 	// Scraper Configuration
 	ScraperTimeout    time.Duration
 	ScraperMaxRetries int
+	ScraperBaseURLs   map[string][]string
 
 	// Warmup Configuration
 	WarmupModules string // Comma-separated list of modules to warmup (default: "sticker,id,contact,course"). Add "syllabus" to enable syllabus warmup (requires GEMINI_API_KEY)
@@ -97,6 +98,18 @@ func Load() (*Config, error) {
 		// Scraper Configuration
 		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", ScraperRequest),
 		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 5),
+		ScraperBaseURLs: map[string][]string{
+			"lms": {
+				"http://120.126.197.52",
+				"https://120.126.197.52",
+				"https://lms.ntpu.edu.tw",
+			},
+			"sea": {
+				"http://120.126.197.7",
+				"https://120.126.197.7",
+				"https://sea.cc.ntpu.edu.tw",
+			},
+		},
 
 		// Warmup Configuration
 		WarmupModules: getEnv("WARMUP_MODULES", "sticker,id,contact,course"),

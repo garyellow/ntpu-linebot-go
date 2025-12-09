@@ -26,7 +26,11 @@ func setupTestHandler(t *testing.T) *Handler {
 	t.Cleanup(func() { _ = db.Close() })
 
 	// Create dependencies
-	scraperClient := scraper.NewClient(30*time.Second, 3)
+	baseURLs := map[string][]string{
+		"lms": {"https://lms.ntpu.edu.tw"},
+		"sea": {"https://sea.cc.ntpu.edu.tw"},
+	}
+	scraperClient := scraper.NewClient(30*time.Second, 3, baseURLs)
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	log := logger.New("info")

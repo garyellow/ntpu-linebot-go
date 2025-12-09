@@ -1,41 +1,40 @@
-package webhook
+package ratelimit
 
 import (
 	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
-	"github.com/garyellow/ntpu-linebot-go/internal/ratelimit"
 )
 
-// RateLimiter wraps the shared ratelimit.Limiter for LINE API calls.
+// WebhookRateLimiter wraps the shared Limiter for LINE API calls.
 // LINE API has rate limits: https://developers.line.biz/en/reference/messaging-api/#rate-limits
-type RateLimiter struct {
-	*ratelimit.Limiter
+type WebhookRateLimiter struct {
+	*Limiter
 }
 
-// NewRateLimiter creates a new rate limiter
+// NewWebhookRateLimiter creates a new rate limiter
 // maxTokens: maximum number of tokens in the bucket
 // refillRate: number of tokens to add per second
-func NewRateLimiter(maxTokens, refillRate float64) *RateLimiter {
-	return &RateLimiter{
-		Limiter: ratelimit.New(maxTokens, refillRate),
+func NewWebhookRateLimiter(maxTokens, refillRate float64) *WebhookRateLimiter {
+	return &WebhookRateLimiter{
+		Limiter: New(maxTokens, refillRate),
 	}
 }
 
 // WaitForToken waits until a token is available
 // Returns immediately if a token is available, otherwise blocks
-func (rl *RateLimiter) WaitForToken() {
+func (rl *WebhookRateLimiter) WaitForToken() {
 	rl.WaitSimple()
 }
 
 // GetAvailableTokens returns the current number of available tokens
-func (rl *RateLimiter) GetAvailableTokens() float64 {
+func (rl *WebhookRateLimiter) GetAvailableTokens() float64 {
 	return rl.Available()
 }
 
 // UserRateLimiter tracks rate limits per user using PerKeyLimiter.
 type UserRateLimiter struct {
-	pkl        *ratelimit.PerKeyLimiter
+	pkl        *PerKeyLimiter
 	maxTokens  float64
 	refillRate float64
 	metrics    *metrics.Metrics
@@ -61,7 +60,7 @@ func (url *UserRateLimiter) initPKL(maxTokens, refillRate float64, cleanup time.
 	url.maxTokens = maxTokens
 	url.refillRate = refillRate
 
-	url.pkl = ratelimit.NewPerKeyLimiter(ratelimit.PerKeyLimiterConfig{
+	url.pkl = NewPerKeyLimiter(PerKeyLimiterConfig{
 		MaxTokens:     maxTokens,
 		RefillRate:    refillRate,
 		CleanupPeriod: cleanup,
