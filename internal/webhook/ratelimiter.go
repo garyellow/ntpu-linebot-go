@@ -1,7 +1,6 @@
 package webhook
 
 import (
-	"sync"
 	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
@@ -34,101 +33,75 @@ func (rl *RateLimiter) GetAvailableTokens() float64 {
 	return rl.Available()
 }
 
-// UserRateLimiter tracks rate limits per user
+// UserRateLimiter tracks rate limits per user using PerKeyLimiter.
 type UserRateLimiter struct {
-	mu       sync.RWMutex
-	limiters map[string]*RateLimiter
-	cleanup  time.Duration
-	metrics  *metrics.Metrics // Optional metrics recorder for tracking dropped requests
-	stopCh   chan struct{}    // Channel to signal cleanup goroutine to stop
+	pkl        *ratelimit.PerKeyLimiter
+	maxTokens  float64
+	refillRate float64
+	metrics    *metrics.Metrics
 }
 
-// NewUserRateLimiter creates a new per-user rate limiter
-// metrics parameter is optional and can be nil
-// Remember to call Stop() when done to prevent goroutine leaks
+// NewUserRateLimiter creates a new per-user rate limiter.
+// Remember to call Stop() when done to prevent goroutine leaks.
 func NewUserRateLimiter(cleanup time.Duration, m *metrics.Metrics) *UserRateLimiter {
 	url := &UserRateLimiter{
-		limiters: make(map[string]*RateLimiter),
-		cleanup:  cleanup,
-		metrics:  m,
-		stopCh:   make(chan struct{}),
+		metrics: m,
 	}
 
-	// Start cleanup goroutine
-	go url.cleanupLoop()
+	// We defer setting maxTokens/refillRate until Allow() is called
+	// since they're passed dynamically per-call
+	url.pkl = nil // Will be initialized on first Allow()
 
 	return url
 }
 
-// Allow checks if a request from a specific user is allowed
+// initPKL initializes the PerKeyLimiter with the given parameters.
+// This is called on first Allow() since maxTokens/refillRate are passed dynamically.
+func (url *UserRateLimiter) initPKL(maxTokens, refillRate float64, cleanup time.Duration) {
+	url.maxTokens = maxTokens
+	url.refillRate = refillRate
+
+	url.pkl = ratelimit.NewPerKeyLimiter(ratelimit.PerKeyLimiterConfig{
+		MaxTokens:     maxTokens,
+		RefillRate:    refillRate,
+		CleanupPeriod: cleanup,
+	})
+
+	if url.metrics != nil {
+		url.pkl.OnDrop(func() {
+			url.metrics.RecordRateLimiterDrop("user")
+		})
+		url.pkl.OnUpdate(func(count int) {
+			url.metrics.SetRateLimiterUsers(count)
+		})
+	}
+}
+
+// Allow checks if a request from a specific user is allowed.
 // userID: the LINE user ID
 // maxTokens: maximum tokens per user (e.g., 6)
 // refillRate: refill rate per second (e.g., 1.0/5.0 = 1 request per 5 seconds)
 func (url *UserRateLimiter) Allow(userID string, maxTokens, refillRate float64) bool {
-	url.mu.RLock()
-	limiter, exists := url.limiters[userID]
-	url.mu.RUnlock()
-
-	if !exists {
-		url.mu.Lock()
-		limiter = NewRateLimiter(maxTokens, refillRate)
-		url.limiters[userID] = limiter
-		url.mu.Unlock()
+	// Initialize on first call with the provided parameters
+	if url.pkl == nil {
+		url.initPKL(maxTokens, refillRate, 5*time.Minute)
 	}
 
-	allowed := limiter.Allow()
-	if !allowed && url.metrics != nil {
-		url.metrics.RecordRateLimiterDrop("user")
-	}
-	return allowed
+	return url.pkl.Allow(userID)
 }
 
-// cleanupLoop periodically removes inactive rate limiters
-// Stops when Stop() is called (stopCh is closed)
-func (url *UserRateLimiter) cleanupLoop() {
-	ticker := time.NewTicker(url.cleanup)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-url.stopCh:
-			return
-		case <-ticker.C:
-			url.mu.Lock()
-			cleanedCount := 0
-			// Remove limiters that are at maximum capacity (inactive users)
-			for userID, limiter := range url.limiters {
-				if limiter.IsFull() {
-					delete(url.limiters, userID)
-					cleanedCount++
-				}
-			}
-			activeCount := len(url.limiters)
-			url.mu.Unlock()
-
-			// Update metrics if available
-			if url.metrics != nil {
-				url.metrics.SetRateLimiterUsers(activeCount)
-			}
-		}
-	}
-}
-
-// GetActiveCount returns the current number of active user limiters
+// GetActiveCount returns the current number of active user limiters.
 func (url *UserRateLimiter) GetActiveCount() int {
-	url.mu.RLock()
-	defer url.mu.RUnlock()
-	return len(url.limiters)
+	if url.pkl == nil {
+		return 0
+	}
+	return url.pkl.GetActiveCount()
 }
 
 // Stop gracefully stops the cleanup goroutine.
-// This should be called during server shutdown to prevent goroutine leaks.
-// Safe to call multiple times (subsequent calls are no-ops).
+// Safe to call multiple times.
 func (url *UserRateLimiter) Stop() {
-	select {
-	case <-url.stopCh:
-		// Already closed, do nothing
-	default:
-		close(url.stopCh)
+	if url.pkl != nil {
+		url.pkl.Stop()
 	}
 }

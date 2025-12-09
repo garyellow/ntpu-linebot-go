@@ -7,15 +7,11 @@ import (
 
 func TestNewLLMRateLimiter(t *testing.T) {
 	limiter := NewLLMRateLimiter(50, 5*time.Minute, nil) // 50 per hour, 5 min cleanup, no metrics
+	defer limiter.Stop()
 
-	if limiter.cleanup != 5*time.Minute {
-		t.Errorf("cleanup = %v, want %v", limiter.cleanup, 5*time.Minute)
-	}
 	if limiter.GetActiveCount() != 0 {
 		t.Errorf("limiters map should be empty initially, got %d entries", limiter.GetActiveCount())
 	}
-
-	limiter.Stop()
 }
 
 func TestLLMRateLimiter_Allow(t *testing.T) {
