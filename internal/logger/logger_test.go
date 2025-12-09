@@ -2,7 +2,6 @@ package logger
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"testing"
 )
@@ -92,30 +91,6 @@ func TestLogger_WithRequestID(t *testing.T) {
 
 	if requestID, ok := logEntry["request_id"].(string); !ok || requestID != "req-123" {
 		t.Errorf("WithRequestID() request_id = %v, want %q", logEntry["request_id"], "req-123")
-	}
-}
-
-func TestLogger_WithContext(t *testing.T) {
-	var buf bytes.Buffer
-	log := New("info")
-	log.SetOutput(&buf)
-
-	ctx := context.Background()
-	ctx = context.WithValue(ctx, RequestIDKey, "ctx-req-456")
-	ctx = context.WithValue(ctx, ModuleKey, "ctx_module")
-
-	log.WithContext(ctx).Info("test message")
-
-	var logEntry map[string]interface{}
-	if err := json.Unmarshal(buf.Bytes(), &logEntry); err != nil {
-		t.Fatalf("Failed to parse JSON log: %v", err)
-	}
-
-	if requestID, ok := logEntry["request_id"].(string); !ok || requestID != "ctx-req-456" {
-		t.Errorf("WithContext() request_id = %v, want %q", logEntry["request_id"], "ctx-req-456")
-	}
-	if module, ok := logEntry["module"].(string); !ok || module != "ctx_module" {
-		t.Errorf("WithContext() module = %v, want %q", logEntry["module"], "ctx_module")
 	}
 }
 

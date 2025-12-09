@@ -1096,26 +1096,6 @@ func deduplicateCourses(courses []storage.Course) []storage.Course {
 	return result
 }
 
-// getChatIDFromContext extracts the chat ID from context.
-// This function is internal to the course package and uses the context key
-// defined in the webhook package. It follows Go's context best practice:
-// "Use context Values only for request-scoped data that transits processes and APIs."
-//
-// The chatID enables features like rate limiting without coupling the course
-// handler to webhook-specific types or session management.
-func getChatIDFromContext(ctx context.Context) string {
-	// Use the same context key pattern as webhook package
-	// Note: This requires importing the context key or using a shared package
-	// For now, we use interface{} type assertion with the string key
-	type contextKey string
-	const chatIDContextKey contextKey = "chatID"
-
-	if chatID, ok := ctx.Value(chatIDContextKey).(string); ok {
-		return chatID
-	}
-	return ""
-}
-
 // handleSmartSearch performs smart search using BM25 + Query Expansion
 // This is triggered by "找課" keywords and searches course syllabi content
 //
@@ -1165,8 +1145,8 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 	expandedQuery := query
 	if h.queryExpander != nil {
 		// Check LLM rate limit if limiter is available and we have a chatID in context
-		// The chatID is injected by webhook handler via context.WithValue
-		chatID := getChatIDFromContext(ctx)
+		// The chatID is injected by webhook handler via ctxutil.WithChatID
+		chatID := ctxutil.GetChatID(ctx)
 		if h.llmRateLimiter != nil && chatID != "" {
 			if !h.llmRateLimiter.Allow(chatID) {
 				log.WithField("chat_id", chatID[:min(8, len(chatID))]+"...").Debug("LLM rate limit exceeded for query expansion, using original query")
