@@ -11,21 +11,30 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
+	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
 func setupTestHandler(t *testing.T) *Handler {
-	db, err := storage.New(":memory:", 168*time.Hour) // 7 days for tests
+	t.Helper()
+
+	// Create test database
+	db, err := storage.New(context.Background(), ":memory:", 168*time.Hour)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
+	t.Cleanup(func() { _ = db.Close() })
 
-	scraperClient := scraper.NewClient(30*time.Second, 3)
+	// Create dependencies
+	baseURLs := map[string][]string{
+		"lms": {"https://lms.ntpu.edu.tw"},
+		"sea": {"https://sea.cc.ntpu.edu.tw"},
+	}
+	scraperClient := scraper.NewClient(30*time.Second, 3, baseURLs)
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	log := logger.New("info")
-	testLogger := logger.New("info")
-	stickerMgr := sticker.NewManager(db, scraperClient, testLogger)
+	stickerMgr := sticker.NewManager(db, scraperClient, log)
 
 	return NewHandler(db, scraperClient, m, log, stickerMgr)
 }
@@ -167,8 +176,8 @@ func TestIsNumeric(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := isNumeric(tt.input); got != tt.want {
-				t.Errorf("isNumeric(%q) = %v, want %v", tt.input, got, tt.want)
+			if got := stringutil.IsNumeric(tt.input); got != tt.want {
+				t.Errorf("stringutil.IsNumeric(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
 	}
@@ -282,37 +291,37 @@ func TestDispatchIntent_ParamValidation(t *testing.T) {
 			name:        "search intent missing name",
 			intent:      IntentSearch,
 			params:      map[string]string{},
-			errContains: "missing required param: name",
+			errContains: "missing required parameter: name",
 		},
 		{
 			name:        "search intent empty name",
 			intent:      IntentSearch,
 			params:      map[string]string{"name": ""},
-			errContains: "missing required param: name",
+			errContains: "missing required parameter: name",
 		},
 		{
 			name:        "student_id intent missing student_id",
 			intent:      IntentStudentID,
 			params:      map[string]string{},
-			errContains: "missing required param: student_id",
+			errContains: "missing required parameter: student_id",
 		},
 		{
 			name:        "student_id intent empty student_id",
 			intent:      IntentStudentID,
 			params:      map[string]string{"student_id": ""},
-			errContains: "missing required param: student_id",
+			errContains: "missing required parameter: student_id",
 		},
 		{
 			name:        "department intent missing department",
 			intent:      IntentDepartment,
 			params:      map[string]string{},
-			errContains: "missing required param: department",
+			errContains: "missing required parameter: department",
 		},
 		{
 			name:        "department intent empty department",
 			intent:      IntentDepartment,
 			params:      map[string]string{"department": ""},
-			errContains: "missing required param: department",
+			errContains: "missing required parameter: department",
 		},
 		{
 			name:        "unknown intent",

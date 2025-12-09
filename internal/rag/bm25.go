@@ -4,7 +4,7 @@ package rag
 
 import (
 	"context"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"unicode"
@@ -135,23 +135,17 @@ func (idx *BM25Index) Initialize(syllabi []*storage.Syllabus) error {
 	return nil
 }
 
-// SyllabiLoader is an interface for loading syllabi from storage.
-// This allows BM25Index to reload data without direct storage dependency.
-type SyllabiLoader interface {
-	GetAllSyllabi(ctx context.Context) ([]*storage.Syllabus, error)
-}
-
 // RebuildFromDB reloads all syllabi from the database and rebuilds the index.
 // This is called during warmup after new syllabi are saved to ensure
 // the index contains complete syllabus content (not just metadata).
 // BM25 requires all documents for IDF calculation, so full rebuild is necessary.
-func (idx *BM25Index) RebuildFromDB(ctx context.Context, loader SyllabiLoader) error {
+func (idx *BM25Index) RebuildFromDB(ctx context.Context, db *storage.DB) error {
 	if idx == nil {
 		return nil
 	}
 
 	// Load all syllabi from database (includes full content)
-	syllabi, err := loader.GetAllSyllabi(ctx)
+	syllabi, err := db.GetAllSyllabi(ctx)
 	if err != nil {
 		return err
 	}
@@ -203,8 +197,14 @@ func (idx *BM25Index) Search(query string, topN int) ([]BM25Result, error) {
 	}
 
 	// Sort by score descending using O(n log n) algorithm
-	sort.Slice(scoredDocs, func(i, j int) bool {
-		return scoredDocs[i].score > scoredDocs[j].score
+	slices.SortFunc(scoredDocs, func(a, b scoredDoc) int {
+		if a.score > b.score {
+			return -1
+		}
+		if a.score < b.score {
+			return 1
+		}
+		return 0
 	})
 
 	// Limit results

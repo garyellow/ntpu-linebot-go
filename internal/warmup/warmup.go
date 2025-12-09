@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -19,6 +18,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 	"github.com/garyellow/ntpu-linebot-go/internal/syllabus"
+	"golang.org/x/sync/errgroup"
 )
 
 // Stats tracks cache warming statistics
@@ -71,121 +71,82 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 		}
 	}
 
-	var wg sync.WaitGroup
-	errChan := make(chan error, len(opts.Modules))
+	g, ctx := errgroup.WithContext(ctx)
 
 	// Channel to signal course completion (for syllabus dependency)
 	courseDone := make(chan struct{})
 
 	// Start independent modules concurrently
 	for _, module := range independentModules {
-		select {
-		case <-ctx.Done():
+		if ctx.Err() != nil {
 			return stats, fmt.Errorf("warmup canceled: %w", ctx.Err())
-		default:
 		}
 
-		wg.Add(1)
-		moduleName := module // Capture for goroutine
-		go func() {
-			defer wg.Done()
-			defer func() {
-				if r := recover(); r != nil {
-					log.WithField("panic", r).WithField("module", moduleName).Error("Panic in warmup module")
-					errChan <- fmt.Errorf("%s module: panic: %v", moduleName, r)
-				}
-			}()
-
-			switch moduleName {
+		g.Go(func() error {
+			switch module {
 			case "id":
 				if err := warmupIDModule(ctx, db, client, log, stats, opts.Metrics); err != nil {
 					log.WithError(err).Error("ID module warmup failed")
-					errChan <- fmt.Errorf("id module: %w", err)
+					return fmt.Errorf("id module: %w", err)
 				}
 			case "contact":
 				if err := warmupContactModule(ctx, db, client, log, stats, opts.Metrics); err != nil {
 					log.WithError(err).Error("Contact module warmup failed")
-					errChan <- fmt.Errorf("contact module: %w", err)
+					return fmt.Errorf("contact module: %w", err)
 				}
 			case "sticker":
 				if err := warmupStickerModule(ctx, stickerMgr, log, stats, opts.Metrics); err != nil {
 					log.WithError(err).Error("Sticker module warmup failed")
-					errChan <- fmt.Errorf("sticker module: %w", err)
+					return fmt.Errorf("sticker module: %w", err)
 				}
 			default:
-				log.WithField("module", moduleName).Warn("Unknown module, skipping")
+				log.WithField("module", module).Warn("Unknown module, skipping")
 			}
-		}()
+			return nil
+		})
 	}
 
 	// Start course module (syllabus will wait for this)
 	if hasCourse {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer close(courseDone) // Signal course completion
-			defer func() {
-				if r := recover(); r != nil {
-					log.WithField("panic", r).WithField("module", "course").Error("Panic in warmup module")
-					errChan <- fmt.Errorf("course module: panic: %v", r)
-				}
-			}()
-
+		g.Go(func() error {
+			defer close(courseDone)
 			if err := warmupCourseModule(ctx, db, client, log, stats, opts.Metrics); err != nil {
 				log.WithError(err).Error("Course module warmup failed")
-				errChan <- fmt.Errorf("course module: %w", err)
+				return fmt.Errorf("course module: %w", err)
 			}
-		}()
+			return nil
+		})
 	} else {
-		// No course module requested, close channel immediately
 		close(courseDone)
 	}
 
 	// Start syllabus module (waits for course to complete first)
 	if hasSyllabus {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer func() {
-				if r := recover(); r != nil {
-					log.WithField("panic", r).WithField("module", "syllabus").Error("Panic in warmup module")
-					errChan <- fmt.Errorf("syllabus module: panic: %v", r)
-				}
-			}()
-
-			// Wait for course module to complete (syllabus needs course data)
+		g.Go(func() error {
 			if hasCourse {
 				log.Debug("Syllabus waiting for course module to complete")
 			}
 			select {
 			case <-ctx.Done():
-				errChan <- fmt.Errorf("syllabus canceled while waiting for course: %w", ctx.Err())
-				return
+				return fmt.Errorf("syllabus canceled while waiting for course: %w", ctx.Err())
 			case <-courseDone:
-				// Course completed (or wasn't requested), proceed with syllabus
 			}
 
 			if opts.BM25Index == nil {
 				log.Info("Syllabus module skipped: BM25Index not configured")
-				return
+				return nil
 			}
 
 			if err := warmupSyllabusModule(ctx, db, client, opts.BM25Index, log, stats, opts.Metrics); err != nil {
 				log.WithError(err).Error("Syllabus module warmup failed")
-				errChan <- fmt.Errorf("syllabus module: %w", err)
+				return fmt.Errorf("syllabus module: %w", err)
 			}
-		}()
+			return nil
+		})
 	}
 
 	// Wait for all modules to complete
-	wg.Wait()
-	close(errChan)
-
-	// Collect errors
-	var errs []error
-	for err := range errChan {
-		errs = append(errs, err)
-	}
+	err := g.Wait()
 
 	duration := time.Since(startTime)
 	log.WithField("duration", duration).
@@ -196,11 +157,9 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 		WithField("syllabi", stats.Syllabi.Load()).
 		Info("Cache warming complete")
 
-	// Return combined error if any modules failed
-	// Note: We still return stats to allow partial success usage
-	if len(errs) > 0 {
-		log.WithField("error_count", len(errs)).Warn("Some modules failed during warmup")
-		return stats, errors.Join(errs...)
+	if err != nil {
+		log.WithError(err).Warn("Some modules failed during warmup")
+		return stats, err
 	}
 
 	return stats, nil
@@ -256,18 +215,8 @@ func ParseModules(modules string) []string {
 
 // resetCache deletes all cached data
 func resetCache(ctx context.Context, db *storage.DB) error {
-	validTables := map[string]bool{
-		"students": true,
-		"contacts": true,
-		"courses":  true,
-		"stickers": true,
-	}
-
 	tables := []string{"students", "contacts", "courses", "stickers"}
 	for _, table := range tables {
-		if !validTables[table] {
-			return fmt.Errorf("invalid table name: %s", table)
-		}
 		query := fmt.Sprintf("DELETE FROM %s", table)
 		if _, err := db.ExecContext(ctx, query); err != nil {
 			return fmt.Errorf("failed to delete from %s: %w", table, err)
@@ -305,6 +254,7 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 
 	var completed int
 	var errorCount int
+	var errs []error
 
 	// Execute tasks sequentially (one at a time)
 	for year := fromYear; year > 100; year-- {
@@ -324,6 +274,7 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 					WithField("year", year).
 					WithField("dept", dept).
 					Warn("Failed to scrape students")
+				errs = append(errs, fmt.Errorf("scrape year=%d dept=%s: %w", year, dept, err))
 				errorCount++
 				continue
 			}
@@ -335,6 +286,7 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 					WithField("dept", dept).
 					WithField("count", len(students)).
 					Warn("Failed to save student batch")
+				errs = append(errs, fmt.Errorf("save year=%d dept=%s: %w", year, dept, err))
 				errorCount++
 				continue
 			}
@@ -351,7 +303,7 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 	}
 
 	if errorCount > 0 {
-		return fmt.Errorf("completed with %d errors", errorCount)
+		return errors.Join(errs...)
 	}
 	return nil
 }

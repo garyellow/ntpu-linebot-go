@@ -7,17 +7,20 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	"github.com/garyellow/ntpu-linebot-go/internal/config"
+	"github.com/garyellow/ntpu-linebot-go/internal/ctxutil"
+	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
 	"github.com/garyellow/ntpu-linebot-go/internal/genai"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 	"github.com/garyellow/ntpu-linebot-go/internal/rag"
+	"github.com/garyellow/ntpu-linebot-go/internal/ratelimit"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper/ntpu"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
@@ -25,20 +28,27 @@ import (
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
-// Handler handles course-related queries
+// Handler handles course-related queries.
+// It depends on *storage.DB directly for data access.
 type Handler struct {
 	db             *storage.DB
 	scraper        *scraper.Client
 	metrics        *metrics.Metrics
 	logger         *logger.Logger
 	stickerManager *sticker.Manager
-	bm25Index      *rag.BM25Index       // Optional: for BM25 search (nil if disabled)
-	queryExpander  *genai.QueryExpander // Optional: for query expansion (nil if disabled)
+	bm25Index      *rag.BM25Index
+	queryExpander  *genai.QueryExpander
+	llmRateLimiter *ratelimit.LLMRateLimiter
+}
+
+// Name returns the module name
+func (h *Handler) Name() string {
+	return ModuleName
 }
 
 // Course handler constants.
 const (
-	moduleName           = "course"
+	ModuleName           = "course" // Module identifier for registration
 	senderName           = "課程小幫手"
 	MaxCoursesPerSearch  = 40 // Maximum courses to return (40 courses = 4 carousels @ 10 bubbles each), leaving 1 slot for warning (LINE API max: 5 messages)
 	MaxTitleDisplayChars = 60 // Maximum characters for course title display before truncation
@@ -88,32 +98,31 @@ var (
 	historicalCourseRegex = regexp.MustCompile(`(?i)^(課程?|course|class)\s+(\d{2,3})\s+(.+)$`)
 )
 
-// NewHandler creates a new course handler
-func NewHandler(db *storage.DB, scraper *scraper.Client, metrics *metrics.Metrics, logger *logger.Logger, stickerManager *sticker.Manager) *Handler {
+// NewHandler creates a new course handler with required dependencies.
+// Optional dependencies (bm25Index, queryExpander, llmRateLimiter) can be nil.
+func NewHandler(
+	db *storage.DB,
+	scraper *scraper.Client,
+	metrics *metrics.Metrics,
+	logger *logger.Logger,
+	stickerManager *sticker.Manager,
+	bm25Index *rag.BM25Index,
+	queryExpander *genai.QueryExpander,
+	llmRateLimiter *ratelimit.LLMRateLimiter,
+) *Handler {
 	return &Handler{
 		db:             db,
 		scraper:        scraper,
 		metrics:        metrics,
 		logger:         logger,
 		stickerManager: stickerManager,
-		bm25Index:      nil, // Set via SetBM25Index after initialization
-		queryExpander:  nil, // Set via SetQueryExpander after initialization
+		bm25Index:      bm25Index,
+		queryExpander:  queryExpander,
+		llmRateLimiter: llmRateLimiter,
 	}
 }
 
-// SetBM25Index sets the BM25 index for smart search.
-// This is optional - if not set, smart search is disabled.
-func (h *Handler) SetBM25Index(bm25Index *rag.BM25Index) {
-	h.bm25Index = bm25Index
-}
-
-// SetQueryExpander sets the query expander for smart search query expansion
-// This is optional - if not set, queries are used as-is
-func (h *Handler) SetQueryExpander(expander *genai.QueryExpander) {
-	h.queryExpander = expander
-}
-
-// IsBM25SearchEnabled returns true if BM25 search is enabled
+// IsBM25SearchEnabled returns true if BM25 search is enabled.
 func (h *Handler) IsBM25SearchEnabled() bool {
 	return h.bm25Index != nil && h.bm25Index.IsEnabled()
 }
@@ -140,35 +149,35 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 	case IntentSearch:
 		keyword, ok := params["keyword"]
 		if !ok || keyword == "" {
-			return nil, fmt.Errorf("missing required param: keyword")
+			return nil, fmt.Errorf("%w: keyword", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(moduleName).Infof("Dispatching course intent: %s, keyword: %s", intent, keyword)
+			h.logger.WithModule(ModuleName).Infof("Dispatching course intent: %s, keyword: %s", intent, keyword)
 		}
 		return h.handleUnifiedCourseSearch(ctx, keyword), nil
 
 	case IntentSmart:
 		query, ok := params["query"]
 		if !ok || query == "" {
-			return nil, fmt.Errorf("missing required param: query")
+			return nil, fmt.Errorf("%w: query", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(moduleName).Infof("Dispatching course intent: %s, query: %s", intent, query)
+			h.logger.WithModule(ModuleName).Infof("Dispatching course intent: %s, query: %s", intent, query)
 		}
 		return h.handleSmartSearch(ctx, query), nil
 
 	case IntentUID:
 		uid, ok := params["uid"]
 		if !ok || uid == "" {
-			return nil, fmt.Errorf("missing required param: uid")
+			return nil, fmt.Errorf("%w: uid", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(moduleName).Infof("Dispatching course intent: %s, uid: %s", intent, uid)
+			h.logger.WithModule(ModuleName).Infof("Dispatching course intent: %s, uid: %s", intent, uid)
 		}
 		return h.handleCourseUIDQuery(ctx, uid), nil
 
 	default:
-		return nil, fmt.Errorf("unknown intent: %s", intent)
+		return nil, fmt.Errorf("%w: %s", domerrors.ErrUnknownIntent, intent)
 	}
 }
 
@@ -201,7 +210,7 @@ func (h *Handler) CanHandle(text string) bool {
 
 // HandleMessage handles text messages for the course module
 func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_api.MessageInterface {
-	log := h.logger.WithModule(moduleName)
+	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
 	log.Infof("Handling course message: %s", text)
@@ -286,7 +295,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 
 // HandlePostback handles postback events for the course module
 func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_api.MessageInterface {
-	log := h.logger.WithModule(moduleName)
+	log := h.logger.WithModule(ModuleName)
 	log.Infof("Handling course postback: %s", data)
 
 	// Handle "授課課程" postback FIRST (before UID check, since teacher name might contain numbers)
@@ -309,7 +318,7 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 
 // handleCourseUIDQuery handles course UID queries
 func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messaging_api.MessageInterface {
-	log := h.logger.WithModule(moduleName)
+	log := h.logger.WithModule(ModuleName)
 	startTime := time.Now()
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
@@ -320,7 +329,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 	course, err := h.db.GetCourseByUID(ctx, uid)
 	if err != nil {
 		log.WithError(err).Error("Failed to query cache")
-		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
+		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		return []messaging_api.MessageInterface{
 			lineutil.ErrorMessageWithQuickReply("查詢課程時發生問題", sender, uid),
 		}
@@ -328,19 +337,19 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 
 	if course != nil {
 		// Cache hit
-		h.metrics.RecordCacheHit(moduleName)
+		h.metrics.RecordCacheHit(ModuleName)
 		log.Infof("Cache hit for course UID: %s", uid)
 		return h.formatCourseResponse(course)
 	}
 
 	// Cache miss - scrape from website
-	h.metrics.RecordCacheMiss(moduleName)
+	h.metrics.RecordCacheMiss(ModuleName)
 	log.Infof("Cache miss for course UID: %s, scraping...", uid)
 
 	course, err = ntpu.ScrapeCourseByUID(ctx, h.scraper, uid)
 	if err != nil {
 		log.WithError(err).Errorf("Failed to scrape course UID: %s", uid)
-		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
+		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🔍 查無課程編號 %s\n\n請確認課程編號是否正確", uid), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyCourseAction(),
@@ -352,7 +361,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 	// Check if course was found (prevent nil pointer dereference)
 	if course == nil {
 		log.Warnf("Course UID %s not found after scraping", uid)
-		h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
+		h.metrics.RecordScraperRequest(ModuleName, "not_found", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(
 			fmt.Sprintf("🔍 查無課程編號 %s\n\n請確認\n• 課程編號拼寫是否正確\n• 該課程是否在近兩學年度開設", uid),
 			sender,
@@ -369,14 +378,14 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 		log.WithError(err).Warn("Failed to save course to cache")
 	}
 
-	h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
+	h.metrics.RecordScraperRequest(ModuleName, "success", time.Since(startTime).Seconds())
 	return h.formatCourseResponse(course)
 }
 
 // handleCourseNoQuery handles course number only queries (e.g., U0001, M0002)
 // It searches in current and previous semester to find the course
 func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []messaging_api.MessageInterface {
-	log := h.logger.WithModule(moduleName)
+	log := h.logger.WithModule(ModuleName)
 	startTime := time.Now()
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
@@ -401,14 +410,14 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 		}
 
 		if course != nil {
-			h.metrics.RecordCacheHit(moduleName)
+			h.metrics.RecordCacheHit(ModuleName)
 			log.Infof("Cache hit for course UID: %s (from course no: %s)", uid, courseNo)
 			return h.formatCourseResponse(course)
 		}
 	}
 
 	// Cache miss - try scraping from each semester
-	h.metrics.RecordCacheMiss(moduleName)
+	h.metrics.RecordCacheMiss(ModuleName)
 	log.Infof("Cache miss for course number: %s, scraping...", courseNo)
 
 	for i := range searchYears {
@@ -428,14 +437,14 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 				log.WithError(err).Warn("Failed to save course to cache")
 			}
 
-			h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
+			h.metrics.RecordScraperRequest(ModuleName, "success", time.Since(startTime).Seconds())
 			log.Infof("Found course for UID: %s (from course no: %s)", uid, courseNo)
 			return h.formatCourseResponse(course)
 		}
 	}
 
 	// No results found
-	h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
+	h.metrics.RecordScraperRequest(ModuleName, "not_found", time.Since(startTime).Seconds())
 
 	// Build helpful message with examples
 	exampleUID := fmt.Sprintf("%d1%s", searchYears[0], courseNo)
@@ -472,7 +481,7 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 // Multi-word search: "微積分 王" will find courses where title contains "微積分王"
 // OR where all characters exist in title+teachers combined.
 func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm string) []messaging_api.MessageInterface {
-	log := h.logger.WithModule(moduleName)
+	log := h.logger.WithModule(ModuleName)
 	startTime := time.Now()
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
@@ -482,7 +491,7 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 	titleCourses, err := h.db.SearchCoursesByTitle(ctx, searchTerm)
 	if err != nil {
 		log.WithError(err).Error("Failed to search courses by title in cache")
-		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
+		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		return []messaging_api.MessageInterface{
 			lineutil.ErrorMessageWithQuickReply("搜尋課程時發生問題", sender, "課程 "+searchTerm),
 		}
@@ -524,14 +533,14 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 	courses = deduplicateCourses(courses)
 
 	if len(courses) > 0 {
-		h.metrics.RecordCacheHit(moduleName)
+		h.metrics.RecordCacheHit(ModuleName)
 		log.Infof("Found %d courses in cache for search term: %s", len(courses), searchTerm)
 		return h.formatCourseListResponse(courses)
 	}
 
 	// Step 3: Cache miss - Try scraping from current and previous semester
 	log.Infof("Cache miss for search term: %s, scraping from recent semesters...", searchTerm)
-	h.metrics.RecordCacheMiss(moduleName)
+	h.metrics.RecordCacheMiss(ModuleName)
 
 	// Get semesters to search based on current date
 	searchYears, searchTerms := getSemestersToSearch()
@@ -608,7 +617,7 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 	}
 
 	if len(foundCourses) > 0 {
-		h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
+		h.metrics.RecordScraperRequest(ModuleName, "success", time.Since(startTime).Seconds())
 		// Convert []*storage.Course to []storage.Course
 		courses := make([]storage.Course, len(foundCourses))
 		for i, c := range foundCourses {
@@ -621,8 +630,10 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 	if h.bm25Index != nil && h.bm25Index.IsEnabled() {
 		log.Infof("No keyword results for %s, trying BM25 search...", searchTerm)
 
-		// Use detached context to prevent cancellation from request context
-		searchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), config.SmartSearchTimeout)
+		// Use detached context for smart search operations.
+		// PreserveTracing() creates independent context to prevent parent cancellation
+		// from aborting LLM API calls (Gemini Query Expansion may take several seconds).
+		searchCtx, cancel := context.WithTimeout(ctxutil.PreserveTracing(ctx), config.SmartSearchTimeout)
 		defer cancel()
 		smartResults, err := h.bm25Index.SearchCourses(searchCtx, searchTerm, 5)
 
@@ -636,14 +647,14 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 			}
 
 			if len(smartCourses) > 0 {
-				h.metrics.RecordScraperRequest(moduleName, "smart_fallback", time.Since(startTime).Seconds())
+				h.metrics.RecordScraperRequest(ModuleName, "smart_fallback", time.Since(startTime).Seconds())
 				return h.formatSmartSearchResponse(smartCourses, smartResults)
 			}
 		}
 	}
 
 	// No results found even after scraping and smart search
-	h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
+	h.metrics.RecordScraperRequest(ModuleName, "not_found", time.Since(startTime).Seconds())
 
 	// Build help message with smart search suggestion
 	helpText := fmt.Sprintf(
@@ -674,7 +685,7 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 // Uses separate historical_courses table with 7-day TTL for on-demand caching
 // This function is called for courses older than the regular warmup range (2 years)
 func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, keyword string) []messaging_api.MessageInterface {
-	log := h.logger.WithModule(moduleName)
+	log := h.logger.WithModule(ModuleName)
 	startTime := time.Now()
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
@@ -697,30 +708,56 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	}
 
 	// Search in historical_courses cache first
-	courses, err := h.db.SearchHistoricalCoursesByYearAndTitle(ctx, year, keyword)
+	// Search in both terms for the specified year
+	var courses []storage.Course
+	for _, term := range []int{1, 2} {
+		termCourses, err := h.db.GetCoursesByYearTerm(ctx, year, term)
+		if err != nil {
+			log.WithError(err).Warnf("Failed to get courses for year %d term %d", year, term)
+			continue
+		}
+		// Filter by keyword using fuzzy matching
+		for _, c := range termCourses {
+			if bot.ContainsAllRunes(c.Title, keyword) {
+				courses = append(courses, c)
+			}
+		}
+	}
+
+	if len(courses) > 0 {
+		log.WithField("count", len(courses)).Info("Found courses in historical cache")
+		h.metrics.RecordScraperRequest(ModuleName, "success", time.Since(startTime).Seconds())
+		// Limit results
+		if len(courses) > MaxCoursesPerSearch {
+			courses = courses[:MaxCoursesPerSearch]
+		}
+		return h.formatCourseListResponse(courses)
+	}
+
+	err := fmt.Errorf("no courses found in cache")
 	if err != nil {
 		log.WithError(err).Error("Failed to search historical courses in cache")
-		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
+		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		msg := lineutil.ErrorMessageWithDetailAndSender("搜尋歷史課程時發生問題", sender)
 		return []messaging_api.MessageInterface{msg}
 	}
 
 	if len(courses) > 0 {
-		h.metrics.RecordCacheHit(moduleName)
+		h.metrics.RecordCacheHit(ModuleName)
 		log.Infof("Found %d historical courses in cache for year=%d, keyword=%s", len(courses), year, keyword)
 		return h.formatCourseListResponse(courses)
 	}
 
 	// Cache miss - scrape from historical course system
 	log.Infof("Cache miss for historical course: year=%d, keyword=%s, scraping...", year, keyword)
-	h.metrics.RecordCacheMiss(moduleName)
+	h.metrics.RecordCacheMiss(ModuleName)
 
 	// Use term=0 to query both semesters at once (more efficient)
 	scrapedCourses, err := ntpu.ScrapeCourses(ctx, h.scraper, year, 0, keyword)
 	if err != nil {
 		log.WithError(err).WithField("year", year).
 			Warn("Failed to scrape historical courses")
-		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
+		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(
 			fmt.Sprintf("🔍 查無 %d 學年度包含「%s」的課程\n\n請確認\n• 學年度和課程名稱是否正確\n• 該課程是否在該學年度開設", year, keyword),
 			sender,
@@ -735,13 +772,13 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 
 	// Save courses to historical_courses table
 	for _, course := range scrapedCourses {
-		if err := h.db.SaveHistoricalCourse(ctx, course); err != nil {
+		if err := h.db.SaveCourse(ctx, course); err != nil {
 			log.WithError(err).Warn("Failed to save historical course to cache")
 		}
 	}
 
 	if len(scrapedCourses) > 0 {
-		h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
+		h.metrics.RecordScraperRequest(ModuleName, "success", time.Since(startTime).Seconds())
 		// Convert []*storage.Course to []storage.Course
 		courses := make([]storage.Course, len(scrapedCourses))
 		for i, c := range scrapedCourses {
@@ -751,7 +788,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	}
 
 	// No results found
-	h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
+	h.metrics.RecordScraperRequest(ModuleName, "not_found", time.Since(startTime).Seconds())
 	msg := lineutil.NewTextMessageWithConsistentSender(
 		fmt.Sprintf("🔍 查無 %d 學年度包含「%s」的課程\n\n請確認\n• 學年度和課程名稱是否正確\n• 該課程是否在該學年度開設", year, keyword),
 		sender,
@@ -924,11 +961,11 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 	}
 
 	// Sort courses: year descending (recent first), then term descending (term 2 before term 1)
-	sort.Slice(courses, func(i, j int) bool {
-		if courses[i].Year != courses[j].Year {
-			return courses[i].Year > courses[j].Year // Year: recent first
+	slices.SortFunc(courses, func(a, b storage.Course) int {
+		if a.Year != b.Year {
+			return b.Year - a.Year // Year: recent first
 		}
-		return courses[i].Term > courses[j].Term // Term: 2 (下學期) before 1 (上學期)
+		return b.Term - a.Term // Term: 2 (下學期) before 1 (上學期)
 	})
 
 	sender := lineutil.GetSender(senderName, h.stickerManager)
@@ -1070,7 +1107,7 @@ func deduplicateCourses(courses []storage.Course) []storage.Course {
 // Total operation is bounded by SmartSearchTimeout (30s), well within
 // the 60s webhook limit. Reply token remains valid for ~20 minutes.
 func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messaging_api.MessageInterface {
-	log := h.logger.WithModule(moduleName)
+	log := h.logger.WithModule(ModuleName)
 	startTime := time.Now()
 
 	// Check if BM25 search is enabled
@@ -1088,24 +1125,57 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 
 	searchType := "bm25"
 
-	// Use a detached context for API calls to prevent cancellation
-	// when the HTTP request context is canceled (e.g., LINE server closes connection)
-	searchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), config.SmartSearchTimeout)
+	// Use detached context for API calls (Query Expansion LLM + BM25 search).
+	// PreserveTracing() preserves tracing values (request ID, user ID, chat ID)
+	// for observability while preventing cancellation from parent timeout.
+	// This ensures LLM API calls complete even if HTTP request is canceled.
+	// Safer than WithoutCancel (avoids memory leaks from parent references).
+	searchCtx, cancel := context.WithTimeout(ctxutil.PreserveTracing(ctx), config.SmartSearchTimeout)
 	defer cancel()
 
 	// Expand query for better search results (adds synonyms, translations, related terms)
 	// Examples: "AWS" → "AWS Amazon Web Services 雲端服務 雲端運算 cloud computing"
+	//
+	// LLM Rate Limiting Strategy:
+	// - NLU-routed requests: Already checked at webhook layer before reaching here
+	// - Keyword-triggered requests: Check here using chatID from context
+	//
+	// This design maintains low coupling - the course handler doesn't need to know
+	// about webhook sources or user sessions, it just uses the chatID from context.
 	expandedQuery := query
 	if h.queryExpander != nil {
-		expanded, err := h.queryExpander.Expand(searchCtx, query)
-		if err != nil {
-			log.WithError(err).Debug("Query expansion failed, using original query")
-		} else if expanded != query {
-			expandedQuery = expanded
-			log.WithFields(map[string]any{
-				"original": query,
-				"expanded": expandedQuery,
-			}).Debug("Query expanded")
+		// Check LLM rate limit if limiter is available and we have a chatID in context
+		// The chatID is injected by webhook handler via ctxutil.WithChatID
+		chatID := ctxutil.GetChatID(ctx)
+		if h.llmRateLimiter != nil && chatID != "" {
+			if !h.llmRateLimiter.Allow(chatID) {
+				log.WithField("chat_id", chatID[:min(8, len(chatID))]+"...").Debug("LLM rate limit exceeded for query expansion, using original query")
+				// Graceful degradation: continue with original query instead of failing
+			} else {
+				// Rate limit OK, proceed with expansion
+				expanded, err := h.queryExpander.Expand(searchCtx, query)
+				if err != nil {
+					log.WithError(err).Debug("Query expansion failed, using original query")
+				} else if expanded != query {
+					expandedQuery = expanded
+					log.WithFields(map[string]any{
+						"original": query,
+						"expanded": expandedQuery,
+					}).Debug("Query expanded")
+				}
+			}
+		} else {
+			// No rate limiting configured, proceed with expansion
+			expanded, err := h.queryExpander.Expand(searchCtx, query)
+			if err != nil {
+				log.WithError(err).Debug("Query expansion failed, using original query")
+			} else if expanded != query {
+				expandedQuery = expanded
+				log.WithFields(map[string]any{
+					"original": query,
+					"expanded": expandedQuery,
+				}).Debug("Query expanded")
+			}
 		}
 	}
 

@@ -1,8 +1,8 @@
 services:
   init-data:
     image: alpine:latest
-    container_name: ntpu-linebot-init-data
-    restart: "no"
+    container_name: ntpu-init-data
+    restart: no
     command: sh -c "mkdir -p /data && chown 65532:65532 /data && chmod 755 /data"
     volumes:
       - ./data:/data
@@ -14,9 +14,38 @@ services:
     container_name: ntpu-linebot
     restart: unless-stopped
     ports:
-      - "10000:10000"
+      - "${HOST_PORT:-10000}:10000"
     volumes:
       - ./data:/data
+    environment:
+      # LINE Bot Configuration (Required)
+      - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN:?LINE_CHANNEL_ACCESS_TOKEN is required}
+      - LINE_CHANNEL_SECRET=${LINE_CHANNEL_SECRET:?LINE_CHANNEL_SECRET is required}
+
+      # GenAI Configuration (Optional)
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+
+      # Server Configuration
+      - PORT=${PORT:-10000}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DATA_DIR=${DATA_DIR:-/data}
+      - CACHE_TTL=${CACHE_TTL:-168h}
+      - SHUTDOWN_TIMEOUT=${SHUTDOWN_TIMEOUT:-30s}
+
+      # Scraper Configuration
+      - SCRAPER_TIMEOUT=${SCRAPER_TIMEOUT:-60s}
+      - SCRAPER_MAX_RETRIES=${SCRAPER_MAX_RETRIES:-5}
+
+      # Warmup Configuration
+      - WARMUP_MODULES=${WARMUP_MODULES:-sticker,id,contact,course}
+
+      # Webhook Configuration
+      - WEBHOOK_TIMEOUT=${WEBHOOK_TIMEOUT:-60s}
+
+      # Rate Limit Configuration
+      - USER_RATE_LIMIT_TOKENS=${USER_RATE_LIMIT_TOKENS:-6}
+      - USER_RATE_LIMIT_REFILL_RATE=${USER_RATE_LIMIT_REFILL_RATE:-0.2}
+      - LLM_RATE_LIMIT_PER_HOUR=${LLM_RATE_LIMIT_PER_HOUR:-50}
     deploy:
       resources:
         limits:
@@ -25,30 +54,13 @@ services:
         reservations:
           cpus: '0.5'
           memory: 256M
-    # Limit log size to prevent disk exhaustion
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
-        max-size: "50m"
+        max-size: 50m
         max-file: "3"
-    environment:
-      - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN}
-      - LINE_CHANNEL_SECRET=${LINE_CHANNEL_SECRET}
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - PORT=${PORT:-10000}
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - DATA_DIR=${DATA_DIR:-/data}
-      - CACHE_TTL=${CACHE_TTL:-168h}
-      - SCRAPER_TIMEOUT=${SCRAPER_TIMEOUT:-60s}
-      - SCRAPER_MAX_RETRIES=${SCRAPER_MAX_RETRIES:-5}
-      - SHUTDOWN_TIMEOUT=${SHUTDOWN_TIMEOUT:-30s}
-      - WEBHOOK_TIMEOUT=${WEBHOOK_TIMEOUT:-60s}
-      - WARMUP_MODULES=${WARMUP_MODULES:-sticker,id,contact,course,syllabus}
-      - USER_RATE_LIMIT_TOKENS=${USER_RATE_LIMIT_TOKENS:-6}
-      - USER_RATE_LIMIT_REFILL_RATE=${USER_RATE_LIMIT_REFILL_RATE:-0.2}
     security_opt:
       - no-new-privileges:true
-    # Read-only filesystem for enhanced security
     read_only: true
     tmpfs:
       - /tmp:size=64M
@@ -88,9 +100,9 @@ services:
         reservations:
           memory: 256M
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
-        max-size: "20m"
+        max-size: 20m
         max-file: "3"
     security_opt:
       - no-new-privileges:true
@@ -127,9 +139,9 @@ services:
         reservations:
           memory: 64M
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
-        max-size: "10m"
+        max-size: 10m
         max-file: "3"
     security_opt:
       - no-new-privileges:true
@@ -169,9 +181,9 @@ services:
         reservations:
           memory: 128M
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
-        max-size: "20m"
+        max-size: 20m
         max-file: "3"
     security_opt:
       - no-new-privileges:true

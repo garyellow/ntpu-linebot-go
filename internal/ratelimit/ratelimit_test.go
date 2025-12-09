@@ -159,17 +159,15 @@ func TestConcurrentAccess(t *testing.T) {
 	allowed := make(chan struct{}, 200)
 
 	// Spawn 50 goroutines each trying to get 2 tokens
-	for i := 0; i < 50; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 50 {
+		wg.Go(func() {
 			if l.Allow() {
 				allowed <- struct{}{}
 			}
 			if l.Allow() {
 				allowed <- struct{}{}
 			}
-		}()
+		})
 	}
 
 	wg.Wait()

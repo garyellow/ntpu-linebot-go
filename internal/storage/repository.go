@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
 )
 
 // SaveStudent inserts or updates a student record
@@ -54,7 +56,7 @@ func (db *DB) SaveStudentsBatch(ctx context.Context, students []*Student) error 
 	})
 }
 
-// GetStudentByID retrieves a student by ID and validates cache freshness (7 days = 168 hours)
+// GetStudentByID retrieves a student by ID and validates cache freshness.
 func (db *DB) GetStudentByID(ctx context.Context, id string) (*Student, error) {
 	query := `SELECT id, name, department, year, cached_at FROM students WHERE id = ?`
 
@@ -71,82 +73,66 @@ func (db *DB) GetStudentByID(ctx context.Context, id string) (*Student, error) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to get student by ID: %w", err)
+		return nil, fmt.Errorf("query student: %w", err)
 	}
 
-	// Check TTL using configured cache duration
 	ttl := int64(db.cacheTTL.Seconds())
 	if student.CachedAt+ttl <= time.Now().Unix() {
-		return nil, nil // Cache expired
+		return nil, nil
 	}
 
 	return &student, nil
 }
 
-// SearchStudentsByName searches students by partial name match (max 500 results)
-// Only returns non-expired cache entries based on configured TTL
+// SearchStudentsByName searches students by partial name match.
 func (db *DB) SearchStudentsByName(ctx context.Context, name string) ([]Student, error) {
-	// Validate input to prevent SQL injection (even though we use prepared statements)
 	if len(name) > 100 {
 		return nil, fmt.Errorf("search term too long")
 	}
 
-	// Sanitize search term to prevent SQL LIKE special character issues
 	sanitized := sanitizeSearchTerm(name)
-
-	// Add TTL filter to prevent returning stale data
 	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT id, name, department, year, cached_at FROM students WHERE name LIKE ? ESCAPE '\' AND cached_at > ? ORDER BY year DESC, id DESC LIMIT 500`
 
 	rows, err := db.reader.QueryContext(ctx, query, "%"+sanitized+"%", ttlTimestamp)
 	if err != nil {
-		return nil, fmt.Errorf("failed to search students by name: %w", err)
+		return nil, fmt.Errorf("query students: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 
 	var students []Student
 	for rows.Next() {
 		var student Student
 		if err := rows.Scan(&student.ID, &student.Name, &student.Department, &student.Year, &student.CachedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan student row: %w", err)
+			return nil, fmt.Errorf("scan student: %w", err)
 		}
 		students = append(students, student)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating student rows: %w", err)
-	}
-
-	return students, nil
+	return students, rows.Err()
 }
 
-// GetStudentsByYearDept retrieves students by year and department
-// Only returns non-expired cache entries based on configured TTL
-func (db *DB) GetStudentsByYearDept(ctx context.Context, year int, dept string) ([]Student, error) {
-	// Add TTL filter to prevent returning stale data
+// GetStudentsByDepartment retrieves students by year and department.
+func (db *DB) GetStudentsByDepartment(ctx context.Context, dept string, year int) ([]Student, error) {
 	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT id, name, department, year, cached_at FROM students WHERE year = ? AND department = ? AND cached_at > ?`
 
 	rows, err := db.reader.QueryContext(ctx, query, year, dept, ttlTimestamp)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get students by year and department: %w", err)
+		return nil, fmt.Errorf("query students: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 
 	var students []Student
 	for rows.Next() {
 		var student Student
 		if err := rows.Scan(&student.ID, &student.Name, &student.Department, &student.Year, &student.CachedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan student row: %w", err)
+			return nil, fmt.Errorf("scan student: %w", err)
 		}
 		students = append(students, student)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating student rows: %w", err)
-	}
-
-	return students, nil
+	return students, rows.Err()
 }
 
 // DeleteExpiredStudents removes students older than the specified TTL
@@ -1356,7 +1342,7 @@ func (db *DB) GetSyllabusByUID(ctx context.Context, uid string) (*Syllabus, erro
 		&syllabus.CachedAt,
 	)
 	if err == sql.ErrNoRows {
-		return nil, ErrNotFound
+		return nil, domerrors.ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get syllabus: %w", err)
@@ -1496,4 +1482,85 @@ func (db *DB) DeleteExpiredSyllabi(ctx context.Context, ttl time.Duration) (int6
 		return 0, fmt.Errorf("failed to get rows affected for syllabi: %w", err)
 	}
 	return rowsAffected, nil
+}
+
+// GetRandomSticker retrieves a random sticker URL from cache.
+// Returns empty string if no stickers available.
+func (db *DB) GetRandomSticker(ctx context.Context) (string, error) {
+	query := `SELECT url FROM stickers WHERE success_count > failure_count ORDER BY RANDOM() LIMIT 1`
+	var url string
+	err := db.reader.QueryRowContext(ctx, query).Scan(&url)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("failed to get random sticker: %w", err)
+	}
+	return url, nil
+}
+
+// UpdateStickerStats updates the success/failure count for a sticker.
+func (db *DB) UpdateStickerStats(ctx context.Context, url string, success bool) error {
+	var query string
+	if success {
+		query = `UPDATE stickers SET success_count = success_count + 1 WHERE url = ?`
+	} else {
+		query = `UPDATE stickers SET failure_count = failure_count + 1 WHERE url = ?`
+	}
+	_, err := db.writer.ExecContext(ctx, query, url)
+	if err != nil {
+		return fmt.Errorf("failed to update sticker stats: %w", err)
+	}
+	return nil
+}
+
+// SaveStickers persists multiple sticker records in a batch.
+func (db *DB) SaveStickers(ctx context.Context, stickers []*Sticker) error {
+	if len(stickers) == 0 {
+		return nil
+	}
+
+	query := `
+		INSERT INTO stickers (url, source, cached_at, success_count, failure_count)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(url) DO UPDATE SET
+			source = excluded.source,
+			cached_at = excluded.cached_at
+	`
+
+	cachedAt := time.Now().Unix()
+	return db.ExecBatchContext(ctx, query, func(stmt *sql.Stmt) error {
+		for _, sticker := range stickers {
+			if _, err := stmt.ExecContext(ctx, sticker.URL, sticker.Source, cachedAt, 0, 0); err != nil {
+				return fmt.Errorf("failed to save sticker %s: %w", sticker.URL, err)
+			}
+		}
+		return nil
+	})
+}
+
+// CountStickersBySource returns the number of stickers grouped by source.
+func (db *DB) CountStickersBySource(ctx context.Context) (map[string]int, error) {
+	query := `SELECT source, COUNT(*) FROM stickers GROUP BY source`
+	rows, err := db.reader.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query sticker counts: %w", err)
+	}
+	defer rows.Close()
+
+	counts := make(map[string]int)
+	for rows.Next() {
+		var source string
+		var count int
+		if err := rows.Scan(&source, &count); err != nil {
+			return nil, fmt.Errorf("failed to scan sticker count: %w", err)
+		}
+		counts[source] = count
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate sticker counts: %w", err)
+	}
+
+	return counts, nil
 }

@@ -31,11 +31,10 @@ type Manager struct {
 // NewManager creates a new sticker manager with database persistence
 func NewManager(db *storage.DB, client *scraper.Client, log *logger.Logger) *Manager {
 	return &Manager{
-		stickers: make([]string, 0),
-		loaded:   false,
-		db:       db,
-		client:   client,
-		logger:   log,
+		loaded: false,
+		db:     db,
+		client: client,
+		logger: log,
 	}
 }
 
@@ -98,7 +97,7 @@ func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
 					results <- result{source: "spy_family", err: fmt.Errorf("panic: %v", r)}
 				}
 			}()
-			stickers, err := m.fetchWithRetry(ctx, u, "spy_family", m.fetchSpyFamilyStickers, 3)
+			stickers, err := m.fetchWithRetry(ctx, u, m.fetchSpyFamilyStickers, 3)
 			results <- result{stickers: stickers, source: "spy_family", err: err}
 		}(url)
 	}
@@ -111,14 +110,16 @@ func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
 				results <- result{source: "ichigo", err: fmt.Errorf("panic: %v", r)}
 			}
 		}()
-		stickers, err := m.fetchWithRetry(ctx, ichigoURL, "ichigo", m.fetchIchigoStickers, 3)
+		stickers, err := m.fetchWithRetry(ctx, ichigoURL, m.fetchIchigoStickers, 3)
 		results <- result{stickers: stickers, source: "ichigo", err: err}
 	}()
 
 	// Collect results
-	allStickers := make([]string, 0)
+	var allStickers []string
 	successCount := 0
 	errorCount := 0
+	spyCount := 0
+	ichigoCount := 0
 
 	for i := 0; i < len(spyFamilyURLs)+1; i++ {
 		res := <-results
@@ -129,6 +130,14 @@ func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
 		}
 		successCount++
 		allStickers = append(allStickers, res.stickers...)
+
+		// Track counts by source
+		switch res.source {
+		case "spy_family":
+			spyCount += len(res.stickers)
+		case "ichigo":
+			ichigoCount += len(res.stickers)
+		}
 
 		// Save each sticker to database
 		for _, stickerURL := range res.stickers {
@@ -172,24 +181,24 @@ func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
 	m.loaded = true
 	m.mu.Unlock()
 
-	m.logger.WithFields(map[string]interface{}{
-		"count":   len(allStickers),
-		"success": successCount,
-		"failed":  errorCount,
-	}).Info("Loaded stickers")
-
+	m.logger.WithFields(map[string]any{
+		"total_fetched": len(allStickers),
+		"spy_family":    spyCount,
+		"ichigo":        ichigoCount,
+		"errors":        errorCount,
+	}).Info("Sticker fetch completed")
 	return nil
 }
 
 // fetchWithRetry retries fetching with exponential backoff
-func (m *Manager) fetchWithRetry(ctx context.Context, url, _ string, fetchFunc func(context.Context, *scraper.Client, string) ([]string, error), maxRetries int) ([]string, error) {
+func (m *Manager) fetchWithRetry(ctx context.Context, url string, fetchFunc func(context.Context, *scraper.Client, string) ([]string, error), maxRetries int) ([]string, error) {
 	var lastErr error
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		if attempt > 0 {
 			// Exponential backoff: 1s, 2s, 4s
 			backoff := time.Duration(math.Pow(2, float64(attempt))) * time.Second
-			m.logger.WithFields(map[string]interface{}{
+			m.logger.WithFields(map[string]any{
 				"attempt": attempt + 1,
 				"url":     url,
 				"backoff": backoff,
@@ -236,7 +245,7 @@ func (m *Manager) fetchSpyFamilyStickers(ctx context.Context, client *scraper.Cl
 		return nil, fmt.Errorf("failed to fetch Spy Family stickers from %s: %w", url, err)
 	}
 
-	stickers := make([]string, 0)
+	var stickers []string
 	baseURL := "https://spy-family.net/tvseries/"
 
 	doc.Find("ul.icondlLists a[href$='.png']").Each(func(i int, s *goquery.Selection) {

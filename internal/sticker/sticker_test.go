@@ -16,7 +16,7 @@ func setupTestDB(t *testing.T) (*storage.DB, func()) {
 	// Use a unique temporary file for each test to ensure complete isolation
 	// This avoids the shared cache issue with in-memory databases
 	tmpFile := t.TempDir() + "/test.db"
-	db, err := storage.New(tmpFile, 168*time.Hour)
+	db, err := storage.New(context.Background(), tmpFile, 168*time.Hour)
 	require.NoError(t, err)
 
 	cleanup := func() {
@@ -30,7 +30,7 @@ func TestNewManager(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	client := scraper.NewClient(30*time.Second, 2)
+	client := scraper.NewClient(30*time.Second, 2, map[string][]string{"lms": {"https://lms.ntpu.edu.tw"}, "sea": {"https://sea.cc.ntpu.edu.tw"}})
 	log := logger.New("info")
 	manager := NewManager(db, client, log)
 
@@ -43,7 +43,7 @@ func TestGetRandomStickerWithFallback(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	client := scraper.NewClient(30*time.Second, 2)
+	client := scraper.NewClient(30*time.Second, 2, map[string][]string{"lms": {"https://lms.ntpu.edu.tw"}, "sea": {"https://sea.cc.ntpu.edu.tw"}})
 	log := logger.New("info")
 	manager := NewManager(db, client, log)
 
@@ -58,7 +58,7 @@ func TestGetRandomStickerWithLoadedStickers(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	client := scraper.NewClient(30*time.Second, 2)
+	client := scraper.NewClient(30*time.Second, 2, map[string][]string{"lms": {"https://lms.ntpu.edu.tw"}, "sea": {"https://sea.cc.ntpu.edu.tw"}})
 	log := logger.New("info")
 	manager := NewManager(db, client, log)
 
@@ -96,7 +96,7 @@ func TestLoadStickersFromDatabase(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	client := scraper.NewClient(30*time.Second, 2)
+	client := scraper.NewClient(30*time.Second, 2, map[string][]string{"lms": {"https://lms.ntpu.edu.tw"}, "sea": {"https://sea.cc.ntpu.edu.tw"}})
 	log := logger.New("info")
 	manager := NewManager(db, client, log)
 
@@ -123,7 +123,7 @@ func TestGenerateFallbackStickers(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	client := scraper.NewClient(30*time.Second, 2)
+	client := scraper.NewClient(30*time.Second, 2, map[string][]string{"lms": {"https://lms.ntpu.edu.tw"}, "sea": {"https://sea.cc.ntpu.edu.tw"}})
 	log := logger.New("info")
 	manager := NewManager(db, client, log)
 
@@ -147,7 +147,7 @@ func TestGetStats(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	client := scraper.NewClient(30*time.Second, 2)
+	client := scraper.NewClient(30*time.Second, 2, map[string][]string{"lms": {"https://lms.ntpu.edu.tw"}, "sea": {"https://sea.cc.ntpu.edu.tw"}})
 	log := logger.New("info")
 	manager := NewManager(db, client, log)
 

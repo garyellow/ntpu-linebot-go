@@ -5,11 +5,12 @@ package contact
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
+	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
@@ -20,21 +21,26 @@ import (
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
-// Handler handles contact-related queries
+// Handler handles contact-related queries.
+// It depends on *storage.DB directly for data access.
 type Handler struct {
-	db             *storage.DB
-	scraper        *scraper.Client
-	metrics        *metrics.Metrics
-	logger         *logger.Logger
-	stickerManager *sticker.Manager
+	db               *storage.DB
+	scraper          *scraper.Client
+	metrics          *metrics.Metrics
+	logger           *logger.Logger
+	stickerManager   *sticker.Manager
+	maxContactsLimit int // Maximum contacts per search (from config)
 }
 
-const (
-	moduleName = "contact"
-	senderName = "聯繫小幫手"
+// Name returns the module name
+func (h *Handler) Name() string {
+	return ModuleName
+}
 
-	// MaxContactsPerSearch is the maximum contacts to return from database search (matches DB LIMIT 500)
-	MaxContactsPerSearch = 500
+// Module constants
+const (
+	ModuleName = "contact" // Module identifier for registration
+	senderName = "聯繫小幫手"
 
 	// Emergency phone numbers are hard-coded as constants for three critical reasons:
 	//   1. Availability: No external dependency (database, scraper) - instant access
@@ -77,14 +83,22 @@ var (
 	contactRegex = bot.BuildKeywordRegex(validContactKeywords)
 )
 
-// NewHandler creates a new contact handler
-func NewHandler(db *storage.DB, scraper *scraper.Client, metrics *metrics.Metrics, logger *logger.Logger, stickerManager *sticker.Manager) *Handler {
+// NewHandler creates a new contact handler with required dependencies.
+func NewHandler(
+	db *storage.DB,
+	scraper *scraper.Client,
+	metrics *metrics.Metrics,
+	logger *logger.Logger,
+	stickerManager *sticker.Manager,
+	maxContactsLimit int,
+) *Handler {
 	return &Handler{
-		db:             db,
-		scraper:        scraper,
-		metrics:        metrics,
-		logger:         logger,
-		stickerManager: stickerManager,
+		db:               db,
+		scraper:          scraper,
+		metrics:          metrics,
+		logger:           logger,
+		stickerManager:   stickerManager,
+		maxContactsLimit: maxContactsLimit,
 	}
 }
 
@@ -108,22 +122,22 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 	case IntentSearch:
 		query, ok := params["query"]
 		if !ok || query == "" {
-			return nil, fmt.Errorf("missing required param: query")
+			return nil, fmt.Errorf("%w: query", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(moduleName).Infof("Dispatching contact intent: %s, query: %s", intent, query)
+			h.logger.WithModule(ModuleName).Infof("Dispatching contact intent: %s, query: %s", intent, query)
 		}
 		return h.handleContactSearch(ctx, query), nil
 
 	case IntentEmergency:
 		// Emergency intent doesn't require any parameters
 		if h.logger != nil {
-			h.logger.WithModule(moduleName).Info("Dispatching contact intent: emergency")
+			h.logger.WithModule(ModuleName).Info("Dispatching contact intent: emergency")
 		}
 		return h.handleEmergencyPhones(), nil
 
 	default:
-		return nil, fmt.Errorf("unknown intent: %s", intent)
+		return nil, fmt.Errorf("%w: %s", domerrors.ErrUnknownIntent, intent)
 	}
 }
 
@@ -146,7 +160,7 @@ func (h *Handler) CanHandle(text string) bool {
 
 // HandleMessage handles text messages for the contact module
 func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_api.MessageInterface {
-	log := h.logger.WithModule(moduleName)
+	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
 	log.Infof("Handling contact message: %s", text)
@@ -201,7 +215,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 
 // HandlePostback handles postback events for the contact module
 func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_api.MessageInterface {
-	log := h.logger.WithModule(moduleName)
+	log := h.logger.WithModule(ModuleName)
 	log.Infof("Handling contact postback: %s", data)
 
 	// Handle "查看更多" postback (with or without prefix)
@@ -347,7 +361,7 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 //   - Fuzzy matching loads up to 1000 contacts; runs in parallel for complete results
 //   - Search variants only affect scraping, not cache lookups
 func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []messaging_api.MessageInterface {
-	log := h.logger.WithModule(moduleName)
+	log := h.logger.WithModule(ModuleName)
 	startTime := time.Now()
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
@@ -358,7 +372,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	sqlContacts, err := h.db.SearchContactsByName(ctx, searchTerm)
 	if err != nil {
 		log.WithError(err).Error("Failed to search contacts in cache")
-		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
+		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		return []messaging_api.MessageInterface{
 			lineutil.ErrorMessageWithQuickReply("查詢聯絡資訊時發生問題", sender, "聯絡 "+searchTerm),
 		}
@@ -387,14 +401,14 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 
 	// If found in cache, return results
 	if len(contacts) > 0 {
-		h.metrics.RecordCacheHit(moduleName)
+		h.metrics.RecordCacheHit(ModuleName)
 		log.Infof("Cache hit for contact search: %s (found %d)", searchTerm, len(contacts))
 		return h.formatContactResultsWithSearch(contacts, searchTerm)
 	}
 
 	// Cache miss - scrape from website
 	// Try multiple search variants to increase hit rate
-	h.metrics.RecordCacheMiss(moduleName)
+	h.metrics.RecordCacheMiss(ModuleName)
 	log.Infof("Cache miss for contact search: %s, scraping...", searchTerm)
 
 	// Build search variants (e.g., "資工系" -> also try "資訊工程")
@@ -419,7 +433,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 		result, err := ntpu.ScrapeContacts(ctx, h.scraper, searchTerm)
 		if err != nil {
 			log.WithError(err).Errorf("Failed to scrape contacts for: %s", searchTerm)
-			h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
+			h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 			msg := lineutil.ErrorMessageWithDetailAndSender("無法取得聯絡資料，可能是網路問題或資料來源暫時無法使用", sender)
 			if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
 				textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -440,7 +454,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	}
 
 	if len(contacts) == 0 {
-		h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
+		h.metrics.RecordScraperRequest(ModuleName, "not_found", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf(
 			"🔍 查無包含「%s」的聯絡資料\n\n建議：\n• 確認關鍵字拼寫是否正確\n• 嘗試使用單位全名或簡稱\n• 若查詢人名，可嘗試只輸入姓氏",
 			searchTerm,
@@ -460,7 +474,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 		}
 	}
 
-	h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
+	h.metrics.RecordScraperRequest(ModuleName, "success", time.Since(startTime).Seconds())
 	return h.formatContactResultsWithSearch(contacts, searchTerm)
 }
 
@@ -468,17 +482,18 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 // Uses cache first, falls back to scraping if not found
 // Returns all individuals belonging to the specified organization
 func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []messaging_api.MessageInterface {
-	log := h.logger.WithModule(moduleName)
+	log := h.logger.WithModule(ModuleName)
 	startTime := time.Now()
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	log.Infof("Handling members query for organization: %s", orgName)
 
 	// Step 1: Search cache for members of this organization
+	// Use GetContactsByOrganization for organization-specific queries
 	members, err := h.db.GetContactsByOrganization(ctx, orgName)
 	if err != nil {
 		log.WithError(err).Error("Failed to query organization members from cache")
-		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
+		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		msg := lineutil.ErrorMessageWithDetailAndSender("查詢成員時發生問題", sender)
 		return []messaging_api.MessageInterface{msg}
 	}
@@ -492,19 +507,19 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 	}
 
 	if len(individuals) > 0 {
-		h.metrics.RecordCacheHit(moduleName)
+		h.metrics.RecordCacheHit(ModuleName)
 		log.Infof("Found %d members in cache for organization: %s", len(individuals), orgName)
 		return h.formatContactResults(individuals)
 	}
 
 	// Step 2: Cache miss - try scraping
-	h.metrics.RecordCacheMiss(moduleName)
+	h.metrics.RecordCacheMiss(ModuleName)
 	log.Infof("Cache miss for organization members: %s, scraping...", orgName)
 
 	scrapedContacts, err := ntpu.ScrapeContacts(ctx, h.scraper, orgName)
 	if err != nil {
 		log.WithError(err).Errorf("Failed to scrape members for: %s", orgName)
-		h.metrics.RecordScraperRequest(moduleName, "error", time.Since(startTime).Seconds())
+		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(
 			fmt.Sprintf("⚠️ 無法取得「%s」的成員資料\n\n💡 可能原因：\n• 網路問題\n• 該單位尚無成員資料", orgName),
 			sender,
@@ -530,7 +545,7 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 	}
 
 	if len(individuals) == 0 {
-		h.metrics.RecordScraperRequest(moduleName, "not_found", time.Since(startTime).Seconds())
+		h.metrics.RecordScraperRequest(ModuleName, "not_found", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(
 			fmt.Sprintf("🔍 查無「%s」的成員資料\n\n💡 該單位可能尚未建立成員資訊", orgName),
 			sender,
@@ -543,7 +558,7 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	h.metrics.RecordScraperRequest(moduleName, "success", time.Since(startTime).Seconds())
+	h.metrics.RecordScraperRequest(ModuleName, "success", time.Since(startTime).Seconds())
 	return h.formatContactResults(individuals)
 }
 
@@ -564,55 +579,74 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 	// Sort contacts based on type:
 	// - Organizations: by hierarchy level (top-level units first, i.e., units without superior field come first)
 	// - Individuals: by match count (descending), then name, title, organization
-	sort.SliceStable(contacts, func(i, j int) bool {
+	slices.SortStableFunc(contacts, func(a, b storage.Contact) int {
 		// Organization comes before individual
-		if contacts[i].Type == "organization" && contacts[j].Type != "organization" {
-			return true
+		aIsOrg := a.Type == "organization"
+		bIsOrg := b.Type == "organization"
+		if aIsOrg && !bIsOrg {
+			return -1
 		}
-		if contacts[i].Type != "organization" && contacts[j].Type == "organization" {
-			return false
+		if !aIsOrg && bIsOrg {
+			return 1
 		}
 
 		// Both are organizations: sort by hierarchy level (superior units first)
 		// Units without superior come first (top-level), then units with superior
-		if contacts[i].Type == "organization" && contacts[j].Type == "organization" {
-			// Unit without superior (top-level) comes before unit with superior
-			iHasSuperior := contacts[i].Superior != ""
-			jHasSuperior := contacts[j].Superior != ""
-			if !iHasSuperior && jHasSuperior {
-				return true
+		if aIsOrg && bIsOrg {
+			aHasSuperior := a.Superior != ""
+			bHasSuperior := b.Superior != ""
+			if !aHasSuperior && bHasSuperior {
+				return -1
 			}
-			if iHasSuperior && !jHasSuperior {
-				return false
+			if aHasSuperior && !bHasSuperior {
+				return 1
 			}
 			// Same level: sort by name
-			return contacts[i].Name < contacts[j].Name
+			if a.Name < b.Name {
+				return -1
+			}
+			if a.Name > b.Name {
+				return 1
+			}
+			return 0
 		}
 
 		// Both are individuals: sort by match count, then name, title, organization
 		if searchTerm != "" {
-			iMatchCount := countMatchRunes(contacts[i], searchTerm)
-			jMatchCount := countMatchRunes(contacts[j], searchTerm)
-			if iMatchCount != jMatchCount {
-				return iMatchCount > jMatchCount // Higher match count first
+			aMatchCount := countMatchRunes(a, searchTerm)
+			bMatchCount := countMatchRunes(b, searchTerm)
+			if aMatchCount != bMatchCount {
+				return bMatchCount - aMatchCount // Higher match count first
 			}
 		}
 
 		// Same match count or no search term: sort by name, then title, then organization
-		if contacts[i].Name != contacts[j].Name {
-			return contacts[i].Name < contacts[j].Name
+		if a.Name != b.Name {
+			if a.Name < b.Name {
+				return -1
+			}
+			return 1
 		}
-		if contacts[i].Title != contacts[j].Title {
-			return contacts[i].Title < contacts[j].Title
+		if a.Title != b.Title {
+			if a.Title < b.Title {
+				return -1
+			}
+			return 1
 		}
-		return contacts[i].Organization < contacts[j].Organization
+		if a.Organization < b.Organization {
+			return -1
+		}
+		if a.Organization > b.Organization {
+			return 1
+		}
+		return 0
 	})
 
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	var messages []messaging_api.MessageInterface
 
 	// Track if we hit the limit (likely more results available) - warning added at end
-	truncated := len(contacts) >= MaxContactsPerSearch
+	truncated := h.maxContactsLimit > 0 && len(contacts) >= h.maxContactsLimit
 
 	// Reserve 1 message slot for warning if truncated (LINE API: max 5 messages)
 	maxMessages := 5
@@ -770,7 +804,7 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 	// Append warning message at the end if results were truncated
 	if truncated {
 		warningMsg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("⚠️ 搜尋結果達到上限 %d 筆\n\n可能有更多結果未顯示，建議使用更精確的關鍵字搜尋。", MaxContactsPerSearch),
+			fmt.Sprintf("⚠️ 搜尋結果達到上限 %d 筆\n\n可能有更多結果未顯示,建議使用更精確的關鍵字搜尋。", h.maxContactsLimit),
 			sender,
 		)
 		messages = append(messages, warningMsg)

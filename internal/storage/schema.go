@@ -8,37 +8,37 @@ import (
 
 // InitSchema creates all necessary tables and indexes.
 // Note: WAL mode is configured in db.go's configureConnection function.
-func InitSchema(db *sql.DB) error {
+func InitSchema(ctx context.Context, db *sql.DB) error {
 	// Create students table
-	if err := createStudentsTable(db); err != nil {
+	if err := createStudentsTable(ctx, db); err != nil {
 		return err
 	}
 
 	// Create contacts table
-	if err := createContactsTable(db); err != nil {
+	if err := createContactsTable(ctx, db); err != nil {
 		return err
 	}
 
 	// Create courses table
-	if err := createCoursesTable(db); err != nil {
+	if err := createCoursesTable(ctx, db); err != nil {
 		return err
 	}
 
 	// Create stickers table
-	if err := createStickersTable(db); err != nil {
+	if err := createStickersTable(ctx, db); err != nil {
 		return err
 	}
 
 	// Create historical_courses table for on-demand historical course queries
-	if err := createHistoricalCoursesTable(db); err != nil {
+	if err := createHistoricalCoursesTable(ctx, db); err != nil {
 		return err
 	}
 
 	// Create syllabi table for course syllabus smart search (BM25 index)
-	return createSyllabiTable(db)
+	return createSyllabiTable(ctx, db)
 }
 
-func createStudentsTable(db *sql.DB) error {
+func createStudentsTable(ctx context.Context, db *sql.DB) error {
 	query := `
 	CREATE TABLE IF NOT EXISTS students (
 		id TEXT PRIMARY KEY,
@@ -52,14 +52,14 @@ func createStudentsTable(db *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_students_cached_at ON students(cached_at);
 	`
 
-	if _, err := db.ExecContext(context.Background(), query); err != nil {
-		return fmt.Errorf("failed to create students table: %w", err)
+	if _, err := db.ExecContext(ctx, query); err != nil {
+		return fmt.Errorf("create students table: %w", err)
 	}
 
 	return nil
 }
 
-func createContactsTable(db *sql.DB) error {
+func createContactsTable(ctx context.Context, db *sql.DB) error {
 	query := `
 	CREATE TABLE IF NOT EXISTS contacts (
 		uid TEXT PRIMARY KEY,
@@ -82,14 +82,14 @@ func createContactsTable(db *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_contacts_cached_at ON contacts(cached_at);
 	`
 
-	if _, err := db.ExecContext(context.Background(), query); err != nil {
-		return fmt.Errorf("failed to create contacts table: %w", err)
+	if _, err := db.ExecContext(ctx, query); err != nil {
+		return fmt.Errorf("create contacts table: %w", err)
 	}
 
 	return nil
 }
 
-func createCoursesTable(db *sql.DB) error {
+func createCoursesTable(ctx context.Context, db *sql.DB) error {
 	query := `
 	CREATE TABLE IF NOT EXISTS courses (
 		uid TEXT PRIMARY KEY,
@@ -111,14 +111,14 @@ func createCoursesTable(db *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_courses_cached_at ON courses(cached_at);
 	`
 
-	if _, err := db.ExecContext(context.Background(), query); err != nil {
-		return fmt.Errorf("failed to create courses table: %w", err)
+	if _, err := db.ExecContext(ctx, query); err != nil {
+		return fmt.Errorf("create courses table: %w", err)
 	}
 
 	return nil
 }
 
-func createStickersTable(db *sql.DB) error {
+func createStickersTable(ctx context.Context, db *sql.DB) error {
 	query := `
 	CREATE TABLE IF NOT EXISTS stickers (
 		url TEXT PRIMARY KEY,
@@ -129,11 +129,11 @@ func createStickersTable(db *sql.DB) error {
 	);
 	CREATE INDEX IF NOT EXISTS idx_stickers_source ON stickers(source);
 	CREATE INDEX IF NOT EXISTS idx_stickers_cached_at ON stickers(cached_at);
-	CREATE INDEX IF NOT EXISTS idx_stickers_success_rate ON stickers(success_count DESC, failure_count ASC);
+	CREATE INDEX IF NOT EXISTS idx_stickers_source ON stickers(source);
 	`
 
-	if _, err := db.ExecContext(context.Background(), query); err != nil {
-		return fmt.Errorf("failed to create stickers table: %w", err)
+	if _, err := db.ExecContext(ctx, query); err != nil {
+		return fmt.Errorf("create stickers table: %w", err)
 	}
 
 	return nil
@@ -142,7 +142,7 @@ func createStickersTable(db *sql.DB) error {
 // createHistoricalCoursesTable creates table for historical course queries
 // This table stores courses from years older than the regular warmup range (2 years)
 // Uses 7-day hard TTL for cache management, same structure as regular courses table
-func createHistoricalCoursesTable(db *sql.DB) error {
+func createHistoricalCoursesTable(ctx context.Context, db *sql.DB) error {
 	query := `
 	CREATE TABLE IF NOT EXISTS historical_courses (
 		uid TEXT PRIMARY KEY,
@@ -164,8 +164,8 @@ func createHistoricalCoursesTable(db *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_historical_courses_cached_at ON historical_courses(cached_at);
 	`
 
-	if _, err := db.ExecContext(context.Background(), query); err != nil {
-		return fmt.Errorf("failed to create historical_courses table: %w", err)
+	if _, err := db.ExecContext(ctx, query); err != nil {
+		return fmt.Errorf("create historical_courses table: %w", err)
 	}
 
 	return nil
@@ -179,7 +179,7 @@ func createHistoricalCoursesTable(db *sql.DB) error {
 // - outline_en: Course Outline (English, may be empty if merged)
 // - schedule: 教學進度 (schedule content only)
 // Uses content_hash for incremental update detection
-func createSyllabiTable(db *sql.DB) error {
+func createSyllabiTable(ctx context.Context, db *sql.DB) error {
 	query := `
 	CREATE TABLE IF NOT EXISTS syllabi (
 		uid TEXT PRIMARY KEY,
@@ -200,8 +200,8 @@ func createSyllabiTable(db *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_syllabi_cached_at ON syllabi(cached_at);
 	`
 
-	if _, err := db.ExecContext(context.Background(), query); err != nil {
-		return fmt.Errorf("failed to create syllabi table: %w", err)
+	if _, err := db.ExecContext(ctx, query); err != nil {
+		return fmt.Errorf("create syllabi table: %w", err)
 	}
 
 	return nil

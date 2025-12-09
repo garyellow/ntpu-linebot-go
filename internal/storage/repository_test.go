@@ -4,11 +4,13 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
 )
 
 func setupTestDB(t *testing.T) *DB {
 	// Use in-memory SQLite database for testing with 7-day TTL
-	db, err := New(":memory:", 168*time.Hour)
+	db, err := New(context.Background(), ":memory:", 168*time.Hour)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
@@ -1341,8 +1343,8 @@ func TestGetSyllabusByUID_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := db.GetSyllabusByUID(ctx, "nonexistent")
-	if err != ErrNotFound {
-		t.Errorf("Expected ErrNotFound, got %v", err)
+	if err != domerrors.ErrNotFound {
+		t.Errorf("Expected domerrors.ErrNotFound, got %v", err)
 	}
 }
 

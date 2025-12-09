@@ -2,6 +2,28 @@
 
 LINE chatbot for NTPU (National Taipei University) providing student ID lookup, contact directory, and course queries. Built with Go, emphasizing anti-scraping measures, persistent caching, and observability.
 
+## 🎯 Architecture Principles
+
+**Core Design:**
+1. **Pure Dependency Injection** - Constructor-based injection with all dependencies explicit at construction time
+2. **Direct Dependencies** - Handlers use `*storage.DB` directly, interfaces only when truly needed
+3. **Typed Error Handling** - Sentinel errors (`errors.ErrNotFound`) with standard wrapping
+4. **Centralized Configuration** - Bot config with load-time validation
+5. **Context Management** - `ctxutil.PreserveTracing()` for safe async operations with tracing
+6. **Simplified Registry** - Direct dispatch without middleware overhead
+7. **Clean Initialization** - Core → GenAI → LLMRateLimiter → Handlers → Webhook (linear flow)
+
+**Code Style:**
+- **Pure DI**: All dependencies via constructors (no functional options)
+- **Concrete Types**: Handlers depend on `*storage.DB` directly (no mocking needed)
+- **Interface Placement**: Defined inline where needed (Go convention: accept interfaces, return structs)
+- **Optional Parameters**: Pass nil for optional dependencies (e.g., `bm25Index`, `intentParser`)
+- **Context Values**: Minimal usage for request tracing only (userID, chatID, requestID)
+- **Error Handling**: Sentinel errors with standard `fmt.Errorf` wrapping
+- **Constants**: Centralized in config package
+- **Async Operations**: `ctxutil.PreserveTracing()` for safe detached contexts (avoids memory leaks)
+- **Validation**: Load-time config validation, runtime parameter checks
+
 ## Architecture: Async Webhook Processing
 
 ```
@@ -27,31 +49,43 @@ LINE Webhook → Gin Handler
 **Critical Flow Details:**
 - **Async processing**: HTTP 200 returned immediately after signature verification (< 2s), events processed in goroutine
 - **LINE Best Practice**: Responds within 2s to prevent request_timeout errors, processes asynchronously to handle long operations
-- **Context handling**: Bot operations use detached context (`context.WithoutCancel`) with 60s timeout, independent from HTTP request lifecycle
-- **Detached context rationale**: LINE may close connection before processing completes; detached context ensures DB queries and scraping finish, reply token remains valid (~20 min)
+- **Context handling**: Bot operations use `ctxutil.PreserveTracing()` with 60s timeout
+  - **PreserveTracing()**: Creates new context with only necessary tracing values (userID, chatID, requestID)
+  - **Why not WithoutCancel()**: Avoids memory leaks from parent references (see Go issue #64478)
+  - **Why not Background()**: Background() loses all tracing data needed for log correlation
+  - **Cancellation independence**: Detached context timeout is independent from HTTP request lifecycle
+- **Detached context rationale**: LINE may close connection before processing completes; detached cancellation ensures DB queries and scraping finish, reply token remains valid (~20 min)
+- **Observability**: Request ID and user ID flow through entire async operation for log correlation
 - **Message batching**: LINE allows max 5 messages per reply; webhook auto-truncates to 4 + warning
-- **Reference**: https://developers.line.biz/en/docs/partner-docs/development-guidelines/
+- **References**:
+  - LINE guidelines: https://developers.line.biz/en/docs/partner-docs/development-guidelines/
+  - Context safety: https://github.com/golang/go/issues/64478
 
 ## Bot Module Registration Pattern
 
 **When adding new modules**:
 
 1. **Implement `bot.Handler` interface** (`internal/bot/handler.go`)
-2. **Register in webhook constructor** and dispatcher (`internal/webhook/handler.go`)
-3. **Use prefix convention** for postback routing (e.g., `"course:"`, `"id:"`, `"contact:"`)
-4. **Warmup support** is automatic if module implements cache warming
+2. **Create handler in app.Initialize()** with required dependencies
+3. **Register via `registry.Register(handler)` before creating webhook handler
+4. **Use prefix convention** for postback routing (e.g., `"course:"`, `"id:"`, `"contact:"`)
+5. **Direct constructors** - Pass all dependencies (including optional nil values) directly in constructor
+6. **Warmup support** is automatic if module implements cache warming
+
+**Handler constructor patterns**:
+- **All handlers**: Direct constructors with all dependencies as parameters
+- **Optional dependencies**: Pass nil if feature disabled (e.g., `bm25Index`, `queryExpander`, `llmRateLimiter`)
+- **No setter injection**: All dependencies passed at construction time to avoid circular dependencies
+- **BotConfig**: Embedded in main Config as `cfg.Bot` (no separate constructor needed)
 
 **Module-specific features**:
 
-**ID Module**: Year query range (95-112, name search 101-112), department selection flow, student search (max 500 results), Flex Message cards
-
-**Course Module**: Smart semester detection (`semester.go`), UID regex (`(?i)\\d{3,4}[umnp]\\d{4}`), max 40 results, Flex Message carousels
 - **Precise search**: `課程` keyword triggers SQL LIKE + fuzzy search on course title and teachers
 - **Smart search**: `找課` keyword triggers BM25 + Query Expansion search using syllabus content (requires `GEMINI_API_KEY` for Query Expansion)
 - **BM25 search**: Keyword-based search with Chinese tokenization (unigram for CJK)
 - **Confidence scoring**: Rank-based confidence (not similarity). Higher rank = higher confidence.
 - **Query expansion**: LLM-based expansion for short queries and technical abbreviations (AWS→雲端運算, AI→人工智慧)
-- **Detached context**: Uses `context.WithoutCancel()` to prevent request context cancellation from aborting API calls
+- **Detached context**: Uses `ctxutil.PreserveTracing()` to prevent request context cancellation from aborting API calls (safer than WithoutCancel)
 - **Fallback**: Precise search → BM25 smart search (when no results and BM25Index enabled)
 - **UX terminology**: Uses "精確搜尋" (precise) for keyword search, "智慧搜尋" (smart) for BM25 search
 
@@ -217,7 +251,7 @@ handleUnmatchedMessage()
 │ mention & process│                   │
 └─────────────────┴───────────────────┘
      ↓
-IntentParser.Parse() (Gemini 2.5 Flash Lite)
+IntentParser.Parse() (gemma-3-27b-it)
      ↓
 dispatchIntent() → Route to Handler
      ↓ (failure)
@@ -231,23 +265,19 @@ Fallback → getHelpMessage() + Warning Log
 - Fallback strategy: NLU failure → help message with warning log
 - Metrics: `ntpu_llm_total{operation="nlu"}`, `ntpu_llm_duration_seconds{operation="nlu"}`
 
-**Interface Pattern**:
-- `genai.IntentParser`: Interface defining Parse(), IsEnabled(), Close()
-- `genai.GeminiIntentParser`: Gemini-based implementation of IntentParser
+**Implementation Pattern**:
+- `genai.GeminiIntentParser`: Gemini Function Calling implementation with Parse(), IsEnabled(), Close()
 - `genai.ParseResult`: Module, Intent, Params, ClarificationText, FunctionName
 - webhook imports genai package directly (no adapter needed)
 
 ## Key File Locations
 
-- **Entry points**: `cmd/server/main.go`, `cmd/healthcheck/main.go`
-- **Server organization**:
-  - `cmd/server/main.go` - Entry point and initialization
-  - `cmd/server/routes.go` - HTTP routes configuration
-  - `cmd/server/middleware.go` - Security and logging middleware
-  - `cmd/server/jobs.go` - Background jobs (cleanup, warmup, metrics)
+- **Entry point**: `cmd/server/main.go` - Application entry point (minimalist)
+- **Application**: `internal/app/app.go` - Application lifecycle with DI, HTTP server, routes, middleware, background jobs
 - **Webhook handler**: `internal/webhook/handler.go:Handle()` (async processing)
 - **Warmup module**: `internal/warmup/warmup.go` (background cache warming)
 - **Bot module interface**: `internal/bot/handler.go`
+- **Context utilities**: `internal/ctxutil/context.go` (type-safe context values, PreserveTracing)
 - **DB schema**: `internal/storage/schema.go`
 - **LINE utilities**: `internal/lineutil/builder.go` (use instead of raw SDK)
 - **Sticker manager**: `internal/sticker/sticker.go` (avatar URLs for messages)

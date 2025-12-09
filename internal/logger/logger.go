@@ -1,120 +1,114 @@
 // Package logger provides structured logging utilities for the application.
-// It wraps logrus with JSON formatting and supports context-based logging
+// It wraps log/slog with JSON formatting and supports context-based logging
 // with request IDs and module names.
 package logger
 
 import (
-	"context"
+	"fmt"
 	"io"
+	"log/slog"
 	"os"
-
-	"github.com/sirupsen/logrus"
-)
-
-// contextKey is the type for context keys
-type contextKey string
-
-const (
-	// RequestIDKey is the context key for request ID
-	RequestIDKey contextKey = "request_id"
-	// ModuleKey is the context key for module name
-	ModuleKey contextKey = "module"
-	// LoggerKey is the context key for storing logger entry
-	LoggerKey contextKey = "logger"
+	"strings"
 )
 
 // Logger is the application logger
 type Logger struct {
-	*logrus.Logger
+	*slog.Logger
 }
 
 // New creates a new logger instance with JSON formatting
 func New(level string) *Logger {
-	log := logrus.New()
-
-	// Set log level
-	logLevel, err := logrus.ParseLevel(level)
-	if err != nil {
-		logLevel = logrus.InfoLevel
-	}
-	log.SetLevel(logLevel)
-
-	// Use JSON formatter for structured logging
-	log.SetFormatter(&logrus.JSONFormatter{
-		TimestampFormat: "2006-01-02T15:04:05.000Z07:00",
-		FieldMap: logrus.FieldMap{
-			logrus.FieldKeyTime:  "timestamp",
-			logrus.FieldKeyLevel: "level",
-			logrus.FieldKeyMsg:   "message",
-		},
-	})
-
-	// Output to stdout
-	log.SetOutput(os.Stdout)
-
-	return &Logger{Logger: log}
+	return NewWithWriter(level, os.Stdout)
 }
 
-// WithContext creates a new entry with context fields
-func (l *Logger) WithContext(ctx context.Context) *logrus.Entry {
-	entry := l.WithFields(logrus.Fields{})
-
-	// Add request ID if present
-	if requestID := ctx.Value(RequestIDKey); requestID != nil {
-		entry = entry.WithField("request_id", requestID)
+// NewWithWriter creates a new logger instance with JSON formatting writing to the provided writer
+func NewWithWriter(level string, w io.Writer) *Logger {
+	var logLevel slog.Level
+	switch level {
+	case "debug":
+		logLevel = slog.LevelDebug
+	case "warn":
+		logLevel = slog.LevelWarn
+	case "error":
+		logLevel = slog.LevelError
+	default:
+		logLevel = slog.LevelInfo
 	}
 
-	// Add module name if present
-	if module := ctx.Value(ModuleKey); module != nil {
-		entry = entry.WithField("module", module)
+	opts := &slog.HandlerOptions{
+		Level: logLevel,
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.TimeKey {
+				a.Key = "timestamp"
+				// slog uses RFC3339Nano by default, which is fine
+			}
+			if a.Key == slog.LevelKey {
+				a.Key = "level"
+				level := a.Value.String()
+				if level == "WARN" {
+					level = "warning"
+				} else {
+					level = strings.ToLower(level)
+				}
+				a.Value = slog.StringValue(level)
+			}
+			if a.Key == slog.MessageKey {
+				a.Key = "message"
+			}
+			return a
+		},
 	}
-
-	return entry
+	handler := slog.NewJSONHandler(w, opts)
+	return &Logger{Logger: slog.New(handler)}
 }
 
 // WithModule creates a new entry with module field
-func (l *Logger) WithModule(module string) *logrus.Entry {
-	return l.WithField("module", module)
+func (l *Logger) WithModule(module string) *Logger {
+	return &Logger{Logger: l.With("module", module)}
 }
 
 // WithRequestID creates a new entry with request ID field
-func (l *Logger) WithRequestID(requestID string) *logrus.Entry {
-	return l.WithField("request_id", requestID)
+func (l *Logger) WithRequestID(requestID string) *Logger {
+	return &Logger{Logger: l.With("request_id", requestID)}
 }
 
 // WithError creates a new entry with error field
-func (l *Logger) WithError(err error) *logrus.Entry {
-	return l.Logger.WithError(err)
+func (l *Logger) WithError(err error) *Logger {
+	return &Logger{Logger: l.With("error", err)}
 }
 
-// NewContext returns a new context with the logger entry stored
-// This avoids creating new Entry objects repeatedly
-func (l *Logger) NewContext(ctx context.Context, fields logrus.Fields) context.Context {
-	entry := l.WithFields(fields)
-	return context.WithValue(ctx, LoggerKey, entry)
+// WithField creates a new entry with a single field
+func (l *Logger) WithField(key string, value any) *Logger {
+	return &Logger{Logger: l.With(key, value)}
 }
 
-// FromContext retrieves the logger entry from context
-// If not found, returns a new entry with context fields extracted
-func (l *Logger) FromContext(ctx context.Context) *logrus.Entry {
-	if entry, ok := ctx.Value(LoggerKey).(*logrus.Entry); ok {
-		return entry
+// WithFields creates a new entry with multiple fields
+func (l *Logger) WithFields(fields map[string]any) *Logger {
+	args := make([]any, 0, len(fields)*2)
+	for k, v := range fields {
+		args = append(args, k, v)
 	}
-	// Fallback: create entry from context values
-	return l.WithContext(ctx)
+	return &Logger{Logger: l.With(args...)}
 }
 
-// SetOutput sets the logger output
-func (l *Logger) SetOutput(output io.Writer) {
-	l.Logger.SetOutput(output)
+// Compatibility methods for logrus-style formatting
+
+// Infof logs a formatted message at info level.
+func (l *Logger) Infof(format string, args ...any) {
+	l.Info(fmt.Sprintf(format, args...))
 }
 
-// SetLevel sets the logger level
-func (l *Logger) SetLevel(level string) error {
-	logLevel, err := logrus.ParseLevel(level)
-	if err != nil {
-		return err
-	}
-	l.Logger.SetLevel(logLevel)
-	return nil
+// Warnf logs a formatted message at warn level.
+func (l *Logger) Warnf(format string, args ...any) {
+	l.Warn(fmt.Sprintf(format, args...))
+}
+
+// Errorf logs a formatted message at error level.
+func (l *Logger) Errorf(format string, args ...any) {
+	l.Error(fmt.Sprintf(format, args...))
+}
+
+// Debugf logs a formatted message at debug level.
+func (l *Logger) Debugf(format string, args ...any) {
+	l.Debug(fmt.Sprintf(format, args...))
 }

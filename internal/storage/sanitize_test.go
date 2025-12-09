@@ -78,7 +78,8 @@ func TestSanitizeSearchTermSQLInjection(t *testing.T) {
 
 			// Note: sanitizeSearchTerm preserves SQL keywords but escapes wildcards
 			// Actual SQL injection protection comes from parameterized queries
-			_ = result // Use result to avoid unused variable warning			// Verify wildcards are escaped
+
+			// Verify wildcards are escaped
 			if strings.Contains(input, "%") {
 				if !strings.Contains(result, "\\%") {
 					t.Error("Expected % to be escaped")

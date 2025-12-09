@@ -12,8 +12,8 @@ import (
 
 const (
 	// IntentParserModel is the model used for intent parsing
-	// Using gemini-2.5-flash-lite for fast, cost-effective intent classification
-	IntentParserModel = "gemini-2.5-flash-lite"
+	// Using gemma-3-27b-it for improved intent classification with function calling support
+	IntentParserModel = "gemma-3-27b-it"
 
 	// IntentParserTimeout is the timeout for intent parsing requests
 	IntentParserTimeout = 10 * time.Second
@@ -161,8 +161,11 @@ func (p *GeminiIntentParser) IsEnabled() bool {
 }
 
 // Close releases resources held by the GeminiIntentParser.
-// It's safe to call Close multiple times or on nil pointer.
-// Note: genai.Client doesn't require explicit closing in current SDK version.
+// Safe to call on nil receiver. Currently a no-op as genai.Client doesn't require cleanup.
 func (p *GeminiIntentParser) Close() error {
+	if p == nil {
+		return nil
+	}
+	// Future: Add client.Close() when SDK supports it
 	return nil
 }

@@ -400,14 +400,12 @@ go func() {
 
 **並行執行模組**:
 ```go
-// Warmup 模組使用 WaitGroup 並行執行
+// Warmup 模組使用 WaitGroup 並行執行 (Go 1.25+)
 var wg sync.WaitGroup
 for _, module := range modules {
-    wg.Add(1)
-    go func(m string) {
-        defer wg.Done()
-        warmupModule(ctx, m)
-    }(module)
+    wg.Go(func() {
+        warmupModule(ctx, module)
+    })
 }
 wg.Wait()
 ```

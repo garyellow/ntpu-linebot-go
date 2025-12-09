@@ -16,27 +16,27 @@ import (
 )
 
 func setupTestHandler(t *testing.T) *Handler {
+	t.Helper()
+
 	// Create test database
-	db, err := storage.New(":memory:", 168*time.Hour) // 7 days for tests
+	db, err := storage.New(context.Background(), ":memory:", 168*time.Hour)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
+	t.Cleanup(func() { _ = db.Close() })
 
-	// Create test scraper
-	scraperClient := scraper.NewClient(30*time.Second, 3)
-
-	// Create test metrics
+	// Create dependencies
+	baseURLs := map[string][]string{
+		"lms": {"https://lms.ntpu.edu.tw"},
+		"sea": {"https://sea.cc.ntpu.edu.tw"},
+	}
+	scraperClient := scraper.NewClient(30*time.Second, 3, baseURLs)
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
-
-	// Create test logger
 	log := logger.New("info")
+	stickerMgr := sticker.NewManager(db, scraperClient, log)
 
-	// Create sticker manager for tests
-	testLogger := logger.New("info")
-	stickerMgr := sticker.NewManager(db, scraperClient, testLogger)
-
-	return NewHandler(db, scraperClient, m, log, stickerMgr)
+	return NewHandler(db, scraperClient, m, log, stickerMgr, nil, nil, nil)
 }
 
 func TestCanHandle(t *testing.T) {
@@ -526,37 +526,37 @@ func TestDispatchIntent_ParamValidation(t *testing.T) {
 			name:        "search intent missing keyword",
 			intent:      IntentSearch,
 			params:      map[string]string{},
-			errContains: "missing required param: keyword",
+			errContains: "missing required parameter: keyword",
 		},
 		{
 			name:        "search intent empty keyword",
 			intent:      IntentSearch,
 			params:      map[string]string{"keyword": ""},
-			errContains: "missing required param: keyword",
+			errContains: "missing required parameter: keyword",
 		},
 		{
 			name:        "smart intent missing query",
 			intent:      IntentSmart,
 			params:      map[string]string{},
-			errContains: "missing required param: query",
+			errContains: "missing required parameter: query",
 		},
 		{
 			name:        "smart intent empty query",
 			intent:      IntentSmart,
 			params:      map[string]string{"query": ""},
-			errContains: "missing required param: query",
+			errContains: "missing required parameter: query",
 		},
 		{
 			name:        "uid intent missing uid",
 			intent:      IntentUID,
 			params:      map[string]string{},
-			errContains: "missing required param: uid",
+			errContains: "missing required parameter: uid",
 		},
 		{
 			name:        "uid intent empty uid",
 			intent:      IntentUID,
 			params:      map[string]string{"uid": ""},
-			errContains: "missing required param: uid",
+			errContains: "missing required parameter: uid",
 		},
 		{
 			name:        "unknown intent",

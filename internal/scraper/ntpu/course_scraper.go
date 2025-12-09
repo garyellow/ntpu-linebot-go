@@ -43,7 +43,7 @@ func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, 
 		return nil, fmt.Errorf("context canceled before scraping courses: %w", err)
 	}
 
-	courses := make([]*storage.Course, 0)
+	var courses []*storage.Course
 
 	// Get working base URL with failover support
 	courseBaseURL, err := seaCache(ctx, client)

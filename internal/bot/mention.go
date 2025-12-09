@@ -1,9 +1,8 @@
-// Package webhook provides LINE webhook handling and message dispatching.
-// This file contains functions for detecting and processing @Bot mentions.
-package webhook
+// Package bot provides the core bot logic and message processing.
+package bot
 
 import (
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/line/line-bot-sdk-go/v8/linebot/webhook"
@@ -61,8 +60,8 @@ func removeBotMentions(text string, mention *webhook.Mention) string {
 	}
 
 	// Sort by index descending to remove from back to front
-	sort.Slice(botMentions, func(i, j int) bool {
-		return botMentions[i].index > botMentions[j].index
+	slices.SortFunc(botMentions, func(a, b mentionInfo) int {
+		return int(b.index - a.index)
 	})
 
 	// Convert text to runes for proper UTF-8 handling

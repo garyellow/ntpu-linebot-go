@@ -7,8 +7,8 @@
 ```bash
 cd deployments
 cp .env.example .env
-# 編輯 .env 填入 LINE_CHANNEL_ACCESS_TOKEN 和 LINE_CHANNEL_SECRET
-docker compose pull  # 從 Docker Hub 拉取最新映像
+# 編輯 .env 填入必要參數
+docker compose pull
 docker compose up -d
 ```
 
@@ -30,6 +30,7 @@ docker compose up -d
 
 可選：
 - `GEMINI_API_KEY` - Gemini API Key，啟用 NLU 自然語言理解和課程智慧搜尋（從 [Google AI Studio](https://aistudio.google.com/apikey) 取得）
+- `LLM_RATE_LIMIT_PER_HOUR` - LLM API 速率限制（每位使用者每小時請求數，預設：50）
 - `IMAGE_TAG` - 映像版本（預設：latest）
 - `WARMUP_MODULES` - 預熱模組（預設：sticker,id,contact,course,syllabus）
 - `LOG_LEVEL` - 日誌層級（預設：info）

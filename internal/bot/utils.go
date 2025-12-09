@@ -2,7 +2,7 @@ package bot
 
 import (
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -36,8 +36,8 @@ func BuildKeywordRegex(keywords []string) *regexp.Regexp {
 	copy(sorted, keywords)
 
 	// Sort by length in descending order (longest first)
-	sort.Slice(sorted, func(i, j int) bool {
-		return len(sorted[i]) > len(sorted[j])
+	slices.SortFunc(sorted, func(a, b string) int {
+		return len(b) - len(a)
 	})
 
 	// Use ^ anchor to match only at the start of text

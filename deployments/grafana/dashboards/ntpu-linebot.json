@@ -558,6 +558,61 @@
       "targets": [{ "expr": "sum(rate(ntpu_rate_limiter_dropped_total[1m])) by (limiter)", "legendFormat": "Dropped {{limiter}}", "refId": "A" }],
       "title": "Rate Limiter Dropped",
       "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 69 },
+      "id": 64,
+      "title": "🤖 LLM Rate Limiting (NLU + Query Expansion)",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 30 }, { "color": "red", "value": 50 }] },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 7, "w": 4, "x": 0, "y": 70 },
+      "id": 65,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "expr": "ntpu_llm_rate_limiter_users", "refId": "A" }],
+      "title": "Active LLM Limiters",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 0.1 }, { "color": "red", "value": 1 }] },
+          "unit": "ops"
+        }
+      },
+      "gridPos": { "h": 7, "w": 4, "x": 4, "y": 70 },
+      "id": 66,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "expr": "rate(ntpu_rate_limiter_dropped_total{limiter=\"llm\"}[1m])", "refId": "A" }],
+      "title": "LLM Drop Rate (last 1m)",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisLabel": "Requests/sec", "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" },
+          "unit": "ops"
+        }
+      },
+      "gridPos": { "h": 7, "w": 16, "x": 8, "y": 70 },
+      "id": 67,
+      "options": { "legend": { "calcs": ["mean", "max", "sum"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [{ "expr": "rate(ntpu_rate_limiter_dropped_total{limiter=\"llm\"}[1m])", "legendFormat": "LLM Dropped", "refId": "A" }],
+      "title": "LLM Rate Limit Drops Over Time",
+      "type": "timeseries"
     }
   ],
   "refresh": "10s",

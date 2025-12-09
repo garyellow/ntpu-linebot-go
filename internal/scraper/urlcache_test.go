@@ -7,12 +7,18 @@ import (
 	"time"
 )
 
+// testBaseURLs provides standard URLs for testing
+var testBaseURLs = map[string][]string{
+	"lms": {"https://lms.ntpu.edu.tw"},
+	"sea": {"https://sea.cc.ntpu.edu.tw"},
+}
+
 func TestURLCache_Get(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping network test in short mode")
 	}
 
-	client := NewClient(5*time.Second, 3)
+	client := NewClient(5*time.Second, 3, testBaseURLs)
 	cache := NewURLCache(client, "lms")
 
 	ctx := context.Background()
@@ -47,7 +53,7 @@ func TestURLCache_Clear(t *testing.T) {
 		t.Skip("skipping network test in short mode")
 	}
 
-	client := NewClient(5*time.Second, 3)
+	client := NewClient(5*time.Second, 3, testBaseURLs)
 	cache := NewURLCache(client, "sea")
 
 	ctx := context.Background()
@@ -84,7 +90,7 @@ func TestURLCache_Clear(t *testing.T) {
 }
 
 func TestURLCache_InvalidDomain(t *testing.T) {
-	client := NewClient(5*time.Second, 3)
+	client := NewClient(5*time.Second, 3, testBaseURLs)
 	cache := NewURLCache(client, "invalid_domain")
 
 	ctx := context.Background()
@@ -100,26 +106,24 @@ func TestURLCache_ConcurrentAccess(t *testing.T) {
 		t.Skip("skipping network test in short mode")
 	}
 
-	client := NewClient(5*time.Second, 3)
+	client := NewClient(5*time.Second, 3, testBaseURLs)
 	cache := NewURLCache(client, "lms")
 
 	ctx := context.Background()
 	const goroutines = 100
 	var wg sync.WaitGroup
-	wg.Add(goroutines)
 
 	// All goroutines should get the same cached URL without races
 	urls := make([]string, goroutines)
-	for i := 0; i < goroutines; i++ {
-		go func(idx int) {
-			defer wg.Done()
+	for i := range goroutines {
+		wg.Go(func() {
 			url, err := cache.Get(ctx)
 			if err != nil {
-				t.Errorf("Goroutine %d: unexpected error: %v", idx, err)
+				t.Errorf("Goroutine %d: unexpected error: %v", i, err)
 				return
 			}
-			urls[idx] = url
-		}(i)
+			urls[i] = url
+		})
 	}
 
 	wg.Wait()
@@ -134,7 +138,7 @@ func TestURLCache_ConcurrentAccess(t *testing.T) {
 }
 
 func BenchmarkURLCache_Get(b *testing.B) {
-	client := NewClient(5*time.Second, 3)
+	client := NewClient(5*time.Second, 3, testBaseURLs)
 	cache := NewURLCache(client, "lms")
 	ctx := context.Background()
 
@@ -150,7 +154,7 @@ func BenchmarkURLCache_Get(b *testing.B) {
 }
 
 func BenchmarkURLCache_GetCached(b *testing.B) {
-	client := NewClient(5*time.Second, 3)
+	client := NewClient(5*time.Second, 3, testBaseURLs)
 	cache := NewURLCache(client, "sea")
 	ctx := context.Background()
 

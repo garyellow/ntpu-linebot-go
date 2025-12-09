@@ -14,7 +14,7 @@ import (
 
 const (
 	// ExpanderModel is the model used for query expansion
-	ExpanderModel = "gemini-2.5-flash-lite"
+	ExpanderModel = "gemma-3-27b-it"
 
 	// ExpanderTimeout is the timeout for query expansion calls
 	ExpanderTimeout = 8 * time.Second
@@ -86,7 +86,8 @@ func (e *QueryExpander) Expand(ctx context.Context, query string) (string, error
 
 	resp, err := e.client.Models.GenerateContent(ctx, e.model, genai.Text(prompt), config)
 	if err != nil {
-		// On error, return original query (graceful degradation)
+		// Graceful degradation: return original query on API errors
+		// Errors are expected (rate limits, network issues) and shouldn't block search
 		return query, nil
 	}
 
@@ -115,9 +116,13 @@ func (e *QueryExpander) Expand(ctx context.Context, query string) (string, error
 	return result, nil
 }
 
-// Close releases resources (no-op for current API version)
+// Close releases resources.
+// Safe to call on nil receiver. Currently a no-op as genai.Client doesn't require cleanup.
 func (e *QueryExpander) Close() error {
-	// Current genai.Client doesn't have a Close method
+	if e == nil {
+		return nil
+	}
+	// Future: Add client.Close() when SDK supports it
 	return nil
 }
 
