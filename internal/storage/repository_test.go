@@ -294,13 +294,13 @@ func TestDeleteExpiredStudents(t *testing.T) {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
 
-	// Count before delete
+	// Count before delete (only counts non-expired due to TTL filtering)
 	countBefore, err := db.CountStudents(ctx)
 	if err != nil {
 		t.Fatalf("CountStudents failed: %v", err)
 	}
-	if countBefore != 2 {
-		t.Errorf("Expected 2 students before delete, got %d", countBefore)
+	if countBefore != 1 {
+		t.Errorf("Expected 1 student before delete (TTL-filtered), got %d", countBefore)
 	}
 
 	// Delete expired
@@ -475,10 +475,10 @@ func TestCleanupExpiredStickers(t *testing.T) {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
 
-	// Verify we have 2 stickers
+	// Verify we have 1 non-expired sticker (CountStickers now filters by TTL)
 	count, _ := db.CountStickers(ctx)
-	if count != 2 {
-		t.Fatalf("Expected 2 stickers, got %d", count)
+	if count != 1 {
+		t.Fatalf("Expected 1 sticker (TTL-filtered), got %d", count)
 	}
 
 	// Cleanup expired
@@ -939,13 +939,13 @@ func TestDeleteExpiredHistoricalCourses(t *testing.T) {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
 
-	// Count before delete
+	// Count before delete (only counts non-expired due to TTL filtering)
 	countBefore, err := db.CountHistoricalCourses(ctx)
 	if err != nil {
 		t.Fatalf("CountHistoricalCourses failed: %v", err)
 	}
-	if countBefore != 2 {
-		t.Errorf("Expected 2 courses before delete, got %d", countBefore)
+	if countBefore != 1 {
+		t.Errorf("Expected 1 course before delete (TTL-filtered), got %d", countBefore)
 	}
 
 	// Delete expired (7 day TTL)
@@ -1449,10 +1449,10 @@ func TestDeleteExpiredSyllabi(t *testing.T) {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
 
-	// Verify both exist
+	// Verify non-expired count (CountSyllabi now filters by TTL)
 	count, _ := db.CountSyllabi(ctx)
-	if count != 2 {
-		t.Fatalf("Expected 2 syllabi before deletion, got %d", count)
+	if count != 1 {
+		t.Fatalf("Expected 1 syllabus before deletion (TTL-filtered), got %d", count)
 	}
 
 	// Delete expired (TTL = 7 days)

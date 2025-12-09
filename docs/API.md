@@ -34,7 +34,7 @@ GET /livez
 **用途**:
 - Kubernetes/Docker liveness probe
 - **最輕量級檢查**：僅確認進程能回應 HTTP
-- **不檢查依賴服務**：避免資料庫暂時不可用導致 Pod 重啟
+- **不檢查依賴服務**：避免資料庫暫時不可用導致 Pod 重啟
 - **失敗行為**: Kubernetes **重啟 Pod**
 
 **何時失敗**:

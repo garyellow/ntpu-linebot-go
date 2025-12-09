@@ -155,10 +155,11 @@ func (db *DB) DeleteExpiredStudents(ctx context.Context, ttl time.Duration) (int
 
 // CountStudents returns the total number of students
 func (db *DB) CountStudents(ctx context.Context) (int, error) {
-	query := `SELECT COUNT(*) FROM students`
+	ttlTimestamp := db.getTTLTimestamp()
+	query := `SELECT COUNT(*) FROM students WHERE cached_at > ?`
 
 	var count int
-	err := db.reader.QueryRowContext(ctx, query).Scan(&count)
+	err := db.reader.QueryRowContext(ctx, query, ttlTimestamp).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count students: %w", err)
 	}
@@ -489,10 +490,11 @@ func (db *DB) DeleteExpiredContacts(ctx context.Context, ttl time.Duration) (int
 
 // CountContacts returns the total number of contacts
 func (db *DB) CountContacts(ctx context.Context) (int, error) {
-	query := `SELECT COUNT(*) FROM contacts`
+	ttlTimestamp := db.getTTLTimestamp()
+	query := `SELECT COUNT(*) FROM contacts WHERE cached_at > ?`
 
 	var count int
-	err := db.reader.QueryRowContext(ctx, query).Scan(&count)
+	err := db.reader.QueryRowContext(ctx, query, ttlTimestamp).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count contacts: %w", err)
 	}
@@ -787,10 +789,11 @@ func (db *DB) DeleteExpiredCourses(ctx context.Context, ttl time.Duration) (int6
 
 // CountCourses returns the total number of courses
 func (db *DB) CountCourses(ctx context.Context) (int, error) {
-	query := `SELECT COUNT(*) FROM courses`
+	ttlTimestamp := db.getTTLTimestamp()
+	query := `SELECT COUNT(*) FROM courses WHERE cached_at > ?`
 
 	var count int
-	err := db.reader.QueryRowContext(ctx, query).Scan(&count)
+	err := db.reader.QueryRowContext(ctx, query, ttlTimestamp).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count courses: %w", err)
 	}
@@ -983,10 +986,11 @@ func (db *DB) CleanupExpiredStickers(ctx context.Context) (int64, error) {
 
 // CountStickers returns the total number of stickers
 func (db *DB) CountStickers(ctx context.Context) (int, error) {
-	query := `SELECT COUNT(*) FROM stickers`
+	ttlTimestamp := db.getTTLTimestamp()
+	query := `SELECT COUNT(*) FROM stickers WHERE cached_at > ?`
 
 	var count int
-	err := db.reader.QueryRowContext(ctx, query).Scan(&count)
+	err := db.reader.QueryRowContext(ctx, query, ttlTimestamp).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count stickers: %w", err)
 	}
@@ -1209,10 +1213,11 @@ func (db *DB) DeleteExpiredHistoricalCourses(ctx context.Context, ttl time.Durat
 
 // CountHistoricalCourses returns the total number of historical courses
 func (db *DB) CountHistoricalCourses(ctx context.Context) (int, error) {
-	query := `SELECT COUNT(*) FROM historical_courses`
+	ttlTimestamp := db.getTTLTimestamp()
+	query := `SELECT COUNT(*) FROM historical_courses WHERE cached_at > ?`
 
 	var count int
-	err := db.reader.QueryRowContext(ctx, query).Scan(&count)
+	err := db.reader.QueryRowContext(ctx, query, ttlTimestamp).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count historical courses: %w", err)
 	}
@@ -1457,10 +1462,11 @@ func (db *DB) GetSyllabiByYearTerm(ctx context.Context, year, term int) ([]*Syll
 
 // CountSyllabi returns the total number of syllabi
 func (db *DB) CountSyllabi(ctx context.Context) (int, error) {
-	query := `SELECT COUNT(*) FROM syllabi`
+	ttlTimestamp := db.getTTLTimestamp()
+	query := `SELECT COUNT(*) FROM syllabi WHERE cached_at > ?`
 
 	var count int
-	err := db.reader.QueryRowContext(ctx, query).Scan(&count)
+	err := db.reader.QueryRowContext(ctx, query, ttlTimestamp).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count syllabi: %w", err)
 	}
