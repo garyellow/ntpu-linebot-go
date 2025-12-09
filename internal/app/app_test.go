@@ -124,7 +124,7 @@ func TestReadinessCheckContextTimeout(t *testing.T) {
 	router := gin.New()
 	router.GET("/ready", app.readinessCheck)
 
-	// Create request with a context that will be cancelled
+	// Create request with a context that will be canceled
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
