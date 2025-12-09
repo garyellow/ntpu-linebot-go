@@ -1,13 +1,5 @@
 package storage
 
-import (
-	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
-)
-
-// ErrNotFound is an alias to the domain-level error for backward compatibility.
-// Prefer using domerrors.ErrNotFound directly in new code.
-var ErrNotFound = domerrors.ErrNotFound
-
 // Student represents a student record
 type Student struct {
 	ID         string `json:"id"`

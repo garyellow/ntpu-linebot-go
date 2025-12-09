@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
 )
 
 // SaveStudent inserts or updates a student record
@@ -1340,7 +1342,7 @@ func (db *DB) GetSyllabusByUID(ctx context.Context, uid string) (*Syllabus, erro
 		&syllabus.CachedAt,
 	)
 	if err == sql.ErrNoRows {
-		return nil, ErrNotFound
+		return nil, domerrors.ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get syllabus: %w", err)

@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
 )
 
 func setupTestDB(t *testing.T) *DB {
@@ -1341,8 +1343,8 @@ func TestGetSyllabusByUID_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := db.GetSyllabusByUID(ctx, "nonexistent")
-	if err != ErrNotFound {
-		t.Errorf("Expected ErrNotFound, got %v", err)
+	if err != domerrors.ErrNotFound {
+		t.Errorf("Expected domerrors.ErrNotFound, got %v", err)
 	}
 }
 
