@@ -171,8 +171,8 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		userLimiter:    userLimiter,
 	}
 
-	router.GET("/healthz", app.healthCheck)
-	router.GET("/ready", app.readinessCheck)
+	router.GET("/livez", app.livenessCheck)
+	router.GET("/readyz", app.readinessCheck)
 	router.POST("/webhook", webhookHandler.Handle)
 	router.GET("/metrics", gin.WrapH(promhttp.HandlerFor(registry, promhttp.HandlerOpts{})))
 
@@ -189,28 +189,12 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	return app, nil
 }
 
-// healthCheck returns service health status.
-func (a *Application) healthCheck(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
-	defer cancel()
-
-	if err := a.db.Ping(ctx); err != nil {
-		a.logger.WithError(err).Error("Health check failed")
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"status": "unhealthy",
-			"error":  "database unavailable",
-		})
-		return
-	}
-
+func (a *Application) livenessCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"status":   "healthy",
-		"db_path":  a.cfg.SQLitePath(),
-		"features": a.getFeatures(),
+		"status": "alive",
 	})
 }
 
-// getFeatures returns enabled features.
 func (a *Application) getFeatures() map[string]bool {
 	return map[string]bool{
 		"bm25_search":     a.bm25Index != nil && a.bm25Index.IsEnabled(),
@@ -219,9 +203,8 @@ func (a *Application) getFeatures() map[string]bool {
 	}
 }
 
-// readinessCheck returns service readiness status with dependency checks.
 func (a *Application) readinessCheck(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), config.HealthCheckTimeout)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), config.ReadinessCheckTimeout)
 	defer cancel()
 
 	// Check database connectivity
@@ -245,7 +228,6 @@ func (a *Application) readinessCheck(c *gin.Context) {
 	})
 }
 
-// getCacheStats retrieves cache statistics for readiness check.
 func (a *Application) getCacheStats(ctx context.Context) map[string]int {
 	stats := make(map[string]int)
 

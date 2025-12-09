@@ -163,8 +163,8 @@ docker compose up -d
 | 端點 | 說明 |
 |------|------|
 | `/webhook` | LINE Webhook URL |
-| `/healthz` | Liveness 健康檢查 |
-| `/ready` | Readiness 檢查 |
+| `/livez` | Liveness (進程存活,不檢查外部依賴) |
+| `/readyz` | Readiness (服務就緒,檢查 DB + cache) |
 | `/metrics` | Prometheus 指標 |
 
 > ⚠️ 本機測試需使用 [ngrok](https://ngrok.com/) 等工具將 localhost 轉發至公網。

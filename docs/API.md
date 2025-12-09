@@ -18,46 +18,37 @@
 
 ### 1.1 Liveness Probe (存活探測)
 
-檢查服務是否存活(輕量級檢查)。包含基本的資料庫連線驗證。
+**Kubernetes Liveness Probe** - 檢查進程是否存活且能回應 HTTP 請求。**不檢查外部依賴**（資料庫、快取等）以避免級連失敗。
 
 ```http
-GET /healthz
+GET /livez
 ```
 
 **Response** (200 OK):
 ```json
 {
-  "status": "healthy",
-  "db_path": "/data/ntpu-linebot.db",
-  "features": {
-    "bm25_search": true,
-    "nlu": true,
-    "query_expansion": true
-  }
-}
-```
-
-**Response** (503 Service Unavailable):
-```json
-{
-  "status": "unhealthy",
-  "error": "database unavailable"
+  "status": "alive"
 }
 ```
 
 **用途**:
 - Kubernetes/Docker liveness probe
-- 基本健康檢查（DB Ping + 功能狀態）
-- **輕量級檢查**（2 秒超時）
+- **最輕量級檢查**：僅確認進程能回應 HTTP
+- **不檢查依賴服務**：避免資料庫暂時不可用導致 Pod 重啟
+- **失敗行為**: Kubernetes **重啟 Pod**
+
+**何時失敗**:
+- 進程崩潰或死鎖
+- 嚴重記憶體洩漏導致無法處理 HTTP 請求
 
 ---
 
 ### 1.2 Readiness Probe (就緒探測)
 
-檢查服務是否準備好處理流量（完整依賴檢查）。失敗時返回 503，Kubernetes 會暫時移除流量，但不重啟 pod。
+**Kubernetes Readiness Probe** - 檢查服務是否準備好接收流量（完整依賴檢查）。包含資料庫連線、快取狀態、功能可用性。
 
 ```http
-GET /ready
+GET /readyz
 ```
 
 **Response** (200 OK):
@@ -89,12 +80,31 @@ GET /ready
 
 **檢查項目**:
 - ✅ 資料庫連線（Ping 測試）
-- ✅ 快取資料統計
-- ✅ 功能啟用狀態
+- ✅ 快取資料統計（students, contacts, courses, stickers）
+- ✅ 功能啟用狀態（BM25, NLU, Query Expansion）
 
 **用途**:
 - Kubernetes readiness probe
 - 確認服務完全就緒後才接收流量
+- **檢查超時**: 3 秒（config.ReadinessCheckTimeout）
+- **失敗行為**: Kubernetes **暫時移除流量**（不重啟 Pod）
+
+**何時失敗**:
+- 資料庫無法連線
+- 快取尚未初始化完成（warmup 進行中）
+- 依賴服務暫時不可用
+
+---
+
+### 1.3 Probe 比較表
+
+| 特性 | Liveness (`/livez`) | Readiness (`/readyz`) |
+|------|---------------------|------------------------|
+| **用途** | 進程是否存活 | 是否準備接流量 |
+| **檢查內容** | 僅 HTTP 回應 | DB + 快取 + 功能 |
+| **超時** | 無 (立即回傳) | 3 秒 |
+| **失敗行為** | 重啟容器 | 移除流量 (不重啟) |
+| **Docker Compose** | 用於 healthcheck | 用於 depends_on |
 
 ---
 
@@ -429,14 +439,14 @@ LINE Webhook **必須**使用 HTTPS：
 
 ### cURL 範例
 
-#### 1. Health Check
+#### 1. Liveness Check
 ```bash
-curl -X GET http://localhost:10000/healthz
+curl -X GET http://localhost:10000/livez
 ```
 
 #### 2. Readiness Check
 ```bash
-curl -X GET http://localhost:10000/ready
+curl -X GET http://localhost:10000/readyz
 ```
 
 #### 3. Prometheus Metrics
@@ -471,17 +481,17 @@ curl -X POST http://localhost:10000/webhook \
   },
   "item": [
     {
-      "name": "Health Check",
+      "name": "Liveness Check",
       "request": {
         "method": "GET",
-        "url": "{{base_url}}/healthz"
+        "url": "{{base_url}}/livez"
       }
     },
     {
       "name": "Readiness Check",
       "request": {
         "method": "GET",
-        "url": "{{base_url}}/ready"
+        "url": "{{base_url}}/readyz"
       }
     },
     {

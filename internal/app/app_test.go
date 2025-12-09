@@ -40,16 +40,61 @@ func setupTestApp(t *testing.T) *Application {
 	}
 }
 
-// TestReadinessCheckHealthy verifies /ready returns 200 OK when database is healthy
+func TestLivenessCheckHealthy(t *testing.T) {
+	app := setupTestApp(t)
+	defer func() { _ = app.db.Close() }()
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.GET("/livez", app.livenessCheck)
+
+	req := httptest.NewRequest("GET", "/livez", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	// Verify JSON structure
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse JSON response: %v", err)
+	}
+
+	// Check required fields for liveness (minimal response)
+	if status, ok := response["status"].(string); !ok || status != "alive" {
+		t.Errorf("Expected status='alive', got %v", response["status"])
+	}
+}
+
+func TestLivenessCheckAlwaysSucceeds(t *testing.T) {
+	app := setupTestApp(t)
+
+	_ = app.db.Close()
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.GET("/livez", app.livenessCheck)
+
+	req := httptest.NewRequest("GET", "/livez", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200 even with database down, got %d", w.Code)
+	}
+}
+
 func TestReadinessCheckHealthy(t *testing.T) {
 	app := setupTestApp(t)
 	defer func() { _ = app.db.Close() }()
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.GET("/ready", app.readinessCheck)
+	router.GET("/readyz", app.readinessCheck)
 
-	req := httptest.NewRequest("GET", "/ready", nil)
+	req := httptest.NewRequest("GET", "/readyz", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -81,7 +126,7 @@ func TestReadinessCheckHealthy(t *testing.T) {
 	}
 }
 
-// TestReadinessCheckDatabaseFailure verifies /ready returns 503 when database ping fails
+// TestReadinessCheckDatabaseFailure verifies /readyz returns 503 when database ping fails
 func TestReadinessCheckDatabaseFailure(t *testing.T) {
 	app := setupTestApp(t)
 
@@ -92,9 +137,9 @@ func TestReadinessCheckDatabaseFailure(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.GET("/ready", app.readinessCheck)
+	router.GET("/readyz", app.readinessCheck)
 
-	req := httptest.NewRequest("GET", "/ready", nil)
+	req := httptest.NewRequest("GET", "/readyz", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -124,17 +169,17 @@ func TestReadinessCheckContextTimeout(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.GET("/ready", app.readinessCheck)
+	router.GET("/readyz", app.readinessCheck)
 
 	// Create request with a context that will be canceled
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	req := httptest.NewRequest("GET", "/ready", nil).WithContext(ctx)
+	req := httptest.NewRequest("GET", "/readyz", nil).WithContext(ctx)
 	w := httptest.NewRecorder()
 
 	// The handler should complete quickly (< 100ms) since SQLite operations are fast,
-	// completing before either the request context timeout or HealthCheckTimeout fires.
+	// completing before either the request context timeout or ReadinessCheckTimeout fires.
 	done := make(chan struct{})
 	go func() {
 		router.ServeHTTP(w, req)
@@ -147,7 +192,7 @@ func TestReadinessCheckContextTimeout(t *testing.T) {
 		if w.Code != http.StatusOK && w.Code != http.StatusServiceUnavailable {
 			t.Errorf("Expected status 200 or 503, got %d", w.Code)
 		}
-	case <-time.After(config.HealthCheckTimeout + 1*time.Second):
+	case <-time.After(config.ReadinessCheckTimeout + 1*time.Second):
 		t.Fatal("Handler did not complete within expected timeout")
 	}
 }
@@ -169,9 +214,9 @@ func TestReadinessCheckCacheStats(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.GET("/ready", app.readinessCheck)
+	router.GET("/readyz", app.readinessCheck)
 
-	req := httptest.NewRequest("GET", "/ready", nil)
+	req := httptest.NewRequest("GET", "/readyz", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 

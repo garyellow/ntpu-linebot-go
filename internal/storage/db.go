@@ -177,9 +177,6 @@ func (db *DB) getTTLTimestamp() int64 {
 	return time.Now().Unix() - int64(db.cacheTTL.Seconds())
 }
 
-// Ping checks if the database is ready to serve requests.
-// This performs a ping on both reader and writer connections to verify connectivity.
-// Use this for Kubernetes readiness probes or health checks.
 func (db *DB) Ping(ctx context.Context) error {
 	return errors.Join(
 		db.writer.PingContext(ctx),

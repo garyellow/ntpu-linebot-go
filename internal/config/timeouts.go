@@ -112,20 +112,8 @@ const (
 	//   - BM25 search is in-memory and very fast (<10ms)
 	//   - Should complete well within the 60s webhook timeout
 	SmartSearchTimeout = 30 * time.Second
-)
 
-// Health check timeouts
-const (
-	// HealthCheckTimeout is the timeout for the /ready (readiness) probe.
-	// Note: /healthz (liveness) uses a separate, hardcoded 2s timeout for faster checks.
-	// Should be short enough to respond quickly to orchestration systems
-	// (e.g., Kubernetes), but long enough to verify database connectivity.
-	//
-	// Set to 3s because:
-	//   - SQLite Ping() is fast (typically <10ms)
-	//   - Allows time for cache statistics queries
-	//   - Kubernetes default probe timeout is 1s, but can be configured higher
-	HealthCheckTimeout = 3 * time.Second
+	ReadinessCheckTimeout = 3 * time.Second
 )
 
 // Graceful shutdown
