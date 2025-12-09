@@ -18,32 +18,37 @@
 
 ### 1.1 Liveness Probe (存活探測)
 
-檢查服務是否存活（最小化檢查）。此端點**永不**檢查外部依賴，僅確認程序運行中。
+**Kubernetes Liveness Probe** - 檢查進程是否存活且能回應 HTTP 請求。**不檢查外部依賴**（資料庫、快取等）以避免級連失敗。
 
 ```http
-GET /healthz
+GET /livez
 ```
 
 **Response** (200 OK):
 ```json
 {
-  "status": "ok"
+  "status": "alive"
 }
 ```
 
 **用途**:
 - Kubernetes/Docker liveness probe
-- 簡單的服務健康檢查
-- **不檢查依賴服務**（避免級聯失敗導致 pod 重啟）
+- **最輕量級檢查**：僅確認進程能回應 HTTP
+- **不檢查依賴服務**：避免資料庫暫時不可用導致 Pod 重啟
+- **失敗行為**: Kubernetes **重啟 Pod**
+
+**何時失敗**:
+- 進程崩潰或死鎖
+- 嚴重記憶體洩漏導致無法處理 HTTP 請求
 
 ---
 
 ### 1.2 Readiness Probe (就緒探測)
 
-檢查服務是否準備好處理流量（完整依賴檢查）。失敗時返回 503，Kubernetes 會暫時移除流量，但不重啟 pod。
+**Kubernetes Readiness Probe** - 檢查服務是否準備好接收流量（完整依賴檢查）。包含資料庫連線、快取狀態、功能可用性。
 
 ```http
-GET /ready
+GET /readyz
 ```
 
 **Response** (200 OK):
@@ -51,15 +56,16 @@ GET /ready
 {
   "status": "ready",
   "database": "connected",
-  "scrapers": {
-    "sea": true,
-    "lms": true
-  },
   "cache": {
     "students": 15234,
     "contacts": 823,
     "courses": 4521,
     "stickers": 42
+  },
+  "features": {
+    "bm25_search": true,
+    "nlu": true,
+    "query_expansion": true
   }
 }
 ```
@@ -73,13 +79,37 @@ GET /ready
 ```
 
 **檢查項目**:
-- ✅ 資料庫連線
-- ✅ Scraper URLs 可用性
-- ✅ 快取資料數量
+- ✅ 資料庫連線（Ping 測試）
+- ✅ 快取資料統計（students, contacts, courses, stickers）
+- ✅ 功能啟用狀態（BM25, NLU, Query Expansion）
 
 **用途**:
 - Kubernetes readiness probe
 - 確認服務完全就緒後才接收流量
+- **檢查超時**: 3 秒（config.ReadinessCheckTimeout）
+- **失敗行為**: Kubernetes **暫時移除流量**（不重啟 Pod）
+
+**何時失敗**:
+- 資料庫無法連線
+- 快取尚未初始化完成（warmup 進行中）
+- 依賴服務暫時不可用
+
+---
+
+### 1.3 Probe 比較表
+
+| 特性 | Liveness (`/livez`) | Readiness (`/readyz`) |
+|------|---------------------|------------------------|
+| **用途** | 進程是否存活 | 是否準備接流量 |
+| **檢查內容** | 僅 HTTP 回應 | DB + 快取 + 功能 |
+| **超時** | 無 (立即回傳) | 3 秒 |
+| **失敗行為** | 重啟容器 | 移除流量 (不重啟) |
+| **Docker Compose** | 用於 healthcheck | 可用於 depends_on (依需求) |
+
+> **說明**:
+> - Docker HEALTHCHECK 使用 `/livez` 檢查容器是否存活，不檢查外部依賴（避免因 DB 暫時不可用而重啟容器）
+> - 若需在 `depends_on` 中等待服務完全就緒（含 DB 連線），可使用 `/readyz`
+> - Kubernetes 環境建議：livenessProbe 使用 `/livez`，readinessProbe 使用 `/readyz`
 
 ---
 
@@ -90,7 +120,7 @@ GET /ready
 接收 LINE Platform 的 Webhook 事件。
 
 ```http
-POST /callback
+POST /webhook
 Content-Type: application/json
 X-Line-Signature: {signature}
 ```
@@ -293,7 +323,7 @@ sequenceDiagram
     participant NTPU
 
     User->>LINE: 傳送訊息「學號 410123456」
-    LINE->>Bot: POST /callback (webhook)
+    LINE->>Bot: POST /webhook (webhook)
     Bot->>Bot: 驗證簽章
     Bot->>Bot: 解析事件
     Bot->>LINE: ShowLoadingAnimation API (...)
@@ -414,14 +444,14 @@ LINE Webhook **必須**使用 HTTPS：
 
 ### cURL 範例
 
-#### 1. Health Check
+#### 1. Liveness Check
 ```bash
-curl -X GET http://localhost:10000/healthz
+curl -X GET http://localhost:10000/livez
 ```
 
 #### 2. Readiness Check
 ```bash
-curl -X GET http://localhost:10000/ready
+curl -X GET http://localhost:10000/readyz
 ```
 
 #### 3. Prometheus Metrics
@@ -436,7 +466,7 @@ echo -n '{"events":[{"type":"message","message":{"text":"test"}}]}' | \
 openssl dgst -sha256 -hmac "YOUR_CHANNEL_SECRET" -binary | base64
 
 # 發送請求
-curl -X POST http://localhost:10000/callback \
+curl -X POST http://localhost:10000/webhook \
   -H "Content-Type: application/json" \
   -H "X-Line-Signature: {calculated_signature}" \
   -d '{"events":[{"type":"message","message":{"text":"test"}}]}'
@@ -456,17 +486,17 @@ curl -X POST http://localhost:10000/callback \
   },
   "item": [
     {
-      "name": "Health Check",
+      "name": "Liveness Check",
       "request": {
         "method": "GET",
-        "url": "{{base_url}}/healthz"
+        "url": "{{base_url}}/livez"
       }
     },
     {
       "name": "Readiness Check",
       "request": {
         "method": "GET",
-        "url": "{{base_url}}/ready"
+        "url": "{{base_url}}/readyz"
       }
     },
     {

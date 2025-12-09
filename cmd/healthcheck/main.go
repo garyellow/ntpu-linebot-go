@@ -19,10 +19,10 @@ func run() int {
 		port = "10000"
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	url := fmt.Sprintf("http://localhost:%s/healthz", port)
+	url := fmt.Sprintf("http://localhost:%s/livez", port)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return 1

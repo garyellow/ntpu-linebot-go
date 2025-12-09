@@ -112,6 +112,11 @@ const (
 	//   - BM25 search is in-memory and very fast (<10ms)
 	//   - Should complete well within the 60s webhook timeout
 	SmartSearchTimeout = 30 * time.Second
+
+	// ReadinessCheckTimeout is the timeout for readiness probe checks.
+	// Set to 3s to allow SQLite ping operations to complete while maintaining
+	// fast probe responses for Kubernetes orchestration.
+	ReadinessCheckTimeout = 3 * time.Second
 )
 
 // Graceful shutdown
