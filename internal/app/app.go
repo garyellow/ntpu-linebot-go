@@ -172,7 +172,9 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	}
 
 	router.GET("/livez", app.livenessCheck)
+	router.HEAD("/livez", app.livenessCheck)
 	router.GET("/readyz", app.readinessCheck)
+	router.HEAD("/readyz", app.readinessCheck)
 	router.POST("/webhook", webhookHandler.Handle)
 	router.GET("/metrics", gin.WrapH(promhttp.HandlerFor(registry, promhttp.HandlerOpts{})))
 
