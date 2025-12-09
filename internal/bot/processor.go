@@ -34,10 +34,8 @@ type Processor struct {
 	metrics        *metrics.Metrics
 
 	// Configuration
-	webhookTimeout          time.Duration
-	userRateLimitTokens     float64
-	userRateLimitRefillRate float64
-	llmRateLimitPerHour     float64
+	webhookTimeout      time.Duration
+	llmRateLimitPerHour float64
 }
 
 // ProcessorConfig holds configuration for creating a new Processor.
@@ -55,25 +53,23 @@ type ProcessorConfig struct {
 // NewProcessor creates a new event processor.
 func NewProcessor(cfg ProcessorConfig) *Processor {
 	return &Processor{
-		registry:                cfg.Registry,
-		intentParser:            cfg.IntentParser,
-		llmLimiter:              cfg.LLMRateLimiter,
-		userLimiter:             cfg.UserLimiter,
-		stickerManager:          cfg.StickerManager,
-		logger:                  cfg.Logger,
-		metrics:                 cfg.Metrics,
-		webhookTimeout:          cfg.BotConfig.WebhookTimeout,
-		userRateLimitTokens:     cfg.BotConfig.UserRateLimitTokens,
-		userRateLimitRefillRate: cfg.BotConfig.UserRateLimitRefillRate,
-		llmRateLimitPerHour:     cfg.BotConfig.LLMRateLimitPerHour,
+		registry:            cfg.Registry,
+		intentParser:        cfg.IntentParser,
+		llmLimiter:          cfg.LLMRateLimiter,
+		userLimiter:         cfg.UserLimiter,
+		stickerManager:      cfg.StickerManager,
+		logger:              cfg.Logger,
+		metrics:             cfg.Metrics,
+		webhookTimeout:      cfg.BotConfig.WebhookTimeout,
+		llmRateLimitPerHour: cfg.BotConfig.LLMRateLimitPerHour,
 	}
 }
 
 // ProcessMessage handles a text message event.
 func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEvent) ([]messaging_api.MessageInterface, error) {
 	// Extract and inject context values for tracing and logging
-	chatID := getChatIDFromSource(event.Source)
-	userID := getUserIDFromSource(event.Source)
+	chatID := GetChatID(event.Source)
+	userID := GetUserID(event.Source)
 
 	// Inject context values for downstream handlers
 	ctx = ctxutil.WithChatID(ctx, chatID)
@@ -86,7 +82,7 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 
 	// Handle sticker messages - only in personal chats
 	if event.Message.GetType() == "sticker" {
-		if isPersonalChat(event.Source) {
+		if IsPersonalChat(event.Source) {
 			return p.handleStickerMessage(event), nil
 		}
 		// Ignore sticker messages in group/room chats
@@ -156,8 +152,8 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 // ProcessPostback handles a postback event.
 func (p *Processor) ProcessPostback(ctx context.Context, event webhook.PostbackEvent) ([]messaging_api.MessageInterface, error) {
 	// Extract and inject context values for tracing and logging
-	chatID := getChatIDFromSource(event.Source)
-	userID := getUserIDFromSource(event.Source)
+	chatID := GetChatID(event.Source)
+	userID := GetUserID(event.Source)
 
 	// Inject context values for downstream handlers
 	ctx = ctxutil.WithChatID(ctx, chatID)
@@ -239,7 +235,7 @@ func (p *Processor) ProcessFollow(event webhook.FollowEvent) ([]messaging_api.Me
 // handleUnmatchedMessage handles messages that don't match any keyword pattern.
 func (p *Processor) handleUnmatchedMessage(ctx context.Context, source webhook.SourceInterface, textMsg webhook.TextMessageContent, sanitizedText string) ([]messaging_api.MessageInterface, error) {
 	// Check if we're in a group chat
-	isGroup := !isPersonalChat(source)
+	isGroup := !IsPersonalChat(source)
 
 	// For group chats, only respond if bot is mentioned
 	if isGroup {
@@ -266,7 +262,7 @@ func (p *Processor) handleUnmatchedMessage(ctx context.Context, source webhook.S
 
 	// Try NLU if available
 	if p.intentParser != nil && p.intentParser.IsEnabled() {
-		chatID := getChatIDFromSource(source)
+		chatID := GetChatID(source)
 		return p.handleWithNLU(ctx, sanitizedText, source, chatID)
 	}
 
@@ -349,7 +345,7 @@ func (p *Processor) checkUserRateLimit(source webhook.SourceInterface, chatID st
 		return true, nil
 	}
 
-	if p.userLimiter.Allow(chatID, p.userRateLimitTokens, p.userRateLimitRefillRate) {
+	if p.userLimiter.Allow(chatID) {
 		return true, nil
 	}
 
@@ -359,7 +355,7 @@ func (p *Processor) checkUserRateLimit(source webhook.SourceInterface, chatID st
 	}
 	p.logger.WithField("chat_id", logChatID).Warn("User rate limit exceeded")
 
-	if isPersonalChat(source) {
+	if IsPersonalChat(source) {
 		sender := lineutil.GetSender("系統小幫手", p.stickerManager)
 		return false, []messaging_api.MessageInterface{
 			lineutil.NewTextMessageWithConsistentSender(
@@ -388,7 +384,7 @@ func (p *Processor) checkLLMRateLimit(source webhook.SourceInterface, chatID str
 	}
 	p.logger.WithField("chat_id", logChatID).Warn("LLM rate limit exceeded")
 
-	if isPersonalChat(source) {
+	if IsPersonalChat(source) {
 		available := p.llmLimiter.GetAvailable(chatID)
 		resetMinutes := int((p.llmRateLimitPerHour - available) * 3600 / p.llmRateLimitPerHour / 60)
 		if resetMinutes < 1 {
@@ -497,35 +493,6 @@ func (p *Processor) getDetailedInstructionMessages() []messaging_api.MessageInte
 }
 
 // Helper functions
-
-func isPersonalChat(source webhook.SourceInterface) bool {
-	_, ok := source.(webhook.UserSource)
-	return ok
-}
-
-func getChatIDFromSource(source webhook.SourceInterface) string {
-	switch s := source.(type) {
-	case webhook.UserSource:
-		return s.UserId
-	case webhook.GroupSource:
-		return s.GroupId
-	case webhook.RoomSource:
-		return s.RoomId
-	}
-	return ""
-}
-
-func getUserIDFromSource(source webhook.SourceInterface) string {
-	switch s := source.(type) {
-	case webhook.UserSource:
-		return s.UserId
-	case webhook.GroupSource:
-		return s.UserId
-	case webhook.RoomSource:
-		return s.UserId
-	}
-	return ""
-}
 
 func normalizeWhitespace(s string) string {
 	return strings.Join(strings.Fields(s), " ")

@@ -82,7 +82,7 @@ func setupTestHandler(t *testing.T) *Handler {
 
 	// Create rate limiters
 	llmRateLimiter := ratelimit.NewLLMRateLimiter(botCfg.LLMRateLimitPerHour, 5*time.Minute, m)
-	userLimiter := ratelimit.NewUserRateLimiter(5*time.Minute, m)
+	userLimiter := ratelimit.NewUserRateLimiter(botCfg.UserRateLimitTokens, botCfg.UserRateLimitRefillRate, 5*time.Minute, m)
 
 	// Create processor
 	processor := bot.NewProcessor(bot.ProcessorConfig{

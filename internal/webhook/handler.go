@@ -30,9 +30,9 @@ type Handler struct {
 	metrics        *metrics.Metrics
 	logger         *logger.Logger
 	processor      *bot.Processor
-	rateLimiter    *ratelimit.WebhookRateLimiter // Global rate limiter for API calls
-	stickerManager *sticker.Manager              // Sticker manager for avatar URLs
-	wg             sync.WaitGroup                // WaitGroup for async event processing
+	rateLimiter    *ratelimit.Limiter // Global rate limiter for API calls
+	stickerManager *sticker.Manager   // Sticker manager for avatar URLs
+	wg             sync.WaitGroup     // WaitGroup for async event processing
 
 	// LINE API constraints (from config.BotConfig)
 	maxMessagesPerReply int
@@ -70,7 +70,7 @@ func NewHandler(cfg HandlerConfig) (*Handler, error) {
 		minReplyTokenLength: cfg.BotConfig.MinReplyTokenLength,
 	}
 
-	h.rateLimiter = ratelimit.NewWebhookRateLimiter(cfg.BotConfig.GlobalRateLimitRPS, cfg.BotConfig.GlobalRateLimitRPS)
+	h.rateLimiter = ratelimit.New(cfg.BotConfig.GlobalRateLimitRPS, cfg.BotConfig.GlobalRateLimitRPS)
 
 	return h, nil
 }
@@ -191,7 +191,7 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 		if !h.rateLimiter.Allow() {
 			h.logger.Warn("Global rate limit exceeded, waiting...")
 			h.metrics.RecordRateLimiterDrop("global")
-			h.rateLimiter.WaitForToken()
+			h.rateLimiter.WaitSimple()
 		}
 
 		// Send reply with error handling
@@ -268,20 +268,7 @@ func (h *Handler) getChatID(event webhook.EventInterface) string {
 		return ""
 	}
 
-	return h.getChatIDFromSource(source)
-}
-
-// getChatIDFromSource extracts chat ID directly from a source interface
-func (h *Handler) getChatIDFromSource(source webhook.SourceInterface) string {
-	switch s := source.(type) {
-	case webhook.UserSource:
-		return s.UserId
-	case webhook.GroupSource:
-		return s.GroupId
-	case webhook.RoomSource:
-		return s.RoomId
-	}
-	return ""
+	return bot.GetChatID(source)
 }
 
 // Shutdown waits for all async event processing to complete.
