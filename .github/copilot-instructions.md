@@ -9,7 +9,7 @@ LINE chatbot for NTPU (National Taipei University) providing student ID lookup, 
 2. **Direct Dependencies** - Handlers use `*storage.DB` directly, interfaces only when truly needed
 3. **Typed Error Handling** - Sentinel errors (`errors.ErrNotFound`) with standard wrapping
 4. **Centralized Configuration** - Bot config with load-time validation
-5. **Context Management** - `ctxpkg.PreserveTracing()` for safe async operations with tracing
+5. **Context Management** - `ctxutil.PreserveTracing()` for safe async operations with tracing
 6. **Simplified Registry** - Direct dispatch without middleware overhead
 7. **Clean Initialization** - Core → GenAI → LLMRateLimiter → Handlers → Webhook (linear flow)
 
@@ -21,7 +21,7 @@ LINE chatbot for NTPU (National Taipei University) providing student ID lookup, 
 - **Context Values**: Minimal usage for request tracing only (userID, chatID, requestID)
 - **Error Handling**: Sentinel errors with standard `fmt.Errorf` wrapping
 - **Constants**: Centralized in config package
-- **Async Operations**: `ctxpkg.PreserveTracing()` for safe detached contexts (avoids memory leaks)
+- **Async Operations**: `ctxutil.PreserveTracing()` for safe detached contexts (avoids memory leaks)
 - **Validation**: Load-time config validation, runtime parameter checks
 
 ## Architecture: Async Webhook Processing
@@ -49,7 +49,7 @@ LINE Webhook → Gin Handler
 **Critical Flow Details:**
 - **Async processing**: HTTP 200 returned immediately after signature verification (< 2s), events processed in goroutine
 - **LINE Best Practice**: Responds within 2s to prevent request_timeout errors, processes asynchronously to handle long operations
-- **Context handling**: Bot operations use `ctxpkg.PreserveTracing()` with 60s timeout
+- **Context handling**: Bot operations use `ctxutil.PreserveTracing()` with 60s timeout
   - **PreserveTracing()**: Creates new context with only necessary tracing values (userID, chatID, requestID)
   - **Why not WithoutCancel()**: Avoids memory leaks from parent references (see Go issue #64478)
   - **Why not Background()**: Background() loses all tracing data needed for log correlation
@@ -85,7 +85,7 @@ LINE Webhook → Gin Handler
 - **BM25 search**: Keyword-based search with Chinese tokenization (unigram for CJK)
 - **Confidence scoring**: Rank-based confidence (not similarity). Higher rank = higher confidence.
 - **Query expansion**: LLM-based expansion for short queries and technical abbreviations (AWS→雲端運算, AI→人工智慧)
-- **Detached context**: Uses `ctxpkg.PreserveTracing()` to prevent request context cancellation from aborting API calls (safer than WithoutCancel)
+- **Detached context**: Uses `ctxutil.PreserveTracing()` to prevent request context cancellation from aborting API calls (safer than WithoutCancel)
 - **Fallback**: Precise search → BM25 smart search (when no results and BM25Index enabled)
 - **UX terminology**: Uses "精確搜尋" (precise) for keyword search, "智慧搜尋" (smart) for BM25 search
 
@@ -277,6 +277,7 @@ Fallback → getHelpMessage() + Warning Log
 - **Webhook handler**: `internal/webhook/handler.go:Handle()` (async processing)
 - **Warmup module**: `internal/warmup/warmup.go` (background cache warming)
 - **Bot module interface**: `internal/bot/handler.go`
+- **Context utilities**: `internal/ctxutil/context.go` (type-safe context values, PreserveTracing)
 - **DB schema**: `internal/storage/schema.go`
 - **LINE utilities**: `internal/lineutil/builder.go` (use instead of raw SDK)
 - **Sticker manager**: `internal/sticker/sticker.go` (avatar URLs for messages)

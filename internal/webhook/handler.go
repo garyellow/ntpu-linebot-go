@@ -15,7 +15,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/bot/course"
 	"github.com/garyellow/ntpu-linebot-go/internal/bot/id"
 	"github.com/garyellow/ntpu-linebot-go/internal/config"
-	ctxpkg "github.com/garyellow/ntpu-linebot-go/internal/context"
+	"github.com/garyellow/ntpu-linebot-go/internal/ctxutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/genai"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
@@ -378,8 +378,8 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 	userID := h.getUserIDFromSource(event.Source)
 
 	// Inject context values for downstream handlers
-	ctx = ctxpkg.WithChatID(ctx, chatID)
-	ctx = ctxpkg.WithUserID(ctx, userID)
+	ctx = ctxutil.WithChatID(ctx, chatID)
+	ctx = ctxutil.WithUserID(ctx, userID)
 
 	// Check rate limit early to avoid unnecessary processing
 	if allowed, rateLimitMsg := h.checkUserRateLimit(event.Source, chatID); !allowed {
@@ -457,7 +457,7 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 	// 3. Partial work (started DB queries) shouldn't be wasted
 	//
 	// Reference: https://github.com/golang/go/issues/64478
-	processCtx, cancel := context.WithTimeout(ctxpkg.PreserveTracing(ctx), h.webhookTimeout)
+	processCtx, cancel := context.WithTimeout(ctxutil.PreserveTracing(ctx), h.webhookTimeout)
 	defer cancel()
 
 	// Dispatch to appropriate bot module based on CanHandle
@@ -478,8 +478,8 @@ func (h *Handler) handlePostbackEvent(ctx context.Context, event webhook.Postbac
 	userID := h.getUserIDFromSource(event.Source)
 
 	// Inject context values for downstream handlers
-	ctx = ctxpkg.WithChatID(ctx, chatID)
-	ctx = ctxpkg.WithUserID(ctx, userID)
+	ctx = ctxutil.WithChatID(ctx, chatID)
+	ctx = ctxutil.WithUserID(ctx, userID)
 
 	data := event.Postback.Data
 
@@ -511,7 +511,7 @@ func (h *Handler) handlePostbackEvent(ctx context.Context, event webhook.Postbac
 
 	// Create context with timeout for postback processing.
 	// Use PreserveTracing() to create a detached context (same reason as handleMessageEvent).
-	processCtx, cancel := context.WithTimeout(ctxpkg.PreserveTracing(ctx), h.webhookTimeout)
+	processCtx, cancel := context.WithTimeout(ctxutil.PreserveTracing(ctx), h.webhookTimeout)
 	defer cancel()
 
 	// Check module prefix or dispatch to all handlers

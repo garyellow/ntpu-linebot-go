@@ -1,4 +1,4 @@
-package context
+package ctxutil
 
 import (
 	"context"
@@ -125,13 +125,6 @@ func TestRequestIDContext(t *testing.T) {
 			t.Errorf("Expected requestID %s, got %s", expectedRequestID, requestID)
 		}
 	})
-}
-
-func TestModuleContext(t *testing.T) {
-	// Module context value has been removed - module name is now only in structured logging
-	// This simplifies context management and follows Go best practices:
-	// context.Value should only be used for request-scoped data, not configuration
-	t.Skip("Module context value removed - module tracking now done via structured logging")
 }
 
 func TestContextChaining(t *testing.T) {

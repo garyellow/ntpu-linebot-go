@@ -1,7 +1,7 @@
-// Package context provides type-safe context value management for the application.
+// Package ctxutil provides type-safe context value management for the application.
 // It uses private key types to prevent context key collisions and provides
 // safe getter/setter functions following Go best practices.
-package context
+package ctxutil
 
 import (
 	"context"
@@ -10,9 +10,9 @@ import (
 type contextKey string
 
 const (
-	userIDKey    contextKey = "context.userID"
-	chatIDKey    contextKey = "context.chatID"
-	requestIDKey contextKey = "context.requestID"
+	userIDKey    contextKey = "ctxutil.userID"
+	chatIDKey    contextKey = "ctxutil.chatID"
+	requestIDKey contextKey = "ctxutil.requestID"
 )
 
 // WithUserID adds a user ID to the context.
@@ -39,7 +39,7 @@ func GetUserID(ctx context.Context) string {
 func MustGetUserID(ctx context.Context) string {
 	userID, ok := ctx.Value(userIDKey).(string)
 	if !ok || userID == "" {
-		panic("context: userID not found")
+		panic("ctxutil: userID not found")
 	}
 	return userID
 }
@@ -66,7 +66,7 @@ func GetChatID(ctx context.Context) string {
 func MustGetChatID(ctx context.Context) string {
 	chatID, ok := ctx.Value(chatIDKey).(string)
 	if !ok || chatID == "" {
-		panic("context: chatID not found")
+		panic("ctxutil: chatID not found")
 	}
 	return chatID
 }
@@ -89,7 +89,7 @@ func GetRequestID(ctx context.Context) (string, bool) {
 func MustGetRequestID(ctx context.Context) string {
 	requestID, ok := ctx.Value(requestIDKey).(string)
 	if !ok || requestID == "" {
-		panic("context: requestID not found")
+		panic("ctxutil: requestID not found")
 	}
 	return requestID
 }
