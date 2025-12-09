@@ -177,6 +177,7 @@ func (db *DB) getTTLTimestamp() int64 {
 	return time.Now().Unix() - int64(db.cacheTTL.Seconds())
 }
 
+// Ping verifies the database connections are alive by pinging both writer and reader connections.
 func (db *DB) Ping(ctx context.Context) error {
 	return errors.Join(
 		db.writer.PingContext(ctx),
