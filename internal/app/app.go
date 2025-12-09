@@ -171,7 +171,8 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		userLimiter:    userLimiter,
 	}
 
-	router.GET("/health", app.healthCheck)
+	router.GET("/healthz", app.healthCheck)
+	router.GET("/ready", app.readinessCheck)
 	router.POST("/webhook", webhookHandler.Handle)
 	router.GET("/metrics", gin.WrapH(promhttp.HandlerFor(registry, promhttp.HandlerOpts{})))
 
@@ -216,6 +217,53 @@ func (a *Application) getFeatures() map[string]bool {
 		"nlu":             a.intentParser != nil && a.intentParser.IsEnabled(),
 		"query_expansion": a.queryExpander != nil,
 	}
+}
+
+// readinessCheck returns service readiness status with dependency checks.
+func (a *Application) readinessCheck(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+	defer cancel()
+
+	// Check database connectivity
+	if err := a.db.Ping(ctx); err != nil {
+		a.logger.WithError(err).Warn("Readiness check failed: database unavailable")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status": "not ready",
+			"reason": "database unavailable",
+		})
+		return
+	}
+
+	// Get cache statistics
+	cacheStats := a.getCacheStats(ctx)
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":   "ready",
+		"database": "connected",
+		"cache":    cacheStats,
+		"features": a.getFeatures(),
+	})
+}
+
+// getCacheStats retrieves cache statistics for readiness check.
+func (a *Application) getCacheStats(ctx context.Context) map[string]int {
+	stats := make(map[string]int)
+
+	// Query each cache table count
+	if count, err := a.db.CountStudents(ctx); err == nil {
+		stats["students"] = count
+	}
+	if count, err := a.db.CountContacts(ctx); err == nil {
+		stats["contacts"] = count
+	}
+	if count, err := a.db.CountCourses(ctx); err == nil {
+		stats["courses"] = count
+	}
+	if count, err := a.db.CountStickers(ctx); err == nil {
+		stats["stickers"] = count
+	}
+
+	return stats
 }
 
 // Run starts the HTTP server and background jobs.

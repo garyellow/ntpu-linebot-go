@@ -27,14 +27,28 @@ GET /healthz
 **Response** (200 OK):
 ```json
 {
-  "status": "ok"
+  "status": "healthy",
+  "db_path": "/data/ntpu-linebot.db",
+  "features": {
+    "bm25_search": true,
+    "nlu": true,
+    "query_expansion": true
+  }
+}
+```
+
+**Response** (503 Service Unavailable):
+```json
+{
+  "status": "unhealthy",
+  "error": "database unavailable"
 }
 ```
 
 **用途**:
 - Kubernetes/Docker liveness probe
-- 簡單的服務健康檢查
-- **不檢查依賴服務**（避免級聯失敗導致 pod 重啟）
+- 基本健康檢查（DB Ping + 功能狀態）
+- **輕量級檢查**（2 秒超時）
 
 ---
 
@@ -51,15 +65,16 @@ GET /ready
 {
   "status": "ready",
   "database": "connected",
-  "scrapers": {
-    "sea": true,
-    "lms": true
-  },
   "cache": {
     "students": 15234,
     "contacts": 823,
     "courses": 4521,
     "stickers": 42
+  },
+  "features": {
+    "bm25_search": true,
+    "nlu": true,
+    "query_expansion": true
   }
 }
 ```
@@ -73,9 +88,9 @@ GET /ready
 ```
 
 **檢查項目**:
-- ✅ 資料庫連線
-- ✅ Scraper URLs 可用性
-- ✅ 快取資料數量
+- ✅ 資料庫連線（Ping 測試）
+- ✅ 快取資料統計
+- ✅ 功能啟用狀態
 
 **用途**:
 - Kubernetes readiness probe
@@ -90,7 +105,7 @@ GET /ready
 接收 LINE Platform 的 Webhook 事件。
 
 ```http
-POST /callback
+POST /webhook
 Content-Type: application/json
 X-Line-Signature: {signature}
 ```
@@ -293,7 +308,7 @@ sequenceDiagram
     participant NTPU
 
     User->>LINE: 傳送訊息「學號 410123456」
-    LINE->>Bot: POST /callback (webhook)
+    LINE->>Bot: POST /webhook (webhook)
     Bot->>Bot: 驗證簽章
     Bot->>Bot: 解析事件
     Bot->>LINE: ShowLoadingAnimation API (...)
@@ -436,7 +451,7 @@ echo -n '{"events":[{"type":"message","message":{"text":"test"}}]}' | \
 openssl dgst -sha256 -hmac "YOUR_CHANNEL_SECRET" -binary | base64
 
 # 發送請求
-curl -X POST http://localhost:10000/callback \
+curl -X POST http://localhost:10000/webhook \
   -H "Content-Type: application/json" \
   -H "X-Line-Signature: {calculated_signature}" \
   -d '{"events":[{"type":"message","message":{"text":"test"}}]}'

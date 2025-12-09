@@ -162,7 +162,7 @@ docker compose up -d
 
 | 端點 | 說明 |
 |------|------|
-| `/callback` | LINE Webhook URL |
+| `/webhook` | LINE Webhook URL |
 | `/healthz` | Liveness 健康檢查 |
 | `/ready` | Readiness 檢查 |
 | `/metrics` | Prometheus 指標 |
