@@ -161,8 +161,11 @@ func (p *GeminiIntentParser) IsEnabled() bool {
 }
 
 // Close releases resources held by the GeminiIntentParser.
-// It's safe to call Close multiple times or on nil pointer.
-// Note: genai.Client doesn't require explicit closing in current SDK version.
+// Safe to call on nil receiver. Currently a no-op as genai.Client doesn't require cleanup.
 func (p *GeminiIntentParser) Close() error {
+	if p == nil {
+		return nil
+	}
+	// Future: Add client.Close() when SDK supports it
 	return nil
 }

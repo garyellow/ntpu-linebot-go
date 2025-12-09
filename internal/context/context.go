@@ -97,6 +97,10 @@ func MustGetRequestID(ctx context.Context) string {
 // PreserveTracing creates a detached context that preserves tracing values.
 // The new context is independent of the parent's cancellation and deadlines.
 //
+// Use cases:
+// - Async webhook processing (parent HTTP request may close before completion)
+// - Background jobs triggered by webhooks (DB writes, scraping, cache updates)
+//
 // This is safer than context.WithoutCancel for long-running operations because:
 // 1. No parent context reference is held (prevents memory leaks)
 // 2. Only essential tracing values are copied

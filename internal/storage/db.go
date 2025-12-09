@@ -93,14 +93,12 @@ func New(ctx context.Context, dbPath string, cacheTTL time.Duration) (*DB, error
 		return nil, fmt.Errorf("ping reader: %w", err)
 	}
 
-	db := &DB{
+	return &DB{
 		writer:   writer,
 		reader:   reader,
 		path:     dbPath,
 		cacheTTL: cacheTTL,
-	}
-
-	return db, nil
+	}, nil
 }
 
 func configureConnection(ctx context.Context, conn *sql.DB, readOnly bool) error {

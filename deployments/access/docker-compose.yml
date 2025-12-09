@@ -2,13 +2,13 @@ services:
   gateway:
     image: nginx:alpine
     container_name: ntpu-access-gateway
-    restart: no
+    restart: "no"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
-      - "3000:3000"
-      - "9090:9090"
-      - "9093:9093"
+      - "${GRAFANA_PORT:-3000}:3000"
+      - "${PROMETHEUS_PORT:-9090}:9090"
+      - "${ALERTMANAGER_PORT:-9093}:9093"
     security_opt:
       - no-new-privileges:true
     read_only: true

@@ -14,22 +14,35 @@ services:
     container_name: ntpu-linebot
     restart: unless-stopped
     ports:
-      - "10000:10000"
+      - "${HOST_PORT:-10000}:10000"
     volumes:
       - ./data:/data
     environment:
+      # LINE Bot Configuration (Required)
       - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN:?LINE_CHANNEL_ACCESS_TOKEN is required}
       - LINE_CHANNEL_SECRET=${LINE_CHANNEL_SECRET:?LINE_CHANNEL_SECRET is required}
+
+      # GenAI Configuration (Optional)
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+
+      # Server Configuration
       - PORT=${PORT:-10000}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - DATA_DIR=${DATA_DIR:-/data}
       - CACHE_TTL=${CACHE_TTL:-168h}
       - SHUTDOWN_TIMEOUT=${SHUTDOWN_TIMEOUT:-30s}
+
+      # Scraper Configuration
       - SCRAPER_TIMEOUT=${SCRAPER_TIMEOUT:-60s}
       - SCRAPER_MAX_RETRIES=${SCRAPER_MAX_RETRIES:-5}
+
+      # Warmup Configuration
       - WARMUP_MODULES=${WARMUP_MODULES:-sticker,id,contact,course}
+
+      # Webhook Configuration
       - WEBHOOK_TIMEOUT=${WEBHOOK_TIMEOUT:-60s}
+
+      # Rate Limit Configuration
       - USER_RATE_LIMIT_TOKENS=${USER_RATE_LIMIT_TOKENS:-6}
       - USER_RATE_LIMIT_REFILL_RATE=${USER_RATE_LIMIT_REFILL_RATE:-0.2}
       - LLM_RATE_LIMIT_PER_HOUR=${LLM_RATE_LIMIT_PER_HOUR:-50}
