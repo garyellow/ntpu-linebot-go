@@ -43,6 +43,7 @@ func setupTestApp(t *testing.T) *Application {
 // TestReadinessCheckHealthy verifies /ready returns 200 OK when database is healthy
 func TestReadinessCheckHealthy(t *testing.T) {
 	app := setupTestApp(t)
+	defer func() { _ = app.db.Close() }()
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -119,6 +120,7 @@ func TestReadinessCheckDatabaseFailure(t *testing.T) {
 // TestReadinessCheckContextTimeout verifies context timeout is respected
 func TestReadinessCheckContextTimeout(t *testing.T) {
 	app := setupTestApp(t)
+	defer func() { _ = app.db.Close() }()
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -131,8 +133,8 @@ func TestReadinessCheckContextTimeout(t *testing.T) {
 	req := httptest.NewRequest("GET", "/ready", nil).WithContext(ctx)
 	w := httptest.NewRecorder()
 
-	// The handler should complete quickly (< 3s HealthCheckTimeout)
-	// and not be affected by the short request context timeout
+	// The handler should complete quickly (< 100ms) since SQLite operations are fast,
+	// completing before either the request context timeout or HealthCheckTimeout fires.
 	done := make(chan struct{})
 	go func() {
 		router.ServeHTTP(w, req)
@@ -153,6 +155,7 @@ func TestReadinessCheckContextTimeout(t *testing.T) {
 // TestReadinessCheckCacheStats verifies cache statistics are correctly populated
 func TestReadinessCheckCacheStats(t *testing.T) {
 	app := setupTestApp(t)
+	defer func() { _ = app.db.Close() }()
 	ctx := context.Background()
 
 	// Insert test data
@@ -201,6 +204,7 @@ func TestReadinessCheckCacheStats(t *testing.T) {
 // TestGetCacheStats verifies getCacheStats handles errors gracefully
 func TestGetCacheStats(t *testing.T) {
 	app := setupTestApp(t)
+	defer func() { _ = app.db.Close() }()
 	ctx := context.Background()
 
 	// With healthy database, should return counts (even if zero)
@@ -250,6 +254,7 @@ func TestGetCacheStatsWithDatabaseError(t *testing.T) {
 // TestGetFeatures verifies feature flags are correctly reported
 func TestGetFeatures(t *testing.T) {
 	app := setupTestApp(t)
+	defer func() { _ = app.db.Close() }()
 
 	features := app.getFeatures()
 	if features == nil {

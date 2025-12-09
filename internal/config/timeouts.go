@@ -116,8 +116,8 @@ const (
 
 // Health check timeouts
 const (
-	// HealthCheckTimeout is the timeout for health check endpoints.
-	// Used by both /healthz (liveness) and /ready (readiness) probes.
+	// HealthCheckTimeout is the timeout for the /ready (readiness) probe.
+	// Note: /healthz (liveness) uses a separate, hardcoded 2s timeout for faster checks.
 	// Should be short enough to respond quickly to orchestration systems
 	// (e.g., Kubernetes), but long enough to verify database connectivity.
 	//
