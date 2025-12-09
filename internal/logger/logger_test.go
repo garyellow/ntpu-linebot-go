@@ -66,7 +66,7 @@ func TestLogger_WithModule(t *testing.T) {
 
 	log.WithModule("test_module").Info("test message")
 
-	var logEntry map[string]interface{}
+	var logEntry map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &logEntry); err != nil {
 		t.Fatalf("Failed to parse JSON log: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestLogger_WithRequestID(t *testing.T) {
 
 	log.WithRequestID("req-123").Info("test message")
 
-	var logEntry map[string]interface{}
+	var logEntry map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &logEntry); err != nil {
 		t.Fatalf("Failed to parse JSON log: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestLogger_WithError(t *testing.T) {
 	testErr := &testError{msg: "test error message"}
 	log.WithError(testErr).Error("operation failed")
 
-	var logEntry map[string]interface{}
+	var logEntry map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &logEntry); err != nil {
 		t.Fatalf("Failed to parse JSON log: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestLogger_JSONFormat(t *testing.T) {
 
 	log.Info("test message")
 
-	var logEntry map[string]interface{}
+	var logEntry map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &logEntry); err != nil {
 		t.Fatalf("Failed to parse JSON log: %v", err)
 	}

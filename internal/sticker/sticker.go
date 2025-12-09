@@ -181,7 +181,7 @@ func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
 	m.loaded = true
 	m.mu.Unlock()
 
-	m.logger.WithFields(map[string]interface{}{
+	m.logger.WithFields(map[string]any{
 		"total_fetched": len(allStickers),
 		"spy_family":    spyCount,
 		"ichigo":        ichigoCount,
@@ -198,7 +198,7 @@ func (m *Manager) fetchWithRetry(ctx context.Context, url string, fetchFunc func
 		if attempt > 0 {
 			// Exponential backoff: 1s, 2s, 4s
 			backoff := time.Duration(math.Pow(2, float64(attempt))) * time.Second
-			m.logger.WithFields(map[string]interface{}{
+			m.logger.WithFields(map[string]any{
 				"attempt": attempt + 1,
 				"url":     url,
 				"backoff": backoff,

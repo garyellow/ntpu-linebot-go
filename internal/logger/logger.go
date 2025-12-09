@@ -78,52 +78,37 @@ func (l *Logger) WithError(err error) *Logger {
 }
 
 // WithField creates a new entry with a single field
-func (l *Logger) WithField(key string, value interface{}) *Logger {
+func (l *Logger) WithField(key string, value any) *Logger {
 	return &Logger{Logger: l.With(key, value)}
 }
 
 // WithFields creates a new entry with multiple fields
-func (l *Logger) WithFields(fields map[string]interface{}) *Logger {
-	args := make([]interface{}, 0, len(fields)*2)
+func (l *Logger) WithFields(fields map[string]any) *Logger {
+	args := make([]any, 0, len(fields)*2)
 	for k, v := range fields {
 		args = append(args, k, v)
 	}
 	return &Logger{Logger: l.With(args...)}
 }
 
-// SetOutput sets the logger output (no-op for slog as it's handler-based, but kept for compatibility)
-// To truly change output, one would need to recreate the handler, but for this app stdout is fine.
-func (l *Logger) SetOutput(output io.Writer) {
-	// slog doesn't support changing output on the fly easily without replacing the handler.
-	// For now, we assume stdout is sufficient as per 12-factor app.
-}
-
-// SetLevel sets the logger level (no-op for slog handler options are immutable)
-// In a real slog setup, we'd use a LevelVar.
-func (l *Logger) SetLevel(level string) error {
-	// To support dynamic level changing, we would need to use slog.LevelVar
-	// For now, we'll ignore this as it's mostly used at startup.
-	return nil
-}
-
 // Compatibility methods for logrus-style formatting
 
 // Infof logs a formatted message at info level.
-func (l *Logger) Infof(format string, args ...interface{}) {
+func (l *Logger) Infof(format string, args ...any) {
 	l.Info(fmt.Sprintf(format, args...))
 }
 
 // Warnf logs a formatted message at warn level.
-func (l *Logger) Warnf(format string, args ...interface{}) {
+func (l *Logger) Warnf(format string, args ...any) {
 	l.Warn(fmt.Sprintf(format, args...))
 }
 
 // Errorf logs a formatted message at error level.
-func (l *Logger) Errorf(format string, args ...interface{}) {
+func (l *Logger) Errorf(format string, args ...any) {
 	l.Error(fmt.Sprintf(format, args...))
 }
 
 // Debugf logs a formatted message at debug level.
-func (l *Logger) Debugf(format string, args ...interface{}) {
+func (l *Logger) Debugf(format string, args ...any) {
 	l.Debug(fmt.Sprintf(format, args...))
 }
