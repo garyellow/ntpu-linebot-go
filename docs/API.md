@@ -104,7 +104,12 @@ GET /readyz
 | **檢查內容** | 僅 HTTP 回應 | DB + 快取 + 功能 |
 | **超時** | 無 (立即回傳) | 3 秒 |
 | **失敗行為** | 重啟容器 | 移除流量 (不重啟) |
-| **Docker Compose** | 用於 healthcheck | 用於 depends_on |
+| **Docker Compose** | 用於 healthcheck | 可用於 depends_on (依需求) |
+
+> **說明**:
+> - Docker HEALTHCHECK 使用 `/livez` 檢查容器是否存活，不檢查外部依賴（避免因 DB 暫時不可用而重啟容器）
+> - 若需在 `depends_on` 中等待服務完全就緒（含 DB 連線），可使用 `/readyz`
+> - Kubernetes 環境建議：livenessProbe 使用 `/livez`，readinessProbe 使用 `/readyz`
 
 ---
 
