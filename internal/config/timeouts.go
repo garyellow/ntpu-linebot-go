@@ -114,6 +114,20 @@ const (
 	SmartSearchTimeout = 30 * time.Second
 )
 
+// Health check timeouts
+const (
+	// HealthCheckTimeout is the timeout for health check endpoints.
+	// Used by both /healthz (liveness) and /ready (readiness) probes.
+	// Should be short enough to respond quickly to orchestration systems
+	// (e.g., Kubernetes), but long enough to verify database connectivity.
+	//
+	// Set to 3s because:
+	//   - SQLite Ping() is fast (typically <10ms)
+	//   - Allows time for cache statistics queries
+	//   - Kubernetes default probe timeout is 1s, but can be configured higher
+	HealthCheckTimeout = 3 * time.Second
+)
+
 // Graceful shutdown
 const (
 	// GracefulShutdown is the timeout for graceful server shutdown.

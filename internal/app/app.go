@@ -221,7 +221,7 @@ func (a *Application) getFeatures() map[string]bool {
 
 // readinessCheck returns service readiness status with dependency checks.
 func (a *Application) readinessCheck(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), config.HealthCheckTimeout)
 	defer cancel()
 
 	// Check database connectivity
@@ -249,18 +249,26 @@ func (a *Application) readinessCheck(c *gin.Context) {
 func (a *Application) getCacheStats(ctx context.Context) map[string]int {
 	stats := make(map[string]int)
 
-	// Query each cache table count
+	// Query each cache table count, log errors for observability
 	if count, err := a.db.CountStudents(ctx); err == nil {
 		stats["students"] = count
+	} else {
+		a.logger.WithError(err).Warn("Failed to count students in cache stats")
 	}
 	if count, err := a.db.CountContacts(ctx); err == nil {
 		stats["contacts"] = count
+	} else {
+		a.logger.WithError(err).Warn("Failed to count contacts in cache stats")
 	}
 	if count, err := a.db.CountCourses(ctx); err == nil {
 		stats["courses"] = count
+	} else {
+		a.logger.WithError(err).Warn("Failed to count courses in cache stats")
 	}
 	if count, err := a.db.CountStickers(ctx); err == nil {
 		stats["stickers"] = count
+	} else {
+		a.logger.WithError(err).Warn("Failed to count stickers in cache stats")
 	}
 
 	return stats
