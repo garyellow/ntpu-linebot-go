@@ -95,7 +95,7 @@ func TestUserRateLimiter_RecordsDroppedRequests(t *testing.T) {
 	url := NewUserRateLimiter(1*time.Minute, m)
 
 	// Consume all tokens (3 tokens)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		url.Allow("user1", 3.0, 1.0)
 	}
 

@@ -114,9 +114,9 @@ func TestStatsConcurrent(t *testing.T) {
 	const incrementsPerGoroutine = 1000
 
 	done := make(chan struct{})
-	for i := 0; i < goroutines; i++ {
+	for range goroutines {
 		go func() {
-			for j := 0; j < incrementsPerGoroutine; j++ {
+			for range incrementsPerGoroutine {
 				stats.Students.Add(1)
 				stats.Contacts.Add(1)
 				stats.Courses.Add(1)
@@ -126,7 +126,7 @@ func TestStatsConcurrent(t *testing.T) {
 	}
 
 	// Wait for all goroutines
-	for i := 0; i < goroutines; i++ {
+	for range goroutines {
 		<-done
 	}
 

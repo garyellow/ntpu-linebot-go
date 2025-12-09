@@ -1,8 +1,6 @@
 // Package stringutil provides common string manipulation utilities.
 package stringutil
 
-import "strings"
-
 // IsNumeric checks if a string contains only digits.
 // Returns false for empty strings.
 func IsNumeric(s string) bool {
@@ -15,11 +13,4 @@ func IsNumeric(s string) bool {
 		}
 	}
 	return true
-}
-
-// TrimAndNormalize trims whitespace and normalizes internal spacing.
-// Multiple spaces are collapsed into single spaces.
-func TrimAndNormalize(s string) string {
-	fields := strings.Fields(s)
-	return strings.Join(fields, " ")
 }

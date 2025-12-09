@@ -37,11 +37,6 @@ func (h *Handler) Name() string {
 	return ModuleName
 }
 
-// PostbackPrefix returns the postback prefix
-func (h *Handler) PostbackPrefix() string {
-	return ModuleName + ":"
-}
-
 // ID handler constants.
 const (
 	ModuleName           = "id" // Module identifier for registration

@@ -106,20 +106,18 @@ func TestURLCache_ConcurrentAccess(t *testing.T) {
 	ctx := context.Background()
 	const goroutines = 100
 	var wg sync.WaitGroup
-	wg.Add(goroutines)
 
 	// All goroutines should get the same cached URL without races
 	urls := make([]string, goroutines)
-	for i := 0; i < goroutines; i++ {
-		go func(idx int) {
-			defer wg.Done()
+	for i := range goroutines {
+		wg.Go(func() {
 			url, err := cache.Get(ctx)
 			if err != nil {
-				t.Errorf("Goroutine %d: unexpected error: %v", idx, err)
+				t.Errorf("Goroutine %d: unexpected error: %v", i, err)
 				return
 			}
-			urls[idx] = url
-		}(i)
+			urls[i] = url
+		})
 	}
 
 	wg.Wait()
