@@ -31,12 +31,15 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     -ldflags="-s -w" \
     -o /bin/healthcheck ./cmd/healthcheck
 
+RUN mkdir -p /data-volume && chmod 755 /data-volume
+
 FROM gcr.io/distroless/static-debian13:nonroot
 
 WORKDIR /app
 
 COPY --from=builder --chown=nonroot:nonroot /bin/ntpu-linebot /app/ntpu-linebot
 COPY --from=builder --chown=nonroot:nonroot /bin/healthcheck /app/healthcheck
+COPY --from=builder --chown=nonroot:nonroot /data-volume /data
 
 EXPOSE 10000
 
