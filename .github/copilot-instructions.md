@@ -187,20 +187,39 @@ lineutil.TruncateRunes(value, 20)                                               
 
 ## Testing
 
-Table-driven tests with `t.Run()`, in-memory SQLite for DB tests (`setupTestDB()` helper in test files)
+**Patterns**:
+- Table-driven tests with `t.Run()` for parallel execution
+- In-memory SQLite (`:memory:`) for DB tests via `setupTestDB()` helper
+- Network tests skip by default (`-short` flag): Use `testing.Short()` guard for scraper integration tests
+- Test files follow `*_test.go` convention alongside implementation files
+
+**Coverage requirements**: 80% threshold enforced in CI (`task test:coverage`)
 
 ## Configuration
 
-Env vars loaded at startup (`internal/config/`). Requires LINE credentials. Platform-specific paths via `runtime.GOOS`.
+**Load-time validation**: All env vars loaded at startup (`internal/config/`) with validation before server starts
+**Required**: `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_TOKEN`
+**Optional**: `GEMINI_API_KEY` (enables NLU + Query Expansion)
+**Platform paths**: `runtime.GOOS` determines default paths (Windows: `./data`, Linux/Mac: `/data`)
 
 ## Task Commands
 
 ```powershell
-task dev          # Run server
-task ci           # Full CI pipeline
-task test:coverage  # Coverage report
-task compose:up   # Start monitoring stack
+task dev              # Run server with debug logging
+task test             # Run tests (skips network tests for speed)
+task test:full        # Run all tests including network tests
+task test:race        # Run tests with race detector
+task test:coverage    # Coverage report with 80% threshold check
+task lint             # Run golangci-lint
+task fmt              # Format code and organize imports
+task build            # Build binaries to bin/
+task clean            # Remove build artifacts
+task compose:up       # Start monitoring stack (Prometheus/Grafana)
 ```
+
+**Environment variables** (`.env`):
+- **Required**: `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_TOKEN`
+- **Optional**: `GEMINI_API_KEY` (enables NLU + Query Expansion), `DATA_DIR` (default: `./data` on Windows, `/data` on Linux/Mac)
 
 Production warmup runs automatically on server startup (non-blocking).
 
