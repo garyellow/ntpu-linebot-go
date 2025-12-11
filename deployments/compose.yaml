@@ -6,7 +6,7 @@ services:
     ports:
       - "${HOST_PORT:-10000}:10000"
     volumes:
-      - data:/data
+      - data:/data:rw
     environment:
       # LINE Bot Configuration (Required)
       - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN:?LINE_CHANNEL_ACCESS_TOKEN is required}
