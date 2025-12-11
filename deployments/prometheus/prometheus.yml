@@ -1,4 +1,3 @@
-# Prometheus Configuration for NTPU LINE Bot
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
@@ -13,11 +12,9 @@ rule_files:
   - 'alerts.yml'
 
 scrape_configs:
-  # NTPU LineBot application metrics
   - job_name: 'ntpu-linebot'
     scrape_interval: 15s
     scrape_timeout: 10s
-    metrics_path: '/metrics'
     static_configs:
       - targets: ['ntpu-linebot:10000']
     relabel_configs:
@@ -25,7 +22,6 @@ scrape_configs:
         target_label: instance
         replacement: 'main'
 
-  # Prometheus self-monitoring (lower frequency)
   - job_name: 'prometheus'
     scrape_interval: 60s
     static_configs:

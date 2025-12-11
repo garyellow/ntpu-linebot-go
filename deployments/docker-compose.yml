@@ -5,9 +5,7 @@ services:
     restart: no
     command: sh -c "mkdir -p /data && chown 65532:65532 /data && chmod 755 /data"
     volumes:
-      - ./data:/data
-    networks:
-      - ntpu-network
+      - data:/data
 
   ntpu-linebot:
     image: garyellow/ntpu-linebot-go:${IMAGE_TAG:-latest}
@@ -16,7 +14,7 @@ services:
     ports:
       - "${HOST_PORT:-10000}:10000"
     volumes:
-      - ./data:/data
+      - data:/data
     environment:
       # LINE Bot Configuration (Required)
       - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN:?LINE_CHANNEL_ACCESS_TOKEN is required}
@@ -65,7 +63,7 @@ services:
     tmpfs:
       - /tmp:size=64M
     healthcheck:
-      test: ["CMD", "/app/healthcheck"]
+      test: ["/app/healthcheck"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -73,8 +71,6 @@ services:
     depends_on:
       init-data:
         condition: service_completed_successfully
-    networks:
-      - ntpu-network
 
   prometheus:
     image: prom/prometheus:latest
@@ -96,9 +92,10 @@ services:
       resources:
         limits:
           cpus: '0.5'
-          memory: 1G
+          memory: 512M
         reservations:
-          memory: 256M
+          cpus: '0.25'
+          memory: 128M
     logging:
       driver: json-file
       options:
@@ -107,7 +104,7 @@ services:
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1"]
+      test: ["wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -117,8 +114,6 @@ services:
         condition: service_healthy
       alertmanager:
         condition: service_healthy
-    networks:
-      - ntpu-network
 
   alertmanager:
     image: prom/alertmanager:latest
@@ -146,7 +141,7 @@ services:
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9093/-/healthy || exit 1"]
+      test: ["wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9093/-/healthy"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -154,8 +149,6 @@ services:
     depends_on:
       ntpu-linebot:
         condition: service_healthy
-    networks:
-      - ntpu-network
 
   grafana:
     image: grafana/grafana:latest
@@ -188,7 +181,7 @@ services:
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      test: ["wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -196,18 +189,9 @@ services:
     depends_on:
       prometheus:
         condition: service_healthy
-    networks:
-      - ntpu-network
 
 volumes:
+  data:
   prometheus-data:
-    driver: local
   alertmanager-data:
-    driver: local
   grafana-data:
-    driver: local
-
-networks:
-  ntpu-network:
-    driver: bridge
-    name: ntpu-linebot-network

@@ -16,11 +16,12 @@ docker compose up -d
 
 - **init-data** - 初始化資料目錄權限（一次性執行）
 - **ntpu-linebot** - 主服務（啟動時會自動在背景預熱快取）
-- **prometheus** - 監控 (http://localhost:9090)
-- **alertmanager** - 告警 (http://localhost:9093)
-- **grafana** - 儀表板 (http://localhost:3000, admin/admin123)
+- **prometheus** - 監控
+- **alertmanager** - 告警
+- **grafana** - 儀表板 (預設帳密：admin/admin123)
 
 > **快取預熱**：主服務啟動後會自動在背景執行快取預熱（約 5-10 分鐘），不影響 webhook 接收請求。
+> **監控存取**：監控服務預設僅限內部網路存取，需透過 access gateway 開放（見下方指令）。
 
 ## 環境變數
 
