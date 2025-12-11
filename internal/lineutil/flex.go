@@ -2,6 +2,7 @@ package lineutil
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
@@ -172,6 +173,10 @@ func (t *FlexText) WithFlex(flex int) *FlexText {
 	if flex < 0 {
 		flex = 0
 	}
+	// Clamp to int32 range to prevent overflow
+	if flex > math.MaxInt32 {
+		flex = math.MaxInt32
+	}
 	t.Flex = int32(flex)
 	return t
 }
@@ -192,6 +197,10 @@ func (t *FlexText) WithMargin(margin string) *FlexText {
 func (t *FlexText) WithMaxLines(lines int) *FlexText {
 	if lines < 0 {
 		lines = 0
+	}
+	// Clamp to int32 range to prevent overflow
+	if lines > math.MaxInt32 {
+		lines = math.MaxInt32
 	}
 	t.MaxLines = int32(lines)
 	return t

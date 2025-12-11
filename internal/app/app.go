@@ -500,8 +500,13 @@ func (a *Application) proactiveWarmup(ctx context.Context) {
 	a.logger.Debug("Proactive warmup job started")
 	defer a.logger.Debug("Proactive warmup job stopped")
 
-	// Initial warmup on startup (non-blocking, no delay)
-	a.performProactiveWarmup(ctx)
+	// Initial warmup on startup with independent context
+	// Uses Background() to prevent cancellation from shutdown signals during startup
+	// This ensures the application has cached data before serving requests
+	initialCtx, initialCancel := context.WithTimeout(context.Background(), config.WarmupProactive)
+	//nolint:contextcheck // Intentionally using independent context to prevent shutdown signal interruption
+	a.performProactiveWarmup(initialCtx)
+	initialCancel()
 
 	// Schedule daily warmup at 3:00 AM
 	for {

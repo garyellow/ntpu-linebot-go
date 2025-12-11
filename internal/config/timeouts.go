@@ -137,10 +137,10 @@ const (
 	// GracefulShutdown is the timeout for graceful server shutdown.
 	// Allows in-flight requests to complete before forceful termination.
 	//
-	// Set to 30s with the following considerations:
-	//   - Webhook requests: up to 60s processing time
+	// Set to 70s with the following considerations:
+	//   - Webhook requests: up to 60s processing time (WebhookProcessing)
 	//   - Background jobs: should exit quickly after context cancellation
-	//   - Safety margin: ~20% recommended for cleanup (VictoriaMetrics best practice)
+	//   - Safety margin: 10s buffer for cleanup and resource closure
 	//
 	// Shutdown sequence:
 	//   1. Stop accepting new HTTP requests (immediate)
@@ -150,6 +150,6 @@ const (
 	//   5. Close resources (DB, API clients - typically < 1s)
 	//
 	// In practice, most shutdowns complete within 10-15s.
-	// The 30s timeout provides adequate buffer for worst-case scenarios.
-	GracefulShutdown = 30 * time.Second
+	// The 70s timeout ensures worst-case webhook requests can complete.
+	GracefulShutdown = 70 * time.Second
 )

@@ -1,6 +1,7 @@
 package lineutil
 
 import (
+	"math"
 	"testing"
 
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
@@ -121,6 +122,38 @@ func TestFlexTextChaining(t *testing.T) {
 	}
 	if text.LineSpacing != "4px" {
 		t.Errorf("Expected lineSpacing '4px', got %v", text.LineSpacing)
+	}
+}
+
+// TestFlexTextOverflowProtection tests integer overflow protection for int32 conversion
+func TestFlexTextOverflowProtection(t *testing.T) {
+	tests := []struct {
+		name     string
+		flex     int
+		maxLines int
+		wantFlex int32
+		wantMax  int32
+	}{
+		{"Normal values", 5, 3, 5, 3},
+		{"Zero values", 0, 0, 0, 0},
+		{"Negative values clamped to zero", -10, -5, 0, 0},
+		{"MaxInt32 boundary", math.MaxInt32, math.MaxInt32, math.MaxInt32, math.MaxInt32},
+		{"Overflow clamped to MaxInt32", math.MaxInt32 + 1, math.MaxInt32 + 100, math.MaxInt32, math.MaxInt32},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			text := NewFlexText("Test").
+				WithFlex(tt.flex).
+				WithMaxLines(tt.maxLines)
+
+			if text.Flex != tt.wantFlex {
+				t.Errorf("WithFlex(%d): got %d, want %d", tt.flex, text.Flex, tt.wantFlex)
+			}
+			if text.MaxLines != tt.wantMax {
+				t.Errorf("WithMaxLines(%d): got %d, want %d", tt.maxLines, text.MaxLines, tt.wantMax)
+			}
+		})
 	}
 }
 

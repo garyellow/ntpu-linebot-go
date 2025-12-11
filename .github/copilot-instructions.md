@@ -54,6 +54,7 @@ LINE Webhook → Gin Handler
   - **Processor layer**: Calls `ctxutil.PreserveTracing(ctx)` to preserve tracing values from event source
   - **PreserveTracing()**: Creates new context with only necessary tracing values (userID, chatID, requestID)
   - **Why not WithoutCancel()**: Avoids memory leaks from parent references (see Go issue #64478)
+  - **Why not Background()**: `Background()` loses all tracing data needed for log correlation, so it's not suitable for the processor layer even though it's used in the webhook layer
   - **Cancellation independence**: Detached context timeout is independent from HTTP request lifecycle
 - **Detached context rationale**: LINE may close connection before processing completes; detached cancellation ensures DB queries and scraping finish, reply token remains valid (~20 min)
 - **Observability**: Request ID and user ID flow through entire async operation for log correlation
@@ -122,7 +123,7 @@ LINE Webhook → Gin Handler
 - **Daily Warmup** (proactiveWarmup): Runs immediately on startup, then every day at 3:00 AM
   - Refreshes modules specified in `WARMUP_MODULES` (default: sticker, id, contact, course)
   - **Concurrent**: id, contact, sticker, course - no dependencies between them
-  - **Dependency**: syllabus waits for course to complete (needs course data), runs in parallel with others
+  - **Optional - syllabus**: If manually added to `WARMUP_MODULES`, waits for course to complete (needs course data), then runs in parallel with others. Removed from default due to infrequent updates.
   - **Note**: sticker can be included in warmup modules for initial population
 - **Cache Cleanup**: Every 12 hours, deletes data past Hard TTL (7 days) + VACUUM
 - **Sticker Refresh** (refreshStickers): Every 24 hours, updates sticker URLs (separate periodic job)
