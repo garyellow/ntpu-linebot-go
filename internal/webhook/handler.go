@@ -107,7 +107,7 @@ func (h *Handler) Handle(c *gin.Context) {
 	events := make([]webhook.EventInterface, len(cb.Events))
 	copy(events, cb.Events)
 
-	// Process events asynchronously in goroutine using Go 1.25 WaitGroup.Go()
+	// Process events asynchronously using WaitGroup.Go (Go 1.25+)
 	h.wg.Go(func() {
 		defer func() {
 			if r := recover(); r != nil {

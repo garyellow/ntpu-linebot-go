@@ -4,11 +4,14 @@
 package logger
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"strings"
+
+	"github.com/garyellow/ntpu-linebot-go/internal/ctxutil"
 )
 
 // Logger is the application logger
@@ -115,22 +118,44 @@ func (l *Logger) Debugf(format string, args ...any) {
 
 // Context-aware methods for better tracing and cancellation support
 
-// InfoContext logs a message at info level with context.
-func (l *Logger) InfoContext(ctx any, msg string, args ...any) {
-	l.Info(msg, args...)
+// InfoContext logs a message at info level with tracing data from context.
+func (l *Logger) InfoContext(ctx context.Context, msg string, args ...any) {
+	l.withContextFields(ctx).Info(msg, args...)
 }
 
-// WarnContext logs a message at warn level with context.
-func (l *Logger) WarnContext(ctx any, msg string, args ...any) {
-	l.Warn(msg, args...)
+// WarnContext logs a message at warn level with tracing data from context.
+func (l *Logger) WarnContext(ctx context.Context, msg string, args ...any) {
+	l.withContextFields(ctx).Warn(msg, args...)
 }
 
-// ErrorContext logs a message at error level with context.
-func (l *Logger) ErrorContext(ctx any, msg string, args ...any) {
-	l.Error(msg, args...)
+// ErrorContext logs a message at error level with tracing data from context.
+func (l *Logger) ErrorContext(ctx context.Context, msg string, args ...any) {
+	l.withContextFields(ctx).Error(msg, args...)
 }
 
-// DebugContext logs a message at debug level with context.
-func (l *Logger) DebugContext(ctx any, msg string, args ...any) {
-	l.Debug(msg, args...)
+// DebugContext logs a message at debug level with tracing data from context.
+func (l *Logger) DebugContext(ctx context.Context, msg string, args ...any) {
+	l.withContextFields(ctx).Debug(msg, args...)
+}
+
+// withContextFields extracts tracing fields from context and returns a logger with those fields.
+func (l *Logger) withContextFields(ctx context.Context) *Logger {
+	logger := l
+
+	// Add userID if present
+	if userID := ctxutil.GetUserID(ctx); userID != "" {
+		logger = logger.WithField("user_id", userID)
+	}
+
+	// Add chatID if present
+	if chatID := ctxutil.GetChatID(ctx); chatID != "" {
+		logger = logger.WithField("chat_id", chatID)
+	}
+
+	// Add requestID if present
+	if requestID, ok := ctxutil.GetRequestID(ctx); ok && requestID != "" {
+		logger = logger.WithRequestID(requestID)
+	}
+
+	return logger
 }

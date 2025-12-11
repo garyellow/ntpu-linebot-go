@@ -157,13 +157,11 @@ func TestPerKeyLimiter_Concurrent(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range 100 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for j := 0; j < 10; j++ {
 				limiter.Allow("user1")
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }
