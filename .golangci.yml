@@ -44,6 +44,11 @@ linters:
     # Performance
     - prealloc      # Find slice declarations that could be preallocated
 
+    # Additional useful linters
+    - gofmt         # Check gofmt formatting
+    - goimports     # Check import formatting
+    - intrange      # Check integer range loop patterns (Go 1.22+)
+
   # v2: Settings moved under linters.settings
   settings:
     errcheck:
