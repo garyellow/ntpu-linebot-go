@@ -35,8 +35,8 @@ FROM gcr.io/distroless/static-debian13:nonroot
 
 WORKDIR /app
 
-COPY --from=builder --chown=65532:65532 /bin/ntpu-linebot /app/ntpu-linebot
-COPY --from=builder --chown=65532:65532 /bin/healthcheck /app/healthcheck
+COPY --from=builder --chown=nonroot:nonroot /bin/ntpu-linebot /app/ntpu-linebot
+COPY --from=builder --chown=nonroot:nonroot /bin/healthcheck /app/healthcheck
 
 EXPOSE 10000
 
@@ -45,6 +45,6 @@ ENV PORT=10000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=3 \
   CMD ["/app/healthcheck"]
 
-USER 65532:65532
+USER nonroot:nonroot
 
 ENTRYPOINT ["/app/ntpu-linebot"]
