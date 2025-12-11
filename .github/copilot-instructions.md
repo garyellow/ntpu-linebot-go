@@ -118,12 +118,14 @@ LINE Webhook → Gin Handler
 - Single document strategy: 1 course = 1 document (no chunking)
 - Combined with LLM Query Expansion for effective retrieval
 - Optional: Gemini API Key enables Query Expansion
+- **Important**: BM25 requires syllabus data - add `syllabus` to `WARMUP_MODULES` to enable smart search (找課)
 
 **Background Jobs** (`cmd/server/main.go`):
 - **Daily Warmup** (proactiveWarmup): Runs immediately on startup, then every day at 3:00 AM
   - Refreshes modules specified in `WARMUP_MODULES` (default: sticker, id, contact, course)
   - **Concurrent**: id, contact, sticker, course - no dependencies between them
   - **Optional - syllabus**: If manually added to `WARMUP_MODULES`, waits for course to complete (needs course data), then runs in parallel with others. Removed from default due to infrequent updates.
+    - **BM25 dependency**: Syllabus module rebuilds BM25 index after saving syllabi. Without syllabus warmup, smart search (找課) remains disabled even if Gemini API key is configured.
   - **Note**: sticker can be included in warmup modules for initial population
 - **Cache Cleanup**: Every 12 hours, deletes data past Hard TTL (7 days) + VACUUM
 - **Sticker Refresh** (refreshStickers): Every 24 hours, updates sticker URLs (separate periodic job)

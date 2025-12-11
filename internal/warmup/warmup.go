@@ -36,7 +36,7 @@ type Options struct {
 	Modules   []string         // Modules to warm (id, contact, course, sticker, syllabus)
 	Reset     bool             // Whether to reset cache before warming
 	Metrics   *metrics.Metrics // Optional metrics recorder
-	BM25Index *rag.BM25Index   // Optional BM25 index for syllabus indexing
+	BM25Index *rag.BM25Index   // Required for syllabus module: rebuilds BM25 index after saving syllabi
 }
 
 // Run executes cache warming with the given options
@@ -57,6 +57,8 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 	// - Independent modules: can run concurrently (id, contact, sticker)
 	// - Course module: runs concurrently but syllabus waits for it
 	// - Syllabus module: depends on course data, starts after course completes
+	//   IMPORTANT: Syllabus module rebuilds BM25 index for smart search feature
+	//   Without syllabus data, BM25 smart search (找課) will be disabled
 	var independentModules []string
 	var hasCourse, hasSyllabus bool
 
@@ -293,8 +295,13 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 			completed++
 
 			if completed%10 == 0 || completed == totalTasks {
+				elapsed := time.Since(startTime)
+				avgTimePerTask := elapsed / time.Duration(completed)
+				estimatedRemaining := avgTimePerTask * time.Duration(totalTasks-completed)
 				log.WithField("progress", fmt.Sprintf("%d/%d", completed, totalTasks)).
 					WithField("students", stats.Students.Load()).
+					WithField("elapsed_min", int(elapsed.Minutes())).
+					WithField("est_remaining_min", int(estimatedRemaining.Minutes())).
 					Info("ID module progress")
 			}
 		}
@@ -392,8 +399,11 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 		years = append(years, year)
 	}
 
+	// Each year makes 4 requests (U/M/N/P education codes)
+	estimatedRequests := len(years) * 4
 	log.WithField("years", years).
 		WithField("total_years", len(years)).
+		WithField("estimated_requests", estimatedRequests).
 		Info("Course warmup: fetching recent courses by year (no term filter)")
 
 	// Scrape all courses for each year (both semesters in one request batch)
@@ -426,8 +436,13 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 		stats.Courses.Add(int64(len(courses)))
 		log.WithField("year", year).
 			WithField("count", len(courses)).
+			WithField("total_cached", stats.Courses.Load()).
 			Info("Courses cached for year")
 	}
+
+	log.WithField("total_courses", stats.Courses.Load()).
+		WithField("years_processed", len(years)).
+		Info("Course module warmup complete")
 
 	return nil
 }
@@ -553,11 +568,17 @@ processLoop:
 		newSyllabi = append(newSyllabi, syl)
 		updatedCount++
 
-		// Log progress every 100 courses
-		if i > 0 && i%100 == 0 {
+		// Log progress every 50 courses for better visibility
+		if i > 0 && i%50 == 0 {
+			elapsed := time.Since(startTime)
+			avgTimePerCourse := elapsed / time.Duration(i)
+			estimatedRemaining := avgTimePerCourse * time.Duration(len(courses)-i)
 			log.WithField("progress", fmt.Sprintf("%d/%d", i, len(courses))).
 				WithField("updated", updatedCount).
 				WithField("skipped", skippedCount).
+				WithField("errors", errorCount).
+				WithField("elapsed_min", int(elapsed.Minutes())).
+				WithField("est_remaining_min", int(estimatedRemaining.Minutes())).
 				Info("Syllabus warmup progress")
 		}
 	}

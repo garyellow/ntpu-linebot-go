@@ -33,6 +33,8 @@ docker compose up -d
 - `LLM_RATE_LIMIT_PER_HOUR` - LLM API 速率限制（每位使用者每小時請求數，預設：50）
 - `IMAGE_TAG` - 映像版本（預設：latest）
 - `WARMUP_MODULES` - 預熱模組（預設：sticker,id,contact,course）
+  - 可加入 `syllabus` 啟用課程大綱抓取與 BM25 智慧搜尋（「找課」功能）
+  - 範例：`WARMUP_MODULES=sticker,id,contact,course,syllabus`
 - `LOG_LEVEL` - 日誌層級（預設：info）
 - `WEBHOOK_TIMEOUT` - Webhook 處理超時時間（預設：60s，配合 LINE Loading Animation）
 - `USER_RATE_LIMIT_TOKENS` - 每位使用者的令牌數量上限（預設：6）
@@ -132,7 +134,7 @@ task access:down
 | **SearchIndexEmpty** | BM25 索引為空 | 15 分鐘 | Warning |
 | **SearchLatencyHigh** | 搜尋 P95 延遲 >3s | 5 分鐘 | Warning |
 | **RateLimiterDroppingRequests** | 正在丟棄請求 | 5 分鐘 | Info |
-| **WarmupJobSlow** | 預熱任務 P95 >15min | 15 分鐘 | Info |
+| **WarmupJobSlow** | 預熱任務 P95 >2.5h | 15 分鐘 | Info |
 | **CleanupJobSlow** | 清理任務 P95 >5min | 15 分鐘 | Info |
 | **StickerRefreshJobSlow** | 貼圖刷新 P95 >5min | 15 分鐘 | Info |
 | **HighMemoryUsage** | 記憶體使用 >400MB | 10 分鐘 | Warning |

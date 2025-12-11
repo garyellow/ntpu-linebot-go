@@ -87,7 +87,9 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 			log.WithField("doc_count", bm25Index.Count()).Info("BM25 index initialized")
 		}
 	} else {
-		log.Warn("No syllabi found, BM25 search disabled")
+		// BM25 index is empty - this is normal on first startup
+		// It will be populated by warmup job (if syllabus module is enabled)
+		log.Debug("BM25 index empty, will be populated by warmup if configured")
 	}
 
 	var intentParser *genai.GeminiIntentParser
@@ -557,6 +559,17 @@ func (a *Application) performProactiveWarmup(ctx context.Context) {
 			WithField("stickers", stats.Stickers.Load()).
 			WithField("duration_ms", time.Since(startTime).Milliseconds()).
 			Info("Proactive warmup completed")
+
+		// Check BM25 status after warmup
+		if a.bm25Index != nil {
+			if a.bm25Index.IsEnabled() {
+				a.logger.WithField("doc_count", a.bm25Index.Count()).Info("BM25 smart search enabled")
+			} else if stats.Courses.Load() > 0 {
+				// Have courses but BM25 still disabled - syllabus module not in warmup
+				a.logger.WithField("course_count", stats.Courses.Load()).
+					Info("BM25 smart search disabled. Add 'syllabus' to WARMUP_MODULES to enable (找課 功能)")
+			}
+		}
 	}
 }
 
