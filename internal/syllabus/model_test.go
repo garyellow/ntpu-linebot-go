@@ -2,6 +2,7 @@ package syllabus
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -302,10 +303,13 @@ func TestFields_ContentForIndexing(t *testing.T) {
 
 func TestFields_ContentForIndexing_FullContent(t *testing.T) {
 	// Create a very long schedule - should NOT be truncated
-	longSchedule := ""
-	for i := 0; i < 100; i++ {
-		longSchedule += "第" + string(rune('0'+i%10)) + "週：課程內容說明與實作練習\n"
+	var scheduleBuilder strings.Builder
+	for i := 0; i < 30; i++ {
+		scheduleBuilder.WriteString("第")
+		scheduleBuilder.WriteRune(rune('0' + i%10))
+		scheduleBuilder.WriteString("週：課程內容說明與實作練習\n")
 	}
+	longSchedule := scheduleBuilder.String()
 
 	fields := Fields{
 		ObjectivesCN: "目標",

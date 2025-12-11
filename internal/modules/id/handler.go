@@ -4,6 +4,7 @@ package id
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -771,7 +772,7 @@ func deduplicateStudents(students []storage.Student) []storage.Student {
 // Only validates format, not range (range validation is done in handleYearQuery for proper error messages)
 func parseYear(yearStr string) (int, error) {
 	if len(yearStr) < 2 || len(yearStr) > 4 {
-		return 0, fmt.Errorf("invalid year length")
+		return 0, errors.New("invalid year length")
 	}
 
 	year, err := strconv.Atoi(yearStr)

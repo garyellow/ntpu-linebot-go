@@ -1,6 +1,8 @@
 package lineutil
 
 import (
+	"strings"
+
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
@@ -83,19 +85,24 @@ func ErrorMessageWithQuickReply(userMessage string, sender *messaging_api.Sender
 //   - suggestions: Optional suggestion lines (will be formatted as bullet points)
 //   - sender: The sender to use for the message
 func NotFoundMessage(searchTerm, itemType string, suggestions []string, sender *messaging_api.Sender) *messaging_api.TextMessage {
-	var text string
+	var builder strings.Builder
 	if searchTerm != "" {
-		text = "🔍 查無包含「" + searchTerm + "」的" + itemType
+		builder.WriteString("🔍 查無包含「")
+		builder.WriteString(searchTerm)
+		builder.WriteString("」的")
+		builder.WriteString(itemType)
 	} else {
-		text = "🔍 查無" + itemType
+		builder.WriteString("🔍 查無")
+		builder.WriteString(itemType)
 	}
 
 	if len(suggestions) > 0 {
-		text += "\n\n💡 建議："
+		builder.WriteString("\n\n💡 建議：")
 		for _, s := range suggestions {
-			text += "\n• " + s
+			builder.WriteString("\n• ")
+			builder.WriteString(s)
 		}
 	}
 
-	return NewTextMessageWithConsistentSender(text, sender)
+	return NewTextMessageWithConsistentSender(builder.String(), sender)
 }

@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -96,7 +97,7 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 
 	textMsg, ok := event.Message.(webhook.TextMessageContent)
 	if !ok {
-		return nil, fmt.Errorf("failed to cast message to text")
+		return nil, errors.New("failed to cast message to text")
 	}
 
 	text := textMsg.Text

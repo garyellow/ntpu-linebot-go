@@ -112,3 +112,25 @@ func (l *Logger) Errorf(format string, args ...any) {
 func (l *Logger) Debugf(format string, args ...any) {
 	l.Debug(fmt.Sprintf(format, args...))
 }
+
+// Context-aware methods for better tracing and cancellation support
+
+// InfoContext logs a message at info level with context.
+func (l *Logger) InfoContext(ctx any, msg string, args ...any) {
+	l.Info(msg, args...)
+}
+
+// WarnContext logs a message at warn level with context.
+func (l *Logger) WarnContext(ctx any, msg string, args ...any) {
+	l.Warn(msg, args...)
+}
+
+// ErrorContext logs a message at error level with context.
+func (l *Logger) ErrorContext(ctx any, msg string, args ...any) {
+	l.Error(msg, args...)
+}
+
+// DebugContext logs a message at debug level with context.
+func (l *Logger) DebugContext(ctx any, msg string, args ...any) {
+	l.Debug(msg, args...)
+}

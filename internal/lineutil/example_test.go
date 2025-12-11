@@ -1,6 +1,7 @@
 package lineutil_test
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
@@ -102,7 +103,7 @@ func ExampleTruncateRunes() {
 
 // ExampleErrorMessageWithSender demonstrates creating error messages.
 func ExampleErrorMessageWithSender() {
-	err := fmt.Errorf("database connection failed")
+	err := errors.New("database connection failed")
 	sender := &messaging_api.Sender{Name: "系統小幫手", IconUrl: "https://example.com/avatar.png"}
 	msg := lineutil.ErrorMessageWithSender(err, sender)
 	fmt.Printf("%T", msg)

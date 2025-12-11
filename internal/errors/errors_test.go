@@ -2,6 +2,7 @@ package errors
 
 import (
 	"errors"
+	"net/http"
 	"testing"
 )
 
@@ -89,7 +90,7 @@ func TestScraperError(t *testing.T) {
 		t.Errorf("expected URL 'https://example.com', got '%s'", err.URL)
 	}
 
-	if err.StatusCode != 500 {
+	if err.StatusCode != http.StatusInternalServerError {
 		t.Errorf("expected status code 500, got %d", err.StatusCode)
 	}
 

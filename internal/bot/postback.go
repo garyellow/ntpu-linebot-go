@@ -1,7 +1,7 @@
 package bot
 
 import (
-	"fmt"
+	"errors"
 	"strings"
 )
 
@@ -19,7 +19,7 @@ type PostbackData struct {
 func ParsePostback(data string) (*PostbackData, error) {
 	parts := strings.SplitN(data, ":", 2)
 	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid postback format: missing ':' separator")
+		return nil, errors.New("invalid postback format: missing ':' separator")
 	}
 
 	module := parts[0]
@@ -27,7 +27,7 @@ func ParsePostback(data string) (*PostbackData, error) {
 
 	actionAndParams := strings.Split(remainder, PostbackSplitChar)
 	if len(actionAndParams) == 0 {
-		return nil, fmt.Errorf("invalid postback format: missing action")
+		return nil, errors.New("invalid postback format: missing action")
 	}
 
 	return &PostbackData{

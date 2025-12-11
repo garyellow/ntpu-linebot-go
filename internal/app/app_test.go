@@ -48,7 +48,7 @@ func TestLivenessCheckHealthy(t *testing.T) {
 	router := gin.New()
 	router.GET("/livez", app.livenessCheck)
 
-	req := httptest.NewRequest("GET", "/livez", nil)
+	req := httptest.NewRequest(http.MethodGet, "/livez", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -77,7 +77,7 @@ func TestLivenessCheckAlwaysSucceeds(t *testing.T) {
 	router := gin.New()
 	router.GET("/livez", app.livenessCheck)
 
-	req := httptest.NewRequest("GET", "/livez", nil)
+	req := httptest.NewRequest(http.MethodGet, "/livez", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -94,7 +94,7 @@ func TestReadinessCheckHealthy(t *testing.T) {
 	router := gin.New()
 	router.GET("/readyz", app.readinessCheck)
 
-	req := httptest.NewRequest("GET", "/readyz", nil)
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -139,7 +139,7 @@ func TestReadinessCheckDatabaseFailure(t *testing.T) {
 	router := gin.New()
 	router.GET("/readyz", app.readinessCheck)
 
-	req := httptest.NewRequest("GET", "/readyz", nil)
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -175,7 +175,7 @@ func TestReadinessCheckContextTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	req := httptest.NewRequest("GET", "/readyz", nil).WithContext(ctx)
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil).WithContext(ctx)
 	w := httptest.NewRecorder()
 
 	// The handler should complete quickly (< 100ms) since SQLite operations are fast,
@@ -216,7 +216,7 @@ func TestReadinessCheckCacheStats(t *testing.T) {
 	router := gin.New()
 	router.GET("/readyz", app.readinessCheck)
 
-	req := httptest.NewRequest("GET", "/readyz", nil)
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 

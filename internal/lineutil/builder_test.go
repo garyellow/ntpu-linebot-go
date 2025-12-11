@@ -1,7 +1,7 @@
 package lineutil
 
 import (
-	"fmt"
+	"errors"
 	"testing"
 
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
@@ -89,7 +89,7 @@ func TestTruncateText(t *testing.T) {
 
 // TestErrorMessage tests that technical errors are NOT exposed to users
 func TestErrorMessage(t *testing.T) {
-	err := fmt.Errorf("database connection failed")
+	err := errors.New("database connection failed")
 	sender := &messaging_api.Sender{Name: "系統小幫手", IconUrl: "https://example.com/avatar.png"}
 	msg := ErrorMessageWithSender(err, sender)
 

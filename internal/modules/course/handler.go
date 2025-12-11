@@ -4,6 +4,7 @@ package course
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -734,7 +735,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 		return h.formatCourseListResponse(courses)
 	}
 
-	err := fmt.Errorf("no courses found in cache")
+	err := errors.New("no courses found in cache")
 	if err != nil {
 		log.WithError(err).Error("Failed to search historical courses in cache")
 		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
@@ -979,7 +980,7 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 	}
 
 	// Create bubbles for carousel (LINE API limit: max 10 bubbles per Flex Carousel)
-	var bubbles []messaging_api.FlexBubble
+	bubbles := make([]messaging_api.FlexBubble, 0, len(courses))
 	for _, course := range courses {
 		// Hero: Course title with course code in format `{課程名稱} ({課程代碼})`
 		heroTitle := lineutil.FormatCourseTitleWithUID(course.Title, course.UID)

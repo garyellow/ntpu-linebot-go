@@ -26,6 +26,7 @@ import (
 
 // setupTestHandler creates a test handler with in-memory database
 func setupTestHandler(t *testing.T) *Handler {
+	t.Helper()
 	// Create test database
 	db, err := storage.New(context.Background(), ":memory:", 168*time.Hour) // 7 days for tests
 	if err != nil {
@@ -140,7 +141,7 @@ func TestHandleInvalidSignature(t *testing.T) {
 
 	// Create request with invalid signature
 	body := []byte(`{"events":[]}`)
-	req := httptest.NewRequest("POST", "/webhook", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Line-Signature", "invalid_signature")
 
@@ -166,7 +167,7 @@ func TestHandleRequestTooLarge(t *testing.T) {
 	// Create request with large body (> 1MB)
 	// This will fail signature validation (no valid signature for random data)
 	largeBody := make([]byte, 1<<20+1) // 1MB + 1 byte
-	req := httptest.NewRequest("POST", "/webhook", bytes.NewReader(largeBody))
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewReader(largeBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Line-Signature", "invalid")
 	req.ContentLength = int64(len(largeBody))

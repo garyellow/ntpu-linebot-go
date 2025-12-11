@@ -148,19 +148,19 @@ func (c *Config) Validate() error {
 	var errs []error
 
 	if c.LineChannelToken == "" {
-		errs = append(errs, fmt.Errorf("LINE_CHANNEL_ACCESS_TOKEN is required"))
+		errs = append(errs, errors.New("LINE_CHANNEL_ACCESS_TOKEN is required"))
 	}
 	if c.LineChannelSecret == "" {
-		errs = append(errs, fmt.Errorf("LINE_CHANNEL_SECRET is required"))
+		errs = append(errs, errors.New("LINE_CHANNEL_SECRET is required"))
 	}
 	if c.Port == "" {
-		errs = append(errs, fmt.Errorf("PORT is required"))
+		errs = append(errs, errors.New("PORT is required"))
 	}
 	if err := c.Bot.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("bot config: %w", err))
 	}
 	if c.DataDir == "" {
-		errs = append(errs, fmt.Errorf("DATA_DIR is required"))
+		errs = append(errs, errors.New("DATA_DIR is required"))
 	}
 	if c.CacheTTL <= 0 {
 		errs = append(errs, fmt.Errorf("CACHE_TTL must be positive, got %v", c.CacheTTL))
