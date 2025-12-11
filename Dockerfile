@@ -19,10 +19,12 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -trimpath \
+    -buildvcs=false \
     -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildDate=${BUILD_DATE} -X main.GitCommit=${VCS_REF}" \
     -o /bin/ntpu-linebot ./cmd/server && \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -trimpath \
+    -buildvcs=false \
     -ldflags="-s -w" \
     -o /bin/healthcheck ./cmd/healthcheck
 

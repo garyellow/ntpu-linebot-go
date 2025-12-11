@@ -1,12 +1,4 @@
 services:
-  init-data:
-    image: alpine:latest
-    container_name: ntpu-init-data
-    restart: no
-    command: sh -c "mkdir -p /data && chown 65532:65532 /data && chmod 755 /data"
-    volumes:
-      - data:/data
-
   ntpu-linebot:
     image: garyellow/ntpu-linebot-go:${IMAGE_TAG:-latest}
     container_name: ntpu-linebot
@@ -48,10 +40,10 @@ services:
       resources:
         limits:
           cpus: '1.0'
-          memory: 512M
+          memory: 768M
         reservations:
           cpus: '0.5'
-          memory: 256M
+          memory: 384M
     logging:
       driver: json-file
       options:
@@ -64,13 +56,10 @@ services:
       - /tmp:size=64M
     healthcheck:
       test: ["/app/healthcheck"]
-      interval: 30s
+      interval: 45s
       timeout: 10s
       retries: 3
-      start_period: 40s
-    depends_on:
-      init-data:
-        condition: service_completed_successfully
+      start_period: 60s
 
   prometheus:
     image: prom/prometheus:latest
@@ -83,8 +72,8 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=30d'
-      - '--storage.tsdb.retention.size=5GB'
+      - '--storage.tsdb.retention.time=15d'
+      - '--storage.tsdb.retention.size=2GB'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
       - '--web.enable-lifecycle'
@@ -111,8 +100,6 @@ services:
       start_period: 30s
     depends_on:
       ntpu-linebot:
-        condition: service_healthy
-      alertmanager:
         condition: service_healthy
 
   alertmanager:
@@ -146,9 +133,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
-    depends_on:
-      ntpu-linebot:
-        condition: service_healthy
 
   grafana:
     image: grafana/grafana:latest

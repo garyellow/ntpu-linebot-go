@@ -233,7 +233,7 @@ histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by 
 
 ## Docker
 
-Multi-stage build (alpine builder + distroless runtime), init-data for permissions, healthcheck binary (no shell).
+Multi-stage build (alpine builder + distroless runtime), healthcheck binary (no shell), volume permissions handled by application.
 
 ## NLU Intent Parser
 
