@@ -26,6 +26,7 @@ import (
 
 // setupTestHandler creates a test handler with in-memory database
 func setupTestHandler(t *testing.T) *Handler {
+	t.Helper()
 	// Create test database
 	db, err := storage.New(context.Background(), ":memory:", 168*time.Hour) // 7 days for tests
 	if err != nil {
@@ -140,7 +141,7 @@ func TestHandleInvalidSignature(t *testing.T) {
 
 	// Create request with invalid signature
 	body := []byte(`{"events":[]}`)
-	req := httptest.NewRequest("POST", "/webhook", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Line-Signature", "invalid_signature")
 
@@ -166,7 +167,7 @@ func TestHandleRequestTooLarge(t *testing.T) {
 	// Create request with large body (> 1MB)
 	// This will fail signature validation (no valid signature for random data)
 	largeBody := make([]byte, 1<<20+1) // 1MB + 1 byte
-	req := httptest.NewRequest("POST", "/webhook", bytes.NewReader(largeBody))
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewReader(largeBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Line-Signature", "invalid")
 	req.ContentLength = int64(len(largeBody))
@@ -270,7 +271,7 @@ func TestContextTimeout(t *testing.T) {
 func TestEventProcessingLimit(t *testing.T) {
 	// This test verifies the concept that we limit events per webhook
 	maxEvents := 100
-	testEvents := make([]interface{}, 150)
+	testEvents := make([]any, 150)
 
 	// Verify our limit logic
 	if len(testEvents) > maxEvents {
@@ -284,7 +285,7 @@ func TestEventProcessingLimit(t *testing.T) {
 // TestMessageTruncation tests that messages are truncated to LINE API limits
 func TestMessageTruncation(t *testing.T) {
 	maxMessages := 5
-	testMessages := make([]interface{}, 10)
+	testMessages := make([]any, 10)
 
 	// Verify our truncation logic
 	if len(testMessages) > maxMessages {

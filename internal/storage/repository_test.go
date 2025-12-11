@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 )
 
 func setupTestDB(t *testing.T) *DB {
+	t.Helper()
 	// Use in-memory SQLite database for testing with 7-day TTL
 	db, err := New(context.Background(), ":memory:", 168*time.Hour)
 	if err != nil {
@@ -859,10 +861,7 @@ func TestSearchHistoricalCoursesByYearAndTitleTooLong(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a search term longer than 100 characters
-	longTitle := ""
-	for i := 0; i < 101; i++ {
-		longTitle += "測"
-	}
+	longTitle := strings.Repeat("測", 101)
 
 	_, err := db.SearchHistoricalCoursesByYearAndTitle(ctx, 100, longTitle)
 	if err == nil {

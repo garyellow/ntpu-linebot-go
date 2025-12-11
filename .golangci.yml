@@ -1,63 +1,74 @@
 # golangci-lint v2 configuration
 # Reference: https://golangci-lint.run/docs/configuration/
+# Migration guide: https://golangci-lint.run/docs/product/migration-guide/
+
 version: "2"
 
 run:
-  # Modules download mode for go modules
-  modules-download-mode: readonly
-  # Allow parallel runners
+  timeout: 5m
   allow-parallel-runners: true
-
-formatters:
-  enable:
-    - gofmt         # Check code formatting
-  settings:
-    gofmt:
-      # Simplify code
-      simplify: true
-  exclusions:
-    paths:
-      - "third_party$"
-      - "builtin$"
-      - "examples$"
+  go: '1.25'
 
 linters:
-  # Start with no linters, then enable specific ones for precise control
+  # v2: Use 'default' instead of 'disable-all'
   default: none
   enable:
-    # Default linters (must have)
+    # Essential linters (must have)
     - errcheck      # Check for unchecked errors
     - govet         # Report suspicious constructs
     - ineffassign   # Detect unused variable assignments
-    - staticcheck   # Static analysis checks (includes gosimple, stylecheck)
+    - staticcheck   # Static analysis (merged gosimple, stylecheck in v2)
     - unused        # Find unused code
 
     # Security and reliability
     - bodyclose     # Check HTTP response body is closed
     - contextcheck  # Check context.Context is passed correctly
+    - fatcontext    # Detect nested contexts in structs (performance issue)
     - gosec         # Security checks
     - noctx         # Find HTTP requests without context
+    - sqlclosecheck # Check SQL rows/statements are closed
 
-    # Code quality
+    # Code quality and style
     - copyloopvar   # Check for pointers to loop variables (Go 1.22+)
     - durationcheck # Check for two durations multiplied together
     - errname       # Check error naming conventions
     - errorlint     # Find issues with error wrapping
     - gocritic      # Opinionated linter with many checks
+    - mirror        # Reports wrong mirror patterns of bytes/strings usage
     - misspell      # Find commonly misspelled words
     - nilerr        # Find returning nil after checking error
     - predeclared   # Find shadowed predeclared identifiers
+    - reassign      # Checks that package variables are not reassigned
     - revive        # Fast, configurable linter (golint replacement)
     - unconvert     # Remove unnecessary type conversions
     - wastedassign  # Find wasted assignment statements
+    - whitespace    # Check for unnecessary whitespace
 
+    # Performance
+    - perfsprint    # Optimize fmt.Sprintf into faster alternatives
+    - prealloc      # Find slice declarations that could be preallocated
+
+    # Logging and observability
+    - sloglint      # Ensure consistent code style with log/slog
+    - spancheck     # Checks for mistakes with OpenTelemetry/Census spans
+
+    # Additional useful linters
+    - intrange      # Check integer range loop patterns (Go 1.22+)
+    - errchkjson    # Check json.Marshal errors
+    - forcetypeassert # Require type assertion checks
+    - makezero      # Check slice initialization
+    - nilnil        # Disallow simultaneous nil returns
+    - protogetter   # Reports direct reads from proto message fields
+    - testifylint   # Testify best practices
+    - thelper       # Test helper detection
+    - unparam       # Detect unused function parameters
+    - usestdlibvars # Use standard library constants
+
+  # v2: Settings moved under linters.settings
   settings:
     errcheck:
-      # Check type assertions
       check-type-assertions: true
-      # Check blank identifier assignments
       check-blank: false
-      # Exclude some functions from checking
       exclude-functions:
         - io.Copy
         - io.WriterTo.WriteTo
@@ -69,31 +80,72 @@ linters:
         - (*strings.Builder).WriteString
 
     gocritic:
-      # Enable all stable checks
       enabled-tags:
         - diagnostic
         - performance
       disabled-checks:
-        - hugeParam        # Allow passing large structs by value
-        - rangeValCopy     # Allow range value copy for clarity
-        - appendCombine    # Allow separate appends for readability
-        - ifElseChain      # Allow if-else chains when clearer
-        - assignOp         # Allow explicit assignment for clarity
+        - hugeParam      # Allow passing large structs by value
+        - rangeValCopy   # Allow range value copy for clarity
+        - appendCombine  # Allow separate appends for readability
+        - ifElseChain    # Allow if-else chains when clearer
+        - assignOp       # Allow explicit assignment for clarity
+
+    fatcontext:
+      # Check for potential fat contexts in struct pointers
+      check-struct-pointers: false  # Too many false positives
 
     gosec:
-      # Exclude certain rules
+      # Why these excludes?
+      # - G104: Duplicate of errcheck linter (avoid redundant checks)
+      # - G115: Safe conversions only (len/time.Duration/modulo operations)
+      # - G304: No user input paths (only config-controlled DataDir)
+      # - G401: crypto/rand for jitter only, not cryptographic purposes
       excludes:
         - G104  # Audit errors not checked (handled by errcheck)
-        - G115  # Integer overflow conversion (false positive for LINE API params)
-        - G304  # File path from variable (we validate paths)
-        - G401  # Use of weak cryptographic primitive (we only use for jitter)
-        - G501  # Import blocklist: crypto/md5 (not used)
+        - G115  # Integer overflow conversion (all conversions are safe)
+        - G304  # File path from variable (DataDir is config-controlled)
+        - G401  # Weak crypto (only used for retry jitter, not cryptographic)
+
+    perfsprint:
+      # Optimize fmt.Sprintf into faster alternatives
+      int-conversion: true
+      err-error: true
+      errorf: true
+      sprintf1: true
+      strconcat: false  # Keep string concatenation readable
+
+    sloglint:
+      # Ensure consistent usage of log/slog (via custom logger wrapper)
+      # Note: Many false positives due to custom logger wrapper
+      # Context methods are available but not required everywhere
+      context: ""       # Don't require context (too strict for wrapper)
+      no-global: ""     # Allow global logger usage
+      kv-only: false    # Allow both key-value and attribute styles
+      attr-only: false  # Allow both styles
+      no-mixed-args: true  # But ensure consistency within calls
+
+    spancheck:
+      # Checks for mistakes with OpenTelemetry spans
+      checks:
+        - end
+        - record-error
+        - set-status
+      ignore-check-signatures:
+        - "telemetry.RecordError"
+
+    nilnil:
+      # Allow nil,nil returns for cache miss scenarios (not found vs error)
+      checked-types:
+        - ptr
+        - func
 
     misspell:
       locale: US
 
     revive:
-      # Revive rules configuration
+      severity: warning
+      confidence: 0.8
+      enable-all-rules: false
       rules:
         - name: blank-imports
         - name: context-as-argument
@@ -110,7 +162,6 @@ linters:
         - name: range
         - name: receiver-naming
         - name: time-naming
-        - name: unexported-return
         - name: indent-error-flow
         - name: errorf
         - name: empty-block
@@ -118,16 +169,12 @@ linters:
         - name: unreachable-code
 
     staticcheck:
-      # Enable all checks
       checks: ["all"]
 
+  # v2: exclusions moved under linters.exclusions
   exclusions:
-    # Exclude generated files by default
+    # v2: Use 'generated' instead of 'exclude-generated'
     generated: lax
-    # Preset exclusions
-    presets:
-      - std-error-handling
-    # Exclude some issues in specific paths
     rules:
       # Ignore certain linters in test files
       - path: _test\.go
@@ -136,6 +183,7 @@ linters:
           - gosec
           - gocritic
           - errorlint
+          - intrange
       # Ignore long lines in generated files
       - path: ".*_generated\\.go"
         linters:
@@ -144,17 +192,24 @@ linters:
       - path: internal/scraper/client\.go
         linters:
           - bodyclose
+      # Allow nil,nil returns for cache miss and feature disabled scenarios
+      - path: internal/storage/repository\.go
+        linters:
+          - nilnil
+      - path: internal/genai/(expander|intent)\.go
+        linters:
+          - nilnil
+    # v2: Use paths instead of skip-dirs
     paths:
-      - "third_party$"
-      - "builtin$"
-      - "examples$"
+      - third_party
+      - examples
 
 issues:
-  # Maximum issues count per linter (0 = unlimited)
   max-issues-per-linter: 50
-  # Maximum same issues count (0 = unlimited)
   max-same-issues: 10
 
 output:
-  # Show statistics per linter
   show-stats: true
+  formats:
+    text:
+      path: stdout

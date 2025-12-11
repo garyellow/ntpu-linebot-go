@@ -31,10 +31,10 @@ build/
 
 # Testing
 *_test.go
-coverage
-coverage.out
+coverage*
 *.test
 *.prof
+testdata/
 
 # CI/CD
 .github/
@@ -47,7 +47,7 @@ Dockerfile*
 
 # Deployment configs
 deployments/
-docker-compose*.yml
+compose*.yaml
 
 # Task runner
 Taskfile.yml

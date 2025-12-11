@@ -233,15 +233,15 @@ func TestLLMRateLimiter_ConcurrentAccess(t *testing.T) {
 	done := make(chan bool, goroutines)
 
 	// Launch multiple goroutines
-	for i := 0; i < goroutines; i++ {
-		go func(id int) {
+	for range goroutines {
+		go func() {
 			userID := "user"
 			for j := 0; j < requestsPerGoroutine; j++ {
 				limiter.Allow(userID)
 				limiter.GetAvailable(userID)
 			}
 			done <- true
-		}(i)
+		}()
 	}
 
 	// Wait for all goroutines

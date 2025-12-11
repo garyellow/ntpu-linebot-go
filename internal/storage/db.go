@@ -57,23 +57,23 @@ func New(ctx context.Context, dbPath string, cacheTTL time.Duration) (*DB, error
 	writer.SetConnMaxLifetime(config.DatabaseConnMaxLifetime)
 
 	if err := configureConnection(ctx, writer, false); err != nil {
-		writer.Close()
+		_ = writer.Close() // Best effort cleanup
 		return nil, fmt.Errorf("configure writer: %w", err)
 	}
 
 	if err := writer.PingContext(ctx); err != nil {
-		writer.Close()
+		_ = writer.Close() // Best effort cleanup
 		return nil, fmt.Errorf("ping writer: %w", err)
 	}
 
 	if err := InitSchema(ctx, writer); err != nil {
-		writer.Close()
+		_ = writer.Close() // Best effort cleanup
 		return nil, fmt.Errorf("initialize schema: %w", err)
 	}
 
 	reader, err := sql.Open("sqlite", readerDSN)
 	if err != nil {
-		writer.Close()
+		_ = writer.Close() // Best effort cleanup
 		return nil, fmt.Errorf("open reader: %w", err)
 	}
 
@@ -82,14 +82,14 @@ func New(ctx context.Context, dbPath string, cacheTTL time.Duration) (*DB, error
 	reader.SetConnMaxLifetime(config.DatabaseConnMaxLifetime)
 
 	if err := configureConnection(ctx, reader, true); err != nil {
-		writer.Close()
-		reader.Close()
+		_ = writer.Close() // Best effort cleanup
+		_ = reader.Close() // Best effort cleanup
 		return nil, fmt.Errorf("configure reader: %w", err)
 	}
 
 	if err := reader.PingContext(ctx); err != nil {
-		writer.Close()
-		reader.Close()
+		_ = writer.Close() // Best effort cleanup
+		_ = reader.Close() // Best effort cleanup
 		return nil, fmt.Errorf("ping reader: %w", err)
 	}
 

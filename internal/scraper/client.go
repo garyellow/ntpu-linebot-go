@@ -265,7 +265,7 @@ func (c *Client) TryFailoverURLs(ctx context.Context, domain string) (string, er
 	// Try each URL
 	for _, baseURL := range urls {
 		// Simple HEAD request to check if URL is accessible
-		req, err := http.NewRequestWithContext(ctx, "HEAD", baseURL, http.NoBody)
+		req, err := http.NewRequestWithContext(ctx, http.MethodHead, baseURL, http.NoBody)
 		if err != nil {
 			continue
 		}

@@ -14,13 +14,13 @@ docker compose up -d
 
 ## 服務
 
-- **init-data** - 初始化資料目錄權限（一次性執行）
 - **ntpu-linebot** - 主服務（啟動時會自動在背景預熱快取）
-- **prometheus** - 監控 (http://localhost:9090)
-- **alertmanager** - 告警 (http://localhost:9093)
-- **grafana** - 儀表板 (http://localhost:3000, admin/admin123)
+- **prometheus** - 監控（資料保留 15 天或 2GB）
+- **alertmanager** - 告警
+- **grafana** - 儀表板 (預設帳密：admin/admin123)
 
 > **快取預熱**：主服務啟動後會自動在背景執行快取預熱（約 5-10 分鐘），不影響 webhook 接收請求。
+> **監控存取**：監控服務預設僅限內部網路存取，需透過 access gateway 開放（見下方指令）。
 
 ## 環境變數
 
@@ -113,11 +113,11 @@ task access:down
 | **SearchIndexEmpty** | BM25 索引為空 | 15 分鐘 | Warning |
 | **SearchLatencyHigh** | 搜尋 P95 延遲 >3s | 5 分鐘 | Warning |
 | **RateLimiterDroppingRequests** | 正在丟棄請求 | 5 分鐘 | Info |
-| **WarmupJobSlow** | 預熱任務 P95 >30min | 15 分鐘 | Info |
+| **WarmupJobSlow** | 預熱任務 P95 >15min | 15 分鐘 | Info |
 | **CleanupJobSlow** | 清理任務 P95 >5min | 15 分鐘 | Info |
 | **StickerRefreshJobSlow** | 貼圖刷新 P95 >5min | 15 分鐘 | Info |
 | **HighMemoryUsage** | 記憶體使用 >400MB | 10 分鐘 | Warning |
-| **HighGoroutineCount** | Goroutine 數量 >1000 | 10 分鐘 | Warning |
+| **HighGoroutineCount** | Goroutine 數量 >500 | 10 分鐘 | Warning |
 
 ## 配置告警通知
 
@@ -137,10 +137,10 @@ task compose:restart -- alertmanager
 
 ## 疑難排解
 
-**權限錯誤**：
+**資料重置**：
 ```bash
 docker compose down
-rm -rf ./data
+docker volume rm deployments_data
 docker compose up -d
 ```
 

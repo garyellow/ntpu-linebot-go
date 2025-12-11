@@ -48,7 +48,7 @@ func TestLivenessCheckHealthy(t *testing.T) {
 	router := gin.New()
 	router.GET("/livez", app.livenessCheck)
 
-	req := httptest.NewRequest("GET", "/livez", nil)
+	req := httptest.NewRequest(http.MethodGet, "/livez", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -57,7 +57,7 @@ func TestLivenessCheckHealthy(t *testing.T) {
 	}
 
 	// Verify JSON structure
-	var response map[string]interface{}
+	var response map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("Failed to parse JSON response: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestLivenessCheckAlwaysSucceeds(t *testing.T) {
 	router := gin.New()
 	router.GET("/livez", app.livenessCheck)
 
-	req := httptest.NewRequest("GET", "/livez", nil)
+	req := httptest.NewRequest(http.MethodGet, "/livez", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -94,7 +94,7 @@ func TestReadinessCheckHealthy(t *testing.T) {
 	router := gin.New()
 	router.GET("/readyz", app.readinessCheck)
 
-	req := httptest.NewRequest("GET", "/readyz", nil)
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -103,7 +103,7 @@ func TestReadinessCheckHealthy(t *testing.T) {
 	}
 
 	// Verify JSON structure
-	var response map[string]interface{}
+	var response map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("Failed to parse JSON response: %v", err)
 	}
@@ -117,11 +117,11 @@ func TestReadinessCheckHealthy(t *testing.T) {
 		t.Errorf("Expected database='connected', got %v", response["database"])
 	}
 
-	if _, ok := response["cache"].(map[string]interface{}); !ok {
+	if _, ok := response["cache"].(map[string]any); !ok {
 		t.Error("Expected cache statistics in response")
 	}
 
-	if _, ok := response["features"].(map[string]interface{}); !ok {
+	if _, ok := response["features"].(map[string]any); !ok {
 		t.Error("Expected features in response")
 	}
 }
@@ -139,7 +139,7 @@ func TestReadinessCheckDatabaseFailure(t *testing.T) {
 	router := gin.New()
 	router.GET("/readyz", app.readinessCheck)
 
-	req := httptest.NewRequest("GET", "/readyz", nil)
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -148,7 +148,7 @@ func TestReadinessCheckDatabaseFailure(t *testing.T) {
 	}
 
 	// Verify JSON structure
-	var response map[string]interface{}
+	var response map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("Failed to parse JSON response: %v", err)
 	}
@@ -175,7 +175,7 @@ func TestReadinessCheckContextTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	req := httptest.NewRequest("GET", "/readyz", nil).WithContext(ctx)
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil).WithContext(ctx)
 	w := httptest.NewRecorder()
 
 	// The handler should complete quickly (< 100ms) since SQLite operations are fast,
@@ -216,7 +216,7 @@ func TestReadinessCheckCacheStats(t *testing.T) {
 	router := gin.New()
 	router.GET("/readyz", app.readinessCheck)
 
-	req := httptest.NewRequest("GET", "/readyz", nil)
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -225,12 +225,12 @@ func TestReadinessCheckCacheStats(t *testing.T) {
 	}
 
 	// Verify cache statistics
-	var response map[string]interface{}
+	var response map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("Failed to parse JSON response: %v", err)
 	}
 
-	cache, ok := response["cache"].(map[string]interface{})
+	cache, ok := response["cache"].(map[string]any)
 	if !ok {
 		t.Fatal("Expected cache statistics in response")
 	}

@@ -12,5 +12,8 @@ datasources:
       httpMethod: POST
       timeout: 30
       queryTimeout: 60s
+      timeInterval: 15s
       incrementalQuerying: true
       incrementalQueryOverlapWindow: 10m
+      cacheLevel: High
+      disableMetricsLookup: false

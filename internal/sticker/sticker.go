@@ -121,7 +121,7 @@ func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
 	spyCount := 0
 	ichigoCount := 0
 
-	for i := 0; i < len(spyFamilyURLs)+1; i++ {
+	for range len(spyFamilyURLs) + 1 {
 		res := <-results
 		if res.err != nil {
 			errorCount++
@@ -194,7 +194,7 @@ func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
 func (m *Manager) fetchWithRetry(ctx context.Context, url string, fetchFunc func(context.Context, *scraper.Client, string) ([]string, error), maxRetries int) ([]string, error) {
 	var lastErr error
 
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := range maxRetries {
 		if attempt > 0 {
 			// Exponential backoff: 1s, 2s, 4s
 			backoff := time.Duration(math.Pow(2, float64(attempt))) * time.Second

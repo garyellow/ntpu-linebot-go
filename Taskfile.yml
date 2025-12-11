@@ -4,6 +4,8 @@ version: '3'
 
 vars:
   COVERAGE_FILE: coverage.out
+  GOIMPORTS_VERSION: latest
+  COVERAGE_THRESHOLD: 80
 
 env:
   CGO_ENABLED: 0
@@ -21,33 +23,52 @@ tasks:
   test:
     desc: Run all tests (skipping network tests for faster CI)
     cmds:
-      - go test -short -v ./...
+      - go test -short -v -shuffle=on ./...
 
   test:full:
     desc: Run all tests including network tests (slower, for manual testing)
     cmds:
-      - go test -v ./...
+      - go test -v -shuffle=on ./...
 
   test:race:
-    desc: Run tests with race detector, skipping network tests (requires CGO_ENABLED=1 on Windows)
+    desc: Run tests with race detector, skipping network tests (requires CGO_ENABLED=1)
     env:
       CGO_ENABLED: 1
     cmds:
-      - go test -short -v -race ./...
+      - go test -short -v -race -shuffle=on ./...
 
   test:coverage:
-    desc: Generate HTML coverage report (skipping network tests)
+    desc: Generate HTML coverage report with threshold check
     cmds:
-      - go test -short -v -coverprofile={{.COVERAGE_FILE}} -covermode=atomic ./...
+      - go test -short -v -shuffle=on -coverprofile={{.COVERAGE_FILE}} -covermode=atomic ./...
       - go tool cover -html={{.COVERAGE_FILE}} -o coverage.html
+      - go tool cover -func={{.COVERAGE_FILE}}
+      - cmd: |
+          $coverage = (go tool cover -func={{.COVERAGE_FILE}} | Select-String 'total:' | ForEach-Object { ($_ -split '\s+')[2] -replace '%','' })
+          if ([float]$coverage -lt {{.COVERAGE_THRESHOLD}}) {
+            Write-Host "Coverage $coverage% is below threshold {{.COVERAGE_THRESHOLD}}%" -ForegroundColor Red
+            exit 1
+          } else {
+            Write-Host "Coverage $coverage% meets threshold {{.COVERAGE_THRESHOLD}}%" -ForegroundColor Green
+          }
+        platforms: [windows]
+      - cmd: |
+          coverage=$(go tool cover -func={{.COVERAGE_FILE}} | grep total | awk '{print $3}' | sed 's/%//')
+          if [ $(echo "$coverage < {{.COVERAGE_THRESHOLD}}" | bc) -eq 1 ]; then
+            echo "Coverage $coverage% is below threshold {{.COVERAGE_THRESHOLD}}%"
+            exit 1
+          else
+            echo "Coverage $coverage% meets threshold {{.COVERAGE_THRESHOLD}}%"
+          fi
+        platforms: [linux, darwin]
       - echo "Coverage report -> coverage.html"
 
   test:coverage:race:
-    desc: Generate HTML coverage report with race detector (requires CGO_ENABLED=1 on Windows)
+    desc: Generate HTML coverage report with race detector (requires CGO_ENABLED=1)
     env:
       CGO_ENABLED: 1
     cmds:
-      - go test -short -v -race -coverprofile={{.COVERAGE_FILE}} -covermode=atomic ./...
+      - go test -short -v -race -shuffle=on -coverprofile={{.COVERAGE_FILE}} -covermode=atomic ./...
       - go tool cover -html={{.COVERAGE_FILE}} -o coverage.html
       - echo "Coverage report with race detector -> coverage.html"
 
@@ -60,7 +81,7 @@ tasks:
   fmt:
     desc: Format and organize imports
     cmds:
-      - go run golang.org/x/tools/cmd/goimports@latest -w .
+      - go run golang.org/x/tools/cmd/goimports@{{.GOIMPORTS_VERSION}} -w .
 
   # Build
   build:
@@ -71,44 +92,44 @@ tasks:
   clean:
     desc: Clean build artifacts
     cmds:
-      - cmd: if exist bin rd /s /q bin
+      - cmd: rd /s /q bin 2>nul || exit 0
         platforms: [windows]
-      - cmd: if exist coverage.out del coverage.out
-        platforms: [windows]
-      - cmd: if exist coverage.html del coverage.html
+      - cmd: del coverage.out coverage.html 2>nul || exit 0
         platforms: [windows]
       - cmd: rm -rf bin/ coverage.out coverage.html
         platforms: [linux, darwin]
+    ignore_error: true
 
   mod:
     desc: Tidy and verify dependencies
     cmds:
       - go mod tidy
       - go mod verify
+      - go mod download
 
   vuln:
-    desc: Run vulnerability check
+    desc: Check for known vulnerabilities
     cmds:
-      - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - go run golang.org/x/vuln/cmd/govulncheck@latest -show verbose ./...
 
   # Docker Compose
   compose:up:
-    desc: Start all services (background)
+    desc: Start all services (uses compose.yaml)
     dir: deployments
     cmds:
-      - docker compose up -d
+      - docker compose -f compose.yaml up -d
 
   compose:down:
     desc: Stop all services
     dir: deployments
     cmds:
-      - docker compose down
+      - docker compose -f compose.yaml down
 
   compose:logs:
     desc: "View service logs (usage: task compose:logs -- SERVICE_NAME)"
     dir: deployments
     cmds:
-      - docker compose logs -f {{.CLI_ARGS}}
+      - docker compose -f compose.yaml logs -f {{.CLI_ARGS}}
 
   compose:update:
     desc: Update and restart all services with latest images
@@ -118,6 +139,12 @@ tasks:
         platforms: [windows]
       - cmd: ./update.sh
         platforms: [linux, darwin]
+
+  compose:ps:
+    desc: List all services status
+    dir: deployments
+    cmds:
+      - docker compose -f compose.yaml ps
 
   # Monitoring Access
   access:up:
@@ -140,10 +167,11 @@ tasks:
 
   # CI Pipeline
   ci:
-    desc: Run full CI pipeline (fmt + lint + test + build)
+    desc: Run full CI pipeline (mod + fmt + lint + test + vuln + build)
+    deps: [mod]
     cmds:
-      - go mod verify
       - task: fmt
       - task: lint
       - task: test
+      - task: vuln
       - task: build

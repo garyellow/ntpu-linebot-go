@@ -2,7 +2,6 @@ services:
   gateway:
     image: nginx:alpine
     container_name: ntpu-access-gateway
-    restart: "no"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
@@ -16,15 +15,15 @@ services:
       - /var/run:size=1M
       - /var/cache/nginx:size=10M
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 5s
     networks:
-      - ntpu-network
+      - default
+      - deployments_default
 
 networks:
-  ntpu-network:
+  deployments_default:
     external: true
-    name: ntpu-linebot-network

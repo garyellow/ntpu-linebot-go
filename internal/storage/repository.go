@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -87,7 +88,7 @@ func (db *DB) GetStudentByID(ctx context.Context, id string) (*Student, error) {
 // SearchStudentsByName searches students by partial name match.
 func (db *DB) SearchStudentsByName(ctx context.Context, name string) ([]Student, error) {
 	if len(name) > 100 {
-		return nil, fmt.Errorf("search term too long")
+		return nil, errors.New("search term too long")
 	}
 
 	sanitized := sanitizeSearchTerm(name)
@@ -98,7 +99,7 @@ func (db *DB) SearchStudentsByName(ctx context.Context, name string) ([]Student,
 	if err != nil {
 		return nil, fmt.Errorf("query students: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var students []Student
 	for rows.Next() {
@@ -121,7 +122,7 @@ func (db *DB) GetStudentsByDepartment(ctx context.Context, dept string, year int
 	if err != nil {
 		return nil, fmt.Errorf("query students: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var students []Student
 	for rows.Next() {
@@ -348,7 +349,7 @@ func (db *DB) GetContactByUID(ctx context.Context, uid string) (*Contact, error)
 func (db *DB) SearchContactsByName(ctx context.Context, name string) ([]Contact, error) {
 	// Validate input
 	if len(name) > 100 {
-		return nil, fmt.Errorf("search term too long")
+		return nil, errors.New("search term too long")
 	}
 
 	// Sanitize search term to prevent SQL LIKE special character issues
@@ -691,7 +692,7 @@ func (db *DB) GetCourseByUID(ctx context.Context, uid string) (*Course, error) {
 func (db *DB) SearchCoursesByTitle(ctx context.Context, title string) ([]Course, error) {
 	// Validate input
 	if len(title) > 100 {
-		return nil, fmt.Errorf("search term too long")
+		return nil, errors.New("search term too long")
 	}
 
 	// Sanitize search term to prevent SQL LIKE special character issues
@@ -715,7 +716,7 @@ func (db *DB) SearchCoursesByTitle(ctx context.Context, title string) ([]Course,
 func (db *DB) SearchCoursesByTeacher(ctx context.Context, teacher string) ([]Course, error) {
 	// Validate input
 	if len(teacher) > 100 {
-		return nil, fmt.Errorf("search term too long")
+		return nil, errors.New("search term too long")
 	}
 
 	// Sanitize search term to prevent SQL LIKE special character issues
@@ -1154,7 +1155,7 @@ func (db *DB) SaveHistoricalCoursesBatch(ctx context.Context, courses []*Course)
 func (db *DB) SearchHistoricalCoursesByYearAndTitle(ctx context.Context, year int, title string) ([]Course, error) {
 	// Validate input
 	if len(title) > 100 {
-		return nil, fmt.Errorf("search term too long")
+		return nil, errors.New("search term too long")
 	}
 
 	// Sanitize search term
@@ -1374,7 +1375,7 @@ func (db *DB) GetAllSyllabi(ctx context.Context) ([]*Syllabus, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query syllabi: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var syllabi []*Syllabus
 	for rows.Next() {
@@ -1421,7 +1422,7 @@ func (db *DB) GetSyllabiByYearTerm(ctx context.Context, year, term int) ([]*Syll
 	if err != nil {
 		return nil, fmt.Errorf("failed to query syllabi: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var syllabi []*Syllabus
 	for rows.Next() {
@@ -1552,7 +1553,7 @@ func (db *DB) CountStickersBySource(ctx context.Context) (map[string]int, error)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query sticker counts: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	counts := make(map[string]int)
 	for rows.Next() {

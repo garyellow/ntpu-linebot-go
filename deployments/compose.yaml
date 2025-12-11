@@ -1,14 +1,4 @@
 services:
-  init-data:
-    image: alpine:latest
-    container_name: ntpu-init-data
-    restart: no
-    command: sh -c "mkdir -p /data && chown 65532:65532 /data && chmod 755 /data"
-    volumes:
-      - ./data:/data
-    networks:
-      - ntpu-network
-
   ntpu-linebot:
     image: garyellow/ntpu-linebot-go:${IMAGE_TAG:-latest}
     container_name: ntpu-linebot
@@ -16,7 +6,7 @@ services:
     ports:
       - "${HOST_PORT:-10000}:10000"
     volumes:
-      - ./data:/data
+      - data:/data
     environment:
       # LINE Bot Configuration (Required)
       - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN:?LINE_CHANNEL_ACCESS_TOKEN is required}
@@ -50,10 +40,10 @@ services:
       resources:
         limits:
           cpus: '1.0'
-          memory: 512M
+          memory: 768M
         reservations:
           cpus: '0.5'
-          memory: 256M
+          memory: 384M
     logging:
       driver: json-file
       options:
@@ -67,14 +57,9 @@ services:
     healthcheck:
       test: ["CMD", "/app/healthcheck"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
-      start_period: 40s
-    depends_on:
-      init-data:
-        condition: service_completed_successfully
-    networks:
-      - ntpu-network
+      start_period: 60s
 
   prometheus:
     image: prom/prometheus:latest
@@ -87,8 +72,8 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=30d'
-      - '--storage.tsdb.retention.size=5GB'
+      - '--storage.tsdb.retention.time=15d'
+      - '--storage.tsdb.retention.size=2GB'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
       - '--web.enable-lifecycle'
@@ -96,9 +81,10 @@ services:
       resources:
         limits:
           cpus: '0.5'
-          memory: 1G
+          memory: 512M
         reservations:
-          memory: 256M
+          cpus: '0.25'
+          memory: 128M
     logging:
       driver: json-file
       options:
@@ -107,7 +93,7 @@ services:
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -115,10 +101,6 @@ services:
     depends_on:
       ntpu-linebot:
         condition: service_healthy
-      alertmanager:
-        condition: service_healthy
-    networks:
-      - ntpu-network
 
   alertmanager:
     image: prom/alertmanager:latest
@@ -146,16 +128,11 @@ services:
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9093/-/healthy || exit 1"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9093/-/healthy"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 20s
-    depends_on:
-      ntpu-linebot:
-        condition: service_healthy
-    networks:
-      - ntpu-network
 
   grafana:
     image: grafana/grafana:latest
@@ -188,7 +165,7 @@ services:
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -196,18 +173,9 @@ services:
     depends_on:
       prometheus:
         condition: service_healthy
-    networks:
-      - ntpu-network
 
 volumes:
+  data:
   prometheus-data:
-    driver: local
   alertmanager-data:
-    driver: local
   grafana-data:
-    driver: local
-
-networks:
-  ntpu-network:
-    driver: bridge
-    name: ntpu-linebot-network

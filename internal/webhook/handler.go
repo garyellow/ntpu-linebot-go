@@ -107,10 +107,8 @@ func (h *Handler) Handle(c *gin.Context) {
 	events := make([]webhook.EventInterface, len(cb.Events))
 	copy(events, cb.Events)
 
-	// Process events asynchronously in goroutine
-	h.wg.Add(1)
-	go func() {
-		defer h.wg.Done()
+	// Process events asynchronously using WaitGroup.Go (Go 1.25+)
+	h.wg.Go(func() {
 		defer func() {
 			if r := recover(); r != nil {
 				h.logger.WithField("panic", r).Error("Panic in async event processing")
@@ -121,7 +119,7 @@ func (h *Handler) Handle(c *gin.Context) {
 		for _, event := range events {
 			h.processEvent(processingCtx, event, start)
 		}
-	}()
+	})
 }
 
 // processEvent handles a single webhook event asynchronously

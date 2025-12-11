@@ -13,6 +13,7 @@ import (
 )
 
 func setupTestDB(t *testing.T) (*storage.DB, func()) {
+	t.Helper()
 	// Use a unique temporary file for each test to ensure complete isolation
 	// This avoids the shared cache issue with in-memory databases
 	tmpFile := t.TempDir() + "/test.db"
@@ -129,7 +130,7 @@ func TestGenerateFallbackStickers(t *testing.T) {
 
 	fallbacks := manager.generateFallbackStickers()
 
-	assert.Equal(t, 20, len(fallbacks))
+	assert.Len(t, fallbacks, 20)
 	for _, url := range fallbacks {
 		assert.Contains(t, url, "ui-avatars.com")
 		assert.Contains(t, url, "name=")

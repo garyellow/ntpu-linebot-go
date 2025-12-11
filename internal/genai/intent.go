@@ -4,6 +4,7 @@ package genai
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -59,7 +60,7 @@ func NewIntentParser(ctx context.Context, apiKey string) (*GeminiIntentParser, e
 // The model uses AUTO mode (default), allowing it to either call a function or return text.
 func (p *GeminiIntentParser) Parse(ctx context.Context, text string) (*ParseResult, error) {
 	if p == nil {
-		return nil, fmt.Errorf("intent parser is nil")
+		return nil, errors.New("intent parser is nil")
 	}
 
 	// Create timeout context
@@ -95,12 +96,12 @@ func (p *GeminiIntentParser) Parse(ctx context.Context, text string) (*ParseResu
 // parseResult extracts intent information from the generation result.
 func (p *GeminiIntentParser) parseResult(result *genai.GenerateContentResponse) (*ParseResult, error) {
 	if result == nil || len(result.Candidates) == 0 {
-		return nil, fmt.Errorf("empty response from model")
+		return nil, errors.New("empty response from model")
 	}
 
 	candidate := result.Candidates[0]
 	if candidate.Content == nil || len(candidate.Content.Parts) == 0 {
-		return nil, fmt.Errorf("no content in response")
+		return nil, errors.New("no content in response")
 	}
 
 	// Check each part for function call or text
@@ -118,7 +119,7 @@ func (p *GeminiIntentParser) parseResult(result *genai.GenerateContentResponse) 
 		}
 	}
 
-	return nil, fmt.Errorf("no function call or text in response")
+	return nil, errors.New("no function call or text in response")
 }
 
 // parseFunctionCall extracts intent and parameters from a function call.
