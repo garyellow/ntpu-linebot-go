@@ -460,8 +460,12 @@ func (a *Application) performStickerRefresh(ctx context.Context) {
 	}
 }
 
-// proactiveWarmup runs daily warmup at 3:00 AM.
+// proactiveWarmup runs initial warmup on startup, then daily at 3:00 AM.
 func (a *Application) proactiveWarmup(ctx context.Context) {
+	// Initial warmup on startup (non-blocking, no delay)
+	a.performProactiveWarmup(ctx)
+
+	// Schedule daily warmup at 3:00 AM
 	for {
 		now := time.Now()
 		next := time.Date(now.Year(), now.Month(), now.Day(), 3, 0, 0, 0, now.Location())
@@ -487,6 +491,10 @@ func (a *Application) performProactiveWarmup(ctx context.Context) {
 	a.logger.Info("Starting proactive warmup...")
 	startTime := time.Now()
 
+	// Use generous timeout for warmup (can involve significant scraping)
+	warmupCtx, cancel := context.WithTimeout(ctx, config.WarmupProactive)
+	defer cancel()
+
 	opts := warmup.Options{
 		Modules:   warmup.ParseModules(a.cfg.WarmupModules),
 		Reset:     false,
@@ -494,7 +502,7 @@ func (a *Application) performProactiveWarmup(ctx context.Context) {
 		BM25Index: a.bm25Index,
 	}
 
-	stats, err := warmup.Run(ctx, a.db, a.scraperClient, a.stickerManager, a.logger, opts)
+	stats, err := warmup.Run(warmupCtx, a.db, a.scraperClient, a.stickerManager, a.logger, opts)
 	if err != nil {
 		a.logger.WithError(err).Error("Proactive warmup failed")
 	} else {

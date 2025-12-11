@@ -98,6 +98,19 @@ const (
 const (
 	// WarmupStickerFetch is the timeout for fetching stickers from external sources.
 	WarmupStickerFetch = 5 * time.Second
+
+	// WarmupProactive is the timeout for proactive cache warmup operations.
+	// Warmup involves concurrent scraping of multiple data sources:
+	//   - Students: ~100 departments × 12 years (potentially 1200+ requests)
+	//   - Courses: 2 years × 3 terms (6 scraping operations)
+	//   - Contacts: Single organization scrape
+	//   - Syllabi: Hash-based incremental updates (only changed courses)
+	//
+	// Set to 10 minutes to accommodate:
+	//   - Network latency to NTPU servers
+	//   - Rate limiting delays (2s per request)
+	//   - Concurrent scraping with exponential backoff on failures
+	WarmupProactive = 10 * time.Minute
 )
 
 // Smart search timeouts
