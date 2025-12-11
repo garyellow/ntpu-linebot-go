@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -47,6 +48,7 @@ type Application struct {
 	queryExpander  *genai.QueryExpander
 	llmRateLimiter *ratelimit.LLMRateLimiter
 	userLimiter    *ratelimit.UserRateLimiter
+	wg             sync.WaitGroup // Track background goroutines for graceful shutdown
 }
 
 // Initialize creates and initializes a new application with all dependencies.
@@ -54,7 +56,6 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	log := logger.New(cfg.LogLevel)
 	log.Info("Initializing application...")
 
-	// === Core Infrastructure ===
 	db, err := storage.New(ctx, cfg.SQLitePath(), cfg.CacheTTL)
 	if err != nil {
 		return nil, fmt.Errorf("database: %w", err)
@@ -72,7 +73,6 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	scraperClient := scraper.NewClient(cfg.ScraperTimeout, cfg.ScraperMaxRetries, cfg.ScraperBaseURLs)
 	stickerMgr := sticker.NewManager(db, scraperClient, log)
 
-	// === RAG / BM25 Index ===
 	syllabi, err := db.GetAllSyllabi(ctx)
 	if err != nil {
 		log.WithError(err).Warn("Failed to load syllabi for BM25")
@@ -90,7 +90,6 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		log.Warn("No syllabi found, BM25 search disabled")
 	}
 
-	// === GenAI Features ===
 	var intentParser *genai.GeminiIntentParser
 	var queryExpander *genai.QueryExpander
 	if cfg.GeminiAPIKey != "" {
@@ -107,22 +106,18 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		log.Info("Gemini API key not configured, NLU and query expansion disabled")
 	}
 
-	// === Rate Limiters ===
 	llmRateLimiter := ratelimit.NewLLMRateLimiter(cfg.Bot.LLMRateLimitPerHour, config.RateLimiterCleanupInterval, m)
 	userLimiter := ratelimit.NewUserRateLimiter(cfg.Bot.UserRateLimitTokens, cfg.Bot.UserRateLimitRefillRate, config.RateLimiterCleanupInterval, m)
 
-	// === Bot Handlers ===
 	idHandler := id.NewHandler(db, scraperClient, m, log, stickerMgr)
 	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerMgr, bm25Index, queryExpander, llmRateLimiter)
 	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerMgr, cfg.Bot.MaxContactsPerSearch)
 
-	// === Bot Registry ===
 	botRegistry := bot.NewRegistry()
 	botRegistry.Register(contactHandler)
 	botRegistry.Register(courseHandler)
 	botRegistry.Register(idHandler)
 
-	// === Processor ===
 	processor := bot.NewProcessor(bot.ProcessorConfig{
 		Registry:       botRegistry,
 		IntentParser:   intentParser,
@@ -134,7 +129,6 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		BotConfig:      &cfg.Bot,
 	})
 
-	// === Webhook Handler ===
 	webhookHandler, err := webhook.NewHandler(webhook.HandlerConfig{
 		ChannelSecret:  cfg.LineChannelSecret,
 		ChannelToken:   cfg.LineChannelToken,
@@ -148,7 +142,6 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		return nil, fmt.Errorf("webhook: %w", err)
 	}
 
-	// === HTTP Router ===
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -261,20 +254,44 @@ func (a *Application) getCacheStats(ctx context.Context) map[string]int {
 // Run starts the HTTP server and background jobs.
 func (a *Application) Run() error {
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	a.startBackgroundJobs(ctx)
 	a.startHTTPServer()
 
-	return a.waitForShutdown()
+	// Wait for shutdown signal
+	err := a.waitForShutdown()
+
+	// Cancel context to stop all background jobs
+	cancel()
+
+	// Wait for all background goroutines to finish
+	a.logger.Info("Waiting for background jobs to finish...")
+	a.wg.Wait()
+	a.logger.Info("All background jobs completed")
+
+	return err
 }
 
 // startBackgroundJobs starts all background goroutines.
+// Each goroutine is tracked via WaitGroup for graceful shutdown.
 func (a *Application) startBackgroundJobs(ctx context.Context) {
-	go a.performCacheCleanup(ctx)
-	go a.refreshStickers(ctx)
-	go a.proactiveWarmup(ctx)
-	go a.updateCacheSizeMetrics(ctx)
+	a.wg.Add(4)
+	go func() {
+		defer a.wg.Done()
+		a.performCacheCleanup(ctx)
+	}()
+	go func() {
+		defer a.wg.Done()
+		a.refreshStickers(ctx)
+	}()
+	go func() {
+		defer a.wg.Done()
+		a.proactiveWarmup(ctx)
+	}()
+	go func() {
+		defer a.wg.Done()
+		a.updateCacheSizeMetrics(ctx)
+	}()
 }
 
 // startHTTPServer starts the HTTP server in a goroutine.
@@ -291,27 +308,34 @@ func (a *Application) startHTTPServer() {
 func (a *Application) waitForShutdown() error {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	sig := <-quit
 
-	a.logger.Info("Shutting down server...")
+	a.logger.WithField("signal", sig.String()).Info("Received shutdown signal")
 	return a.shutdown()
 }
 
-// shutdown performs graceful shutdown.
+// shutdown performs graceful shutdown in the following order:
+// 1. Stop accepting new HTTP requests
+// 2. Wait for in-flight HTTP requests to complete
+// 3. Signal background jobs to stop (via context cancellation in Run())
+// 4. Wait for background jobs to finish (via WaitGroup in Run())
+// 5. Close resources (DB, API clients, rate limiters)
 func (a *Application) shutdown() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), a.cfg.ShutdownTimeout)
 	defer cancel()
 
-	// Wait for webhook handler to finish processing pending events
+	a.logger.Info("Stopping HTTP server...")
+	if err := a.server.Shutdown(shutdownCtx); err != nil {
+		a.logger.WithError(err).Error("HTTP server shutdown error")
+	}
+
+	a.logger.Info("Waiting for webhook events to complete...")
 	if err := a.webhookHandler.Shutdown(shutdownCtx); err != nil {
 		a.logger.WithError(err).Warn("Webhook handler shutdown timeout")
 	}
 
-	if err := a.server.Shutdown(shutdownCtx); err != nil {
-		a.logger.WithError(err).Error("Server shutdown error")
-	}
+	a.logger.Info("Closing resources...")
 
-	// Close components in reverse initialization order
 	if a.queryExpander != nil {
 		if err := a.queryExpander.Close(); err != nil {
 			a.logger.WithError(err).WithField("component", "query_expander").Error("Component close error")
@@ -328,7 +352,6 @@ func (a *Application) shutdown() error {
 		a.logger.WithError(err).WithField("component", "database").Error("Component close error")
 	}
 
-	// Stop rate limiters
 	if a.llmRateLimiter != nil {
 		a.llmRateLimiter.Stop()
 	}
@@ -341,10 +364,14 @@ func (a *Application) shutdown() error {
 }
 
 // performCacheCleanup runs periodic cache cleanup.
+// Exits cleanly when context is canceled during shutdown.
 func (a *Application) performCacheCleanup(ctx context.Context) {
-	// Initial delay to let server stabilize
+	a.logger.Debug("Cache cleanup job started")
+	defer a.logger.Debug("Cache cleanup job stopped")
+
 	select {
 	case <-ctx.Done():
+		a.logger.Debug("Cache cleanup canceled before initial delay")
 		return
 	case <-time.After(config.CacheCleanupInitialDelay):
 	}
@@ -355,6 +382,7 @@ func (a *Application) performCacheCleanup(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			a.logger.Debug("Cache cleanup received shutdown signal")
 			return
 		case <-ticker.C:
 			a.runCacheCleanup(ctx)
@@ -415,10 +443,15 @@ func (a *Application) runCacheCleanup(ctx context.Context) {
 }
 
 // refreshStickers runs periodic sticker refresh.
+// Exits cleanly when context is canceled during shutdown.
 func (a *Application) refreshStickers(ctx context.Context) {
+	a.logger.Debug("Sticker refresh job started")
+	defer a.logger.Debug("Sticker refresh job stopped")
+
 	// Initial delay
 	select {
 	case <-ctx.Done():
+		a.logger.Debug("Sticker refresh canceled before initial delay")
 		return
 	case <-time.After(config.StickerRefreshInitialDelay):
 		a.performStickerRefresh(ctx)
@@ -430,6 +463,7 @@ func (a *Application) refreshStickers(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			a.logger.Debug("Sticker refresh received shutdown signal")
 			return
 		case <-ticker.C:
 			a.performStickerRefresh(ctx)
@@ -461,7 +495,11 @@ func (a *Application) performStickerRefresh(ctx context.Context) {
 }
 
 // proactiveWarmup runs initial warmup on startup, then daily at 3:00 AM.
+// Exits cleanly when context is canceled during shutdown.
 func (a *Application) proactiveWarmup(ctx context.Context) {
+	a.logger.Debug("Proactive warmup job started")
+	defer a.logger.Debug("Proactive warmup job stopped")
+
 	// Initial warmup on startup (non-blocking, no delay)
 	a.performProactiveWarmup(ctx)
 
@@ -479,6 +517,7 @@ func (a *Application) proactiveWarmup(ctx context.Context) {
 
 		select {
 		case <-ctx.Done():
+			a.logger.Debug("Proactive warmup received shutdown signal")
 			return
 		case <-time.After(waitDuration):
 			a.performProactiveWarmup(ctx)
@@ -517,13 +556,18 @@ func (a *Application) performProactiveWarmup(ctx context.Context) {
 }
 
 // updateCacheSizeMetrics periodically updates cache size metrics.
+// Exits cleanly when context is canceled during shutdown.
 func (a *Application) updateCacheSizeMetrics(ctx context.Context) {
+	a.logger.Debug("Cache metrics job started")
+	defer a.logger.Debug("Cache metrics job stopped")
+
 	ticker := time.NewTicker(config.MetricsUpdateInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
+			a.logger.Debug("Cache metrics received shutdown signal")
 			return
 		case <-ticker.C:
 			a.recordCacheSizeMetrics(ctx)

@@ -172,8 +172,6 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 //nolint:contextcheck // Intentionally using context.Background() for independent background operation
 func RunInBackground(_ context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, opts Options) {
 	go func() {
-		// Recover from panics to prevent server crash
-		// Goroutine runs independently from HTTP request lifecycle
 		defer func() {
 			if r := recover(); r != nil {
 				log.WithField("panic", r).Error("Panic in background cache warming")

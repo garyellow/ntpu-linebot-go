@@ -129,7 +129,7 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 	var eventType string
 	var err error
 
-	// Show loading animation BEFORE processing (best effort, non-blocking)
+	// Best effort, non-blocking
 	if loadErr := h.showLoadingAnimation(event); loadErr != nil {
 		h.logger.WithError(loadErr).Debug("Failed to show loading animation")
 	}
@@ -150,7 +150,6 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 		return
 	}
 
-	// Record metrics
 	duration := time.Since(eventStart).Seconds()
 	status := "success"
 	if err != nil {
@@ -159,7 +158,6 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 	}
 	h.metrics.RecordWebhook(eventType, status, duration)
 
-	// Send reply if we have messages
 	if len(messages) > 0 && err == nil {
 		// LINE API restriction: max messages per reply
 		if len(messages) > h.maxMessagesPerReply {
@@ -172,7 +170,6 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 			))
 		}
 
-		// Reply to the event
 		replyToken := h.getReplyToken(event)
 		if replyToken == "" {
 			h.logger.Warn("Empty reply token, skipping reply")
@@ -192,7 +189,6 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 			h.rateLimiter.WaitSimple()
 		}
 
-		// Send reply with error handling
 		if _, err := h.client.ReplyMessage(
 			&messaging_api.ReplyMessageRequest{
 				ReplyToken: replyToken,

@@ -27,41 +27,33 @@ import (
 // setupTestHandler creates a test handler with in-memory database
 func setupTestHandler(t *testing.T) *Handler {
 	t.Helper()
-	// Create test database
-	db, err := storage.New(context.Background(), ":memory:", 168*time.Hour) // 7 days for tests
+	db, err := storage.New(context.Background(), ":memory:", 168*time.Hour)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
 
-	// Create test scraper with baseURLs
 	baseURLs := map[string][]string{
 		"lms": {"https://lms.ntpu.edu.tw"},
 		"sea": {"https://sea.cc.ntpu.edu.tw"},
 	}
 	scraperClient := scraper.NewClient(30*time.Second, 3, baseURLs)
 
-	// Create test metrics with a new registry
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 
-	// Create test logger
 	log := logger.New("info")
 
-	// Create sticker manager
 	stickerManager := sticker.NewManager(db, scraperClient, log)
 
-	// Create bot handlers with direct constructor injection
 	idHandler := id.NewHandler(db, scraperClient, m, log, stickerManager)
 	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerManager, 100)
 	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerManager, nil, nil, nil)
 
-	// Create bot registry
 	botRegistry := bot.NewRegistry()
 	botRegistry.Register(contactHandler)
 	botRegistry.Register(courseHandler)
 	botRegistry.Register(idHandler)
 
-	// Create bot config for testing
 	botCfg := config.BotConfig{
 		WebhookTimeout:          30 * time.Second,
 		UserRateLimitTokens:     6.0,
@@ -81,11 +73,9 @@ func setupTestHandler(t *testing.T) *Handler {
 		ValidYearEnd:            112,
 	}
 
-	// Create rate limiters
 	llmRateLimiter := ratelimit.NewLLMRateLimiter(botCfg.LLMRateLimitPerHour, 5*time.Minute, m)
 	userLimiter := ratelimit.NewUserRateLimiter(botCfg.UserRateLimitTokens, botCfg.UserRateLimitRefillRate, 5*time.Minute, m)
 
-	// Create processor
 	processor := bot.NewProcessor(bot.ProcessorConfig{
 		Registry:       botRegistry,
 		IntentParser:   nil,
@@ -97,7 +87,6 @@ func setupTestHandler(t *testing.T) *Handler {
 		BotConfig:      &botCfg,
 	})
 
-	// Create handler with HandlerConfig
 	handler, err := NewHandler(HandlerConfig{
 		ChannelSecret:  "test_channel_secret",
 		ChannelToken:   "test_channel_token",
