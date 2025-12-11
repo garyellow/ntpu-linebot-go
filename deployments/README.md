@@ -58,26 +58,6 @@ docker compose up -d
 - ✅ **No new privileges** - 禁止權限提升
 - ✅ **Minimal tmpfs** - `/tmp` 限制 64MB 防止資源耗盡
 
-### 測試資料持久化
-
-使用提供的測試腳本驗證 Docker 環境的資料持久化：
-
-```bash
-# Windows PowerShell
-.\scripts\test-data-persistence.ps1
-
-# Linux/macOS
-chmod +x scripts/test-data-persistence.sh
-./scripts/test-data-persistence.sh
-```
-
-測試涵蓋：
-- 容器正常啟動
-- 資料目錄可存取
-- 資料庫檔案創建
-- 重啟後資料保留
-- 寫入權限正確
-
 ## 指定版本
 
 ```bash

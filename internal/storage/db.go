@@ -30,7 +30,7 @@ func New(ctx context.Context, dbPath string, cacheTTL time.Duration) (*DB, error
 	if dbPath != ":memory:" {
 		dir := filepath.Dir(dbPath)
 		if dir != "" && dir != "." {
-			if err := os.MkdirAll(dir, 0o775); err != nil {
+			if err := os.MkdirAll(dir, 0o750); err != nil {
 				return nil, fmt.Errorf("create database directory: %w", err)
 			}
 		}
