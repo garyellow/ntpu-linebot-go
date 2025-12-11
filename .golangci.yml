@@ -95,11 +95,16 @@ linters:
       check-struct-pointers: false  # Too many false positives
 
     gosec:
+      # Why these excludes?
+      # - G104: Duplicate of errcheck linter (avoid redundant checks)
+      # - G115: Safe conversions only (len/time.Duration/modulo operations)
+      # - G304: No user input paths (only config-controlled DataDir)
+      # - G401: crypto/rand for jitter only, not cryptographic purposes
       excludes:
         - G104  # Audit errors not checked (handled by errcheck)
-        - G115  # Integer overflow conversion (false positives)
-        - G304  # File path from variable (paths are validated)
-        - G401  # Weak crypto (only used for jitter, not cryptographic)
+        - G115  # Integer overflow conversion (all conversions are safe)
+        - G304  # File path from variable (DataDir is config-controlled)
+        - G401  # Weak crypto (only used for retry jitter, not cryptographic)
 
     perfsprint:
       # Optimize fmt.Sprintf into faster alternatives
