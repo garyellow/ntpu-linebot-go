@@ -169,6 +169,9 @@ func (t *FlexText) WithWrap(wrap bool) *FlexText {
 
 // WithFlex sets the flex factor for the text component.
 func (t *FlexText) WithFlex(flex int) *FlexText {
+	if flex < 0 {
+		flex = 0
+	}
 	t.Flex = int32(flex)
 	return t
 }
@@ -187,6 +190,9 @@ func (t *FlexText) WithMargin(margin string) *FlexText {
 
 // WithMaxLines sets the maximum number of lines to display.
 func (t *FlexText) WithMaxLines(lines int) *FlexText {
+	if lines < 0 {
+		lines = 0
+	}
 	t.MaxLines = int32(lines)
 	return t
 }

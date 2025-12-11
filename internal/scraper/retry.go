@@ -3,9 +3,9 @@ package scraper
 import (
 	"context"
 	"crypto/rand"
-	"encoding/binary"
 	"errors"
 	"math"
+	"math/big"
 	"time"
 )
 
@@ -50,17 +50,17 @@ func RetryWithBackoff(ctx context.Context, maxRetries int, initialDelay time.Dur
 		delay := time.Duration(float64(initialDelay) * math.Pow(2, float64(attempt)))
 
 		// Add jitter (±25%)
-		var b [8]byte
-		_, _ = rand.Read(b[:])
-		jitterValue := int64(binary.LittleEndian.Uint64(b[:]))
-		if jitterValue < 0 {
-			jitterValue = -jitterValue
-		}
 		halfDelay := int64(delay) / 2
 		if halfDelay == 0 {
 			halfDelay = 1 // Prevent division by zero
 		}
-		jitter := time.Duration(jitterValue % halfDelay)
+		// Use crypto/rand.Int for statistically uniform random number without overflow risk
+		jitterBig, err := rand.Int(rand.Reader, big.NewInt(halfDelay))
+		if err != nil {
+			// Fallback to zero jitter on crypto failure (extremely rare)
+			jitterBig = big.NewInt(0)
+		}
+		jitter := time.Duration(jitterBig.Int64())
 		delay = delay - delay/4 + jitter
 
 		// Wait for delay or context cancellation

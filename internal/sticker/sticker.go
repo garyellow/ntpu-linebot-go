@@ -5,9 +5,9 @@ package sticker
 import (
 	"context"
 	"crypto/rand"
-	"encoding/binary"
 	"fmt"
 	"math"
+	"math/big"
 	"strings"
 	"sync"
 	"time"
@@ -368,14 +368,13 @@ func (m *Manager) GetRandomSticker() string {
 		return fmt.Sprintf("https://ui-avatars.com/api/?name=%s&size=256&background=%s&color=fff", name, bg)
 	}
 
-	// Use crypto/rand for secure randomness
-	var b [8]byte
-	_, _ = rand.Read(b[:]) // Error ignored: crypto/rand.Read only fails on catastrophic system failures
-	idx := int(binary.LittleEndian.Uint64(b[:])) % len(stickers)
-	if idx < 0 {
-		idx = -idx
+	// Use crypto/rand.Int for statistically uniform random selection
+	idxBig, err := rand.Int(rand.Reader, big.NewInt(int64(len(stickers))))
+	if err != nil {
+		// Fallback to first sticker on crypto failure (extremely rare)
+		idxBig = big.NewInt(0)
 	}
-	selectedURL := stickers[idx]
+	selectedURL := stickers[idxBig.Int64()]
 
 	// Update success count in database (non-blocking)
 	// Uses background context with timeout to prevent goroutine leaks on shutdown
