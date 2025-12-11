@@ -39,6 +39,45 @@ docker compose up -d
 - `USER_RATE_LIMIT_REFILL_RATE` - 令牌回填速率（預設：0.2，每 5 秒補充 1 個令牌）
 - `GRAFANA_PASSWORD` - Grafana 密碼（預設：admin123）
 
+## 資料持久化
+
+應用使用 Docker named volume 持久化 SQLite 資料庫：
+
+- **Volume**: `data` → `/data` (容器內路徑)
+- **內容**: SQLite 資料庫檔案 (`cache.db`, `cache.db-wal`, `cache.db-shm`)
+- **權限**: 明確設定 `rw` (讀寫) 模式，因為容器啟用了 `read_only: true` 安全特性
+- **TTL**: 快取資料會在 7 天後自動過期 (Hard TTL)
+- **清理**: 每 12 小時自動執行 VACUUM 清理過期資料
+
+### 安全特性
+
+容器採用多層安全措施：
+- ✅ **Distroless base image** - 最小化攻擊面，無 shell 和套件管理器
+- ✅ **Non-root user** - 使用 `nonroot` 用戶 (UID/GID: 65532) 運行
+- ✅ **Read-only filesystem** - 除 `/data` 和 `/tmp` 外整個檔案系統唯讀
+- ✅ **No new privileges** - 禁止權限提升
+- ✅ **Minimal tmpfs** - `/tmp` 限制 64MB 防止資源耗盡
+
+### 測試資料持久化
+
+使用提供的測試腳本驗證 Docker 環境的資料持久化：
+
+```bash
+# Windows PowerShell
+.\scripts\test-data-persistence.ps1
+
+# Linux/macOS
+chmod +x scripts/test-data-persistence.sh
+./scripts/test-data-persistence.sh
+```
+
+測試涵蓋：
+- 容器正常啟動
+- 資料目錄可存取
+- 資料庫檔案創建
+- 重啟後資料保留
+- 寫入權限正確
+
 ## 指定版本
 
 ```bash
