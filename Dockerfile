@@ -26,7 +26,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     -ldflags="-s -w" \
     -o /bin/healthcheck ./cmd/healthcheck
 
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian13:nonroot
 
 WORKDIR /app
 

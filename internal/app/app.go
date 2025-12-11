@@ -562,6 +562,8 @@ func securityHeadersMiddleware() gin.HandlerFunc {
 		c.Header("X-Frame-Options", "DENY")
 		c.Header("X-XSS-Protection", "1; mode=block")
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
+		c.Header("Content-Security-Policy", "default-src 'none'")
+		c.Header("X-Permitted-Cross-Domain-Policies", "none")
 		c.Next()
 	}
 }
