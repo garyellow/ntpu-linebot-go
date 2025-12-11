@@ -36,7 +36,7 @@ type Options struct {
 	Modules   []string         // Modules to warm (id, contact, course, sticker, syllabus)
 	Reset     bool             // Whether to reset cache before warming
 	Metrics   *metrics.Metrics // Optional metrics recorder
-	BM25Index *rag.BM25Index   // Optional BM25 index for syllabus indexing
+	BM25Index *rag.BM25Index   // Required for syllabus module: rebuilds BM25 index after saving syllabi
 }
 
 // Run executes cache warming with the given options
@@ -57,6 +57,8 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 	// - Independent modules: can run concurrently (id, contact, sticker)
 	// - Course module: runs concurrently but syllabus waits for it
 	// - Syllabus module: depends on course data, starts after course completes
+	//   IMPORTANT: Syllabus module rebuilds BM25 index for smart search feature
+	//   Without syllabus data, BM25 smart search (找課) will be disabled
 	var independentModules []string
 	var hasCourse, hasSyllabus bool
 

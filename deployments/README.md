@@ -33,6 +33,8 @@ docker compose up -d
 - `LLM_RATE_LIMIT_PER_HOUR` - LLM API 速率限制（每位使用者每小時請求數，預設：50）
 - `IMAGE_TAG` - 映像版本（預設：latest）
 - `WARMUP_MODULES` - 預熱模組（預設：sticker,id,contact,course）
+  - 可加入 `syllabus` 啟用課程大綱抓取與 BM25 智慧搜尋（「找課」功能）
+  - 範例：`WARMUP_MODULES=sticker,id,contact,course,syllabus`
 - `LOG_LEVEL` - 日誌層級（預設：info）
 - `WEBHOOK_TIMEOUT` - Webhook 處理超時時間（預設：60s，配合 LINE Loading Animation）
 - `USER_RATE_LIMIT_TOKENS` - 每位使用者的令牌數量上限（預設：6）
