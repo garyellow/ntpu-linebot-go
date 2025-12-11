@@ -147,28 +147,22 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 func (h *Handler) CanHandle(text string) bool {
 	text = strings.TrimSpace(text)
 
-	// Check for "所有系代碼"
 	if text == allDeptCodeText {
 		return true
 	}
 
-	// Check for student ID (8-9 digits) at the start of text
-	// This handles direct ID input like "412345678"
 	if len(text) >= 8 && len(text) <= 9 && stringutil.IsNumeric(text) {
 		return true
 	}
 
-	// Check for student name search with keyword
 	if studentRegex.MatchString(text) {
 		return true
 	}
 
-	// Check for department queries
 	if departmentRegex.MatchString(text) || deptCodeRegex.MatchString(text) {
 		return true
 	}
 
-	// Check for year queries
 	if yearRegex.MatchString(text) {
 		return true
 	}
@@ -183,12 +177,10 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 
 	log.Infof("Handling ID message: %s", text)
 
-	// Handle "所有系代碼"
 	if text == allDeptCodeText {
 		return h.handleAllDepartmentCodes()
 	}
 
-	// Check for direct student ID input (8-9 digits without keyword)
 	if len(text) >= 8 && len(text) <= 9 && stringutil.IsNumeric(text) {
 		return h.handleStudentIDQuery(ctx, text)
 	}
@@ -229,7 +221,6 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	// Handle student ID or name query
 	if loc := studentRegex.FindStringIndex(text); loc != nil {
 		match := studentRegex.FindString(text)
 		searchTerm := bot.ExtractSearchTerm(text, match)
@@ -244,11 +235,9 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			return []messaging_api.MessageInterface{msg}
 		}
 
-		// Check if it's a student ID (8-9 digits)
 		if stringutil.IsNumeric(searchTerm) && (len(searchTerm) == 8 || len(searchTerm) == 9) {
 			return h.handleStudentIDQuery(ctx, searchTerm)
 		}
-		// Otherwise, it's a name search
 		return h.handleStudentNameQuery(ctx, searchTerm)
 	}
 
@@ -308,7 +297,6 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 				}
 			}
 
-			// Check if it's a department code
 			if _, ok := ntpu.DepartmentNames[action]; ok {
 				return h.handleDepartmentSelection(ctx, action, year)
 			}

@@ -32,7 +32,7 @@ docker compose up -d
 - `GEMINI_API_KEY` - Gemini API Key，啟用 NLU 自然語言理解和課程智慧搜尋（從 [Google AI Studio](https://aistudio.google.com/apikey) 取得）
 - `LLM_RATE_LIMIT_PER_HOUR` - LLM API 速率限制（每位使用者每小時請求數，預設：50）
 - `IMAGE_TAG` - 映像版本（預設：latest）
-- `WARMUP_MODULES` - 預熱模組（預設：sticker,id,contact,course,syllabus）
+- `WARMUP_MODULES` - 預熱模組（預設：sticker,id,contact,course）
 - `LOG_LEVEL` - 日誌層級（預設：info）
 - `WEBHOOK_TIMEOUT` - Webhook 處理超時時間（預設：60s，配合 LINE Loading Animation）
 - `USER_RATE_LIMIT_TOKENS` - 每位使用者的令牌數量上限（預設：6）

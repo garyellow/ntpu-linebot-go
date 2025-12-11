@@ -31,12 +31,12 @@ LINE Webhook → Gin Handler
                 ↓ (signature validation - synchronous)
           HTTP 200 OK (< 2s)
                 ↓
-          [Goroutine] Async Event Processing
+          [Goroutine] Async Event Processing (context.Background())
                 ↓ (Loading Animation + rate limiting)
       Bot Module Dispatcher
                 ↓ (keyword matching via CanHandle())
       Bot Handlers (id/contact/course)
-                ↓ (detached context with 60s timeout)
+                ↓ (ctxutil.PreserveTracing() with 60s timeout)
       Storage Repository (cache-first)
                 ↓ (7-day TTL check)
       Scraper Client (rate-limited)
@@ -49,10 +49,12 @@ LINE Webhook → Gin Handler
 **Critical Flow Details:**
 - **Async processing**: HTTP 200 returned immediately after signature verification (< 2s), events processed in goroutine
 - **LINE Best Practice**: Responds within 2s to prevent request_timeout errors, processes asynchronously to handle long operations
-- **Context handling**: Bot operations use `ctxutil.PreserveTracing()` with 60s timeout
+- **Context handling**: Webhook uses `context.Background()` for async processing, Bot operations use `ctxutil.PreserveTracing()` with 60s timeout
+  - **Webhook layer**: Uses `context.Background()` directly (no parent context)
+  - **Processor layer**: Calls `ctxutil.PreserveTracing(ctx)` to preserve tracing values from event source
   - **PreserveTracing()**: Creates new context with only necessary tracing values (userID, chatID, requestID)
   - **Why not WithoutCancel()**: Avoids memory leaks from parent references (see Go issue #64478)
-  - **Why not Background()**: Background() loses all tracing data needed for log correlation
+  - **Why not Background()**: `Background()` loses all tracing data needed for log correlation, so it's not suitable for the processor layer even though it's used in the webhook layer
   - **Cancellation independence**: Detached context timeout is independent from HTTP request lifecycle
 - **Detached context rationale**: LINE may close connection before processing completes; detached cancellation ensures DB queries and scraping finish, reply token remains valid (~20 min)
 - **Observability**: Request ID and user ID flow through entire async operation for log correlation
@@ -118,12 +120,13 @@ LINE Webhook → Gin Handler
 - Optional: Gemini API Key enables Query Expansion
 
 **Background Jobs** (`cmd/server/main.go`):
-- **Daily Warmup**: Every day at 3:00 AM, refreshes all data modules unconditionally
-  - **Concurrent**: id, contact, course - no dependencies between them
-  - **Dependency**: syllabus waits for course to complete (needs course data), runs in parallel with others
-  - **Sticker**: Handled separately by `refreshStickers` (every 24h, not included in daily warmup)
+- **Daily Warmup** (proactiveWarmup): Runs immediately on startup, then every day at 3:00 AM
+  - Refreshes modules specified in `WARMUP_MODULES` (default: sticker, id, contact, course)
+  - **Concurrent**: id, contact, sticker, course - no dependencies between them
+  - **Optional - syllabus**: If manually added to `WARMUP_MODULES`, waits for course to complete (needs course data), then runs in parallel with others. Removed from default due to infrequent updates.
+  - **Note**: sticker can be included in warmup modules for initial population
 - **Cache Cleanup**: Every 12 hours, deletes data past Hard TTL (7 days) + VACUUM
-- **Sticker Refresh**: Every 24 hours (separate from daily warmup)
+- **Sticker Refresh** (refreshStickers): Every 24 hours, updates sticker URLs (separate periodic job)
 
 **Data availability**:
 - Student: 101-112 學年度 (≥113 shows deprecation notice)
