@@ -3,7 +3,7 @@ setlocal
 pushd %~dp0
 
 if "%1"=="up" (
-    docker compose -f access/docker-compose.yml up -d
+    docker compose -f access/compose.yml up -d
     echo Access gateway started.
     echo Grafana: http://localhost:3000
     echo Prometheus: http://localhost:9090
@@ -13,7 +13,7 @@ if "%1"=="up" (
 )
 
 if "%1"=="down" (
-    docker compose -f access/docker-compose.yml down
+    docker compose -f access/compose.yml down
     echo Access gateway stopped.
     popd
     goto :eof
