@@ -295,8 +295,13 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 			completed++
 
 			if completed%10 == 0 || completed == totalTasks {
+				elapsed := time.Since(startTime)
+				avgTimePerTask := elapsed / time.Duration(completed)
+				estimatedRemaining := avgTimePerTask * time.Duration(totalTasks-completed)
 				log.WithField("progress", fmt.Sprintf("%d/%d", completed, totalTasks)).
 					WithField("students", stats.Students.Load()).
+					WithField("elapsed_min", int(elapsed.Minutes())).
+					WithField("est_remaining_min", int(estimatedRemaining.Minutes())).
 					Info("ID module progress")
 			}
 		}
@@ -394,8 +399,11 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 		years = append(years, year)
 	}
 
+	// Each year makes 4 requests (U/M/N/P education codes)
+	estimatedRequests := len(years) * 4
 	log.WithField("years", years).
 		WithField("total_years", len(years)).
+		WithField("estimated_requests", estimatedRequests).
 		Info("Course warmup: fetching recent courses by year (no term filter)")
 
 	// Scrape all courses for each year (both semesters in one request batch)
@@ -428,8 +436,13 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 		stats.Courses.Add(int64(len(courses)))
 		log.WithField("year", year).
 			WithField("count", len(courses)).
+			WithField("total_cached", stats.Courses.Load()).
 			Info("Courses cached for year")
 	}
+
+	log.WithField("total_courses", stats.Courses.Load()).
+		WithField("years_processed", len(years)).
+		Info("Course module warmup complete")
 
 	return nil
 }
@@ -555,11 +568,17 @@ processLoop:
 		newSyllabi = append(newSyllabi, syl)
 		updatedCount++
 
-		// Log progress every 100 courses
-		if i > 0 && i%100 == 0 {
+		// Log progress every 50 courses for better visibility
+		if i > 0 && i%50 == 0 {
+			elapsed := time.Since(startTime)
+			avgTimePerCourse := elapsed / time.Duration(i)
+			estimatedRemaining := avgTimePerCourse * time.Duration(len(courses)-i)
 			log.WithField("progress", fmt.Sprintf("%d/%d", i, len(courses))).
 				WithField("updated", updatedCount).
 				WithField("skipped", skippedCount).
+				WithField("errors", errorCount).
+				WithField("elapsed_min", int(elapsed.Minutes())).
+				WithField("est_remaining_min", int(estimatedRemaining.Minutes())).
 				Info("Syllabus warmup progress")
 		}
 	}

@@ -134,7 +134,7 @@ task access:down
 | **SearchIndexEmpty** | BM25 索引為空 | 15 分鐘 | Warning |
 | **SearchLatencyHigh** | 搜尋 P95 延遲 >3s | 5 分鐘 | Warning |
 | **RateLimiterDroppingRequests** | 正在丟棄請求 | 5 分鐘 | Info |
-| **WarmupJobSlow** | 預熱任務 P95 >15min | 15 分鐘 | Info |
+| **WarmupJobSlow** | 預熱任務 P95 >2.5h | 15 分鐘 | Info |
 | **CleanupJobSlow** | 清理任務 P95 >5min | 15 分鐘 | Info |
 | **StickerRefreshJobSlow** | 貼圖刷新 P95 >5min | 15 分鐘 | Info |
 | **HighMemoryUsage** | 記憶體使用 >400MB | 10 分鐘 | Warning |

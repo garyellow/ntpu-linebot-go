@@ -101,16 +101,18 @@ const (
 
 	// WarmupProactive is the timeout for proactive cache warmup operations.
 	// Warmup involves concurrent scraping of multiple data sources:
-	//   - Students: ~100 departments × 12 years (potentially 1200+ requests)
+	//   - Students: ~252 departments × 12 years (~40 departments/10min observed)
 	//   - Courses: 2 years × 3 terms (6 scraping operations)
 	//   - Contacts: Single organization scrape
-	//   - Syllabi: Hash-based incremental updates (only changed courses)
+	//   - Syllabi: Hash-based incremental updates (~2000 courses, 243 processed/10min)
 	//
-	// Set to 10 minutes to accommodate:
+	// Set to 2 hours to accommodate:
 	//   - Network latency to NTPU servers
 	//   - Rate limiting delays (2s per request)
 	//   - Concurrent scraping with exponential backoff on failures
-	WarmupProactive = 10 * time.Minute
+	//   - Full student database scraping (252 departments × ~15s/dept ≈ 63 min)
+	//   - Syllabus scraping (2000 courses with hash-based incremental updates)
+	WarmupProactive = 2 * time.Hour
 )
 
 // Smart search timeouts

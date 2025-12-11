@@ -164,14 +164,15 @@ groups:
   - name: ntpu_job_alerts
     rules:
       # Warmup job taking too long (any module)
+      # Set to 2.5h (9000s) with 30min buffer over the 2h WarmupProactive timeout
       - alert: WarmupJobSlow
-        expr: histogram_quantile(0.95, sum by (le, module) (rate(ntpu_job_duration_seconds_bucket{job="warmup"}[1h]))) > 900
+        expr: histogram_quantile(0.95, sum by (le, module) (rate(ntpu_job_duration_seconds_bucket{job="warmup"}[1h]))) > 9000
         for: 15m
         labels:
           severity: info
         annotations:
-          summary: "Warmup job P95 duration exceeds 15 minutes for {{ $labels.module }}"
-          description: "Module {{ $labels.module }} warmup taking {{ $value | printf \"%.0f\" }}s."
+          summary: "Warmup job P95 duration exceeds 2.5 hours for {{ $labels.module }}"
+          description: "Module {{ $labels.module }} warmup taking {{ $value | printf \"%.0f\" }}s ({{ $value | humanizeDuration }})."
 
       # Cleanup job taking too long
       - alert: CleanupJobSlow
