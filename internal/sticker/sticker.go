@@ -371,10 +371,8 @@ func (m *Manager) GetRandomSticker() string {
 	// Use crypto/rand for secure randomness
 	var b [8]byte
 	_, _ = rand.Read(b[:]) // Error ignored: crypto/rand.Read only fails on catastrophic system failures
-	idx := int(binary.LittleEndian.Uint64(b[:])) % len(stickers)
-	if idx < 0 {
-		idx = -idx
-	}
+	// Safe conversion: mask to ensure positive int64 value (avoid overflow)
+	idx := int(binary.LittleEndian.Uint64(b[:])&0x7FFFFFFFFFFFFFFF) % len(stickers)
 	selectedURL := stickers[idx]
 
 	// Update success count in database (non-blocking)

@@ -52,10 +52,8 @@ func RetryWithBackoff(ctx context.Context, maxRetries int, initialDelay time.Dur
 		// Add jitter (±25%)
 		var b [8]byte
 		_, _ = rand.Read(b[:])
-		jitterValue := int64(binary.LittleEndian.Uint64(b[:]))
-		if jitterValue < 0 {
-			jitterValue = -jitterValue
-		}
+		// Safe conversion: mask to ensure positive int64 value (avoid overflow)
+		jitterValue := int64(binary.LittleEndian.Uint64(b[:]) & 0x7FFFFFFFFFFFFFFF)
 		halfDelay := int64(delay) / 2
 		if halfDelay == 0 {
 			halfDelay = 1 // Prevent division by zero
