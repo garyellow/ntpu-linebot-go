@@ -47,7 +47,7 @@ Dockerfile*
 
 # Deployment configs
 deployments/
-docker-compose*.yml
+compose*.yaml
 
 # Task runner
 Taskfile.yml

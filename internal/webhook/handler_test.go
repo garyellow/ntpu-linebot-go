@@ -270,7 +270,7 @@ func TestContextTimeout(t *testing.T) {
 func TestEventProcessingLimit(t *testing.T) {
 	// This test verifies the concept that we limit events per webhook
 	maxEvents := 100
-	testEvents := make([]interface{}, 150)
+	testEvents := make([]any, 150)
 
 	// Verify our limit logic
 	if len(testEvents) > maxEvents {
@@ -284,7 +284,7 @@ func TestEventProcessingLimit(t *testing.T) {
 // TestMessageTruncation tests that messages are truncated to LINE API limits
 func TestMessageTruncation(t *testing.T) {
 	maxMessages := 5
-	testMessages := make([]interface{}, 10)
+	testMessages := make([]any, 10)
 
 	// Verify our truncation logic
 	if len(testMessages) > maxMessages {

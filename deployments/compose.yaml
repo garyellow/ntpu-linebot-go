@@ -56,8 +56,8 @@ services:
       - /tmp:size=64M
     healthcheck:
       test: ["/app/healthcheck"]
-      interval: 45s
-      timeout: 10s
+      interval: 30s
+      timeout: 5s
       retries: 3
       start_period: 60s
 
@@ -93,7 +93,7 @@ services:
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -128,7 +128,7 @@ services:
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9093/-/healthy"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9093/-/healthy"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -165,7 +165,7 @@ services:
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3

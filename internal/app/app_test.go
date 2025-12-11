@@ -57,7 +57,7 @@ func TestLivenessCheckHealthy(t *testing.T) {
 	}
 
 	// Verify JSON structure
-	var response map[string]interface{}
+	var response map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("Failed to parse JSON response: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestReadinessCheckHealthy(t *testing.T) {
 	}
 
 	// Verify JSON structure
-	var response map[string]interface{}
+	var response map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("Failed to parse JSON response: %v", err)
 	}
@@ -117,11 +117,11 @@ func TestReadinessCheckHealthy(t *testing.T) {
 		t.Errorf("Expected database='connected', got %v", response["database"])
 	}
 
-	if _, ok := response["cache"].(map[string]interface{}); !ok {
+	if _, ok := response["cache"].(map[string]any); !ok {
 		t.Error("Expected cache statistics in response")
 	}
 
-	if _, ok := response["features"].(map[string]interface{}); !ok {
+	if _, ok := response["features"].(map[string]any); !ok {
 		t.Error("Expected features in response")
 	}
 }
@@ -148,7 +148,7 @@ func TestReadinessCheckDatabaseFailure(t *testing.T) {
 	}
 
 	// Verify JSON structure
-	var response map[string]interface{}
+	var response map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("Failed to parse JSON response: %v", err)
 	}
@@ -225,12 +225,12 @@ func TestReadinessCheckCacheStats(t *testing.T) {
 	}
 
 	// Verify cache statistics
-	var response map[string]interface{}
+	var response map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("Failed to parse JSON response: %v", err)
 	}
 
-	cache, ok := response["cache"].(map[string]interface{})
+	cache, ok := response["cache"].(map[string]any)
 	if !ok {
 		t.Fatal("Expected cache statistics in response")
 	}
