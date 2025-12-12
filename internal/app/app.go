@@ -166,6 +166,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		userLimiter:    userLimiter,
 	}
 
+	router.GET("/", app.redirectToGitHub)
 	router.GET("/livez", app.livenessCheck)
 	router.HEAD("/livez", app.livenessCheck)
 	router.GET("/readyz", app.readinessCheck)
@@ -184,6 +185,10 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 
 	log.Info("Initialization complete")
 	return app, nil
+}
+
+func (a *Application) redirectToGitHub(c *gin.Context) {
+	c.Redirect(http.StatusTemporaryRedirect, "https://github.com/garyellow/ntpu-linebot-go")
 }
 
 func (a *Application) livenessCheck(c *gin.Context) {
@@ -638,7 +643,13 @@ func securityHeadersMiddleware() gin.HandlerFunc {
 	}
 }
 
-// loggingMiddleware logs HTTP requests.
+// loggingMiddleware logs HTTP requests with appropriate log levels.
+// Follows industry best practices for HTTP status code logging:
+// - 5xx: Error (server issues requiring immediate attention)
+// - 4xx: Warn (client errors, except 404 which is common noise)
+// - 404: Debug (common probes: robots.txt, favicon.ico, security.txt)
+// - 3xx: Debug (redirects are normal behavior)
+// - 2xx: Debug (successful requests)
 func loggingMiddleware(log *logger.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
@@ -656,11 +667,18 @@ func loggingMiddleware(log *logger.Logger) gin.HandlerFunc {
 			WithField("duration_ms", duration.Milliseconds()).
 			WithField("ip", c.ClientIP())
 
+		// Log level selection based on status code
 		if status >= 500 {
 			entry.Error("Server error")
-		} else if status >= 400 {
+		} else if status >= 400 && status != 404 {
+			// 400, 401, 403, etc. - potential security issues or misconfigurations
 			entry.Warn("Client error")
+		} else if status == 404 {
+			// 404s are common from health checkers, security scanners, and bots
+			// Use Prometheus metrics for monitoring 404 patterns instead
+			entry.Debug("Not found")
 		} else {
+			// 2xx success and 3xx redirects
 			entry.Debug("Request")
 		}
 	}
