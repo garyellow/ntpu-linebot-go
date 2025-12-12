@@ -445,22 +445,23 @@ func (p *Processor) getHelpMessage() []messaging_api.MessageInterface {
 			"• 「微積分的課有哪些」\n" +
 			"• 「王小明的學號」\n" +
 			"• 「資工系電話」\n\n" +
-			"📖 或使用關鍵字查詢：\n" +
-			"• 課程：「課程 微積分」\n" +
-			"• 學生：「學生 王小明」\n" +
-			"• 聯繫：「聯繫 資工系」\n\n" +
+			"📖 或使用關鍵字：\n" +
+			"• 課程：「課程 微積分」「老師 王教授」\n" +
+			"• 學號：「學號 王小明」「系 資工」\n" +
+			"• 聯絡：「聯絡 資工系」「緊急」\n\n" +
 			"💡 輸入「使用說明」查看完整說明"
 	} else {
 		helpText = "🔍 NTPU 查詢小工具\n\n" +
 			"📚 課程查詢\n" +
-			"• 課程/教師：「課程 微積分」\n" +
-			"• 課程編號：直接輸入編號\n\n" +
-			"🎓 學生查詢\n" +
-			"• 學號/姓名：「學生 王小明」\n" +
-			"• 按學年查：「學年 112」\n\n" +
+			"• 「課程 微積分」「老師 王教授」\n" +
+			"• 「U0001」（課號查詢）\n" +
+			"• 「找課 Python」（智慧搜尋）\n\n" +
+			"🎓 學號查詢\n" +
+			"• 「學號 王小明」「系 資工」\n" +
+			"• 「412345678」（直接輸入學號）\n\n" +
 			"📞 聯絡資訊\n" +
-			"• 單位查詢：「聯繫 資工系」\n" +
-			"• 緊急電話：「緊急」\n\n" +
+			"• 「聯絡 資工系」「電話 學務處」\n" +
+			"• 「緊急」（緊急聯絡電話）\n\n" +
 			"💡 輸入「使用說明」查看完整說明"
 	}
 
@@ -499,52 +500,53 @@ func (p *Processor) getDetailedInstructionMessages() []messaging_api.MessageInte
 	// Keyword mode instructions (always show)
 	keywordTitle := "📖 使用說明 - 關鍵字模式"
 	if nluEnabled {
-		keywordTitle = "📖 關鍵字模式（備選方案）"
+		keywordTitle = "📖 關鍵字模式"
 	}
 
 	courseMsg := keywordTitle + "\n\n" +
 		"📚 課程查詢\n" +
-		"• 精確搜尋：課程 [關鍵字]\n" +
+		"• 精確搜尋：課程 或 老師\n" +
 		"  例：課程 微積分\n" +
-		"  例：老師 王小明\n" +
-		"• 智慧搜尋：找課 [關鍵字]\n" +
+		"  例：老師 王教授\n" +
+		"• 智慧搜尋：找課 [描述]\n" +
 		"  例：找課 線上實體混合\n" +
-		"• 課號查詢：直接輸入課號\n" +
-		"  例：1131U0001"
+		"• 課號查詢：直接輸入\n" +
+		"  例：U0001 或 1131U0001"
 	messages = append(messages, lineutil.NewTextMessageWithConsistentSender(courseMsg, sender))
 
 	studentMsg := "🎓 學號查詢\n" +
-		"• 姓名查詢：學生 [姓名]\n" +
-		"  例：學生 王小明\n" +
-		"• 科系查詢：系 [科系名]\n" +
+		"• 姓名查詢：學號 [姓名]\n" +
+		"  例：學號 王小明\n" +
+		"• 科系查詢：系 [名稱]\n" +
 		"  例：系 資工\n" +
 		"• 學年查詢：學年 [年份]\n" +
 		"  例：學年 112\n" +
-		"• 系代碼查詢：系代碼 [代碼]\n" +
-		"  例：系代碼 C2"
+		"• 系代碼：系代碼 [代碼]\n" +
+		"  例：系代碼 87\n" +
+		"• 直接輸入學號\n" +
+		"  例：412345678"
 	messages = append(messages, lineutil.NewTextMessageWithConsistentSender(studentMsg, sender))
 
 	contactMsg := "📞 聯絡資訊\n" +
-		"• 單位查詢：聯繫 [單位名]\n" +
-		"  例：聯繫 資工系\n" +
-		"• 緊急電話：緊急\n" +
-		"• 關鍵字：聯繫、電話、信箱\n" +
-		"  例：聯絡 教務處\n" +
-		"  例：電話 圖書館"
+		"• 單位查詢：聯絡 [單位名]\n" +
+		"  例：聯絡 資工系\n" +
+		"• 電話查詢：電話 [名稱]\n" +
+		"  例：電話 圖書館\n" +
+		"• 信箱查詢：信箱 [名稱]\n" +
+		"  例：信箱 教務處\n" +
+		"• 緊急電話：緊急"
 	messages = append(messages, lineutil.NewTextMessageWithConsistentSender(contactMsg, sender))
 
 	// Tips message
 	tipsMsg := "💡 使用提示\n" +
-		"• 關鍵字必須在句首\n" +
-		"• 空格分隔關鍵字和查詢內容\n" +
+		"• 關鍵字必須在句首，之後加空格\n" +
 		"• 支援中英文關鍵字\n" +
-		"• 部分查詢支援模糊搜尋"
+		"• 大部分查詢支援模糊搜尋"
 	if nluEnabled {
 		tipsMsg = "💡 使用提示\n" +
-			"• AI 模式：直接對話即可\n" +
-			"• 關鍵字模式：關鍵字必須在句首\n" +
-			"• 支援中英文關鍵字\n" +
-			"• AI 配額用盡時自動切換關鍵字"
+			"• AI 模式：直接對話即可，不需關鍵字\n" +
+			"• 關鍵字模式：關鍵字在句首 + 空格\n" +
+			"• AI 配額用盡時自動使用關鍵字查詢"
 	}
 	messages = append(messages, lineutil.NewTextMessageWithConsistentSender(tipsMsg, sender))
 
