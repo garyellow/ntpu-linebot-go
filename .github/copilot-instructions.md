@@ -168,7 +168,20 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
 - **截斷**: `TruncateRunes()` 僅用於 LINE API 限制 (altText 400 字, displayText 長度限制)
 - **設計原則**: 對稱、現代、一致 - 確保視覺和諧，完整呈現資訊
 
-**Postback format** (300 byte limit): Use module prefix `"module:data"` for routing. Reply token is single-use - batch all messages into one array.
+**Postback format** (300 byte limit): Use module prefix `"module:data"` for routing (e.g., `"course:1132U2236"`). Reply token is single-use - batch all messages into one array.
+
+**Postback processing**: Handlers must extract actual data from prefixed format:
+```go
+// ✅ Correct: Extract matched portion
+if uidRegex.MatchString(data) {
+    uid := uidRegex.FindString(data)  // "course:1132U2236" -> "1132U2236"
+    return h.handleQuery(ctx, uid)
+}
+// ❌ Wrong: Pass entire data string
+if uidRegex.MatchString(data) {
+    return h.handleQuery(ctx, data)  // "course:1132U2236" causes parsing errors
+}
+```
 
 ## URL Failover
 

@@ -372,6 +372,20 @@ func TestHandlePostback_InvalidData(t *testing.T) {
 	}
 }
 
+func TestHandlePostback_WithPrefix(t *testing.T) {
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	// Test postback data with "course:" prefix (simulates Flex Message button click)
+	// Should extract the UID and handle it correctly
+	messages := h.HandlePostback(ctx, "course:1131U0001")
+
+	// Should return some response (cache miss is expected in test, but should not error on prefix)
+	if len(messages) == 0 {
+		t.Error("Expected messages for valid postback with prefix, got empty slice")
+	}
+}
+
 // NOTE: HandlePostback network tests are omitted.
 // The postback logic reuses the same scraper as HandleMessage.
 // TestHandleMessage_NetworkIntegration provides sufficient integration coverage.
