@@ -188,7 +188,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 }
 
 func (a *Application) redirectToGitHub(c *gin.Context) {
-	c.Redirect(http.StatusMovedPermanently, "https://github.com/garyellow/ntpu-linebot-go")
+	c.Redirect(http.StatusTemporaryRedirect, "https://github.com/garyellow/ntpu-linebot-go")
 }
 
 func (a *Application) livenessCheck(c *gin.Context) {
