@@ -191,7 +191,7 @@ func (h *Handler) CanHandle(text string) bool {
 		return true
 	}
 
-	// Check for course number only pattern (e.g., U0001, 1U0001, 2U0001)
+	// Check for course number only pattern (e.g., U0001, M0002)
 	if courseNoRegex.MatchString(text) {
 		return true
 	}
@@ -221,7 +221,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		return h.handleCourseUIDQuery(ctx, match)
 	}
 
-	// Check for course number only (e.g., U0001, 1U0001, 2U0001)
+	// Check for course number only (e.g., U0001, M0002)
 	// Will search in current and previous semester
 	if courseNoRegex.MatchString(text) {
 		return h.handleCourseNoQuery(ctx, text)
@@ -290,7 +290,8 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 					"🔮 智慧搜尋\n" +
 					"• 找課 想學資料分析\n" +
 					"• 找課 Python 入門\n\n" +
-					"💡 直接輸入課號也可以（如 1131U0001）"
+					"💡 直接輸入課號（如 U0001）\n" +
+					"   或完整課號（如 1131U0001）"
 				quickReplyItems = []lineutil.QuickReplyItem{
 					lineutil.QuickReplySmartSearchAction(),
 					lineutil.QuickReplyHelpAction(),
@@ -301,7 +302,8 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 					"• 課程 微積分\n" +
 					"• 課程 王小明\n" +
 					"• 課程 線代 王\n\n" +
-					"💡 直接輸入課號也可以（如 1131U0001）"
+					"💡 直接輸入課號（如 U0001）\n" +
+					"   或完整課號（如 1131U0001）"
 				quickReplyItems = []lineutil.QuickReplyItem{
 					lineutil.QuickReplyHelpAction(),
 				}
@@ -469,10 +471,9 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 	// No results found
 	h.metrics.RecordScraperRequest(ModuleName, "not_found", time.Since(startTime).Seconds())
 
-	// Build helpful message with examples
-	exampleUID := fmt.Sprintf("%d1%s", searchYears[0], courseNo)
+	// Build helpful message
 	msg := lineutil.NewTextMessageWithConsistentSender(
-		fmt.Sprintf("🔍 查無課程編號 %s\n\n請確認\n• 課程編號拼寫是否正確\n• 該課程是否在近兩學年度開設\n\n完整課號範例：%s", courseNo, exampleUID),
+		fmt.Sprintf("🔍 查無課程編號 %s\n\n請確認\n• 課程編號拼寫是否正確（如 U0001）\n• 該課程是否在近兩學年度開設\n\n💡 或使用「課程 課名」查詢", courseNo),
 		sender,
 	)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{

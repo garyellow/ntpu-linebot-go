@@ -128,9 +128,9 @@ func TestSaveContactsBatch(t *testing.T) {
 	ctx := context.Background()
 
 	contacts := []*Contact{
-		{UID: "c1", Type: "individual", Name: "陳大華", Organization: "資工系"},
-		{UID: "c2", Type: "individual", Name: "陳小明", Organization: "電機系"},
-		{UID: "c3", Type: "organization", Name: "資訊工程學系", Organization: "工學院"},
+		{UID: "85", Type: "individual", Name: "陳大華", Organization: "資工系"},
+		{UID: "87", Type: "individual", Name: "陳小明", Organization: "電機系"},
+		{UID: "85", Type: "organization", Name: "資訊工程學系", Organization: "電機資訊學院"},
 	}
 
 	// Test batch save

@@ -454,7 +454,7 @@ func (p *Processor) getHelpMessage() []messaging_api.MessageInterface {
 		helpText = "🔍 NTPU 查詢小工具\n\n" +
 			"📚 課程查詢\n" +
 			"• 課程/教師：「課程 微積分」\n" +
-			"• 課程編號：直接輸入編號\n\n" +
+			"• 課號查詢：直接輸入（如 U0001）\n\n" +
 			"🎓 學生查詢\n" +
 			"• 學號/姓名：「學生 王小明」\n" +
 			"• 按學年查：「學年 112」\n\n" +
@@ -499,7 +499,7 @@ func (p *Processor) getDetailedInstructionMessages() []messaging_api.MessageInte
 	// Keyword mode instructions (always show)
 	keywordTitle := "📖 使用說明 - 關鍵字模式"
 	if nluEnabled {
-		keywordTitle = "📖 關鍵字模式（備選方案）"
+		keywordTitle = "📖 關鍵字模式"
 	}
 
 	courseMsg := keywordTitle + "\n\n" +
@@ -510,7 +510,8 @@ func (p *Processor) getDetailedInstructionMessages() []messaging_api.MessageInte
 		"• 智慧搜尋：找課 [關鍵字]\n" +
 		"  例：找課 線上實體混合\n" +
 		"• 課號查詢：直接輸入課號\n" +
-		"  例：1131U0001"
+		"  例：U0001（自動搜尋最近兩學期）\n" +
+		"  例：1131U0001（精確查詢特定學期）"
 	messages = append(messages, lineutil.NewTextMessageWithConsistentSender(courseMsg, sender))
 
 	studentMsg := "🎓 學號查詢\n" +
@@ -521,7 +522,7 @@ func (p *Processor) getDetailedInstructionMessages() []messaging_api.MessageInte
 		"• 學年查詢：學年 [年份]\n" +
 		"  例：學年 112\n" +
 		"• 系代碼查詢：系代碼 [代碼]\n" +
-		"  例：系代碼 C2"
+		"  例：系代碼 87"
 	messages = append(messages, lineutil.NewTextMessageWithConsistentSender(studentMsg, sender))
 
 	contactMsg := "📞 聯絡資訊\n" +
