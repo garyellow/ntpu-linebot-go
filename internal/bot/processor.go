@@ -217,9 +217,9 @@ func (p *Processor) ProcessFollow(event webhook.FollowEvent) ([]messaging_api.Me
 	// Build welcome messages based on features
 	var featureHint string
 	if nluEnabled {
-		featureHint = "💬 直接用自然語言問我！\n或輸入「使用說明」查看詳細功能"
+		featureHint = "💬 直接用自然語言問我！\n輸入「使用說明」查看詳細功能"
 	} else {
-		featureHint = "使用說明請點選下方選單\n或輸入「使用說明」查看"
+		featureHint = "使用方式請看下方選單\n或輸入「使用說明」查看完整說明"
 	}
 
 	messages := []messaging_api.MessageInterface{
@@ -397,17 +397,18 @@ func (p *Processor) checkLLMRateLimit(source webhook.SourceInterface, chatID str
 			"⏳ AI 功能使用次數已達上限\n\n"+
 				"📊 本小時配額：%.0f 次（已用完）\n"+
 				"⏰ 約 %d 分鐘後重置\n\n"+
-				"💡 您仍可使用：\n"+
-				"• 關鍵字查詢：課程 微積分\n"+
-				"• 課號查詢：1131U0001",
+				"💡 您仍可使用關鍵字查詢：\n"+
+				"• 課程：課程 微積分\n"+
+				"• 學號：學生 王小明\n"+
+				"• 聯絡：聯繫 資工系",
 			p.llmRateLimitPerHour,
 			resetMinutes,
 		)
 
 		msg := lineutil.NewTextMessageWithConsistentSender(message, sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyCourseAction(),
 			lineutil.QuickReplyHelpAction(),
+			lineutil.QuickReplyCourseAction(),
 		})
 
 		return false, []messaging_api.MessageInterface{
@@ -466,11 +467,11 @@ func (p *Processor) getHelpMessage() []messaging_api.MessageInterface {
 	sender := lineutil.GetSender("幫助小幫手", p.stickerManager)
 	msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		lineutil.QuickReplyHelpAction(),
 		lineutil.QuickReplyCourseAction(),
 		lineutil.QuickReplyStudentAction(),
 		lineutil.QuickReplyContactAction(),
 		lineutil.QuickReplyEmergencyAction(),
+		lineutil.QuickReplyHelpAction(),
 	})
 	return []messaging_api.MessageInterface{msg}
 }
@@ -479,18 +480,75 @@ func (p *Processor) getHelpMessage() []messaging_api.MessageInterface {
 func (p *Processor) getDetailedInstructionMessages() []messaging_api.MessageInterface {
 	senderName := "小幫手"
 	nluEnabled := p.intentParser != nil && p.intentParser.IsEnabled()
-
 	sender := lineutil.GetSender(senderName, p.stickerManager)
-	var msg string
+
+	var messages []messaging_api.MessageInterface
+
+	// AI mode introduction (if enabled)
 	if nluEnabled {
-		msg = "使用說明 (AI 模式)\n\n您可以直接跟我聊天，例如：\n「幫我查微積分」\n「資工系辦公室在哪」"
-	} else {
-		msg = "使用說明 (關鍵字模式)\n\n請使用以下格式：\n課程 [關鍵字]\n學生 [關鍵字]\n聯繫 [關鍵字]"
+		aiMsg := "🤖 使用說明 - AI 模式\n\n" +
+			"💬 直接用自然語言問我，例如：\n" +
+			"• 「微積分的課有哪些」\n" +
+			"• 「王小明的學號是多少」\n" +
+			"• 「資工系辦公室在哪裡」\n" +
+			"• 「緊急電話幾號」\n\n" +
+			"✨ AI 會自動理解您的問題"
+		messages = append(messages, lineutil.NewTextMessageWithConsistentSender(aiMsg, sender))
 	}
 
-	return []messaging_api.MessageInterface{
-		lineutil.NewTextMessageWithConsistentSender(msg, sender),
+	// Keyword mode instructions (always show)
+	keywordTitle := "📖 使用說明 - 關鍵字模式"
+	if nluEnabled {
+		keywordTitle = "📖 關鍵字模式（備選方案）"
 	}
+
+	courseMsg := keywordTitle + "\n\n" +
+		"📚 課程查詢\n" +
+		"• 精確搜尋：課程 [關鍵字]\n" +
+		"  例：課程 微積分\n" +
+		"  例：老師 王小明\n" +
+		"• 智慧搜尋：找課 [關鍵字]\n" +
+		"  例：找課 線上實體混合\n" +
+		"• 課號查詢：直接輸入課號\n" +
+		"  例：1131U0001"
+	messages = append(messages, lineutil.NewTextMessageWithConsistentSender(courseMsg, sender))
+
+	studentMsg := "🎓 學號查詢\n" +
+		"• 姓名查詢：學生 [姓名]\n" +
+		"  例：學生 王小明\n" +
+		"• 科系查詢：系 [科系名]\n" +
+		"  例：系 資工\n" +
+		"• 學年查詢：學年 [年份]\n" +
+		"  例：學年 112\n" +
+		"• 系代碼查詢：系代碼 [代碼]\n" +
+		"  例：系代碼 C2"
+	messages = append(messages, lineutil.NewTextMessageWithConsistentSender(studentMsg, sender))
+
+	contactMsg := "📞 聯絡資訊\n" +
+		"• 單位查詢：聯繫 [單位名]\n" +
+		"  例：聯繫 資工系\n" +
+		"• 緊急電話：緊急\n" +
+		"• 關鍵字：聯繫、電話、信箱\n" +
+		"  例：聯絡 教務處\n" +
+		"  例：電話 圖書館"
+	messages = append(messages, lineutil.NewTextMessageWithConsistentSender(contactMsg, sender))
+
+	// Tips message
+	tipsMsg := "💡 使用提示\n" +
+		"• 關鍵字必須在句首\n" +
+		"• 空格分隔關鍵字和查詢內容\n" +
+		"• 支援中英文關鍵字\n" +
+		"• 部分查詢支援模糊搜尋"
+	if nluEnabled {
+		tipsMsg = "💡 使用提示\n" +
+			"• AI 模式：直接對話即可\n" +
+			"• 關鍵字模式：關鍵字必須在句首\n" +
+			"• 支援中英文關鍵字\n" +
+			"• AI 配額用盡時自動切換關鍵字"
+	}
+	messages = append(messages, lineutil.NewTextMessageWithConsistentSender(tipsMsg, sender))
+
+	return messages
 }
 
 // Helper functions
