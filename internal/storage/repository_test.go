@@ -130,7 +130,7 @@ func TestSaveContactsBatch(t *testing.T) {
 	contacts := []*Contact{
 		{UID: "85", Type: "individual", Name: "陳大華", Organization: "資工系"},
 		{UID: "87", Type: "individual", Name: "陳小明", Organization: "電機系"},
-		{UID: "85", Type: "organization", Name: "資訊工程學系", Organization: "電機資訊學院"},
+		{UID: "86", Type: "organization", Name: "資訊工程學系", Organization: "電機資訊學院"},
 	}
 
 	// Test batch save
