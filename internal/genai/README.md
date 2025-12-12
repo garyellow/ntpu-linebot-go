@@ -60,7 +60,7 @@ if err != nil {
 
 ### 技術規格
 
-- 模型: `gemma-3-27b-it`
+- 模型: `gemini-2.5-flash`
 - 超時: 10 秒
 - Temperature: 0.1 (低變異性)
 - Max Tokens: 256
@@ -93,7 +93,7 @@ if err != nil {
 
 ### 技術規格
 
-- 模型: `gemma-3-27b-it`
+- 模型: `gemini-2.5-flash`
 - 超時: 8 秒
 - Temperature: 0.3 (適度變異性)
 - Max Tokens: 200

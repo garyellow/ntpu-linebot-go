@@ -13,8 +13,8 @@ import (
 
 const (
 	// IntentParserModel is the model used for intent parsing
-	// Using gemma-3-27b-it for improved intent classification with function calling support
-	IntentParserModel = "gemma-3-27b-it"
+	// Using gemini-2.5-flash for improved intent classification with function calling support
+	IntentParserModel = "gemini-2.5-flash"
 
 	// IntentParserTimeout is the timeout for intent parsing requests
 	IntentParserTimeout = 10 * time.Second

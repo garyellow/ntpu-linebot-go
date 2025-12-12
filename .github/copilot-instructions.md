@@ -275,7 +275,7 @@ handleUnmatchedMessage()
 │ mention & process│                   │
 └─────────────────┴───────────────────┘
      ↓
-IntentParser.Parse() (gemma-3-27b-it)
+IntentParser.Parse() (gemini-2.5-flash)
      ↓
 dispatchIntent() → Route to Handler
      ↓ (failure)
