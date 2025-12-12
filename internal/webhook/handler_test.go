@@ -59,7 +59,7 @@ func setupTestHandler(t *testing.T) *Handler {
 		UserRateLimitTokens:     6.0,
 		UserRateLimitRefillRate: 1.0 / 5.0,
 		LLMRateLimitPerHour:     50.0,
-		GlobalRateLimitRPS:      80.0,
+		GlobalRateLimitRPS:      100.0,
 		MaxMessagesPerReply:     5,
 		MaxEventsPerWebhook:     100,
 		MinReplyTokenLength:     10,

@@ -32,8 +32,8 @@ type Limiter struct {
 //
 // Example:
 //
-//	// Allow 80 requests per second with burst of 80
-//	limiter := ratelimit.New(80, 80)
+//	// Allow 100 requests per second with burst of 100
+//	limiter := ratelimit.New(100, 100)
 //
 //	// Allow 1000 requests per minute (≈16.67/sec) with burst of 33
 //	limiter := ratelimit.NewPerMinute(1000)
