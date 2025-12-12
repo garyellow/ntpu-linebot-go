@@ -187,7 +187,7 @@ X-Line-Signature: {signature}
 **限制**:
 - Request body < 1MB
 - 處理超時: 60 秒
-- Global rate limit: 80 rps
+- Global rate limit: 100 rps
 - Per-user rate limit: 6 tokens, 1 token/5s refill (Token Bucket)
 
 ---

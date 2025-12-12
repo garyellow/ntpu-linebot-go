@@ -248,9 +248,18 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			// Check if smart search is actually enabled
 			var helpText string
 			if h.bm25Index != nil && h.bm25Index.IsEnabled() {
-				helpText = "🔮 智慧搜尋說明\n\n請描述您想找的課程內容\n• 找課 想學資料分析\n• 找課 Python 機器學習\n• 找課 商業管理相關\n\n💡 根據課程大綱內容匹配\n\n🔍 若知道課名，建議用「課程 名稱」"
+				helpText = "🔮 智慧搜尋說明\n\n" +
+					"請描述您想找的課程內容：\n" +
+					"• 找課 想學資料分析\n" +
+					"• 找課 Python 機器學習\n" +
+					"• 找課 商業管理相關\n\n" +
+					"💡 根據課程大綱內容匹配\n" +
+					"🔍 若知道課名，建議用「課程 名稱」"
 			} else {
-				helpText = "⚠️ 智慧搜尋目前未啟用\n\n請使用精確搜尋\n• 課程 微積分\n• 課程 王小明"
+				helpText = "⚠️ 智慧搜尋目前未啟用\n\n" +
+					"請使用精確搜尋：\n" +
+					"• 課程 微積分\n" +
+					"• 課程 王小明"
 			}
 			msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
 			return []messaging_api.MessageInterface{msg}
@@ -273,13 +282,26 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			var quickReplyItems []lineutil.QuickReplyItem
 			if h.bm25Index != nil && h.bm25Index.IsEnabled() {
 				// Smart search enabled - mention it as an option
-				helpText = "📚 課程查詢方式\n\n🔍 精確搜尋\n• 課程 微積分\n• 課程 王小明\n• 課程 線代 王\n\n🔮 智慧搜尋\n• 找課 想學資料分析\n• 找課 Python 入門\n\n💡 直接輸入課號也可以（如 1131U0001）"
+				helpText = "📚 課程查詢方式\n\n" +
+					"🔍 精確搜尋\n" +
+					"• 課程 微積分\n" +
+					"• 課程 王小明\n" +
+					"• 課程 線代 王\n\n" +
+					"🔮 智慧搜尋\n" +
+					"• 找課 想學資料分析\n" +
+					"• 找課 Python 入門\n\n" +
+					"💡 直接輸入課號也可以（如 1131U0001）"
 				quickReplyItems = []lineutil.QuickReplyItem{
 					lineutil.QuickReplySmartSearchAction(),
 					lineutil.QuickReplyHelpAction(),
 				}
 			} else {
-				helpText = "📚 課程查詢方式\n\n🔍 精確搜尋\n• 課程 微積分\n• 課程 王小明\n• 課程 線代 王\n\n💡 直接輸入課號也可以（如 1131U0001）"
+				helpText = "📚 課程查詢方式\n\n" +
+					"🔍 精確搜尋\n" +
+					"• 課程 微積分\n" +
+					"• 課程 王小明\n" +
+					"• 課程 線代 王\n\n" +
+					"💡 直接輸入課號也可以（如 1131U0001）"
 				quickReplyItems = []lineutil.QuickReplyItem{
 					lineutil.QuickReplyHelpAction(),
 				}

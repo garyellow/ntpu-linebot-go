@@ -449,7 +449,7 @@ func sanitizeSearchTerm(term string) string {
 
 ### 3. Rate Limiting（防 DDoS）
 
-- Global Rate Limit: 80 rps
+- Global Rate Limit: 100 rps
 - Per-User Rate Limit: 6 tokens, 1 token/5s refill (Token Bucket)
 - 超過限制靜默丟棄請求
 
