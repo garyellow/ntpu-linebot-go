@@ -12,6 +12,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
+	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -372,6 +373,42 @@ func TestHandlePostback_InvalidData(t *testing.T) {
 	}
 }
 
+func TestHandlePostback_WithPrefix(t *testing.T) {
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	// Test postback data with "course:" prefix (simulates Flex Message button click)
+	// Should extract the UID and handle it correctly
+	messages := h.HandlePostback(ctx, "course:1131U0001")
+
+	// Should return some response (cache miss is expected in test, but should not error on prefix)
+	if len(messages) == 0 {
+		t.Error("Expected messages for valid postback with prefix, got empty slice")
+		return
+	}
+
+	// Verify the response is not an "invalid format" error
+	// The UID extraction should work, so we expect either cache miss or success
+	// If UID extraction failed, it would return "invalid format" message
+	if len(messages) > 0 {
+		if msg, ok := messages[0].(*messaging_api.TextMessage); ok {
+			if msg.Text != "" && !containsString(msg.Text, "格式錯誤") && !containsString(msg.Text, "invalid format") {
+				t.Logf("UID extraction successful, response: %s", truncateString(msg.Text, 50))
+			} else if containsString(msg.Text, "格式錯誤") || containsString(msg.Text, "invalid format") {
+				t.Error("UID extraction failed - got format error despite valid UID")
+			}
+		}
+	}
+	if len(messages) > 0 {
+		if textMsg, ok := messages[0].(*messaging_api.TextMessage); ok {
+			if textMsg.Text != "" && !strings.Contains(textMsg.Text, "找不到") && !strings.Contains(textMsg.Text, "查無") {
+				// If not a "not found" message, something went wrong with UID extraction
+				t.Logf("Extracted UID correctly, response: %s", textMsg.Text)
+			}
+		}
+	}
+}
+
 // NOTE: HandlePostback network tests are omitted.
 // The postback logic reuses the same scraper as HandleMessage.
 // TestHandleMessage_NetworkIntegration provides sufficient integration coverage.
@@ -645,4 +682,26 @@ func TestDispatchIntent_SmartNoBM25Index(t *testing.T) {
 	if len(msgs) == 0 {
 		t.Error("DispatchIntent() expected fallback message, got none")
 	}
+}
+
+// Helper functions for testing
+
+func containsString(s, substr string) bool {
+	return len(s) > 0 && len(substr) > 0 && (s == substr || len(s) >= len(substr) && stringContains(s, substr))
+}
+
+func stringContains(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }

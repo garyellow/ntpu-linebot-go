@@ -28,9 +28,18 @@ docker compose up -d
 - `LINE_CHANNEL_ACCESS_TOKEN`
 - `LINE_CHANNEL_SECRET`
 
-可選：
-- `GEMINI_API_KEY` - Gemini API Key，啟用 NLU 自然語言理解和課程智慧搜尋（從 [Google AI Studio](https://aistudio.google.com/apikey) 取得）
+LLM 設定（二選一即可啟用 NLU 和智慧搜尋）：
+- `GEMINI_API_KEY` - Gemini API Key（從 [Google AI Studio](https://aistudio.google.com/apikey) 取得）
+- `GROQ_API_KEY` - Groq API Key（從 [Groq Console](https://console.groq.com/keys) 取得）
+
+LLM 進階設定（可選）：
+- `LLM_PRIMARY_PROVIDER` - 主要 LLM 提供者（預設：gemini，可選：groq）
+- `LLM_FALLBACK_PROVIDER` - 備援 LLM 提供者（預設：groq，可選：gemini）
+- `GEMINI_INTENT_MODEL` - Gemini 意圖分析模型（預設：gemini-2.5-flash）
+- `GROQ_INTENT_MODEL` - Groq 意圖分析模型（預設：llama-3.1-8b-instant）
 - `LLM_RATE_LIMIT_PER_HOUR` - LLM API 速率限制（每位使用者每小時請求數，預設：50）
+
+其他可選：
 - `IMAGE_TAG` - 映像版本（預設：latest）
 - `WARMUP_MODULES` - 預熱模組（預設：sticker,id,contact,course）
   - 可加入 `syllabus` 啟用課程大綱抓取與 BM25 智慧搜尋（「找課」功能）

@@ -44,8 +44,8 @@ type Application struct {
 	webhookHandler *webhook.Handler
 	server         *http.Server
 	bm25Index      *rag.BM25Index
-	intentParser   *genai.GeminiIntentParser
-	queryExpander  *genai.QueryExpander
+	intentParser   genai.IntentParser  // Interface type for multi-provider support
+	queryExpander  genai.QueryExpander // Interface type for multi-provider support
 	llmRateLimiter *ratelimit.LLMRateLimiter
 	userLimiter    *ratelimit.UserRateLimiter
 	wg             sync.WaitGroup // Track background goroutines for graceful shutdown
@@ -70,6 +70,9 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	)
 	m := metrics.New(registry)
 
+	// Initialize global metrics for genai package
+	metrics.InitGlobal(m)
+
 	scraperClient := scraper.NewClient(cfg.ScraperTimeout, cfg.ScraperMaxRetries, cfg.ScraperBaseURLs)
 	stickerMgr := sticker.NewManager(db, scraperClient, log)
 
@@ -92,20 +95,30 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		log.Debug("BM25 index empty, will be populated by warmup if configured")
 	}
 
-	var intentParser *genai.GeminiIntentParser
-	var queryExpander *genai.QueryExpander
-	if cfg.GeminiAPIKey != "" {
-		if intentParser, err = genai.NewIntentParser(ctx, cfg.GeminiAPIKey); err != nil {
+	var intentParser genai.IntentParser
+	var queryExpander genai.QueryExpander
+	if cfg.HasLLMProvider() {
+		// Build LLM configuration from config
+		llmCfg := buildLLMConfig(cfg)
+
+		if intentParser, err = genai.CreateIntentParser(ctx, llmCfg); err != nil {
 			log.WithError(err).Warn("Intent parser initialization failed")
 		}
-		if queryExpander, err = genai.NewQueryExpander(ctx, cfg.GeminiAPIKey); err != nil {
+		if queryExpander, err = genai.CreateQueryExpander(ctx, llmCfg); err != nil {
 			log.WithError(err).Warn("Query expander initialization failed")
 		}
 		if intentParser != nil || queryExpander != nil {
-			log.Info("GenAI features enabled")
+			providers := []string{}
+			if cfg.GeminiAPIKey != "" {
+				providers = append(providers, "gemini")
+			}
+			if cfg.GroqAPIKey != "" {
+				providers = append(providers, "groq")
+			}
+			log.WithField("providers", providers).Info("LLM features enabled")
 		}
 	} else {
-		log.Info("Gemini API key not configured, NLU and query expansion disabled")
+		log.Info("No LLM provider configured, NLU and query expansion disabled")
 	}
 
 	llmRateLimiter := ratelimit.NewLLMRateLimiter(cfg.Bot.LLMRateLimitPerHour, config.RateLimiterCleanupInterval, m)
@@ -185,6 +198,56 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 
 	log.Info("Initialization complete")
 	return app, nil
+}
+
+// buildLLMConfig creates an LLMConfig from the application config.
+func buildLLMConfig(cfg *config.Config) genai.LLMConfig {
+	llmCfg := genai.DefaultLLMConfig()
+
+	// Set API keys
+	llmCfg.Gemini.APIKey = cfg.GeminiAPIKey
+	llmCfg.Groq.APIKey = cfg.GroqAPIKey
+
+	// Set custom models if provided
+	if cfg.GeminiIntentModel != "" {
+		llmCfg.Gemini.IntentModel = cfg.GeminiIntentModel
+	}
+	if cfg.GeminiIntentFallbackModel != "" {
+		llmCfg.Gemini.IntentFallbackModel = cfg.GeminiIntentFallbackModel
+	}
+	if cfg.GeminiExpanderModel != "" {
+		llmCfg.Gemini.ExpanderModel = cfg.GeminiExpanderModel
+	}
+	if cfg.GeminiExpanderFallbackModel != "" {
+		llmCfg.Gemini.ExpanderFallbackModel = cfg.GeminiExpanderFallbackModel
+	}
+	if cfg.GroqIntentModel != "" {
+		llmCfg.Groq.IntentModel = cfg.GroqIntentModel
+	}
+	if cfg.GroqIntentFallbackModel != "" {
+		llmCfg.Groq.IntentFallbackModel = cfg.GroqIntentFallbackModel
+	}
+	if cfg.GroqExpanderModel != "" {
+		llmCfg.Groq.ExpanderModel = cfg.GroqExpanderModel
+	}
+	if cfg.GroqExpanderFallbackModel != "" {
+		llmCfg.Groq.ExpanderFallbackModel = cfg.GroqExpanderFallbackModel
+	}
+
+	// Set provider order
+	if cfg.LLMPrimaryProvider == "groq" {
+		llmCfg.PrimaryProvider = genai.ProviderGroq
+	} else {
+		llmCfg.PrimaryProvider = genai.ProviderGemini
+	}
+
+	if cfg.LLMFallbackProvider == "gemini" {
+		llmCfg.FallbackProvider = genai.ProviderGemini
+	} else {
+		llmCfg.FallbackProvider = genai.ProviderGroq
+	}
+
+	return llmCfg
 }
 
 func (a *Application) redirectToGitHub(c *gin.Context) {

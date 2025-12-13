@@ -15,6 +15,31 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
+// Package-level metrics for use by other packages (e.g., genai).
+// These are initialized by InitGlobal() after creating the Metrics instance.
+var (
+	// LLMTotal is the global LLM request counter.
+	LLMTotal *prometheus.CounterVec
+
+	// LLMDuration is the global LLM duration histogram.
+	LLMDuration *prometheus.HistogramVec
+
+	// LLMFallbackTotal is the global LLM fallback counter.
+	LLMFallbackTotal *prometheus.CounterVec
+
+	// LLMFallbackLatency is the global LLM fallback latency histogram.
+	LLMFallbackLatency *prometheus.HistogramVec
+)
+
+// InitGlobal initializes the package-level metric variables.
+// Must be called after New() to enable metrics in other packages.
+func InitGlobal(m *Metrics) {
+	LLMTotal = m.LLMTotal
+	LLMDuration = m.LLMDuration
+	LLMFallbackTotal = m.LLMFallbackTotal
+	LLMFallbackLatency = m.LLMFallbackLatency
+}
+
 // Metrics holds all Prometheus metrics for the NTPU LineBot.
 // Organized by component following the RED/USE methodology.
 type Metrics struct {
@@ -45,11 +70,13 @@ type Metrics struct {
 	CacheSize       *prometheus.GaugeVec   // current entries by module
 
 	// ============================================
-	// LLM (Gemini API - RED Method)
+	// LLM (Gemini/Groq API - RED Method)
 	// NLU intent parsing, Query Expansion
 	// ============================================
-	LLMTotal    *prometheus.CounterVec   // requests by operation and status
-	LLMDuration *prometheus.HistogramVec // latency by operation
+	LLMTotal           *prometheus.CounterVec   // requests by provider, operation, and status
+	LLMDuration        *prometheus.HistogramVec // latency by provider and operation
+	LLMFallbackTotal   *prometheus.CounterVec   // fallback events by provider pair and operation
+	LLMFallbackLatency *prometheus.HistogramVec // additional latency from fallback by provider pair and operation
 
 	// ============================================
 	// Smart Search (BM25 - RED Method)
@@ -164,22 +191,52 @@ func New(registry *prometheus.Registry) *Metrics {
 				Name: "ntpu_llm_total",
 				Help: "Total LLM API requests",
 			},
-			// operation: nlu (intent parsing)
-			// status: success, error, fallback, clarification
-			[]string{"operation", "status"},
+			// provider: gemini, groq
+			// operation: nlu (intent parsing), expander (query expansion)
+			// status: success, error, rate_limit, quota_exhausted
+			[]string{"provider", "operation", "status"},
 		),
 
 		LLMDuration: promauto.With(registry).NewHistogramVec(
 			prometheus.HistogramOpts{
 				Name: "ntpu_llm_duration_seconds",
 				Help: "LLM API request duration in seconds",
-				// Buckets for Gemini API latency:
+				// Buckets for LLM API latency:
 				// Fast: < 0.5s (simple queries)
 				// Normal: 0.5-2s (typical)
 				// Slow: > 2s (complex or retry)
 				Buckets: []float64{0.1, 0.25, 0.5, 1, 2, 5, 10},
 			},
-			[]string{"operation"},
+			// provider: gemini, groq
+			// operation: nlu, expander
+			[]string{"provider", "operation"},
+		),
+
+		LLMFallbackTotal: promauto.With(registry).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "ntpu_llm_fallback_total",
+				Help: "Total LLM provider fallback events",
+			},
+			// from_provider: gemini, groq (primary that failed)
+			// to_provider: gemini, groq (fallback used)
+			// operation: nlu, expander
+			[]string{"from_provider", "to_provider", "operation"},
+		),
+
+		LLMFallbackLatency: promauto.With(registry).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name: "ntpu_llm_fallback_latency_seconds",
+				Help: "Additional latency introduced by provider fallback",
+				// Buckets for fallback overhead:
+				// Fast: < 0.5s (immediate fallback)
+				// Normal: 0.5-2s (with retry)
+				// Slow: > 2s (multiple retries)
+				Buckets: []float64{0.1, 0.5, 1, 2, 5, 10},
+			},
+			// from_provider: gemini, groq (primary that failed)
+			// to_provider: gemini, groq (fallback used)
+			// operation: nlu, expander
+			[]string{"from_provider", "to_provider", "operation"},
 		),
 
 		// ============================================
@@ -319,11 +376,12 @@ func (m *Metrics) SetCacheSize(module string, size int) {
 // ============================================
 
 // RecordLLM records an LLM API request.
-// operation: nlu (primary user-facing intent parsing)
-// status: success, error, fallback, clarification
-func (m *Metrics) RecordLLM(operation, status string, duration float64) {
-	m.LLMTotal.WithLabelValues(operation, status).Inc()
-	m.LLMDuration.WithLabelValues(operation).Observe(duration)
+// provider: gemini, groq
+// operation: nlu (intent parsing), expander (query expansion)
+// status: success, error, rate_limit, quota_exhausted
+func (m *Metrics) RecordLLM(provider, operation, status string, duration float64) {
+	m.LLMTotal.WithLabelValues(provider, operation, status).Inc()
+	m.LLMDuration.WithLabelValues(provider, operation).Observe(duration)
 }
 
 // ============================================
@@ -396,11 +454,14 @@ func (m *Metrics) RecordScraperRequest(module, status string, duration float64) 
 }
 
 // RecordLLMRequest is an alias for RecordLLM.
-func (m *Metrics) RecordLLMRequest(operation, status string, duration float64) {
-	m.RecordLLM(operation, status, duration)
+func (m *Metrics) RecordLLMRequest(provider, operation, status string, duration float64) {
+	m.RecordLLM(provider, operation, status, duration)
 }
 
-// RecordLLMFallback records an LLM fallback event.
-func (m *Metrics) RecordLLMFallback(operation string) {
-	m.LLMTotal.WithLabelValues(operation, "fallback").Inc()
+// RecordLLMFallback records an LLM provider fallback event.
+// fromProvider: the primary provider that failed
+// toProvider: the fallback provider used
+// operation: nlu, expander
+func (m *Metrics) RecordLLMFallback(fromProvider, toProvider, operation string) {
+	m.LLMFallbackTotal.WithLabelValues(fromProvider, toProvider, operation).Inc()
 }

@@ -125,7 +125,9 @@ for _, r := range results {
 }
 
 // 配合 Query Expansion
-expander, _ := genai.NewQueryExpander(ctx, geminiAPIKey)
+llmCfg := genai.DefaultLLMConfig()
+llmCfg.Gemini.APIKey = geminiAPIKey
+expander, _ := genai.CreateQueryExpander(ctx, llmCfg)
 expanded, _ := expander.Expand(ctx, "AWS")
 // "AWS" → "AWS Amazon Web Services 雲端服務 雲端運算"
 results, _ = bm25Index.SearchCourses(ctx, expanded, 10)
@@ -139,6 +141,6 @@ results, _ = bm25Index.SearchCourses(ctx, expanded, 10)
 
 ## 依賴
 
-- `internal/genai`: Query Expander（可選，需 Gemini API Key）
+- `internal/genai`: Query Expander（可選，需 Gemini 或 Groq API Key）
 - `internal/storage`: Syllabus 資料模型
 - `internal/syllabus`: Syllabus 欄位處理與內容生成

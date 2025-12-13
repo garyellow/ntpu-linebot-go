@@ -27,7 +27,7 @@ var helpKeywords = []string{"使用說明", "help"}
 // It orchestrates rate limiting, NLU parsing, and dispatching to handlers.
 type Processor struct {
 	registry       *Registry
-	intentParser   *genai.GeminiIntentParser
+	intentParser   genai.IntentParser // Interface for multi-provider support
 	llmLimiter     *ratelimit.LLMRateLimiter
 	userLimiter    *ratelimit.UserRateLimiter
 	stickerManager *sticker.Manager
@@ -42,7 +42,7 @@ type Processor struct {
 // ProcessorConfig holds configuration for creating a new Processor.
 type ProcessorConfig struct {
 	Registry       *Registry
-	IntentParser   *genai.GeminiIntentParser
+	IntentParser   genai.IntentParser // Interface for multi-provider support
 	LLMRateLimiter *ratelimit.LLMRateLimiter
 	UserLimiter    *ratelimit.UserRateLimiter
 	StickerManager *sticker.Manager
@@ -278,27 +278,21 @@ func (p *Processor) handleWithNLU(ctx context.Context, text string, source webho
 		return rateLimitMsg, nil
 	}
 
-	start := time.Now()
-
 	result, err := p.intentParser.Parse(ctx, text)
-	duration := time.Since(start).Seconds()
 
 	if err != nil {
 		p.logger.WithError(err).Warn("NLU intent parsing failed")
-		p.metrics.RecordLLMRequest("nlu", "error", duration)
-		p.metrics.RecordLLMFallback("nlu")
+		// Metrics are recorded by FallbackIntentParser
 		return p.getHelpMessage(), nil
 	}
 
 	if result == nil {
-		p.metrics.RecordLLMRequest("nlu", "error", duration)
-		p.metrics.RecordLLMFallback("nlu")
+		// Metrics are recorded by FallbackIntentParser
 		return p.getHelpMessage(), nil
 	}
 
 	if result.ClarificationText != "" {
 		p.logger.WithField("clarification", result.ClarificationText).Debug("NLU returned clarification")
-		p.metrics.RecordLLMRequest("nlu", "clarification", duration)
 
 		sender := lineutil.GetSender("小幫手", p.stickerManager)
 		return []messaging_api.MessageInterface{
@@ -310,7 +304,7 @@ func (p *Processor) handleWithNLU(ctx context.Context, text string, source webho
 		WithField("intent", result.Intent).
 		WithField("params", result.Params).
 		Debug("NLU intent parsed")
-	p.metrics.RecordLLMRequest("nlu", "success", duration)
+	// Metrics are recorded by FallbackIntentParser
 
 	return p.dispatchIntent(ctx, result)
 }

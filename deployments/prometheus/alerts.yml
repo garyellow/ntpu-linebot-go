@@ -90,33 +90,48 @@ groups:
           description: "Cache hit rate is {{ $value | humanizePercentage }}. Consider running warmup."
 
   # ============================================
-  # LLM Alerts (GenAI - Reliability)
+  # LLM Alerts (GenAI - Multi-Provider Reliability)
+  # Supports both Gemini and Groq providers with fallback
   # ============================================
   - name: ntpu_llm_alerts
     rules:
-      # LLM error rate (only count actual errors, not clarifications)
+      # LLM error rate (per provider)
       - alert: LLMErrorRateHigh
         expr: |
           (
-            sum(rate(ntpu_llm_total{status=~"error|fallback"}[5m]))
-            / sum(rate(ntpu_llm_total[5m]))
+            sum by (provider) (rate(ntpu_llm_total{status=~"error|rate_limit|quota_exhausted"}[5m]))
+            / sum by (provider) (rate(ntpu_llm_total[5m]))
           ) > 0.2
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "LLM error rate exceeds 20%"
-          description: "LLM API error rate is {{ $value | humanizePercentage }}."
+          summary: "LLM error rate exceeds 20% for {{ $labels.provider }}"
+          description: "{{ $labels.provider | title }} API error rate is {{ $value | humanizePercentage }}."
 
-      # LLM latency
+      # LLM latency (per provider)
       - alert: LLMLatencyHigh
-        expr: histogram_quantile(0.95, sum(rate(ntpu_llm_duration_seconds_bucket[5m])) by (le)) > 5
+        expr: histogram_quantile(0.95, sum by (le, provider) (rate(ntpu_llm_duration_seconds_bucket[5m]))) > 5
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "LLM P95 latency exceeds 5 seconds"
-          description: "Gemini API P95 latency is {{ $value | printf \"%.1f\" }}s."
+          summary: "LLM P95 latency exceeds 5 seconds for {{ $labels.provider }}"
+          description: "{{ $labels.provider | title }} API P95 latency is {{ $value | printf \"%.1f\" }}s."
+
+      # High fallback rate indicates primary provider issues
+      - alert: LLMFallbackRateHigh
+        expr: |
+          (
+            sum(rate(ntpu_llm_fallback_total[5m]))
+            / sum(rate(ntpu_llm_total[5m]))
+          ) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM fallback rate exceeds 10%"
+          description: "Primary LLM provider is failing frequently, triggering {{ $value | humanizePercentage }} fallback rate."
 
   # ============================================
   # Search Alerts (BM25 Index)

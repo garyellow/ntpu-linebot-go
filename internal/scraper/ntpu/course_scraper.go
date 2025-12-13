@@ -3,6 +3,7 @@ package ntpu
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -204,6 +205,15 @@ func parseCoursesPage(doc *goquery.Document, courseBaseURL string, year, term in
 
 		// Extract title, detail URL, note, location (field 7)
 		title, detailURL, note, location := parseTitleField(tds.Eq(7))
+
+		// Skip courses without a title (parsing error or invalid data)
+		if title == "" {
+			slog.Debug("skipping course with empty title",
+				"year", year,
+				"term", term,
+				"courseNo", strings.TrimSpace(tds.Eq(3).Text()))
+			return
+		}
 
 		// Extract teachers and teacher URLs (field 8)
 		teachers, teacherURLs := parseTeacherField(tds.Eq(8), courseBaseURL)

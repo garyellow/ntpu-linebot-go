@@ -21,8 +21,23 @@ type Config struct {
 	LineChannelToken  string
 	LineChannelSecret string
 
-	// GenAI Configuration
+	// LLM Configuration
 	GeminiAPIKey string // Gemini API key for NLU and Query Expansion features
+	GroqAPIKey   string // Groq API key (alternative LLM provider)
+
+	// LLM Model Configuration (optional, defaults apply if empty)
+	GeminiIntentModel           string // Primary Gemini model for intent parsing
+	GeminiIntentFallbackModel   string // Fallback Gemini model for intent parsing
+	GeminiExpanderModel         string // Primary Gemini model for query expansion
+	GeminiExpanderFallbackModel string // Fallback Gemini model for query expansion
+	GroqIntentModel             string // Primary Groq model for intent parsing
+	GroqIntentFallbackModel     string // Fallback Groq model for intent parsing
+	GroqExpanderModel           string // Primary Groq model for query expansion
+	GroqExpanderFallbackModel   string // Fallback Groq model for query expansion
+
+	// LLM Provider Configuration
+	LLMPrimaryProvider  string // Primary LLM provider: "gemini" or "groq" (default: "gemini")
+	LLMFallbackProvider string // Fallback LLM provider: "gemini" or "groq" (default: "groq")
 
 	// Server Configuration
 	Port            string
@@ -83,8 +98,23 @@ func Load() (*Config, error) {
 		LineChannelToken:  getEnv("LINE_CHANNEL_ACCESS_TOKEN", ""),
 		LineChannelSecret: getEnv("LINE_CHANNEL_SECRET", ""),
 
-		// GenAI Configuration
+		// LLM Configuration
 		GeminiAPIKey: getEnv("GEMINI_API_KEY", ""),
+		GroqAPIKey:   getEnv("GROQ_API_KEY", ""),
+
+		// LLM Model Configuration (empty = use defaults from genai package)
+		GeminiIntentModel:           getEnv("GEMINI_INTENT_MODEL", ""),
+		GeminiIntentFallbackModel:   getEnv("GEMINI_INTENT_FALLBACK_MODEL", ""),
+		GeminiExpanderModel:         getEnv("GEMINI_EXPANDER_MODEL", ""),
+		GeminiExpanderFallbackModel: getEnv("GEMINI_EXPANDER_FALLBACK_MODEL", ""),
+		GroqIntentModel:             getEnv("GROQ_INTENT_MODEL", ""),
+		GroqIntentFallbackModel:     getEnv("GROQ_INTENT_FALLBACK_MODEL", ""),
+		GroqExpanderModel:           getEnv("GROQ_EXPANDER_MODEL", ""),
+		GroqExpanderFallbackModel:   getEnv("GROQ_EXPANDER_FALLBACK_MODEL", ""),
+
+		// LLM Provider Configuration
+		LLMPrimaryProvider:  getEnv("LLM_PRIMARY_PROVIDER", "gemini"),
+		LLMFallbackProvider: getEnv("LLM_FALLBACK_PROVIDER", "groq"),
 
 		// Server Configuration
 		Port:            getEnv("PORT", "10000"),
@@ -227,4 +257,9 @@ func getDefaultDataDir() string {
 // SQLitePath returns the full path to the SQLite database file
 func (c *Config) SQLitePath() string {
 	return filepath.Join(c.DataDir, "cache.db")
+}
+
+// HasLLMProvider returns true if at least one LLM provider is configured.
+func (c *Config) HasLLMProvider() bool {
+	return c.GeminiAPIKey != "" || c.GroqAPIKey != ""
 }

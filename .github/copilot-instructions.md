@@ -83,7 +83,7 @@ LINE Webhook → Gin Handler
 **Module-specific features**:
 
 - **Precise search**: `課程` keyword triggers SQL LIKE + fuzzy search on course title and teachers
-- **Smart search**: `找課` keyword triggers BM25 + Query Expansion search using syllabus content (requires `GEMINI_API_KEY` for Query Expansion)
+- **Smart search**: `找課` keyword triggers BM25 + Query Expansion search using syllabus content (requires `GEMINI_API_KEY` or `GROQ_API_KEY` for Query Expansion)
 - **BM25 search**: Keyword-based search with Chinese tokenization (unigram for CJK)
 - **Confidence scoring**: Rank-based confidence (not similarity). Higher rank = higher confidence.
 - **Query expansion**: LLM-based expansion for short queries and technical abbreviations (AWS→雲端運算, AI→人工智慧)
@@ -168,7 +168,20 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
 - **截斷**: `TruncateRunes()` 僅用於 LINE API 限制 (altText 400 字, displayText 長度限制)
 - **設計原則**: 對稱、現代、一致 - 確保視覺和諧，完整呈現資訊
 
-**Postback format** (300 byte limit): Use module prefix `"module:data"` for routing. Reply token is single-use - batch all messages into one array.
+**Postback format** (300 byte limit): Use module prefix `"module:data"` for routing (e.g., `"course:1132U2236"`). Reply token is single-use - batch all messages into one array.
+
+**Postback processing**: Handlers must extract actual data from prefixed format:
+```go
+// ✅ Correct: Extract matched portion
+if uidRegex.MatchString(data) {
+    uid := uidRegex.FindString(data)  // "course:1132U2236" -> "1132U2236"
+    return h.handleQuery(ctx, uid)
+}
+// ❌ Wrong: Pass entire data string
+if uidRegex.MatchString(data) {
+    return h.handleQuery(ctx, data)  // "course:1132U2236" causes parsing errors
+}
+```
 
 ## URL Failover
 
@@ -204,7 +217,7 @@ lineutil.TruncateRunes(value, 20)                                               
 
 **Load-time validation**: All env vars loaded at startup (`internal/config/`) with validation before server starts
 **Required**: `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_TOKEN`
-**Optional**: `GEMINI_API_KEY` (enables NLU + Query Expansion)
+**Optional**: `GEMINI_API_KEY` or `GROQ_API_KEY` (enables NLU + Query Expansion with multi-provider fallback)
 **Platform paths**: `runtime.GOOS` determines default paths (Windows: `./data`, Linux/Mac: `/data`)
 
 ## Task Commands
@@ -224,7 +237,7 @@ task compose:up       # Start monitoring stack (Prometheus/Grafana)
 
 **Environment variables** (`.env`):
 - **Required**: `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_TOKEN`
-- **Optional**: `GEMINI_API_KEY` (enables NLU + Query Expansion), `DATA_DIR` (default: `./data` on Windows, `/data` on Linux/Mac)
+- **Optional**: `GEMINI_API_KEY`, `GROQ_API_KEY` (enables NLU + Query Expansion with multi-provider fallback), `DATA_DIR` (default: `./data` on Windows, `/data` on Linux/Mac)
 
 Production warmup runs automatically on server startup (non-blocking).
 
@@ -259,9 +272,9 @@ histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by 
 
 Multi-stage build (alpine builder + distroless runtime), healthcheck binary (no shell), volume permissions handled by application.
 
-## NLU Intent Parser
+## NLU Intent Parser (Multi-Provider)
 
-**Location**: `internal/genai/` (types.go, intent.go, functions.go, prompts.go)
+**Location**: `internal/genai/` (types.go, gemini_intent.go, groq_intent.go, factory.go, provider_fallback.go)
 
 **Architecture**:
 ```
@@ -275,7 +288,12 @@ handleUnmatchedMessage()
 │ mention & process│                   │
 └─────────────────┴───────────────────┘
      ↓
-IntentParser.Parse() (gemma-3-27b-it)
+FallbackIntentParser.Parse()
+     ↓
+┌─ Primary Provider ─┐  ┌─ Fallback Provider ─┐
+│ Gemini/Groq        │→│ Groq/Gemini          │
+│ (with retry)       │  │ (on failure)         │
+└────────────────────┴──────────────────────────┘
      ↓
 dispatchIntent() → Route to Handler
      ↓ (failure)
@@ -283,16 +301,22 @@ Fallback → getHelpMessage() + Warning Log
 ```
 
 **Key Features**:
+- **Multi-Provider Support**: Gemini and Groq with automatic failover
+- **Three-layer Fallback**: Model retry → Provider fallback → Graceful degradation
 - Function Calling (AUTO mode): Model chooses function call or text response
 - 9 intent functions: `course_search`, `course_smart`, `course_uid`, `id_search`, `id_student_id`, `id_department`, `contact_search`, `contact_emergency`, `help`
 - Group @Bot detection: Uses `mention.Index` and `mention.Length` for precise removal
-- Fallback strategy: NLU failure → help message with warning log
-- Metrics: `ntpu_llm_total{operation="nlu"}`, `ntpu_llm_duration_seconds{operation="nlu"}`
+- Metrics: `ntpu_llm_total{provider,operation}`, `ntpu_llm_duration_seconds{provider}`, `ntpu_llm_fallback_total`
 
 **Implementation Pattern**:
-- `genai.GeminiIntentParser`: Gemini Function Calling implementation with Parse(), IsEnabled(), Close()
+- `genai.IntentParser`: Interface for NLU parsing (implemented by Gemini and Groq)
+- `genai.FallbackIntentParser`: Cross-provider failover wrapper
+- `genai.CreateIntentParser()`: Factory function with provider selection
 - `genai.ParseResult`: Module, Intent, Params, ClarificationText, FunctionName
-- webhook imports genai package directly (no adapter needed)
+
+**Default Models**:
+- Gemini: `gemini-2.5-flash` (primary), `gemini-2.0-flash-lite` (fallback)
+- Groq: `llama-3.1-8b-instant` (primary), `llama-3.3-70b-versatile` (fallback)
 
 ## Key File Locations
 
@@ -306,7 +330,7 @@ Fallback → getHelpMessage() + Warning Log
 - **LINE utilities**: `internal/lineutil/builder.go` (use instead of raw SDK)
 - **Sticker manager**: `internal/sticker/sticker.go` (avatar URLs for messages)
 - **Smart search**: `internal/rag/bm25.go` (BM25 index with Chinese tokenization)
-- **Query expander**: `internal/genai/expander.go` (LLM-based query expansion)
-- **NLU intent parser**: `internal/genai/intent.go` (Function Calling with Close method)
+- **Query expander**: `internal/genai/gemini_expander.go` / `internal/genai/groq_expander.go` (LLM-based query expansion)
+- **NLU intent parser**: `internal/genai/gemini_intent.go` / `internal/genai/groq_intent.go` (Function Calling with Close method)
 - **Syllabus scraper**: `internal/syllabus/scraper.go` (course syllabus extraction)
 - **Timeout constants**: `internal/config/timeouts.go` (all timeout/interval constants)

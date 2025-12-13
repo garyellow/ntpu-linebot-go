@@ -38,7 +38,7 @@ type Handler struct {
 	logger         *logger.Logger
 	stickerManager *sticker.Manager
 	bm25Index      *rag.BM25Index
-	queryExpander  *genai.QueryExpander
+	queryExpander  genai.QueryExpander // Interface for multi-provider support
 	llmRateLimiter *ratelimit.LLMRateLimiter
 }
 
@@ -108,7 +108,7 @@ func NewHandler(
 	logger *logger.Logger,
 	stickerManager *sticker.Manager,
 	bm25Index *rag.BM25Index,
-	queryExpander *genai.QueryExpander,
+	queryExpander genai.QueryExpander, // Interface for multi-provider support
 	llmRateLimiter *ratelimit.LLMRateLimiter,
 ) *Handler {
 	return &Handler{
@@ -334,8 +334,10 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 	}
 
 	// Check for course UID in postback (with or without prefix)
+	// Extract the actual UID from data (e.g., "course:1132U2236" -> "1132U2236")
 	if uidRegex.MatchString(data) {
-		return h.handleCourseUIDQuery(ctx, data)
+		uid := uidRegex.FindString(data)
+		return h.handleCourseUIDQuery(ctx, uid)
 	}
 
 	return []messaging_api.MessageInterface{}
@@ -373,8 +375,14 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 
 	course, err = ntpu.ScrapeCourseByUID(ctx, h.scraper, uid)
 	if err != nil {
-		log.WithError(err).Errorf("Failed to scrape course UID: %s", uid)
-		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
+		// Check if it's a context error (timeout/cancellation)
+		if ctx.Err() != nil {
+			log.WithError(err).Warnf("Context error while scraping course UID %s: %v", uid, ctx.Err())
+			h.metrics.RecordScraperRequest(ModuleName, "timeout", time.Since(startTime).Seconds())
+		} else {
+			log.WithError(err).Errorf("Failed to scrape course UID: %s (error type: %T)", uid, err)
+			h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
+		}
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🔍 查無課程編號 %s\n\n請確認課程編號是否正確", uid), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyCourseAction(),

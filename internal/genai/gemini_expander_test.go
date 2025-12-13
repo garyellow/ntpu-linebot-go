@@ -53,7 +53,7 @@ func TestBuildExpansionPrompt(t *testing.T) {
 }
 
 func TestQueryExpanderNil(t *testing.T) {
-	var e *QueryExpander
+	var e *geminiQueryExpander
 	result, err := e.Expand(context.Background(), "test query")
 	if err != nil {
 		t.Errorf("Expand() error = %v, want nil", err)

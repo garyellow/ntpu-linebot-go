@@ -1,5 +1,5 @@
-// Package genai provides integration with Google's Generative AI APIs.
-// This file contains the QueryExpander for smart search query expansion.
+// Package genai provides integration with LLM APIs (Gemini and Groq).
+// This file contains the Gemini implementation of query expansion.
 package genai
 
 import (
@@ -7,34 +7,31 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"time"
 
 	"google.golang.org/genai"
 )
 
-const (
-	// ExpanderModel is the model used for query expansion
-	ExpanderModel = "gemma-3-27b-it"
+// MinQueryLengthForExpansion is the minimum rune count to skip expansion
+// Short queries benefit most from expansion
+const MinQueryLengthForExpansion = 15
 
-	// ExpanderTimeout is the timeout for query expansion calls
-	ExpanderTimeout = 8 * time.Second
-
-	// MinQueryLengthForExpansion is the minimum rune count to skip expansion
-	// Short queries benefit most from expansion
-	MinQueryLengthForExpansion = 15
-)
-
-// QueryExpander expands user queries for better smart search results.
+// geminiQueryExpander expands user queries for better smart search results.
 // Uses LLM to add synonyms, translations, and related concepts.
-type QueryExpander struct {
+// It implements the QueryExpander interface.
+type geminiQueryExpander struct {
 	client *genai.Client
 	model  string
 }
 
-// NewQueryExpander creates a new query expander
-func NewQueryExpander(ctx context.Context, apiKey string) (*QueryExpander, error) {
+// newGeminiQueryExpander creates a new Gemini-based query expander.
+// Returns nil if apiKey is empty (expansion disabled).
+func newGeminiQueryExpander(ctx context.Context, apiKey, model string) (*geminiQueryExpander, error) {
 	if apiKey == "" {
-		return nil, nil
+		return nil, nil //nolint:nilnil // Intentional: feature disabled when no API key
+	}
+
+	if model == "" {
+		model = DefaultGeminiExpanderModel
 	}
 
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
@@ -44,9 +41,9 @@ func NewQueryExpander(ctx context.Context, apiKey string) (*QueryExpander, error
 		return nil, fmt.Errorf("failed to create genai client: %w", err)
 	}
 
-	return &QueryExpander{
+	return &geminiQueryExpander{
 		client: client,
-		model:  ExpanderModel,
+		model:  model,
 	}, nil
 }
 
@@ -63,7 +60,7 @@ func NewQueryExpander(ctx context.Context, apiKey string) (*QueryExpander, error
 //   - "AWS" → "AWS Amazon Web Services 雲端服務 雲端運算 cloud computing"
 //   - "我想學 AI" → "我想學 AI 人工智慧 機器學習 深度學習 artificial intelligence machine learning"
 //   - "程式設計" → "程式設計 programming 軟體開發 coding 程式開發"
-func (e *QueryExpander) Expand(ctx context.Context, query string) (string, error) {
+func (e *geminiQueryExpander) Expand(ctx context.Context, query string) (string, error) {
 	if e == nil || e.client == nil {
 		return query, nil
 	}
@@ -72,10 +69,6 @@ func (e *QueryExpander) Expand(ctx context.Context, query string) (string, error
 	if len([]rune(query)) > MinQueryLengthForExpansion && !containsAbbreviation(query) {
 		return query, nil
 	}
-
-	// Apply timeout
-	ctx, cancel := context.WithTimeout(ctx, ExpanderTimeout)
-	defer cancel()
 
 	prompt := buildExpansionPrompt(query)
 
@@ -86,9 +79,8 @@ func (e *QueryExpander) Expand(ctx context.Context, query string) (string, error
 
 	resp, err := e.client.Models.GenerateContent(ctx, e.model, genai.Text(prompt), config)
 	if err != nil {
-		// Graceful degradation: return original query on API errors
-		// Errors are expected (rate limits, network issues) and shouldn't block search
-		return query, nil
+		// Return error for retry/fallback decision
+		return query, fmt.Errorf("generate content failed: %w", err)
 	}
 
 	if resp == nil || len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil {
@@ -116,9 +108,14 @@ func (e *QueryExpander) Expand(ctx context.Context, query string) (string, error
 	return result, nil
 }
 
+// Provider returns the provider type for this expander.
+func (e *geminiQueryExpander) Provider() Provider {
+	return ProviderGemini
+}
+
 // Close releases resources.
-// Safe to call on nil receiver. Currently a no-op as genai.Client doesn't require cleanup.
-func (e *QueryExpander) Close() error {
+// Safe to call on nil receiver.
+func (e *geminiQueryExpander) Close() error {
 	if e == nil {
 		return nil
 	}

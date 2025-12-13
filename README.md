@@ -154,7 +154,7 @@ cd ntpu-linebot-go/deployments
 
 cp .env.example .env
 # 編輯 .env 填入 LINE_CHANNEL_ACCESS_TOKEN 和 LINE_CHANNEL_SECRET
-# （可選）填入 GEMINI_API_KEY 以啟用 AI 功能
+# （可選）填入 GEMINI_API_KEY 或 GROQ_API_KEY 以啟用 AI 功能
 
 docker compose up -d
 ```
