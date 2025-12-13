@@ -278,10 +278,7 @@ func (p *Processor) handleWithNLU(ctx context.Context, text string, source webho
 		return rateLimitMsg, nil
 	}
 
-	start := time.Now()
-
 	result, err := p.intentParser.Parse(ctx, text)
-	duration := time.Since(start).Seconds()
 
 	if err != nil {
 		p.logger.WithError(err).Warn("NLU intent parsing failed")
@@ -296,7 +293,6 @@ func (p *Processor) handleWithNLU(ctx context.Context, text string, source webho
 
 	if result.ClarificationText != "" {
 		p.logger.WithField("clarification", result.ClarificationText).Debug("NLU returned clarification")
-		_ = duration // Duration recorded by FallbackIntentParser
 
 		sender := lineutil.GetSender("小幫手", p.stickerManager)
 		return []messaging_api.MessageInterface{
