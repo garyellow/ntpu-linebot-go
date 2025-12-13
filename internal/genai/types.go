@@ -123,13 +123,16 @@ type LLMConfig struct {
 // Default model constants
 const (
 	// DefaultGeminiIntentModel is the default model for Gemini intent parsing.
+	// gemini-2.5-flash offers excellent function calling with fast inference.
 	DefaultGeminiIntentModel = "gemini-2.5-flash"
 	// DefaultGeminiIntentFallbackModel is the fallback model for Gemini intent parsing.
-	DefaultGeminiIntentFallbackModel = "gemini-2.0-flash-lite"
+	// gemini-2.5-flash-lite provides faster, cost-efficient function calling.
+	DefaultGeminiIntentFallbackModel = "gemini-2.5-flash-lite"
 	// DefaultGeminiExpanderModel is the default model for Gemini query expansion.
 	DefaultGeminiExpanderModel = "gemini-2.5-flash"
 	// DefaultGeminiExpanderFallbackModel is the fallback model for Gemini query expansion.
-	DefaultGeminiExpanderFallbackModel = "gemini-2.0-flash-lite"
+	// gemini-2.5-flash-lite provides faster, cost-efficient text generation.
+	DefaultGeminiExpanderFallbackModel = "gemini-2.5-flash-lite"
 
 	// DefaultGroqIntentModel is the default model for Groq intent parsing.
 	// llama-3.1-8b-instant is optimized for fast inference with tool use support.
