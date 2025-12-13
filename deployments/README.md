@@ -36,7 +36,7 @@ LLM 進階設定（可選）：
 - `LLM_PRIMARY_PROVIDER` - 主要 LLM 提供者（預設：gemini，可選：groq）
 - `LLM_FALLBACK_PROVIDER` - 備援 LLM 提供者（預設：groq，可選：gemini）
 - `GEMINI_INTENT_MODEL` - Gemini 意圖分析模型（預設：gemini-2.5-flash）
-- `GROQ_INTENT_MODEL` - Groq 意圖分析模型（預設：llama-3.1-8b-instant）
+- `GROQ_INTENT_MODEL` - Groq 意圖分析模型（預設：meta-llama/llama-4-scout-17b-16e-instruct）
 - `LLM_RATE_LIMIT_PER_HOUR` - LLM API 速率限制（每位使用者每小時請求數，預設：50）
 
 其他可選：
@@ -46,8 +46,9 @@ LLM 進階設定（可選）：
   - 範例：`WARMUP_MODULES=sticker,id,contact,course,syllabus`
 - `LOG_LEVEL` - 日誌層級（預設：info）
 - `WEBHOOK_TIMEOUT` - Webhook 處理超時時間（預設：60s，配合 LINE Loading Animation）
-- `USER_RATE_LIMIT_TOKENS` - 每位使用者的令牌數量上限（預設：6）
-- `USER_RATE_LIMIT_REFILL_RATE` - 令牌回填速率（預設：0.2，每 5 秒補充 1 個令牌）
+- `USER_RATE_LIMIT_BURST` - 每位使用者的突發容量（預設：6）
+- `USER_RATE_LIMIT_REFILL_PER_SEC` - 令牌回填速率（預設：0.2 tokens/sec，每 5 秒補充 1 個令牌）
+- `GLOBAL_RATE_LIMIT_RPS` - 全域速率限制（預設：100 requests/sec）
 - `GRAFANA_PASSWORD` - Grafana 密碼（預設：admin123）
 
 ## 資料持久化

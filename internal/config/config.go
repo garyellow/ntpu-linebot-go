@@ -65,11 +65,11 @@ type BotConfig struct {
 	// Timeouts
 	WebhookTimeout time.Duration // Timeout for webhook bot processing (see config/timeouts.go)
 
-	// Rate Limits
-	UserRateLimitTokens     float64 // Maximum tokens per user (default: 6)
-	UserRateLimitRefillRate float64 // Tokens refill rate per second (default: 1/5)
-	LLMRateLimitPerHour     float64 // Maximum LLM requests per user per hour (default: 50)
-	GlobalRateLimitRPS      float64 // Global rate limit in requests per second (default: 100)
+	// Rate Limits (Token Bucket Algorithm)
+	UserRateLimitBurst        float64 // Maximum burst tokens per user (default: 6)
+	UserRateLimitRefillPerSec float64 // Tokens refilled per second (default: 0.2)
+	LLMRateLimitPerHour       float64 // Maximum LLM requests per user per hour (default: 50)
+	GlobalRateLimitRPS        float64 // Global rate limit in requests per second (default: 100)
 
 	// LINE API Constraints
 	MaxMessagesPerReply int // Maximum messages per reply (LINE API limit: 5)
@@ -146,22 +146,22 @@ func Load() (*Config, error) {
 
 		// Bot Configuration
 		Bot: BotConfig{
-			WebhookTimeout:          getDurationEnv("WEBHOOK_TIMEOUT", WebhookProcessing),
-			UserRateLimitTokens:     getFloatEnv("USER_RATE_LIMIT_TOKENS", 6.0),
-			UserRateLimitRefillRate: getFloatEnv("USER_RATE_LIMIT_REFILL_RATE", 1.0/5.0),
-			LLMRateLimitPerHour:     getFloatEnv("LLM_RATE_LIMIT_PER_HOUR", 50.0),
-			GlobalRateLimitRPS:      getFloatEnv("GLOBAL_RATE_LIMIT_RPS", 100.0),
-			MaxMessagesPerReply:     5,
-			MaxEventsPerWebhook:     100,
-			MinReplyTokenLength:     10,
-			MaxMessageLength:        20000,
-			MaxPostbackDataSize:     300,
-			MaxCoursesPerSearch:     40,
-			MaxTitleDisplayChars:    60,
-			MaxStudentsPerSearch:    500,
-			MaxContactsPerSearch:    100,
-			ValidYearStart:          95,
-			ValidYearEnd:            112,
+			WebhookTimeout:            getDurationEnv("WEBHOOK_TIMEOUT", WebhookProcessing),
+			UserRateLimitBurst:        getFloatEnv("USER_RATE_LIMIT_BURST", 6.0),
+			UserRateLimitRefillPerSec: getFloatEnv("USER_RATE_LIMIT_REFILL_PER_SEC", 1.0/5.0),
+			LLMRateLimitPerHour:       getFloatEnv("LLM_RATE_LIMIT_PER_HOUR", 50.0),
+			GlobalRateLimitRPS:        getFloatEnv("GLOBAL_RATE_LIMIT_RPS", 100.0),
+			MaxMessagesPerReply:       5,
+			MaxEventsPerWebhook:       100,
+			MinReplyTokenLength:       10,
+			MaxMessageLength:          20000,
+			MaxPostbackDataSize:       300,
+			MaxCoursesPerSearch:       40,
+			MaxTitleDisplayChars:      60,
+			MaxStudentsPerSearch:      500,
+			MaxContactsPerSearch:      100,
+			ValidYearStart:            95,
+			ValidYearEnd:              112,
 		},
 	}
 

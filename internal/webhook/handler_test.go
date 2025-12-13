@@ -55,26 +55,26 @@ func setupTestHandler(t *testing.T) *Handler {
 	botRegistry.Register(idHandler)
 
 	botCfg := config.BotConfig{
-		WebhookTimeout:          30 * time.Second,
-		UserRateLimitTokens:     6.0,
-		UserRateLimitRefillRate: 1.0 / 5.0,
-		LLMRateLimitPerHour:     50.0,
-		GlobalRateLimitRPS:      100.0,
-		MaxMessagesPerReply:     5,
-		MaxEventsPerWebhook:     100,
-		MinReplyTokenLength:     10,
-		MaxMessageLength:        20000,
-		MaxPostbackDataSize:     300,
-		MaxCoursesPerSearch:     40,
-		MaxTitleDisplayChars:    60,
-		MaxStudentsPerSearch:    500,
-		MaxContactsPerSearch:    100,
-		ValidYearStart:          95,
-		ValidYearEnd:            112,
+		WebhookTimeout:            30 * time.Second,
+		UserRateLimitBurst:        6.0,
+		UserRateLimitRefillPerSec: 1.0 / 5.0,
+		LLMRateLimitPerHour:       50.0,
+		GlobalRateLimitRPS:        100.0,
+		MaxMessagesPerReply:       5,
+		MaxEventsPerWebhook:       100,
+		MinReplyTokenLength:       10,
+		MaxMessageLength:          20000,
+		MaxPostbackDataSize:       300,
+		MaxCoursesPerSearch:       40,
+		MaxTitleDisplayChars:      60,
+		MaxStudentsPerSearch:      500,
+		MaxContactsPerSearch:      100,
+		ValidYearStart:            95,
+		ValidYearEnd:              112,
 	}
 
 	llmRateLimiter := ratelimit.NewLLMRateLimiter(botCfg.LLMRateLimitPerHour, 5*time.Minute, m)
-	userLimiter := ratelimit.NewUserRateLimiter(botCfg.UserRateLimitTokens, botCfg.UserRateLimitRefillRate, 5*time.Minute, m)
+	userLimiter := ratelimit.NewUserRateLimiter(botCfg.UserRateLimitBurst, botCfg.UserRateLimitRefillPerSec, 5*time.Minute, m)
 
 	processor := bot.NewProcessor(bot.ProcessorConfig{
 		Registry:       botRegistry,

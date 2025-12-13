@@ -216,7 +216,7 @@ lineutil.TruncateRunes(value, 20)                                               
 ## Configuration
 
 **Load-time validation**: All env vars loaded at startup (`internal/config/`) with validation before server starts
-**Required**: `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_TOKEN`
+**Required**: `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN`
 **Optional**: `GEMINI_API_KEY` or `GROQ_API_KEY` (enables NLU + Query Expansion with multi-provider fallback)
 **Platform paths**: `runtime.GOOS` determines default paths (Windows: `./data`, Linux/Mac: `/data`)
 
@@ -236,7 +236,7 @@ task compose:up       # Start monitoring stack (Prometheus/Grafana)
 ```
 
 **Environment variables** (`.env`):
-- **Required**: `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_TOKEN`
+- **Required**: `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN`
 - **Optional**: `GEMINI_API_KEY`, `GROQ_API_KEY` (enables NLU + Query Expansion with multi-provider fallback), `DATA_DIR` (default: `./data` on Windows, `/data` on Linux/Mac)
 
 Production warmup runs automatically on server startup (non-blocking).
@@ -315,8 +315,8 @@ Fallback → getHelpMessage() + Warning Log
 - `genai.ParseResult`: Module, Intent, Params, ClarificationText, FunctionName
 
 **Default Models**:
-- Gemini: `gemini-2.5-flash` (primary), `gemini-2.0-flash-lite` (fallback)
-- Groq: `llama-3.1-8b-instant` (primary), `llama-3.3-70b-versatile` (fallback)
+- Gemini: `gemini-2.5-flash` (primary), `gemini-2.5-flash-lite` (fallback)
+- Groq: `meta-llama/llama-4-scout-17b-16e-instruct` (intent), `meta-llama/llama-4-maverick-17b-128e-instruct` (expander), with Llama 3.x Production fallbacks
 
 ## Key File Locations
 
