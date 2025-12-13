@@ -347,11 +347,12 @@ Warmup:
 
 **啟用條件**:
 - 將 `syllabus` 加入 `WARMUP_MODULES`
-- 設定 `GEMINI_API_KEY` 環境變數（Query Expansion 需要）
+- 設定 `GEMINI_API_KEY` 或 `GROQ_API_KEY`（Query Expansion 需要）
 - 即使沒有 API Key，基本 BM25 搜尋仍可使用
 
 **關鍵實作**:
-- `internal/genai/expander.go`: Query Expansion（Gemini API）
+- `internal/genai/gemini_expander.go`: Query Expansion（Gemini）
+- `internal/genai/groq_expander.go`: Query Expansion（Groq）
 - `internal/rag/bm25.go`: BM25Index（記憶體索引）
 - `internal/syllabus/`: 課程大綱擷取與 hash 計算
 

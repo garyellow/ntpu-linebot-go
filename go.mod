@@ -4,6 +4,7 @@ go 1.25.5
 
 require (
 	github.com/PuerkitoBio/goquery v1.11.0
+	github.com/conneroisu/groq-go v0.9.5
 	github.com/corpix/uarand v0.2.0
 	github.com/gin-gonic/gin v1.11.0
 	github.com/iwilltry42/bm25-go v0.0.0-20240909111832-a928590cc9da
@@ -23,6 +24,7 @@ require (
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.14.2 // indirect
 	github.com/bytedance/sonic/loader v0.4.0 // indirect

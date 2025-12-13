@@ -169,18 +169,19 @@ func TestRecordLLM(t *testing.T) {
 	m := New(registry)
 
 	testCases := []struct {
+		provider  string
 		operation string
 		status    string
 		duration  float64
 	}{
-		{"nlu", "success", 0.5},
-		{"nlu", "error", 1.0},
-		{"nlu", "fallback", 2.0},
-		{"nlu", "clarification", 0.8},
+		{"gemini", "nlu", "success", 0.5},
+		{"gemini", "nlu", "error", 1.0},
+		{"groq", "nlu", "rate_limit", 2.0},
+		{"gemini", "expander", "success", 0.8},
 	}
 
 	for _, tc := range testCases {
-		m.RecordLLM(tc.operation, tc.status, tc.duration)
+		m.RecordLLM(tc.provider, tc.operation, tc.status, tc.duration)
 	}
 }
 
@@ -279,15 +280,16 @@ func TestRecordLLMRequest(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 
-	// RecordLLMRequest is an alias for RecordLLM
-	m.RecordLLMRequest("nlu", "success", 0.5)
-	m.RecordLLMRequest("nlu", "error", 1.0)
+	// RecordLLMRequest is an alias for RecordLLM with provider
+	m.RecordLLMRequest("gemini", "nlu", "success", 0.5)
+	m.RecordLLMRequest("groq", "nlu", "error", 1.0)
 }
 
 func TestRecordLLMFallback(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 
-	// RecordLLMFallback records with "fallback" status
-	m.RecordLLMFallback("nlu")
+	// RecordLLMFallback records provider fallback events
+	m.RecordLLMFallback("gemini", "groq", "nlu")
+	m.RecordLLMFallback("groq", "gemini", "expander")
 }

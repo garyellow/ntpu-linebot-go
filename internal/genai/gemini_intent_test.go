@@ -92,7 +92,7 @@ func TestBuildIntentFunctions(t *testing.T) {
 }
 
 func TestNewIntentParser_NilWithEmptyKey(t *testing.T) {
-	parser, err := NewIntentParser(context.Background(), "")
+	parser, err := newGeminiIntentParser(context.Background(), "", "")
 	if err != nil {
 		t.Errorf("Expected nil error for empty key, got: %v", err)
 	}
@@ -103,20 +103,20 @@ func TestNewIntentParser_NilWithEmptyKey(t *testing.T) {
 
 func TestIntentParser_IsEnabled(t *testing.T) {
 	// nil parser
-	var nilParser *GeminiIntentParser
+	var nilParser *geminiIntentParser
 	if nilParser.IsEnabled() {
 		t.Error("nil parser should return false for IsEnabled")
 	}
 
 	// parser with nil client
-	parserWithNilClient := &GeminiIntentParser{client: nil}
+	parserWithNilClient := &geminiIntentParser{client: nil}
 	if parserWithNilClient.IsEnabled() {
 		t.Error("parser with nil client should return false for IsEnabled")
 	}
 }
 
 func TestIntentParser_ParseNil(t *testing.T) {
-	var nilParser *GeminiIntentParser
+	var nilParser *geminiIntentParser
 	_, err := nilParser.Parse(context.Background(), "test")
 	if err == nil {
 		t.Error("Expected error for nil parser")

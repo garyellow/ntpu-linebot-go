@@ -38,7 +38,7 @@ type Handler struct {
 	logger         *logger.Logger
 	stickerManager *sticker.Manager
 	bm25Index      *rag.BM25Index
-	queryExpander  *genai.QueryExpander
+	queryExpander  genai.QueryExpander // Interface for multi-provider support
 	llmRateLimiter *ratelimit.LLMRateLimiter
 }
 
@@ -108,7 +108,7 @@ func NewHandler(
 	logger *logger.Logger,
 	stickerManager *sticker.Manager,
 	bm25Index *rag.BM25Index,
-	queryExpander *genai.QueryExpander,
+	queryExpander genai.QueryExpander, // Interface for multi-provider support
 	llmRateLimiter *ratelimit.LLMRateLimiter,
 ) *Handler {
 	return &Handler{
