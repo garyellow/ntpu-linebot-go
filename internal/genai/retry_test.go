@@ -120,7 +120,7 @@ func TestSleep(t *testing.T) {
 
 		err := Sleep(ctx, time.Hour)
 		if !errors.Is(err, context.Canceled) {
-			t.Errorf("Sleep with cancelled context should return context.Canceled, got: %v", err)
+			t.Errorf("Sleep with canceled context should return context.Canceled, got: %v", err)
 		}
 	})
 

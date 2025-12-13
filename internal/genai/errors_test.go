@@ -348,7 +348,7 @@ func TestHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("WrapError", func(t *testing.T) {
-		wrapped := WrapError(errors.New("test"), ProviderGemini, 429)
+		wrapped := WrapError(errors.New("test"), ProviderGemini, http.StatusTooManyRequests)
 		var llmErr *LLMError
 		if !errors.As(wrapped, &llmErr) {
 			t.Error("should be LLMError")
@@ -356,13 +356,13 @@ func TestHelperFunctions(t *testing.T) {
 		if llmErr.Provider != ProviderGemini {
 			t.Error("wrong provider")
 		}
-		if llmErr.StatusCode != 429 {
+		if llmErr.StatusCode != http.StatusTooManyRequests {
 			t.Error("wrong status code")
 		}
 	})
 
 	t.Run("WrapError nil", func(t *testing.T) {
-		if WrapError(nil, ProviderGemini, 429) != nil {
+		if WrapError(nil, ProviderGemini, http.StatusTooManyRequests) != nil {
 			t.Error("should return nil for nil error")
 		}
 	})

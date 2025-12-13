@@ -21,7 +21,7 @@ import (
 //   - Better distribution of retry attempts
 //
 // Reference: https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
-func CalculateBackoff(attempt int, initial, max time.Duration) time.Duration {
+func CalculateBackoff(attempt int, initial, maxDelay time.Duration) time.Duration {
 	if attempt <= 0 {
 		return 0 // No delay on first attempt
 	}
@@ -31,8 +31,8 @@ func CalculateBackoff(attempt int, initial, max time.Duration) time.Duration {
 	delay := time.Duration(float64(initial) * exp)
 
 	// Cap at maximum
-	if delay > max {
-		delay = max
+	if delay > maxDelay {
+		delay = maxDelay
 	}
 
 	// Apply Full Jitter: random(0, delay)
@@ -52,7 +52,7 @@ func CalculateBackoff(attempt int, initial, max time.Duration) time.Duration {
 }
 
 // Sleep waits for the specified duration, respecting context cancellation.
-// Returns ctx.Err() if context is cancelled during sleep.
+// Returns ctx.Err() if context is canceled during sleep.
 func Sleep(ctx context.Context, d time.Duration) error {
 	if d <= 0 {
 		return nil
@@ -77,7 +77,7 @@ func Sleep(ctx context.Context, d time.Duration) error {
 func WithRetry(ctx context.Context, cfg RetryConfig, fn func() error) error {
 	var lastErr error
 
-	for attempt := 0; attempt < cfg.MaxAttempts; attempt++ {
+	for attempt := range cfg.MaxAttempts {
 		// Check context before attempting
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -105,7 +105,7 @@ func WithRetry(ctx context.Context, cfg RetryConfig, fn func() error) error {
 
 		// Sleep with context cancellation support
 		if err := Sleep(ctx, delay); err != nil {
-			return err // Context cancelled
+			return err // Context canceled
 		}
 	}
 
@@ -123,7 +123,7 @@ func WithRetry(ctx context.Context, cfg RetryConfig, fn func() error) error {
 func WithRetryAndMetrics(ctx context.Context, cfg RetryConfig, onRetry func(attempt int, err error), fn func() error) error {
 	var lastErr error
 
-	for attempt := 0; attempt < cfg.MaxAttempts; attempt++ {
+	for attempt := range cfg.MaxAttempts {
 		// Check context before attempting
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -156,7 +156,7 @@ func WithRetryAndMetrics(ctx context.Context, cfg RetryConfig, onRetry func(atte
 
 		// Sleep with context cancellation support
 		if err := Sleep(ctx, delay); err != nil {
-			return err // Context cancelled
+			return err // Context canceled
 		}
 	}
 
@@ -175,10 +175,13 @@ func RemainingBudget(ctx context.Context) time.Duration {
 
 // HasSufficientBudget checks if there's enough time remaining for an operation.
 // This helps prevent starting operations that are likely to timeout.
+// It includes a buffer for the estimated API call time to prevent edge cases.
 func HasSufficientBudget(ctx context.Context, required time.Duration) bool {
 	deadline, ok := ctx.Deadline()
 	if !ok {
 		return true // No deadline means unlimited budget
 	}
-	return time.Until(deadline) >= required
+	// Add buffer for API call time (average 2s based on metrics)
+	const estimatedCallTime = 2 * time.Second
+	return time.Until(deadline) >= (required + estimatedCallTime)
 }

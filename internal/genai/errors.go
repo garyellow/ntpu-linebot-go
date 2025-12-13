@@ -86,12 +86,13 @@ func ClassifyError(err error) ErrorAction {
 	// Parse error message for status codes and patterns
 	errStr := strings.ToLower(err.Error())
 
-	// Check for quota exhaustion (immediate fallback)
-	if containsAny(errStr, "quota", "resource_exhausted", "rate limit exceeded", "too many requests") {
-		// Check if it's a quota issue vs rate limit
-		if containsAny(errStr, "quota", "daily limit", "monthly limit") {
-			return ActionFallback // Quota exhausted, try other provider
-		}
+	// Check for quota exhaustion first (more severe, immediate fallback)
+	if containsAny(errStr, "quota", "daily limit", "monthly limit", "billing", "quota exceeded") {
+		return ActionFallback // Quota exhausted, try other provider
+	}
+
+	// Then check for rate limiting (transient, can retry)
+	if containsAny(errStr, "rate limit", "too many requests", "resource_exhausted") {
 		return ActionRetry // Rate limit, can retry after backoff
 	}
 

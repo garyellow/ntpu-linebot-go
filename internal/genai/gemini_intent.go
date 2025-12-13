@@ -23,7 +23,7 @@ type geminiIntentParser struct {
 // Returns nil if apiKey is empty (NLU disabled).
 func newGeminiIntentParser(ctx context.Context, apiKey, model string) (*geminiIntentParser, error) {
 	if apiKey == "" {
-		return nil, nil // NLU disabled
+		return nil, nil //nolint:nilnil // Intentional: NLU disabled when no API key
 	}
 
 	if model == "" {

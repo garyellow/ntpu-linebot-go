@@ -27,7 +27,7 @@ type geminiQueryExpander struct {
 // Returns nil if apiKey is empty (expansion disabled).
 func newGeminiQueryExpander(ctx context.Context, apiKey, model string) (*geminiQueryExpander, error) {
 	if apiKey == "" {
-		return nil, nil
+		return nil, nil //nolint:nilnil // Intentional: feature disabled when no API key
 	}
 
 	if model == "" {

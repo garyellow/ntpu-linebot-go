@@ -25,7 +25,7 @@ type groqIntentParser struct {
 // Returns nil if apiKey is empty (NLU disabled).
 func newGroqIntentParser(_ context.Context, apiKey, model string) (*groqIntentParser, error) {
 	if apiKey == "" {
-		return nil, nil // NLU disabled
+		return nil, nil //nolint:nilnil // Intentional: NLU disabled when no API key
 	}
 
 	if model == "" {

@@ -26,6 +26,9 @@ var (
 
 	// LLMFallbackTotal is the global LLM fallback counter.
 	LLMFallbackTotal *prometheus.CounterVec
+
+	// LLMFallbackLatency is the global LLM fallback latency histogram.
+	LLMFallbackLatency *prometheus.HistogramVec
 )
 
 // InitGlobal initializes the package-level metric variables.
@@ -34,6 +37,7 @@ func InitGlobal(m *Metrics) {
 	LLMTotal = m.LLMTotal
 	LLMDuration = m.LLMDuration
 	LLMFallbackTotal = m.LLMFallbackTotal
+	LLMFallbackLatency = m.LLMFallbackLatency
 }
 
 // Metrics holds all Prometheus metrics for the NTPU LineBot.
@@ -69,9 +73,10 @@ type Metrics struct {
 	// LLM (Gemini/Groq API - RED Method)
 	// NLU intent parsing, Query Expansion
 	// ============================================
-	LLMTotal         *prometheus.CounterVec   // requests by provider, operation, and status
-	LLMDuration      *prometheus.HistogramVec // latency by provider and operation
-	LLMFallbackTotal *prometheus.CounterVec   // fallback events by provider pair and operation
+	LLMTotal           *prometheus.CounterVec   // requests by provider, operation, and status
+	LLMDuration        *prometheus.HistogramVec // latency by provider and operation
+	LLMFallbackTotal   *prometheus.CounterVec   // fallback events by provider pair and operation
+	LLMFallbackLatency *prometheus.HistogramVec // additional latency from fallback by provider pair and operation
 
 	// ============================================
 	// Smart Search (BM25 - RED Method)
@@ -211,6 +216,22 @@ func New(registry *prometheus.Registry) *Metrics {
 			prometheus.CounterOpts{
 				Name: "ntpu_llm_fallback_total",
 				Help: "Total LLM provider fallback events",
+			},
+			// from_provider: gemini, groq (primary that failed)
+			// to_provider: gemini, groq (fallback used)
+			// operation: nlu, expander
+			[]string{"from_provider", "to_provider", "operation"},
+		),
+
+		LLMFallbackLatency: promauto.With(registry).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name: "ntpu_llm_fallback_latency_seconds",
+				Help: "Additional latency introduced by provider fallback",
+				// Buckets for fallback overhead:
+				// Fast: < 0.5s (immediate fallback)
+				// Normal: 0.5-2s (with retry)
+				// Slow: > 2s (multiple retries)
+				Buckets: []float64{0.1, 0.5, 1, 2, 5, 10},
 			},
 			// from_provider: gemini, groq (primary that failed)
 			// to_provider: gemini, groq (fallback used)

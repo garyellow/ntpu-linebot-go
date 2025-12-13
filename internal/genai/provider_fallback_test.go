@@ -356,6 +356,6 @@ func TestFallbackQueryExpander_ContextCancellation(t *testing.T) {
 	}
 	// Error should be nil due to graceful degradation
 	if err != nil {
-		t.Logf("Note: Expand() returned error = %v (acceptable for cancelled context)", err)
+		t.Logf("Note: Expand() returned error = %v (acceptable for canceled context)", err)
 	}
 }

@@ -22,7 +22,7 @@ type groqQueryExpander struct {
 // Returns nil if apiKey is empty (expansion disabled).
 func newGroqQueryExpander(_ context.Context, apiKey, model string) (*groqQueryExpander, error) {
 	if apiKey == "" {
-		return nil, nil
+		return nil, nil //nolint:nilnil // Intentional: feature disabled when no API key
 	}
 
 	if model == "" {

@@ -4,8 +4,10 @@ package genai
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
@@ -35,7 +37,7 @@ func NewFallbackIntentParser(primary, fallback IntentParser, cfg RetryConfig) *F
 // Parse tries the primary parser first with retry, then falls back if needed.
 func (f *FallbackIntentParser) Parse(ctx context.Context, text string) (*ParseResult, error) {
 	if f == nil || f.primary == nil {
-		return nil, fmt.Errorf("intent parser not configured")
+		return nil, errors.New("intent parser not configured")
 	}
 
 	start := time.Now()
@@ -73,7 +75,7 @@ func (f *FallbackIntentParser) Parse(ctx context.Context, text string) (*ParseRe
 	result, err = f.parseWithRetry(ctx, f.fallback, text)
 	if err == nil {
 		recordIntentSuccess(fallbackProvider, fallbackStart)
-		recordFallback(provider, fallbackProvider, "nlu")
+		recordFallback(provider, fallbackProvider, "nlu", time.Since(start))
 		return result, nil
 	}
 
@@ -91,17 +93,9 @@ func (f *FallbackIntentParser) Parse(ctx context.Context, text string) (*ParseRe
 func (f *FallbackIntentParser) parseWithRetry(ctx context.Context, parser IntentParser, text string) (*ParseResult, error) {
 	var lastErr error
 
-	for attempt := 0; attempt < f.retryConfig.MaxAttempts; attempt++ {
+	for attempt := range f.retryConfig.MaxAttempts {
 		// Check context before attempting
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-
-		// Check remaining time budget
-		if !HasSufficientBudget(ctx, f.retryConfig.InitialDelay) {
-			if lastErr != nil {
-				return nil, lastErr
-			}
 			return nil, ctx.Err()
 		}
 
@@ -124,7 +118,13 @@ func (f *FallbackIntentParser) parseWithRetry(ctx context.Context, parser Intent
 		}
 
 		// Calculate backoff with jitter
-		backoff := CalculateBackoff(attempt, f.retryConfig.InitialDelay, f.retryConfig.MaxDelay)
+		backoff := CalculateBackoff(attempt+1, f.retryConfig.InitialDelay, f.retryConfig.MaxDelay)
+
+		// Check remaining time budget with actual backoff
+		if !HasSufficientBudget(ctx, backoff) {
+			// Insufficient time remaining, return last error
+			return nil, fmt.Errorf("timeout during retry: %w", lastErr)
+		}
 
 		slog.Debug("retrying intent parse",
 			"provider", parser.Provider(),
@@ -242,7 +242,7 @@ func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (strin
 	result, err = f.expandWithRetry(ctx, f.fallback, query)
 	if err == nil {
 		recordExpanderSuccess(fallbackProvider, fallbackStart)
-		recordFallback(provider, fallbackProvider, "expander")
+		recordFallback(provider, fallbackProvider, "expander", time.Since(start))
 		return result, nil
 	}
 
@@ -260,7 +260,7 @@ func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (strin
 func (f *FallbackQueryExpander) expandWithRetry(ctx context.Context, expander QueryExpander, query string) (string, error) {
 	var lastErr error
 
-	for attempt := 0; attempt < f.retryConfig.MaxAttempts; attempt++ {
+	for attempt := range f.retryConfig.MaxAttempts {
 		if ctx.Err() != nil {
 			return query, ctx.Err()
 		}
@@ -372,7 +372,7 @@ func recordExpanderError(provider Provider, err error) {
 	metrics.LLMTotal.WithLabelValues(string(provider), "expander", errType).Inc()
 }
 
-func recordFallback(fromProvider, toProvider Provider, operation string) {
+func recordFallback(fromProvider, toProvider Provider, operation string, totalDuration time.Duration) {
 	if metrics.LLMFallbackTotal == nil {
 		return
 	}
@@ -381,19 +381,54 @@ func recordFallback(fromProvider, toProvider Provider, operation string) {
 		string(toProvider),
 		operation,
 	).Inc()
+
+	// Record additional latency introduced by fallback
+	if metrics.LLMFallbackLatency != nil {
+		metrics.LLMFallbackLatency.WithLabelValues(
+			string(fromProvider),
+			string(toProvider),
+			operation,
+		).Observe(totalDuration.Seconds())
+	}
 }
 
+// classifyErrorType maps error to a metric status label.
+// Provides fine-grained error classification for better observability.
 func classifyErrorType(err error) string {
 	if err == nil {
 		return "success"
 	}
 
+	// Check for context errors first
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "timeout"
+	}
+	if errors.Is(err, context.Canceled) {
+		return "canceled"
+	}
+
+	// Check for wrapped LLMError with status code
+	var llmErr *LLMError
+	if errors.As(err, &llmErr) {
+		switch {
+		case llmErr.StatusCode == http.StatusTooManyRequests:
+			return "rate_limit"
+		case llmErr.StatusCode >= 500:
+			return "server_error"
+		case llmErr.StatusCode == http.StatusUnauthorized || llmErr.StatusCode == http.StatusForbidden:
+			return "auth_error"
+		case llmErr.StatusCode == http.StatusBadRequest:
+			return "invalid_request"
+		}
+	}
+
+	// Fall back to action-based classification
 	action := ClassifyError(err)
 	switch action {
-	case ActionRetry:
-		return "rate_limit"
 	case ActionFallback:
 		return "quota_exhausted"
+	case ActionRetry:
+		return "transient_error"
 	default:
 		return "error"
 	}
