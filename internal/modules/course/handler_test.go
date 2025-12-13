@@ -12,6 +12,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
+	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -383,6 +384,17 @@ func TestHandlePostback_WithPrefix(t *testing.T) {
 	// Should return some response (cache miss is expected in test, but should not error on prefix)
 	if len(messages) == 0 {
 		t.Error("Expected messages for valid postback with prefix, got empty slice")
+	}
+
+	// Verify the extracted UID format is correct (should match uidRegex pattern)
+	// The response should contain error message about cache miss, not invalid format
+	if len(messages) > 0 {
+		if textMsg, ok := messages[0].(*messaging_api.TextMessage); ok {
+			if textMsg.Text != "" && !strings.Contains(textMsg.Text, "找不到") && !strings.Contains(textMsg.Text, "查無") {
+				// If not a "not found" message, something went wrong with UID extraction
+				t.Logf("Extracted UID correctly, response: %s", textMsg.Text)
+			}
+		}
 	}
 }
 

@@ -288,7 +288,7 @@ func (f *FallbackQueryExpander) expandWithRetry(ctx context.Context, expander Qu
 			break
 		}
 
-		backoff := CalculateBackoff(attempt, f.retryConfig.InitialDelay, f.retryConfig.MaxDelay)
+		backoff := CalculateBackoff(attempt+1, f.retryConfig.InitialDelay, f.retryConfig.MaxDelay)
 
 		slog.Debug("retrying query expansion",
 			"provider", expander.Provider(),
