@@ -18,12 +18,12 @@ func (c *BotConfig) Validate() error {
 		return fmt.Errorf("max events per webhook must be positive, got %d", c.MaxEventsPerWebhook)
 	}
 
-	if c.UserRateLimitTokens <= 0 {
-		return fmt.Errorf("user rate limit tokens must be positive, got %f", c.UserRateLimitTokens)
+	if c.UserRateLimitBurst <= 0 {
+		return fmt.Errorf("user rate limit burst must be positive, got %f", c.UserRateLimitBurst)
 	}
 
-	if c.UserRateLimitRefillRate <= 0 {
-		return fmt.Errorf("user rate limit refill rate must be positive, got %f", c.UserRateLimitRefillRate)
+	if c.UserRateLimitRefillPerSec <= 0 {
+		return fmt.Errorf("user rate limit refill per second must be positive, got %f", c.UserRateLimitRefillPerSec)
 	}
 
 	if c.LLMRateLimitPerHour <= 0 {

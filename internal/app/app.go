@@ -122,7 +122,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	}
 
 	llmRateLimiter := ratelimit.NewLLMRateLimiter(cfg.Bot.LLMRateLimitPerHour, config.RateLimiterCleanupInterval, m)
-	userLimiter := ratelimit.NewUserRateLimiter(cfg.Bot.UserRateLimitTokens, cfg.Bot.UserRateLimitRefillRate, config.RateLimiterCleanupInterval, m)
+	userLimiter := ratelimit.NewUserRateLimiter(cfg.Bot.UserRateLimitBurst, cfg.Bot.UserRateLimitRefillPerSec, config.RateLimiterCleanupInterval, m)
 
 	idHandler := id.NewHandler(db, scraperClient, m, log, stickerMgr)
 	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerMgr, bm25Index, queryExpander, llmRateLimiter)

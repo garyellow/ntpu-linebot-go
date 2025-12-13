@@ -7,22 +7,22 @@ import (
 
 func newTestBotConfig() BotConfig {
 	return BotConfig{
-		WebhookTimeout:          WebhookProcessing,
-		UserRateLimitTokens:     6.0,
-		UserRateLimitRefillRate: 0.2,
-		LLMRateLimitPerHour:     50.0,
-		GlobalRateLimitRPS:      80.0,
-		MaxMessagesPerReply:     5,
-		MaxEventsPerWebhook:     100,
-		MinReplyTokenLength:     10,
-		MaxMessageLength:        20000,
-		MaxPostbackDataSize:     300,
-		MaxCoursesPerSearch:     40,
-		MaxTitleDisplayChars:    60,
-		MaxStudentsPerSearch:    500,
-		MaxContactsPerSearch:    100,
-		ValidYearStart:          95,
-		ValidYearEnd:            112,
+		WebhookTimeout:            WebhookProcessing,
+		UserRateLimitBurst:        6.0,
+		UserRateLimitRefillPerSec: 0.2,
+		LLMRateLimitPerHour:       50.0,
+		GlobalRateLimitRPS:        80.0,
+		MaxMessagesPerReply:       5,
+		MaxEventsPerWebhook:       100,
+		MinReplyTokenLength:       10,
+		MaxMessageLength:          20000,
+		MaxPostbackDataSize:       300,
+		MaxCoursesPerSearch:       40,
+		MaxTitleDisplayChars:      60,
+		MaxStudentsPerSearch:      500,
+		MaxContactsPerSearch:      100,
+		ValidYearStart:            95,
+		ValidYearEnd:              112,
 	}
 }
 
@@ -51,12 +51,12 @@ func TestNewBotConfig(t *testing.T) {
 		t.Errorf("expected LLMRateLimitPerHour 50.0, got %f", cfg.LLMRateLimitPerHour)
 	}
 
-	if cfg.UserRateLimitTokens != 6.0 {
-		t.Errorf("expected UserRateLimitTokens 6.0, got %f", cfg.UserRateLimitTokens)
+	if cfg.UserRateLimitBurst != 6.0 {
+		t.Errorf("expected UserRateLimitBurst 6.0, got %f", cfg.UserRateLimitBurst)
 	}
 
-	if cfg.UserRateLimitRefillRate != 0.2 {
-		t.Errorf("expected UserRateLimitRefillRate 0.2, got %f", cfg.UserRateLimitRefillRate)
+	if cfg.UserRateLimitRefillPerSec != 0.2 {
+		t.Errorf("expected UserRateLimitRefillPerSec 0.2, got %f", cfg.UserRateLimitRefillPerSec)
 	}
 
 	// Test module limits
@@ -81,20 +81,20 @@ func TestNewBotConfig(t *testing.T) {
 func TestBotConfigCustomValues(t *testing.T) {
 	cfg := newTestBotConfig()
 	cfg.WebhookTimeout = 30 * time.Second
-	cfg.UserRateLimitTokens = 10.0
-	cfg.UserRateLimitRefillRate = 0.5
+	cfg.UserRateLimitBurst = 10.0
+	cfg.UserRateLimitRefillPerSec = 0.5
 	cfg.LLMRateLimitPerHour = 100.0
 
 	if cfg.WebhookTimeout != 30*time.Second {
 		t.Errorf("expected WebhookTimeout 30s, got %v", cfg.WebhookTimeout)
 	}
 
-	if cfg.UserRateLimitTokens != 10.0 {
-		t.Errorf("expected UserRateLimitTokens 10.0, got %f", cfg.UserRateLimitTokens)
+	if cfg.UserRateLimitBurst != 10.0 {
+		t.Errorf("expected UserRateLimitBurst 10.0, got %f", cfg.UserRateLimitBurst)
 	}
 
-	if cfg.UserRateLimitRefillRate != 0.5 {
-		t.Errorf("expected UserRateLimitRefillRate 0.5, got %f", cfg.UserRateLimitRefillRate)
+	if cfg.UserRateLimitRefillPerSec != 0.5 {
+		t.Errorf("expected UserRateLimitRefillPerSec 0.5, got %f", cfg.UserRateLimitRefillPerSec)
 	}
 
 	if cfg.LLMRateLimitPerHour != 100.0 {
@@ -143,8 +143,8 @@ func TestBotConfig_Validate(t *testing.T) {
 			name string
 			fn   func(*BotConfig)
 		}{
-			{"negative user tokens", func(c *BotConfig) { c.UserRateLimitTokens = -1 }},
-			{"zero refill rate", func(c *BotConfig) { c.UserRateLimitRefillRate = 0 }},
+			{"negative user burst", func(c *BotConfig) { c.UserRateLimitBurst = -1 }},
+			{"zero refill rate", func(c *BotConfig) { c.UserRateLimitRefillPerSec = 0 }},
 			{"negative LLM limit", func(c *BotConfig) { c.LLMRateLimitPerHour = -1 }},
 			{"zero global RPS", func(c *BotConfig) { c.GlobalRateLimitRPS = 0 }},
 		}
