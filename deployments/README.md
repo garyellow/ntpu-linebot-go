@@ -36,7 +36,7 @@ LLM 進階設定（可選）：
 - `LLM_PRIMARY_PROVIDER` - 主要 LLM 提供者（預設：gemini，可選：groq）
 - `LLM_FALLBACK_PROVIDER` - 備援 LLM 提供者（預設：groq，可選：gemini）
 - `GEMINI_INTENT_MODEL` - Gemini 意圖分析模型（預設：gemini-2.5-flash）
-- `GROQ_INTENT_MODEL` - Groq 意圖分析模型（預設：llama-3.1-8b-instant）
+- `GROQ_INTENT_MODEL` - Groq 意圖分析模型（預設：meta-llama/llama-4-scout-17b-16e-instruct）
 - `LLM_RATE_LIMIT_PER_HOUR` - LLM API 速率限制（每位使用者每小時請求數，預設：50）
 
 其他可選：

@@ -200,10 +200,10 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 | `GEMINI_INTENT_FALLBACK_MODEL` | gemini-2.5-flash-lite | Gemini 意圖解析備援模型 |
 | `GEMINI_EXPANDER_MODEL` | gemini-2.5-flash | Gemini 查詢擴展模型 |
 | `GEMINI_EXPANDER_FALLBACK_MODEL` | gemini-2.5-flash-lite | Gemini 查詢擴展備援模型 |
-| `GROQ_INTENT_MODEL` | llama-3.1-8b-instant | Groq 意圖解析模型 |
-| `GROQ_INTENT_FALLBACK_MODEL` | llama-3.3-70b-versatile | Groq 意圖解析備援模型 |
-| `GROQ_EXPANDER_MODEL` | llama-3.1-8b-instant | Groq 查詢擴展模型 |
-| `GROQ_EXPANDER_FALLBACK_MODEL` | llama-3.3-70b-versatile | Groq 查詢擴展備援模型 |
+| `GROQ_INTENT_MODEL` | meta-llama/llama-4-scout-17b-16e-instruct | Groq 意圖解析模型 (Preview) |
+| `GROQ_INTENT_FALLBACK_MODEL` | llama-3.1-8b-instant | Groq 意圖解析備援模型 (Production) |
+| `GROQ_EXPANDER_MODEL` | meta-llama/llama-4-maverick-17b-128e-instruct | Groq 查詢擴展模型 (Preview) |
+| `GROQ_EXPANDER_FALLBACK_MODEL` | llama-3.3-70b-versatile | Groq 查詢擴展備援模型 (Production) |
 
 #### Rate Limiting
 

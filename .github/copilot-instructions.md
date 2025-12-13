@@ -316,7 +316,7 @@ Fallback → getHelpMessage() + Warning Log
 
 **Default Models**:
 - Gemini: `gemini-2.5-flash` (primary), `gemini-2.5-flash-lite` (fallback)
-- Groq: `llama-3.1-8b-instant` (primary), `llama-3.3-70b-versatile` (fallback)
+- Groq: `meta-llama/llama-4-scout-17b-16e-instruct` (intent), `meta-llama/llama-4-maverick-17b-128e-instruct` (expander), with Llama 3.x Production fallbacks
 
 ## Key File Locations
 
