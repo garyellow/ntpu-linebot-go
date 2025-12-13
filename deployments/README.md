@@ -46,8 +46,9 @@ LLM 進階設定（可選）：
   - 範例：`WARMUP_MODULES=sticker,id,contact,course,syllabus`
 - `LOG_LEVEL` - 日誌層級（預設：info）
 - `WEBHOOK_TIMEOUT` - Webhook 處理超時時間（預設：60s，配合 LINE Loading Animation）
-- `USER_RATE_LIMIT_TOKENS` - 每位使用者的令牌數量上限（預設：6）
-- `USER_RATE_LIMIT_REFILL_RATE` - 令牌回填速率（預設：0.2，每 5 秒補充 1 個令牌）
+- `USER_RATE_LIMIT_BURST` - 每位使用者的突發容量（預設：6）
+- `USER_RATE_LIMIT_REFILL_PER_SEC` - 令牌回填速率（預設：0.2 tokens/sec，每 5 秒補充 1 個令牌）
+- `GLOBAL_RATE_LIMIT_RPS` - 全域速率限制（預設：100 requests/sec）
 - `GRAFANA_PASSWORD` - Grafana 密碼（預設：admin123）
 
 ## 資料持久化
