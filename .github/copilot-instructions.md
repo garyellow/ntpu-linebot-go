@@ -315,7 +315,7 @@ Fallback → getHelpMessage() + Warning Log
 - `genai.ParseResult`: Module, Intent, Params, ClarificationText, FunctionName
 
 **Default Models**:
-- Gemini: `gemini-2.5-flash` (primary), `gemini-2.0-flash-lite` (fallback)
+- Gemini: `gemini-2.5-flash` (primary), `gemini-2.5-flash-lite` (fallback)
 - Groq: `llama-3.1-8b-instant` (primary), `llama-3.3-70b-versatile` (fallback)
 
 ## Key File Locations

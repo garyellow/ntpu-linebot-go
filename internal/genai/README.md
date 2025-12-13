@@ -12,7 +12,7 @@
 
 | 提供者 | 主要模型 | 備援模型 | 特色 |
 |--------|---------|---------|------|
-| **Gemini** | `gemini-2.5-flash` | `gemini-2.0-flash-lite` | 高品質、多模態 |
+| **Gemini** | `gemini-2.5-flash` | `gemini-2.5-flash-lite` | 高品質、多模態 |
 | **Groq** | `llama-3.1-8b-instant` | `llama-3.3-70b-versatile` | 極速推論、高吞吐量 |
 
 ## 檔案結構
@@ -197,9 +197,9 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 | 變數名稱 | 預設值 | 說明 |
 |---------|--------|------|
 | `GEMINI_INTENT_MODEL` | gemini-2.5-flash | Gemini 意圖解析模型 |
-| `GEMINI_INTENT_FALLBACK_MODEL` | gemini-2.0-flash-lite | Gemini 意圖解析備援模型 |
+| `GEMINI_INTENT_FALLBACK_MODEL` | gemini-2.5-flash-lite | Gemini 意圖解析備援模型 |
 | `GEMINI_EXPANDER_MODEL` | gemini-2.5-flash | Gemini 查詢擴展模型 |
-| `GEMINI_EXPANDER_FALLBACK_MODEL` | gemini-2.0-flash-lite | Gemini 查詢擴展備援模型 |
+| `GEMINI_EXPANDER_FALLBACK_MODEL` | gemini-2.5-flash-lite | Gemini 查詢擴展備援模型 |
 | `GROQ_INTENT_MODEL` | llama-3.1-8b-instant | Groq 意圖解析模型 |
 | `GROQ_INTENT_FALLBACK_MODEL` | llama-3.3-70b-versatile | Groq 意圖解析備援模型 |
 | `GROQ_EXPANDER_MODEL` | llama-3.1-8b-instant | Groq 查詢擴展模型 |
