@@ -52,7 +52,7 @@ func (f *FallbackIntentParser) Parse(ctx context.Context, text string) (*ParseRe
 
 	// Check if we should fallback
 	action := ClassifyError(err)
-	slog.Warn("primary intent parser failed",
+	slog.WarnContext(ctx, "primary intent parser failed",
 		"provider", provider,
 		"error", err,
 		"action", action,
@@ -65,7 +65,7 @@ func (f *FallbackIntentParser) Parse(ctx context.Context, text string) (*ParseRe
 	}
 
 	// Try fallback provider
-	slog.Info("falling back to secondary provider",
+	slog.InfoContext(ctx, "falling back to secondary provider",
 		"from", provider,
 		"to", f.fallback.Provider())
 
@@ -81,7 +81,7 @@ func (f *FallbackIntentParser) Parse(ctx context.Context, text string) (*ParseRe
 
 	// Both providers failed
 	recordIntentError(fallbackProvider, err)
-	slog.Error("all intent parsers failed",
+	slog.ErrorContext(ctx, "all intent parsers failed",
 		"primary", provider,
 		"fallback", fallbackProvider,
 		"error", err)
@@ -126,7 +126,7 @@ func (f *FallbackIntentParser) parseWithRetry(ctx context.Context, parser Intent
 			return nil, fmt.Errorf("timeout during retry: %w", lastErr)
 		}
 
-		slog.Debug("retrying intent parse",
+		slog.DebugContext(ctx, "retrying intent parse",
 			"provider", parser.Provider(),
 			"attempt", attempt+1,
 			"backoff", backoff,
@@ -218,7 +218,7 @@ func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (strin
 
 	// Check if we should fallback
 	action := ClassifyError(err)
-	slog.Warn("primary query expander failed",
+	slog.WarnContext(ctx, "primary query expander failed",
 		"provider", provider,
 		"error", err,
 		"action", action,
@@ -232,7 +232,7 @@ func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (strin
 	}
 
 	// Try fallback provider
-	slog.Info("falling back to secondary expander",
+	slog.InfoContext(ctx, "falling back to secondary expander",
 		"from", provider,
 		"to", f.fallback.Provider())
 
@@ -248,7 +248,7 @@ func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (strin
 
 	// Both providers failed - graceful degradation
 	recordExpanderError(fallbackProvider, err)
-	slog.Warn("all expanders failed, using original query",
+	slog.WarnContext(ctx, "all expanders failed, using original query",
 		"primary", provider,
 		"fallback", fallbackProvider,
 		"query", query)
@@ -290,7 +290,7 @@ func (f *FallbackQueryExpander) expandWithRetry(ctx context.Context, expander Qu
 
 		backoff := CalculateBackoff(attempt+1, f.retryConfig.InitialDelay, f.retryConfig.MaxDelay)
 
-		slog.Debug("retrying query expansion",
+		slog.DebugContext(ctx, "retrying query expansion",
 			"provider", expander.Provider(),
 			"attempt", attempt+1,
 			"backoff", backoff,

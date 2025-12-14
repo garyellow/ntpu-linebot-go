@@ -45,14 +45,14 @@ func CreateIntentParser(ctx context.Context, cfg LLMConfig) (IntentParser, error
 		if cfg.Gemini.APIKey != "" && cfg.FallbackProvider != cfg.PrimaryProvider {
 			fallback, err = newGeminiIntentParser(ctx, cfg.Gemini.APIKey, cfg.Gemini.IntentFallbackModel)
 			if err != nil {
-				slog.Warn("failed to create gemini fallback parser", "error", err)
+				slog.WarnContext(ctx, "failed to create gemini fallback parser", "error", err)
 			}
 		}
 	case ProviderGroq:
 		if cfg.Groq.APIKey != "" && cfg.FallbackProvider != cfg.PrimaryProvider {
 			fallback, err = newGroqIntentParser(ctx, cfg.Groq.APIKey, cfg.Groq.IntentFallbackModel)
 			if err != nil {
-				slog.Warn("failed to create groq fallback parser", "error", err)
+				slog.WarnContext(ctx, "failed to create groq fallback parser", "error", err)
 			}
 		}
 	}
@@ -62,25 +62,25 @@ func CreateIntentParser(ctx context.Context, cfg LLMConfig) (IntentParser, error
 		if cfg.Gemini.APIKey != "" {
 			primary, err = newGeminiIntentParser(ctx, cfg.Gemini.APIKey, cfg.Gemini.IntentModel)
 			if err != nil {
-				slog.Warn("failed to create gemini intent parser", "error", err)
+				slog.WarnContext(ctx, "failed to create gemini intent parser", "error", err)
 			}
 		}
 		if primary == nil && cfg.Groq.APIKey != "" {
 			primary, err = newGroqIntentParser(ctx, cfg.Groq.APIKey, cfg.Groq.IntentModel)
 			if err != nil {
-				slog.Warn("failed to create groq intent parser", "error", err)
+				slog.WarnContext(ctx, "failed to create groq intent parser", "error", err)
 			}
 		}
 	}
 
 	// No providers available
 	if primary == nil {
-		slog.Info("no LLM provider configured for intent parsing")
+		slog.InfoContext(ctx, "no LLM provider configured for intent parsing")
 		return nil, nil
 	}
 
 	// Log configuration
-	slog.Info("intent parser configured",
+	slog.InfoContext(ctx, "intent parser configured",
 		"primary", primary.Provider(),
 		"hasFallback", fallback != nil)
 
@@ -117,14 +117,14 @@ func CreateQueryExpander(ctx context.Context, cfg LLMConfig) (QueryExpander, err
 		if cfg.Gemini.APIKey != "" && cfg.FallbackProvider != cfg.PrimaryProvider {
 			fallback, err = newGeminiQueryExpander(ctx, cfg.Gemini.APIKey, cfg.Gemini.ExpanderFallbackModel)
 			if err != nil {
-				slog.Warn("failed to create gemini fallback expander", "error", err)
+				slog.WarnContext(ctx, "failed to create gemini fallback expander", "error", err)
 			}
 		}
 	case ProviderGroq:
 		if cfg.Groq.APIKey != "" && cfg.FallbackProvider != cfg.PrimaryProvider {
 			fallback, err = newGroqQueryExpander(ctx, cfg.Groq.APIKey, cfg.Groq.ExpanderFallbackModel)
 			if err != nil {
-				slog.Warn("failed to create groq fallback expander", "error", err)
+				slog.WarnContext(ctx, "failed to create groq fallback expander", "error", err)
 			}
 		}
 	}
@@ -134,24 +134,24 @@ func CreateQueryExpander(ctx context.Context, cfg LLMConfig) (QueryExpander, err
 		if cfg.Gemini.APIKey != "" {
 			primary, err = newGeminiQueryExpander(ctx, cfg.Gemini.APIKey, cfg.Gemini.ExpanderModel)
 			if err != nil {
-				slog.Warn("failed to create gemini query expander", "error", err)
+				slog.WarnContext(ctx, "failed to create gemini query expander", "error", err)
 			}
 		}
 		if primary == nil && cfg.Groq.APIKey != "" {
 			primary, err = newGroqQueryExpander(ctx, cfg.Groq.APIKey, cfg.Groq.ExpanderModel)
 			if err != nil {
-				slog.Warn("failed to create groq query expander", "error", err)
+				slog.WarnContext(ctx, "failed to create groq query expander", "error", err)
 			}
 		}
 	}
 
 	// No providers available
 	if primary == nil {
-		slog.Info("no LLM provider configured for query expansion")
+		slog.InfoContext(ctx, "no LLM provider configured for query expansion")
 		return nil, nil
 	}
 
-	slog.Info("query expander configured",
+	slog.InfoContext(ctx, "query expander configured",
 		"primary", primary.Provider(),
 		"hasFallback", fallback != nil)
 
