@@ -61,8 +61,11 @@ func NewWithWriter(level string, w io.Writer) *Logger {
 			return a
 		},
 	}
-	handler := slog.NewJSONHandler(w, opts)
-	return &Logger{Logger: slog.New(handler)}
+	// Wrap the base handler with ContextHandler to automatically extract
+	// tracing values (userID, chatID, requestID) from context
+	baseHandler := slog.NewJSONHandler(w, opts)
+	contextHandler := NewContextHandler(baseHandler)
+	return &Logger{Logger: slog.New(contextHandler)}
 }
 
 // WithModule creates a new entry with module field
