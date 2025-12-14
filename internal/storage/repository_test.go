@@ -1110,7 +1110,7 @@ func TestSaveSyllabus(t *testing.T) {
 		Teachers:     []string{"王小明", "李小華"},
 		ObjectivesCN: "培養程式設計能力",
 		ObjectivesEN: "Develop programming skills",
-		OutlineCN:    "變數、迴圈、函數",
+		OutlineCN:    "變數、迴圈、函式",
 		OutlineEN:    "Variables, loops, functions",
 		Schedule:     "第1週：課程介紹",
 		ContentHash:  "abc123hash",

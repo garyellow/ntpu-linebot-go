@@ -24,7 +24,7 @@ func TestComputeContentHash(t *testing.T) {
 		},
 		{
 			name:    "multiline content",
-			content: "教學目標：學習程式設計\n內容綱要：變數、迴圈、函數",
+			content: "教學目標：學習程式設計\n內容綱要：變數、迴圈、函式",
 			wantLen: 64,
 		},
 	}
@@ -222,14 +222,14 @@ func TestFields_ContentForIndexing(t *testing.T) {
 			},
 			courseTitle:  "程式設計",
 			wantEmpty:    false,
-			wantContains: []string{"教學目標：", "培養程式設計能力", "內容綱要：", "變數、迴圈、函數", "教學進度：", "第1週：課程介紹"},
+			wantContains: []string{"教學目標：", "培養程式設計能力", "內容綱要：", "變數、迴圈、函式", "教學進度：", "第1週：課程介紹"},
 		},
 		{
 			name: "all fields (CN + EN)",
 			fields: Fields{
 				ObjectivesCN: "培養程式設計能力",
 				ObjectivesEN: "Develop programming skills",
-				OutlineCN:    "變數、迴圈、函數",
+				OutlineCN:    "變數、迴圈、函式",
 				OutlineEN:    "Variables, loops, functions",
 				Schedule:     "第1週：課程介紹",
 			},
@@ -239,7 +239,7 @@ func TestFields_ContentForIndexing(t *testing.T) {
 				"【程式設計】",
 				"教學目標：", "培養程式設計能力",
 				"Course Objectives:", "Develop programming skills",
-				"內容綱要：", "變數、迴圈、函數",
+				"內容綱要：", "變數、迴圈、函式",
 				"Course Outline:", "Variables, loops, functions",
 				"教學進度：", "第1週：課程介紹",
 			},
@@ -342,7 +342,7 @@ func TestFields_ContentForIndexing_SingleDocument(t *testing.T) {
 	fields := Fields{
 		ObjectivesCN: "培養程式設計能力",
 		ObjectivesEN: "Develop programming skills",
-		OutlineCN:    "變數、迴圈、函數",
+		OutlineCN:    "變數、迴圈、函式",
 		OutlineEN:    "Variables, loops, functions",
 	}
 
@@ -358,7 +358,7 @@ func TestFields_ContentForIndexing_SingleDocument(t *testing.T) {
 		"【測試課程】",
 		"教學目標：培養程式設計能力",
 		"Course Objectives: Develop programming skills",
-		"內容綱要：變數、迴圈、函數",
+		"內容綱要：變數、迴圈、函式",
 		"Course Outline: Variables, loops, functions",
 	}
 
