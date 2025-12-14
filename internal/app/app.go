@@ -521,7 +521,7 @@ func (a *Application) runCacheCleanup(ctx context.Context) {
 	}
 }
 
-// refreshStickers runs daily sticker refresh at 4:00 AM Taiwan time.
+// refreshStickers runs daily sticker refresh at 2:00 AM Taiwan time (configurable via config.StickerRefreshHour).
 // Exits cleanly when context is canceled during shutdown.
 func (a *Application) refreshStickers(ctx context.Context) {
 	a.logger.Debug("Sticker refresh job started")
