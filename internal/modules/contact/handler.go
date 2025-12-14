@@ -125,14 +125,14 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: query", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching contact intent: %s, query: %s", intent, query)
+			h.logger.WithModule(ModuleName).Debugf("Dispatching contact intent: %s, query: %s", intent, query)
 		}
 		return h.handleContactSearch(ctx, query), nil
 
 	case IntentEmergency:
 		// Emergency intent doesn't require any parameters
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Info("Dispatching contact intent: emergency")
+			h.logger.WithModule(ModuleName).Debug("Dispatching contact intent: emergency")
 		}
 		return h.handleEmergencyPhones(), nil
 
@@ -163,7 +163,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
-	log.Infof("Handling contact message: %s", text)
+	log.Debugf("Handling contact message: %s", text)
 
 	// Handle emergency phone request
 	if strings.HasPrefix(text, "緊急") {
@@ -402,7 +402,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	// If found in cache, return results
 	if len(contacts) > 0 {
 		h.metrics.RecordCacheHit(ModuleName)
-		log.Infof("Cache hit for contact search: %s (found %d)", searchTerm, len(contacts))
+		log.Debugf("Cache hit for contact search: %s (found %d)", searchTerm, len(contacts))
 		return h.formatContactResultsWithSearch(contacts, searchTerm)
 	}
 

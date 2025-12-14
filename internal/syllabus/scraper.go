@@ -3,8 +3,10 @@ package syllabus
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
@@ -42,14 +44,34 @@ func (s *Scraper) ScrapeSyllabus(ctx context.Context, course *storage.Course) (*
 		return nil, fmt.Errorf("context canceled before scraping syllabus: %w", err)
 	}
 
+	start := time.Now()
+	slog.DebugContext(ctx, "scraping syllabus",
+		"uid", course.UID,
+		"detail_url", course.DetailURL)
+
 	// Fetch the detail page
 	doc, err := s.client.GetDocument(ctx, course.DetailURL)
 	if err != nil {
+		slog.WarnContext(ctx, "failed to scrape syllabus",
+			"uid", course.UID,
+			"detail_url", course.DetailURL,
+			"duration_ms", time.Since(start).Milliseconds(),
+			"error", err)
 		return nil, fmt.Errorf("failed to fetch syllabus for %s: %w", course.UID, err)
 	}
 
 	// Parse syllabus fields
 	fields := parseSyllabusPage(doc)
+
+	// Log success with content statistics
+	isEmpty := fields.IsEmpty()
+	contentLength := len(fields.ContentForIndexing(course.Title))
+	slog.DebugContext(ctx, "syllabus scraped successfully",
+		"uid", course.UID,
+		"is_empty", isEmpty,
+		"content_length", contentLength,
+		"duration_ms", time.Since(start).Milliseconds())
+
 	return fields, nil
 }
 

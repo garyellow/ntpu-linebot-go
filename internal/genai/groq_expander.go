@@ -5,7 +5,9 @@ package genai
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/conneroisu/groq-go"
 )
@@ -66,8 +68,17 @@ func (e *groqQueryExpander) Expand(ctx context.Context, query string) (string, e
 		MaxTokens:   200,
 	}
 
+	start := time.Now()
 	resp, err := e.client.ChatCompletion(ctx, req)
+	duration := time.Since(start)
+
 	if err != nil {
+		slog.WarnContext(ctx, "query expansion API call failed",
+			"provider", "groq",
+			"model", e.model,
+			"query_length", len(query),
+			"duration_ms", duration.Milliseconds(),
+			"error", err)
 		// Return error for retry/fallback decision
 		return query, fmt.Errorf("chat completion failed: %w", err)
 	}
@@ -84,6 +95,19 @@ func (e *groqQueryExpander) Expand(ctx context.Context, query string) (string, e
 	// Ensure original query is preserved (prepend if not present)
 	if !strings.Contains(result, query) {
 		result = query + " " + result
+	}
+
+	// Log success with token usage
+	if resp.Usage.TotalTokens > 0 {
+		slog.DebugContext(ctx, "query expansion completed",
+			"provider", "groq",
+			"model", e.model,
+			"input_tokens", resp.Usage.PromptTokens,
+			"output_tokens", resp.Usage.CompletionTokens,
+			"total_tokens", resp.Usage.TotalTokens,
+			"duration_ms", duration.Milliseconds(),
+			"original_length", len(query),
+			"expanded_length", len(result))
 	}
 
 	return result, nil

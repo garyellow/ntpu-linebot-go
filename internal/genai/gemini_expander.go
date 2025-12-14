@@ -5,8 +5,10 @@ package genai
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strings"
+	"time"
 
 	"google.golang.org/genai"
 )
@@ -77,8 +79,17 @@ func (e *geminiQueryExpander) Expand(ctx context.Context, query string) (string,
 		MaxOutputTokens: 200,
 	}
 
+	start := time.Now()
 	resp, err := e.client.Models.GenerateContent(ctx, e.model, genai.Text(prompt), config)
+	duration := time.Since(start)
+
 	if err != nil {
+		slog.WarnContext(ctx, "query expansion API call failed",
+			"provider", "gemini",
+			"model", e.model,
+			"query_length", len(query),
+			"duration_ms", duration.Milliseconds(),
+			"error", err)
 		// Return error for retry/fallback decision
 		return query, fmt.Errorf("generate content failed: %w", err)
 	}
@@ -103,6 +114,19 @@ func (e *geminiQueryExpander) Expand(ctx context.Context, query string) (string,
 	// Ensure original query is preserved (prepend if not present)
 	if !strings.Contains(result, query) {
 		result = query + " " + result
+	}
+
+	// Log success with token usage
+	if resp.UsageMetadata != nil {
+		slog.DebugContext(ctx, "query expansion completed",
+			"provider", "gemini",
+			"model", e.model,
+			"input_tokens", resp.UsageMetadata.PromptTokenCount,
+			"output_tokens", resp.UsageMetadata.CandidatesTokenCount,
+			"total_tokens", resp.UsageMetadata.TotalTokenCount,
+			"duration_ms", duration.Milliseconds(),
+			"original_length", len(query),
+			"expanded_length", len(result))
 	}
 
 	return result, nil

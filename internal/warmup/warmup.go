@@ -46,7 +46,7 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 
 	// Reset cache if requested
 	if opts.Reset {
-		log.Warn("Resetting cache data...")
+		log.Info("Resetting cache data...")
 		if err := resetCache(ctx, db); err != nil {
 			return nil, fmt.Errorf("failed to reset cache: %w", err)
 		}

@@ -153,7 +153,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: keyword", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching course intent: %s, keyword: %s", intent, keyword)
+			h.logger.WithModule(ModuleName).Debugf("Dispatching course intent: %s, keyword: %s", intent, keyword)
 		}
 		return h.handleUnifiedCourseSearch(ctx, keyword), nil
 
@@ -163,7 +163,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: query", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching course intent: %s, query: %s", intent, query)
+			h.logger.WithModule(ModuleName).Debugf("Dispatching course intent: %s, query: %s", intent, query)
 		}
 		return h.handleSmartSearch(ctx, query), nil
 
@@ -173,7 +173,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: uid", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching course intent: %s, uid: %s", intent, uid)
+			h.logger.WithModule(ModuleName).Debugf("Dispatching course intent: %s, uid: %s", intent, uid)
 		}
 		return h.handleCourseUIDQuery(ctx, uid), nil
 
@@ -214,7 +214,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
-	log.Infof("Handling course message: %s", text)
+	log.Debugf("Handling course message: %s", text)
 
 	// Check for full course UID first (highest priority, e.g., 11312U0001)
 	if match := uidRegex.FindString(text); match != "" {
@@ -365,7 +365,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 	if course != nil {
 		// Cache hit
 		h.metrics.RecordCacheHit(ModuleName)
-		log.Infof("Cache hit for course UID: %s", uid)
+		log.Debugf("Cache hit for course UID: %s", uid)
 		return h.formatCourseResponse(course)
 	}
 
@@ -444,7 +444,7 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 
 		if course != nil {
 			h.metrics.RecordCacheHit(ModuleName)
-			log.Infof("Cache hit for course UID: %s (from course no: %s)", uid, courseNo)
+			log.Debugf("Cache hit for course UID: %s (from course no: %s)", uid, courseNo)
 			return h.formatCourseResponse(course)
 		}
 	}

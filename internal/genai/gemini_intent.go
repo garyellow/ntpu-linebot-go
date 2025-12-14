@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"time"
 
 	"google.golang.org/genai"
 )
@@ -65,19 +67,47 @@ func (p *geminiIntentParser) Parse(ctx context.Context, text string) (*ParseResu
 		MaxOutputTokens:   256,                     // Intent parsing doesn't need long responses
 	}
 
-	// Generate content
+	// Generate content with timing
+	start := time.Now()
 	result, err := p.client.Models.GenerateContent(
 		ctx,
 		p.model,
 		genai.Text(text),
 		config,
 	)
+	duration := time.Since(start)
+
 	if err != nil {
+		slog.WarnContext(ctx, "intent parsing API call failed",
+			"provider", "gemini",
+			"model", p.model,
+			"input_length", len(text),
+			"duration_ms", duration.Milliseconds(),
+			"error", err)
 		return nil, fmt.Errorf("generate content failed: %w", err)
 	}
 
 	// Parse the result
-	return p.parseResult(result)
+	parsedResult, parseErr := p.parseResult(result)
+
+	// Log success with token usage
+	if parseErr == nil && result.UsageMetadata != nil {
+		slog.DebugContext(ctx, "intent parsing completed",
+			"provider", "gemini",
+			"model", p.model,
+			"input_tokens", result.UsageMetadata.PromptTokenCount,
+			"output_tokens", result.UsageMetadata.CandidatesTokenCount,
+			"total_tokens", result.UsageMetadata.TotalTokenCount,
+			"duration_ms", duration.Milliseconds(),
+			"function_name", func() string {
+				if parsedResult != nil {
+					return parsedResult.FunctionName
+				}
+				return ""
+			}())
+	}
+
+	return parsedResult, parseErr
 }
 
 // parseResult extracts intent information from the generation result.
