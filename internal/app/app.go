@@ -4,6 +4,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -55,6 +56,13 @@ type Application struct {
 // Initialize creates and initializes a new application with all dependencies.
 func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	log := logger.New(cfg.LogLevel)
+
+	// Set the custom logger as the default slog logger.
+	// This allows package-level slog.*Context() calls to automatically extract
+	// context values (userID, chatID, requestID) via the ContextHandler.
+	// Reference: https://betterstack.com/community/guides/logging/golang-contextual-logging/
+	slog.SetDefault(log.Logger)
+
 	log.Info("Initializing application...")
 
 	db, err := storage.New(ctx, cfg.SQLitePath(), cfg.CacheTTL)
