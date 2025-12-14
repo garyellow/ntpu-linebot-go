@@ -118,7 +118,7 @@ func (e *geminiQueryExpander) Expand(ctx context.Context, query string) (string,
 
 	// Log success with token usage
 	if resp.UsageMetadata != nil {
-		slog.InfoContext(ctx, "query expansion completed",
+		slog.DebugContext(ctx, "query expansion completed",
 			"provider", "gemini",
 			"model", e.model,
 			"input_tokens", resp.UsageMetadata.PromptTokenCount,

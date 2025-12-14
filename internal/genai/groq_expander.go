@@ -99,7 +99,7 @@ func (e *groqQueryExpander) Expand(ctx context.Context, query string) (string, e
 
 	// Log success with token usage
 	if resp.Usage.TotalTokens > 0 {
-		slog.InfoContext(ctx, "query expansion completed",
+		slog.DebugContext(ctx, "query expansion completed",
 			"provider", "groq",
 			"model", e.model,
 			"input_tokens", resp.Usage.PromptTokens,

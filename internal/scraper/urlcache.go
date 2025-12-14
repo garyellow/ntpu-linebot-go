@@ -122,7 +122,7 @@ func (c *URLCache) Clear() {
 	previousURL := c.GetCached()
 	c.cache.Store("")
 	if previousURL != "" {
-		slog.Warn("URL cache cleared due to scrape failure",
+		slog.Info("URL cache cleared due to scrape failure",
 			"domain", c.domain,
 			"previous_url", previousURL)
 	}

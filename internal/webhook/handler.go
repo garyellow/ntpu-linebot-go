@@ -81,7 +81,7 @@ func (h *Handler) Handle(c *gin.Context) {
 	cb, err := webhook.ParseRequest(h.channelSecret, c.Request)
 	if err != nil {
 		if errors.Is(err, webhook.ErrInvalidSignature) {
-			h.logger.Warn("Invalid signature")
+			h.logger.Info("Invalid signature")
 			c.Status(http.StatusBadRequest)
 		} else {
 			h.logger.WithError(err).Error("Failed to parse webhook request")
@@ -99,7 +99,7 @@ func (h *Handler) Handle(c *gin.Context) {
 
 	// Validate event count (max events per webhook per LINE API spec)
 	if len(cb.Events) > h.maxEventsPerWebhook {
-		h.logger.Warnf("Too many events in single webhook: %d", len(cb.Events))
+		h.logger.Infof("Too many events in single webhook: %d, truncating", len(cb.Events))
 		cb.Events = cb.Events[:h.maxEventsPerWebhook] // Limit to prevent DoS
 	}
 
@@ -172,13 +172,13 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 
 		replyToken := h.getReplyToken(event)
 		if replyToken == "" {
-			h.logger.Warn("Empty reply token, skipping reply")
+			h.logger.Debug("Empty reply token, skipping reply")
 			return
 		}
 
 		// Validate reply token format
 		if len(replyToken) < h.minReplyTokenLength {
-			h.logger.WithField("token_length", len(replyToken)).Warn("Invalid reply token format")
+			h.logger.WithField("token_length", len(replyToken)).Debug("Invalid reply token format")
 			return
 		}
 
@@ -197,7 +197,7 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 		); err != nil {
 			errMsg := err.Error()
 			if strings.Contains(errMsg, "Invalid reply token") {
-				h.logger.WithError(err).Warn("Reply token already used or invalid")
+				h.logger.WithError(err).Debug("Reply token already used or invalid")
 			} else if strings.Contains(errMsg, "rate limit") {
 				h.logger.WithError(err).Error("Rate limit exceeded")
 			} else {

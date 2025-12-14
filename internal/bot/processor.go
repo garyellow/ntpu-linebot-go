@@ -108,7 +108,7 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 	}
 	maxLen := 20000 // LINE API limit
 	if len(text) > maxLen {
-		p.logger.Warnf("Text message too long: %d characters", len(text))
+		p.logger.Infof("Text message too long: %d characters (limit: %d)", len(text), maxLen)
 		sender := lineutil.GetSender("系統小幫手", p.stickerManager)
 		return []messaging_api.MessageInterface{
 			lineutil.NewTextMessageWithConsistentSender(
@@ -131,7 +131,7 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 	if slices.ContainsFunc(helpKeywords, func(k string) bool {
 		return strings.EqualFold(text, k)
 	}) {
-		p.logger.Info("User requested help/instruction")
+		p.logger.Debug("User requested help/instruction")
 		return p.getDetailedInstructionMessages(), nil
 	}
 
@@ -162,11 +162,11 @@ func (p *Processor) ProcessPostback(ctx context.Context, event webhook.PostbackE
 
 	// Validate postback data
 	if len(data) == 0 {
-		p.logger.Warn("Empty postback data")
+		p.logger.Debug("Empty postback data")
 		return nil, nil
 	}
 	if len(data) > 300 { // LINE postback data limit is 300 bytes
-		p.logger.Warnf("Postback data too long: %d bytes", len(data))
+		p.logger.Infof("Postback data too long: %d bytes (limit: 300)", len(data))
 		sender := lineutil.GetSender("系統小幫手", p.stickerManager)
 		return []messaging_api.MessageInterface{
 			lineutil.NewTextMessageWithConsistentSender("❌ 操作資料異常\n\n請重新使用功能。", sender),
@@ -182,7 +182,7 @@ func (p *Processor) ProcessPostback(ctx context.Context, event webhook.PostbackE
 	if slices.ContainsFunc(helpKeywords, func(k string) bool {
 		return strings.EqualFold(data, k)
 	}) {
-		p.logger.Info("User requested help/instruction via postback")
+		p.logger.Debug("User requested help/instruction via postback")
 		return p.getDetailedInstructionMessages(), nil
 	}
 
@@ -413,7 +413,7 @@ func (p *Processor) checkLLMRateLimit(source webhook.SourceInterface, chatID str
 
 // handleStickerMessage processes sticker messages
 func (p *Processor) handleStickerMessage(_ webhook.MessageEvent) []messaging_api.MessageInterface {
-	p.logger.Info("Received sticker message, replying with random sticker image")
+	p.logger.Debug("Received sticker message, replying with random sticker image")
 
 	stickerURL := p.stickerManager.GetRandomSticker()
 	sender := lineutil.GetSender("貼圖小幫手", p.stickerManager)

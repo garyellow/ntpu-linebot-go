@@ -92,7 +92,7 @@ func (p *geminiIntentParser) Parse(ctx context.Context, text string) (*ParseResu
 
 	// Log success with token usage
 	if parseErr == nil && result.UsageMetadata != nil {
-		slog.InfoContext(ctx, "intent parsing completed",
+		slog.DebugContext(ctx, "intent parsing completed",
 			"provider", "gemini",
 			"model", p.model,
 			"input_tokens", result.UsageMetadata.PromptTokenCount,

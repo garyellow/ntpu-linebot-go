@@ -135,7 +135,7 @@ func (p *groqIntentParser) Parse(ctx context.Context, text string) (*ParseResult
 
 	// Log success with token usage
 	if parseErr == nil && resp.Usage.TotalTokens > 0 {
-		slog.InfoContext(ctx, "intent parsing completed",
+		slog.DebugContext(ctx, "intent parsing completed",
 			"provider", "groq",
 			"model", p.model,
 			"input_tokens", resp.Usage.PromptTokens,

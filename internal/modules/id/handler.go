@@ -114,7 +114,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: name", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching ID intent: %s, name: %s", intent, name)
+			h.logger.WithModule(ModuleName).Debugf("Dispatching ID intent: %s, name: %s", intent, name)
 		}
 		return h.handleStudentNameQuery(ctx, name), nil
 
@@ -124,7 +124,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: student_id", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching ID intent: %s, student_id: %s", intent, studentID)
+			h.logger.WithModule(ModuleName).Debugf("Dispatching ID intent: %s, student_id: %s", intent, studentID)
 		}
 		return h.handleStudentIDQuery(ctx, studentID), nil
 
@@ -134,7 +134,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: department", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching ID intent: %s, department: %s", intent, department)
+			h.logger.WithModule(ModuleName).Debugf("Dispatching ID intent: %s, department: %s", intent, department)
 		}
 		return h.handleDepartmentNameQuery(department), nil
 
@@ -175,7 +175,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
-	log.Infof("Handling ID message: %s", text)
+	log.Debugf("Handling ID message: %s", text)
 
 	if text == allDeptCodeText {
 		return h.handleAllDepartmentCodes()
