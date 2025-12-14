@@ -27,8 +27,8 @@ internal/genai/
 ├── gemini_expander.go    # Gemini QueryExpander 實作
 ├── groq_expander.go      # Groq QueryExpander 實作
 ├── provider_fallback.go  # 跨提供者故障轉移
-├── factory.go            # 工廠函數
-├── functions.go          # Function Calling 函數定義
+├── factory.go            # 工廠函式
+├── functions.go          # Function Calling 函式定義
 ├── prompts.go            # 系統提示詞
 └── README.md
 ```
@@ -62,7 +62,7 @@ internal/genai/
 
 ### 支援的意圖
 
-| 函數名稱 | 模組 | 說明 |
+| 函式名稱 | 模組 | 說明 |
 |---------|------|------|
 | `course_search` | course | 課程/教師名稱搜尋 |
 | `course_smart` | course | 課程智慧搜尋 |

@@ -75,10 +75,8 @@ func TestBackgroundJobIntervals(t *testing.T) {
 		got      time.Duration
 		expected time.Duration
 	}{
-		{"CacheCleanupInterval", CacheCleanupInterval, 12 * time.Hour},
-		{"CacheCleanupInitialDelay", CacheCleanupInitialDelay, 5 * time.Minute},
+		{"CacheCleanupInterval", CacheCleanupInterval, 24 * time.Hour},
 		{"StickerRefreshInterval", StickerRefreshInterval, 24 * time.Hour},
-		{"StickerRefreshInitialDelay", StickerRefreshInitialDelay, 1 * time.Hour},
 		{"MetricsUpdateInterval", MetricsUpdateInterval, 5 * time.Minute},
 		{"RateLimiterCleanupInterval", RateLimiterCleanupInterval, 5 * time.Minute},
 	}
@@ -89,6 +87,53 @@ func TestBackgroundJobIntervals(t *testing.T) {
 				t.Errorf("%s = %v, want %v", tt.name, tt.got, tt.expected)
 			}
 		})
+	}
+}
+
+// TestBackgroundJobScheduleHours verifies background job schedule hours (Taiwan time)
+func TestBackgroundJobScheduleHours(t *testing.T) {
+	tests := []struct {
+		name     string
+		got      int
+		expected int
+	}{
+		{"StickerRefreshHour", StickerRefreshHour, 2}, // 2:00 AM - refresh stickers first
+		{"WarmupHour", WarmupHour, 3},                 // 3:00 AM - warmup cache
+		{"CacheCleanupHour", CacheCleanupHour, 4},     // 4:00 AM - cleanup after warmup
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.got != tt.expected {
+				t.Errorf("%s = %d, want %d", tt.name, tt.got, tt.expected)
+			}
+		})
+	}
+}
+
+// TestScheduleOrderIsLogical verifies jobs run in logical order
+func TestScheduleOrderIsLogical(t *testing.T) {
+	// Sticker refresh should happen before warmup
+	if StickerRefreshHour >= WarmupHour {
+		t.Errorf("StickerRefreshHour (%d) should be < WarmupHour (%d) to ensure fresh stickers before warmup",
+			StickerRefreshHour, WarmupHour)
+	}
+
+	// Warmup should happen before cache cleanup
+	if WarmupHour >= CacheCleanupHour {
+		t.Errorf("WarmupHour (%d) should be < CacheCleanupHour (%d) to avoid deleting fresh data",
+			WarmupHour, CacheCleanupHour)
+	}
+
+	// All should be in early morning (0-6 AM)
+	if StickerRefreshHour < 0 || StickerRefreshHour > 6 {
+		t.Errorf("StickerRefreshHour (%d) should be in early morning (0-6 AM)", StickerRefreshHour)
+	}
+	if WarmupHour < 0 || WarmupHour > 6 {
+		t.Errorf("WarmupHour (%d) should be in early morning (0-6 AM)", WarmupHour)
+	}
+	if CacheCleanupHour < 0 || CacheCleanupHour > 6 {
+		t.Errorf("CacheCleanupHour (%d) should be in early morning (0-6 AM)", CacheCleanupHour)
 	}
 }
 

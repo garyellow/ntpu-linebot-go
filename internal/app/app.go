@@ -14,6 +14,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	"github.com/garyellow/ntpu-linebot-go/internal/config"
 	"github.com/garyellow/ntpu-linebot-go/internal/genai"
+	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 	"github.com/garyellow/ntpu-linebot-go/internal/modules/contact"
@@ -348,7 +349,7 @@ func (a *Application) startBackgroundJobs(ctx context.Context) {
 	a.wg.Add(4)
 	go func() {
 		defer a.wg.Done()
-		a.performCacheCleanup(ctx)
+		a.cacheCleanup(ctx)
 	}()
 	go func() {
 		defer a.wg.Done()
@@ -433,28 +434,36 @@ func (a *Application) shutdown() error {
 	return nil
 }
 
-// performCacheCleanup runs periodic cache cleanup.
+// cacheCleanup runs daily cache cleanup at 4:00 AM Taiwan time.
 // Exits cleanly when context is canceled during shutdown.
-func (a *Application) performCacheCleanup(ctx context.Context) {
+func (a *Application) cacheCleanup(ctx context.Context) {
 	a.logger.Debug("Cache cleanup job started")
 	defer a.logger.Debug("Cache cleanup job stopped")
 
-	select {
-	case <-ctx.Done():
-		a.logger.Debug("Cache cleanup canceled before initial delay")
-		return
-	case <-time.After(config.CacheCleanupInitialDelay):
-	}
+	// Run initial cleanup on startup with independent context
+	initialCtx, initialCancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	//nolint:contextcheck // Intentionally using independent context
+	a.runCacheCleanup(initialCtx)
+	initialCancel()
 
-	ticker := time.NewTicker(config.CacheCleanupInterval)
-	defer ticker.Stop()
-
+	// Schedule daily cleanup at fixed time (4:00 AM Taiwan time)
+	taipeiTZ := lineutil.GetTaipeiLocation()
 	for {
+		now := time.Now().In(taipeiTZ)
+		next := time.Date(now.Year(), now.Month(), now.Day(), config.CacheCleanupHour, 0, 0, 0, taipeiTZ)
+		if now.After(next) {
+			next = next.Add(24 * time.Hour)
+		}
+
+		waitDuration := time.Until(next)
+		a.logger.WithField("next_run", next.Format(time.RFC3339)).
+			Info("Scheduled next cache cleanup (Taiwan time)")
+
 		select {
 		case <-ctx.Done():
 			a.logger.Debug("Cache cleanup received shutdown signal")
 			return
-		case <-ticker.C:
+		case <-time.After(waitDuration):
 			a.runCacheCleanup(ctx)
 		}
 	}
@@ -512,30 +521,36 @@ func (a *Application) runCacheCleanup(ctx context.Context) {
 	}
 }
 
-// refreshStickers runs periodic sticker refresh.
+// refreshStickers runs daily sticker refresh at 2:00 AM Taiwan time (configurable via config.StickerRefreshHour).
 // Exits cleanly when context is canceled during shutdown.
 func (a *Application) refreshStickers(ctx context.Context) {
 	a.logger.Debug("Sticker refresh job started")
 	defer a.logger.Debug("Sticker refresh job stopped")
 
-	// Initial delay
-	select {
-	case <-ctx.Done():
-		a.logger.Debug("Sticker refresh canceled before initial delay")
-		return
-	case <-time.After(config.StickerRefreshInitialDelay):
-		a.performStickerRefresh(ctx)
-	}
+	// Run initial refresh on startup with independent context
+	initialCtx, initialCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	//nolint:contextcheck // Intentionally using independent context
+	a.performStickerRefresh(initialCtx)
+	initialCancel()
 
-	ticker := time.NewTicker(config.StickerRefreshInterval)
-	defer ticker.Stop()
-
+	// Schedule daily refresh at fixed time (4:00 AM Taiwan time)
+	taipeiTZ := lineutil.GetTaipeiLocation()
 	for {
+		now := time.Now().In(taipeiTZ)
+		next := time.Date(now.Year(), now.Month(), now.Day(), config.StickerRefreshHour, 0, 0, 0, taipeiTZ)
+		if now.After(next) {
+			next = next.Add(24 * time.Hour)
+		}
+
+		waitDuration := time.Until(next)
+		a.logger.WithField("next_run", next.Format(time.RFC3339)).
+			Info("Scheduled next sticker refresh (Taiwan time)")
+
 		select {
 		case <-ctx.Done():
 			a.logger.Debug("Sticker refresh received shutdown signal")
 			return
-		case <-ticker.C:
+		case <-time.After(waitDuration):
 			a.performStickerRefresh(ctx)
 		}
 	}
@@ -578,17 +593,18 @@ func (a *Application) proactiveWarmup(ctx context.Context) {
 	a.performProactiveWarmup(initialCtx)
 	initialCancel()
 
-	// Schedule daily warmup at 3:00 AM
+	// Schedule daily warmup at fixed time (3:00 AM Taiwan time)
+	taipeiTZ := lineutil.GetTaipeiLocation()
 	for {
-		now := time.Now()
-		next := time.Date(now.Year(), now.Month(), now.Day(), 3, 0, 0, 0, now.Location())
+		now := time.Now().In(taipeiTZ)
+		next := time.Date(now.Year(), now.Month(), now.Day(), config.WarmupHour, 0, 0, 0, taipeiTZ)
 		if now.After(next) {
 			next = next.Add(24 * time.Hour)
 		}
 
 		waitDuration := time.Until(next)
 		a.logger.WithField("next_run", next.Format(time.RFC3339)).
-			Info("Scheduled next proactive warmup")
+			Info("Scheduled next proactive warmup (Taiwan time)")
 
 		select {
 		case <-ctx.Done():

@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Taipei timezone for consistent time display
+// Taipei timezone for consistent time display and scheduling
 var taipeiTZ *time.Location
 
 func init() {
@@ -15,6 +15,12 @@ func init() {
 		// Fallback to UTC+8 if timezone data is not available
 		taipeiTZ = time.FixedZone("Asia/Taipei", 8*60*60)
 	}
+}
+
+// GetTaipeiLocation returns the Taiwan (Asia/Taipei) timezone location.
+// Use this for scheduling jobs and time calculations that should be in Taiwan time.
+func GetTaipeiLocation() *time.Location {
+	return taipeiTZ
 }
 
 // FormatCacheTime formats a Unix timestamp into a user-friendly time string.

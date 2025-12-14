@@ -149,7 +149,7 @@ term := bot.ExtractSearchTerm("課程 微積分", "課程") // → "微積分"
 - 「線代」→ SQL LIKE 無結果 → fuzzy 找到「線性代數」✅
 - 「線性代數」→ SQL LIKE 有結果 → 跳過 fuzzy → 漏掉其他匹配 ❌
 
-**函數位置**：
+**函式位置**：
 - `bot.ContainsAllRunes(text, search)` - 判斷 text 是否包含 search 的所有字元（rune）
 
 ## 開發規範

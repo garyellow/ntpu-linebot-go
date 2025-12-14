@@ -292,7 +292,7 @@ func isValidUTF8(s string) bool {
 
 // BenchmarkTruncateRunes benchmarks the TruncateRunes function
 func BenchmarkTruncateRunes(b *testing.B) {
-	testString := "這是一個測試字串，用來測試 TruncateRunes 函數的效能，包含中英文與數字 123"
+	testString := "這是一個測試字串，用來測試 TruncateRunes 函式的效能，包含中英文與數字 123"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = TruncateRunes(testString, 20)
