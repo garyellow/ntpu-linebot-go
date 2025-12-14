@@ -536,7 +536,7 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	if student != nil {
 		// Cache hit
 		h.metrics.RecordCacheHit(ModuleName)
-		log.Infof("Cache hit for student ID: %s", studentID)
+		log.Debugf("Cache hit for student ID: %s", studentID)
 		return h.formatStudentResponse(student)
 	}
 

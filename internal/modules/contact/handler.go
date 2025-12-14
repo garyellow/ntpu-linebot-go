@@ -402,7 +402,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	// If found in cache, return results
 	if len(contacts) > 0 {
 		h.metrics.RecordCacheHit(ModuleName)
-		log.Infof("Cache hit for contact search: %s (found %d)", searchTerm, len(contacts))
+		log.Debugf("Cache hit for contact search: %s (found %d)", searchTerm, len(contacts))
 		return h.formatContactResultsWithSearch(contacts, searchTerm)
 	}
 

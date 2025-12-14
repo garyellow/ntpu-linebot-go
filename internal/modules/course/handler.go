@@ -365,7 +365,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 	if course != nil {
 		// Cache hit
 		h.metrics.RecordCacheHit(ModuleName)
-		log.Infof("Cache hit for course UID: %s", uid)
+		log.Debugf("Cache hit for course UID: %s", uid)
 		return h.formatCourseResponse(course)
 	}
 
@@ -444,7 +444,7 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 
 		if course != nil {
 			h.metrics.RecordCacheHit(ModuleName)
-			log.Infof("Cache hit for course UID: %s (from course no: %s)", uid, courseNo)
+			log.Debugf("Cache hit for course UID: %s (from course no: %s)", uid, courseNo)
 			return h.formatCourseResponse(course)
 		}
 	}

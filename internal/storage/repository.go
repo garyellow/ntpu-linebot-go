@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
@@ -22,9 +23,21 @@ func (db *DB) SaveStudent(ctx context.Context, student *Student) error {
 			year = excluded.year,
 			cached_at = excluded.cached_at
 	`
+	start := time.Now()
 	_, err := db.writer.ExecContext(ctx, query, student.ID, student.Name, student.Department, student.Year, time.Now().Unix())
 	if err != nil {
+		slog.ErrorContext(ctx, "failed to save student",
+			"student_id", student.ID,
+			"error", err)
 		return fmt.Errorf("failed to save student: %w", err)
+	}
+
+	// Warn on slow queries (>100ms)
+	if duration := time.Since(start); duration > 100*time.Millisecond {
+		slog.WarnContext(ctx, "slow database operation",
+			"operation", "SaveStudent",
+			"duration_ms", duration.Milliseconds(),
+			"student_id", student.ID)
 	}
 	return nil
 }
@@ -46,15 +59,39 @@ func (db *DB) SaveStudentsBatch(ctx context.Context, students []*Student) error 
 			cached_at = excluded.cached_at
 	`
 
+	start := time.Now()
 	cachedAt := time.Now().Unix()
-	return db.ExecBatchContext(ctx, query, func(stmt *sql.Stmt) error {
+	err := db.ExecBatchContext(ctx, query, func(stmt *sql.Stmt) error {
 		for _, student := range students {
 			if _, err := stmt.ExecContext(ctx, student.ID, student.Name, student.Department, student.Year, cachedAt); err != nil {
+				slog.ErrorContext(ctx, "failed to save student in batch",
+					"student_id", student.ID,
+					"error", err)
 				return fmt.Errorf("failed to save student %s: %w", student.ID, err)
 			}
 		}
 		return nil
 	})
+
+	if err != nil {
+		return err
+	}
+
+	// Log batch statistics
+	duration := time.Since(start)
+	slog.DebugContext(ctx, "batch operation completed",
+		"operation", "SaveStudentsBatch",
+		"count", len(students),
+		"duration_ms", duration.Milliseconds())
+
+	if duration > 500*time.Millisecond {
+		slog.WarnContext(ctx, "slow batch operation",
+			"operation", "SaveStudentsBatch",
+			"count", len(students),
+			"duration_ms", duration.Milliseconds())
+	}
+
+	return nil
 }
 
 // GetStudentByID retrieves a student by ID and validates cache freshness.
@@ -74,6 +111,9 @@ func (db *DB) GetStudentByID(ctx context.Context, id string) (*Student, error) {
 		return nil, nil
 	}
 	if err != nil {
+		slog.ErrorContext(ctx, "failed to query student",
+			"student_id", id,
+			"error", err)
 		return nil, fmt.Errorf("query student: %w", err)
 	}
 
@@ -95,8 +135,12 @@ func (db *DB) SearchStudentsByName(ctx context.Context, name string) ([]Student,
 	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT id, name, department, year, cached_at FROM students WHERE name LIKE ? ESCAPE '\' AND cached_at > ? ORDER BY year DESC, id DESC LIMIT 500`
 
+	start := time.Now()
 	rows, err := db.reader.QueryContext(ctx, query, "%"+sanitized+"%", ttlTimestamp)
 	if err != nil {
+		slog.ErrorContext(ctx, "failed to search students",
+			"search_term", name,
+			"error", err)
 		return nil, fmt.Errorf("query students: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
@@ -108,6 +152,15 @@ func (db *DB) SearchStudentsByName(ctx context.Context, name string) ([]Student,
 			return nil, fmt.Errorf("scan student: %w", err)
 		}
 		students = append(students, student)
+	}
+
+	// Warn on slow queries
+	if duration := time.Since(start); duration > 100*time.Millisecond {
+		slog.WarnContext(ctx, "slow database query",
+			"operation", "SearchStudentsByName",
+			"duration_ms", duration.Milliseconds(),
+			"search_term", name,
+			"result_count", len(students))
 	}
 
 	return students, rows.Err()

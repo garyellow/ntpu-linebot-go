@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"time"
 
 	"github.com/conneroisu/groq-go"
 	"github.com/conneroisu/groq-go/pkg/tools"
@@ -113,14 +115,42 @@ func (p *groqIntentParser) Parse(ctx context.Context, text string) (*ParseResult
 		MaxTokens:   256,
 	}
 
-	// Execute request
+	// Execute request with timing
+	start := time.Now()
 	resp, err := p.client.ChatCompletion(ctx, req)
+	duration := time.Since(start)
+
 	if err != nil {
+		slog.WarnContext(ctx, "intent parsing API call failed",
+			"provider", "groq",
+			"model", p.model,
+			"input_length", len(text),
+			"duration_ms", duration.Milliseconds(),
+			"error", err)
 		return nil, fmt.Errorf("chat completion failed: %w", err)
 	}
 
 	// Parse the result
-	return p.parseResult(&resp)
+	parsedResult, parseErr := p.parseResult(&resp)
+
+	// Log success with token usage
+	if parseErr == nil && resp.Usage.TotalTokens > 0 {
+		slog.InfoContext(ctx, "intent parsing completed",
+			"provider", "groq",
+			"model", p.model,
+			"input_tokens", resp.Usage.PromptTokens,
+			"output_tokens", resp.Usage.CompletionTokens,
+			"total_tokens", resp.Usage.TotalTokens,
+			"duration_ms", duration.Milliseconds(),
+			"function_name", func() string {
+				if parsedResult != nil {
+					return parsedResult.FunctionName
+				}
+				return ""
+			}())
+	}
+
+	return parsedResult, parseErr
 }
 
 // parseResult extracts intent information from the Groq response.

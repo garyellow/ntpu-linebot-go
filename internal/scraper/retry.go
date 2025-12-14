@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"log/slog"
 	"math"
 	"math/big"
 	"time"
@@ -26,11 +27,20 @@ import (
 //	attempt 5: ~64s (48s - 80s)
 func RetryWithBackoff(ctx context.Context, maxRetries int, initialDelay time.Duration, fn func() error) error {
 	var lastErr error
+	startTime := time.Now()
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
+		attemptStart := time.Now()
+
 		// Try the function
 		err := fn()
 		if err == nil {
+			// Log success if retries were needed
+			if attempt > 0 {
+				slog.InfoContext(ctx, "request succeeded after retries",
+					"total_attempts", attempt+1,
+					"total_duration_ms", time.Since(startTime).Milliseconds())
+			}
 			return nil
 		}
 		lastErr = err
@@ -38,7 +48,19 @@ func RetryWithBackoff(ctx context.Context, maxRetries int, initialDelay time.Dur
 		// Don't retry permanent errors (e.g., 404, 403, 401)
 		var permErr *permanentError
 		if errors.As(err, &permErr) {
+			slog.DebugContext(ctx, "permanent error, not retrying",
+				"error", err,
+				"attempt", attempt+1)
 			return permErr.Unwrap() // Return the underlying error
+		}
+
+		// Log retry warning
+		if attempt < maxRetries {
+			slog.WarnContext(ctx, "request failed, will retry",
+				"attempt", attempt+1,
+				"max_retries", maxRetries,
+				"duration_ms", time.Since(attemptStart).Milliseconds(),
+				"error", err)
 		}
 
 		// Don't delay after the last attempt
@@ -71,6 +93,12 @@ func RetryWithBackoff(ctx context.Context, maxRetries int, initialDelay time.Dur
 			return ctx.Err()
 		}
 	}
+
+	// Log final failure
+	slog.ErrorContext(ctx, "all retries exhausted",
+		"total_attempts", maxRetries+1,
+		"total_duration_ms", time.Since(startTime).Milliseconds(),
+		"last_error", lastErr)
 
 	return lastErr
 }

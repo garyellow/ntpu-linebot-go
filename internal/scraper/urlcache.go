@@ -3,8 +3,10 @@ package scraper
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // URLCache provides thread-safe caching for working base URLs with automatic failover.
@@ -77,8 +79,15 @@ func (c *URLCache) Get(ctx context.Context) (string, error) {
 	}
 
 	// Slow path: cache miss or empty - detect working URL
+	oldURL := c.GetCached()
+	start := time.Now()
 	baseURL, err := c.client.TryFailoverURLs(ctx, c.domain)
 	if err != nil {
+		slog.WarnContext(ctx, "URL failover detection failed",
+			"domain", c.domain,
+			"error", err,
+			"duration_ms", time.Since(start).Milliseconds())
+
 		// Fallback to first configured URL if failover detection fails
 		urls := c.client.GetBaseURLs(c.domain)
 		if len(urls) > 0 {
@@ -86,6 +95,20 @@ func (c *URLCache) Get(ctx context.Context) (string, error) {
 		} else {
 			return "", fmt.Errorf("no URLs available for domain %s: %w", c.domain, err)
 		}
+	}
+
+	// Log failover event if URL changed
+	if oldURL != "" && oldURL != baseURL {
+		slog.InfoContext(ctx, "URL failover successful",
+			"domain", c.domain,
+			"old_url", oldURL,
+			"new_url", baseURL,
+			"detection_duration_ms", time.Since(start).Milliseconds())
+	} else if oldURL == "" {
+		slog.DebugContext(ctx, "initial URL detected",
+			"domain", c.domain,
+			"url", baseURL,
+			"detection_duration_ms", time.Since(start).Milliseconds())
 	}
 
 	// Cache the working URL for future requests (lock-free write)
@@ -96,7 +119,13 @@ func (c *URLCache) Get(ctx context.Context) (string, error) {
 // Clear invalidates the cached URL, forcing re-detection on next Get().
 // Call this when a scrape operation fails to trigger automatic failover.
 func (c *URLCache) Clear() {
+	previousURL := c.GetCached()
 	c.cache.Store("")
+	if previousURL != "" {
+		slog.Warn("URL cache cleared due to scrape failure",
+			"domain", c.domain,
+			"previous_url", previousURL)
+	}
 }
 
 // GetCached returns the cached URL without triggering failover detection.

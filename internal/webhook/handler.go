@@ -131,7 +131,7 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 
 	// Best effort, non-blocking
 	if loadErr := h.showLoadingAnimation(event); loadErr != nil {
-		h.logger.WithError(loadErr).Debug("Failed to show loading animation")
+		h.logger.WithError(loadErr).Warn("Failed to show loading animation")
 	}
 
 	switch e := event.(type) {

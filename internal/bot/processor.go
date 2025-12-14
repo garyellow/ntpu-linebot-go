@@ -127,8 +127,6 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 		return nil, nil // Empty after sanitization
 	}
 
-	p.logger.WithField("text", text).Debug("Received text message")
-
 	// Check for help keywords FIRST (before dispatching to bot modules)
 	if slices.ContainsFunc(helpKeywords, func(k string) bool {
 		return strings.EqualFold(text, k)
