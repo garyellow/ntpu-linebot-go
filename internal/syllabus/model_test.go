@@ -217,7 +217,7 @@ func TestFields_ContentForIndexing(t *testing.T) {
 			name: "all fields (CN only)",
 			fields: Fields{
 				ObjectivesCN: "培養程式設計能力",
-				OutlineCN:    "變數、迴圈、函數",
+				OutlineCN:    "變數、迴圈、函式",
 				Schedule:     "第1週：課程介紹",
 			},
 			courseTitle:  "程式設計",

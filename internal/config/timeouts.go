@@ -73,24 +73,32 @@ const (
 
 // Background job intervals
 const (
-	// CacheCleanupInterval is how often expired cache entries are deleted.
-	CacheCleanupInterval = 12 * time.Hour
-
-	// CacheCleanupInitialDelay is the delay before first cache cleanup.
-	// Allows server to stabilize before running cleanup.
-	CacheCleanupInitialDelay = 5 * time.Minute
-
-	// StickerRefreshInterval is how often sticker URLs are refreshed.
+	// StickerRefreshInterval is how often sticker refresh runs (daily).
+	// Refresh runs at fixed time (2:00 AM Taiwan time).
 	StickerRefreshInterval = 24 * time.Hour
 
-	// StickerRefreshInitialDelay is the delay before first sticker refresh.
-	// Allows server to stabilize before running refresh.
-	StickerRefreshInitialDelay = 1 * time.Hour
+	// StickerRefreshHour is the hour (0-23) when sticker refresh runs daily.
+	// Set to 2:00 AM Taiwan time, before warmup to ensure fresh sticker data.
+	StickerRefreshHour = 2
+
+	// CacheCleanupInterval is how often cache cleanup runs (daily).
+	// Cleanup runs at fixed time (4:00 AM Taiwan time) after warmup.
+	CacheCleanupInterval = 24 * time.Hour
+
+	// CacheCleanupHour is the hour (0-23) when cache cleanup runs daily.
+	// Set to 4:00 AM Taiwan time, after warmup completes to avoid deleting fresh data.
+	CacheCleanupHour = 4
+
+	// WarmupHour is the hour (0-23) when daily warmup runs.
+	// Set to 3:00 AM Taiwan time for fresh cache before business hours.
+	WarmupHour = 3
 
 	// MetricsUpdateInterval is how often cache size metrics are updated.
+	// Uses Ticker pattern as it's high-frequency monitoring task.
 	MetricsUpdateInterval = 5 * time.Minute
 
 	// RateLimiterCleanupInterval is how often inactive user rate limiters are cleaned.
+	// Uses Ticker pattern as it's high-frequency cleanup task.
 	RateLimiterCleanupInterval = 5 * time.Minute
 )
 
