@@ -332,8 +332,8 @@ Warmup:
   (關鍵字匹配)
     │
     ▼
-  Confidence-based ranking
-  (排名位置 → 信心分數)
+  Confidence Scoring
+  (相對分數: score / maxScore)
     ↓
   回傳信心分數排序結果
 ```

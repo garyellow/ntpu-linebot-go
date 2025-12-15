@@ -8,7 +8,7 @@ Retrieval-Augmented Generation (RAG) 模組，提供課程智慧搜尋功能。
 
 - **BM25Index**: BM25 關鍵字搜尋索引 (中文分詞優化)
 - **Query Expansion**: LLM 擴展查詢詞彙（同義詞、縮寫、翻譯）
-- **Rank-based Confidence**: 基於排名的信心分數
+- **Relative Confidence**: 基於相對 BM25 分數的信心度 (score / maxScore)
 
 ## 架構
 
@@ -20,7 +20,7 @@ Search Flow:
   │ BM25 Search (expanded keywords)  │
   │ - 中文 Unigram 分詞              │
   │ - IDF 加權                       │
-  │ - 排名信心分數                   │
+  │ - 相對信心分數 (score/maxScore) │
   └──────────────────────────────────┘
       ↓
   去重合併 → 排序結果
