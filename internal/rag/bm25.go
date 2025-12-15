@@ -15,6 +15,34 @@ import (
 	"github.com/iwilltry42/bm25-go/bm25"
 )
 
+// BM25 Configuration Constants
+//
+// Best Practices for BM25 Score Filtering (2024-2025):
+// - DO NOT use fixed global score thresholds (scores are not comparable across queries)
+// - Use rank cutoff (Top-K) as primary filtering method
+// - Optionally use relative score threshold (score >= maxScore * ratio)
+//
+// References:
+// - Azure AI Search: No min_score support for BM25, recommends semantic reranking
+// - Elasticsearch: Recommends size limit over min_score for BM25
+// - OpenSearch: Supports min_score but officially recommends Top-K
+// - Academic research: Relative thresholds work better than absolute thresholds
+const (
+	// RelativeScoreThreshold defines the minimum score as a ratio of the maximum score.
+	// Results with score < maxScore * RelativeScoreThreshold are filtered out.
+	// Set to 0.0 to disable relative filtering (only use Top-K).
+	//
+	// Rationale: 0.3 (30%) filters out results that are significantly less relevant
+	// than the top result while being lenient enough to include potentially useful matches.
+	// For small corpora (~5000 docs), this helps remove noise without being too aggressive.
+	RelativeScoreThreshold = 0.3
+
+	// MinResultsBeforeFiltering is the minimum number of results required before
+	// applying relative score filtering. If fewer results exist, all are returned.
+	// This prevents over-filtering when very few matches exist.
+	MinResultsBeforeFiltering = 3
+)
+
 // SearchResult represents a search result with confidence score.
 // Confidence is derived from BM25 rank position, not vector similarity.
 type SearchResult struct {
@@ -207,7 +235,31 @@ func (idx *BM25Index) Search(query string, topN int) ([]BM25Result, error) {
 		return 0
 	})
 
-	// Limit results
+	// Apply relative score threshold filtering (optional, based on best practices)
+	// This filters out results that are significantly less relevant than the top result.
+	// Only applied when:
+	// 1. RelativeScoreThreshold > 0 (filtering is enabled)
+	// 2. We have enough results (>= MinResultsBeforeFiltering)
+	// 3. The max score is positive (negative scores indicate poor matches overall)
+	if RelativeScoreThreshold > 0 && len(scoredDocs) >= MinResultsBeforeFiltering {
+		maxScore := scoredDocs[0].score
+		if maxScore > 0 {
+			threshold := maxScore * RelativeScoreThreshold
+			filtered := make([]scoredDoc, 0, len(scoredDocs))
+			for _, sd := range scoredDocs {
+				if sd.score >= threshold {
+					filtered = append(filtered, sd)
+				}
+			}
+			// Only use filtered results if we still have some
+			// This prevents returning empty results when all scores are low
+			if len(filtered) > 0 {
+				scoredDocs = filtered
+			}
+		}
+	}
+
+	// Limit results by Top-K (primary filtering method)
 	if topN > 0 && len(scoredDocs) > topN {
 		scoredDocs = scoredDocs[:topN]
 	}

@@ -57,18 +57,3 @@ func TestGroqQueryExpander_Close(t *testing.T) {
 		t.Errorf("expander.Close() should not error, got: %v", err)
 	}
 }
-
-func TestGroqQueryExpander_SkipLongQueries(t *testing.T) {
-	expander := &groqQueryExpander{client: nil} // will return early due to nil client
-
-	// Long query without abbreviations should be skipped
-	longQuery := "這是一個很長的查詢字串用於測試跳過擴展的邏輯因為已經足夠描述性"
-	result, err := expander.Expand(context.Background(), longQuery)
-
-	if err != nil {
-		t.Errorf("Expand() error = %v, want nil", err)
-	}
-	if result != longQuery {
-		t.Errorf("Expand() should return original query for long queries")
-	}
-}

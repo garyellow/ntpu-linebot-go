@@ -6,16 +6,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"regexp"
 	"strings"
 	"time"
 
 	"google.golang.org/genai"
 )
-
-// MinQueryLengthForExpansion is the minimum rune count to skip expansion
-// Short queries benefit most from expansion
-const MinQueryLengthForExpansion = 15
 
 // geminiQueryExpander expands user queries for better smart search results.
 // Uses LLM to add synonyms, translations, and related concepts.
@@ -67,12 +62,12 @@ func (e *geminiQueryExpander) Expand(ctx context.Context, query string) (string,
 		return query, nil
 	}
 
-	// Skip expansion for very long queries (already descriptive enough)
-	if len([]rune(query)) > MinQueryLengthForExpansion && !containsAbbreviation(query) {
-		return query, nil
-	}
-
-	prompt := buildExpansionPrompt(query)
+	// Let LLM handle ALL queries - it can:
+	// 1. Expand abbreviations (AWS → 雲端服務)
+	// 2. Add synonyms and related terms
+	// 3. Clean up verbose queries to extract key concepts
+	// 4. Handle mixed Chinese/English with different information density
+	prompt := QueryExpansionPrompt(query)
 
 	config := &genai.GenerateContentConfig{
 		Temperature:     genai.Ptr[float32](0.3), // Low temperature for consistent expansion
@@ -145,46 +140,4 @@ func (e *geminiQueryExpander) Close() error {
 	}
 	// Future: Add client.Close() when SDK supports it
 	return nil
-}
-
-// buildExpansionPrompt creates the prompt for query expansion
-func buildExpansionPrompt(query string) string {
-	return fmt.Sprintf(`你是課程搜尋查詢擴展助手。擴展以下查詢以提高課程搜尋效果。
-
-## 任務
-將使用者查詢擴展為包含同義詞、翻譯和相關概念的搜尋詞。
-
-## 規則
-1. 保留原始查詢詞
-2. 英文縮寫必須加上全稱（AWS→Amazon Web Services）
-3. 英文術語必須加上中文翻譯（AI→人工智慧）
-4. 中文術語必須加上英文翻譯（機器學習→machine learning）
-5. 加入2-3個相關概念
-6. 只輸出擴展後的關鍵詞，用空格分隔
-7. 不要輸出任何解釋或標點符號
-
-## 範例
-輸入: AWS
-輸出: AWS Amazon Web Services 雲端服務 雲端運算 cloud computing EC2 S3
-
-輸入: 我想學 AI
-輸出: AI 人工智慧 artificial intelligence 機器學習 machine learning 深度學習
-
-輸入: 程式設計
-輸出: 程式設計 programming 軟體開發 coding 程式語言 software development
-
-輸入: 資料分析
-輸出: 資料分析 data analysis 數據分析 統計 statistics 資料科學 data science
-
-## 查詢
-%s
-
-## 輸出`, query)
-}
-
-// containsAbbreviation checks if query contains technical abbreviations
-var abbreviationRegex = regexp.MustCompile(`(?i)\b(AWS|AI|ML|DL|API|SDK|SQL|DB|UI|UX|IoT|AR|VR|NLP|CV|LLM|GPT|RAG|ETL|CI|CD|K8S|GCP|AZURE)\b`)
-
-func containsAbbreviation(query string) bool {
-	return abbreviationRegex.MatchString(query)
 }
