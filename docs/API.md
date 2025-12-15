@@ -348,7 +348,7 @@ sequenceDiagram
 | 文字長度 | 5000 字元 | 超過會被截斷 |
 | Postback Data | 300 bytes | 按鈕回傳資料長度 |
 | Carousel Columns | 10 個 | 輪播訊息最多 10 個欄位 |
-| API Rate Limit | 100 rps | 全域限制（我們設定 80 rps） |
+| API Rate Limit | 100 rps | 全域限制 |
 
 ### LINE Bot UX 最佳實踐
 
