@@ -380,10 +380,10 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 // Uses ScrapeCourses to fetch courses for each semester individually.
 // Makes 4 HTTP requests per semester (U/M/N/P education codes).
 // Uses intelligent detection to determine which 4 semesters to warm up:
-// 1. First checks if the "next potential semester" has data (early upload detection)
-// 2. If yes, use it as the newest semester
-// 3. If no, use calendar-based newest semester
-// 4. Generate 4 semesters backward from the newest
+// 1. Calculates the calendar-based newest semester
+// 2. Checks if that semester has data
+// 3. If yes, uses it as the newest semester; if no, shifts back one semester
+// 4. Generates 4 semesters backward from the newest
 // This ensures we always warm up the most relevant 4 semesters.
 func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
 	startTime := time.Now()
@@ -451,29 +451,23 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 }
 
 // detectWarmupSemesters determines which 4 semesters should be warmed up.
-// It uses the SemesterDetector for intelligent data-driven detection instead
-// of calendar-based guesses. This ensures we warmup the most relevant semesters
-// based on actual data availability.
+// It uses the SemesterDetector for intelligent data-driven detection based on
+// actual course data availability, rather than relying solely on calendar-based guesses.
 //
 // Strategy (DATA-FIRST approach):
-// 1. Check if "next potential semester" has data (early upload detection)
-// 2. If yes, use it as the newest semester
-// 3. If no, use calendar-based newest semester
-// 4. Generate 4 semesters backward from the newest
+// 1. Detect the most recent semesters that have any course data available
+// 2. Select up to 4 such semesters for warmup
 //
-// This handles edge cases like:
-// - Early uploads: Next semester uploaded before calendar date
-// - Delayed uploads: Current semester not ready yet
-// - Pre-registration: New semester opens early for course selection
+// This approach ensures that the semesters with actual data are prioritized for cache warming,
+// handling cases where semesters may be delayed or out of sync with the calendar.
 //
 // Key insight: Trust data availability over calendar calculations.
 func detectWarmupSemesters(ctx context.Context, db *storage.DB, log *logger.Logger) []course.Semester {
 	// Create semester detector with database count function
 	detector := course.NewSemesterDetector(db.CountCoursesBySemester)
 
-	// Use intelligent detection to get 4 semesters
-	// Pass 0 as threshold: any data (> 0 courses) means the semester is active
-	semesters := detector.DetectWarmupSemesters(ctx, 0)
+	// Use intelligent detection to get 4 most recent semesters with data
+	semesters := detector.DetectWarmupSemesters(ctx)
 
 	log.WithField("semesters", formatSemesters(semesters)).
 		WithField("total_semesters", len(semesters)).

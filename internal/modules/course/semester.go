@@ -88,7 +88,7 @@ func getSemestersForDate(date time.Time) ([]int, []int) {
 }
 
 // generateSemestersBackward generates n semesters going backwards from the given start point.
-// Term alternates: 1 → 2 (prev year) → 1 (prev year) → 2 (prev-prev year) → ...
+// Term alternates: 1 → 2 (prev year) → 1 (same year as that term 2) → 2 (prev year) → ...
 func generateSemestersBackward(startYear, startTerm, count int) ([]int, []int) {
 	years := make([]int, count)
 	terms := make([]int, count)
@@ -113,21 +113,10 @@ func generateSemestersBackward(startYear, startTerm, count int) ([]int, []int) {
 	return years, terms
 }
 
-// DetectActiveSemesters intelligently detects which semesters have data available.
-// Strategy:
-// 1. Calculate the potential newest semester based on calendar (may be future)
-// 2. Check if that semester has any data (> 0 courses)
-// 3. If yes → use it as starting point
-// 4. If no → shift back one semester and use that
-//
-// This handles:
-// - Early data upload (e.g., Aug 25: 114-1 already available)
-// - Delayed upload (e.g., Sep 15: 114-1 not ready yet)
-// - Pre-registration period (next semester opens early)
-//
-// Returns 4 semesters starting from the detected active semester.
-// The minCoursesThreshold is kept for backwards compatibility but typically set to 0.
-func (d *SemesterDetector) DetectActiveSemesters(ctx context.Context, minCoursesThreshold int) ([]int, []int) {
+// DetectActiveSemesters returns the 4 most recent semesters with course data.
+// It checks if the calendar-based newest semester has any data; if not, shifts back one semester.
+// This ensures we always return semesters with actual course availability.
+func (d *SemesterDetector) DetectActiveSemesters(ctx context.Context) ([]int, []int) {
 	// Get calendar-based semesters as starting point
 	baseYears, baseTerms := getSemestersForDate(time.Now())
 
@@ -136,14 +125,14 @@ func (d *SemesterDetector) DetectActiveSemesters(ctx context.Context, minCourses
 		return baseYears, baseTerms
 	}
 
-	// Check if the newest semester has enough courses
+	// Check if the newest semester has any data
 	newestCount, err := d.countFunc(ctx, baseYears[0], baseTerms[0])
 	if err != nil {
 		// On error, fall back to calendar-based detection
 		return baseYears, baseTerms
 	}
 
-	if newestCount >= minCoursesThreshold {
+	if newestCount > 0 {
 		// Newest semester has data, use calendar-based semesters
 		return baseYears, baseTerms
 	}
@@ -157,25 +146,11 @@ func (d *SemesterDetector) DetectActiveSemesters(ctx context.Context, minCourses
 	return shiftedYears, shiftedTerms
 }
 
-// DetectWarmupSemesters intelligently detects which 4 semesters should be warmed up.
-// It returns the semesters that should have course data based on actual data availability,
-// not just calendar dates. This ensures we always warmup the most relevant semesters.
-//
-// Strategy (DATA-FIRST approach):
-// 1. Check if "next potential semester" has data (e.g., early upload before semester starts)
-// 2. If yes, use it as the newest semester
-// 3. If no, use calendar-based newest semester
-// 4. Generate 4 semesters backward from the newest
-//
-// This approach handles edge cases like:
-// - Early uploads: If next semester data is uploaded early, use it immediately
-// - Late uploads: If current semester data not ready, fall back to previous
-// - Pre-registration periods: Naturally detects when new semester opens
-//
-// Key insight: We trust data availability over calendar calculations.
-func (d *SemesterDetector) DetectWarmupSemesters(ctx context.Context, minCoursesThreshold int) []Semester {
+// DetectWarmupSemesters returns the 4 most recent semesters with course data.
+// This is used during warmup to determine which semesters should be cached.
+func (d *SemesterDetector) DetectWarmupSemesters(ctx context.Context) []Semester {
 	// Use DetectActiveSemesters to find which 4 semesters have data
-	years, terms := d.DetectActiveSemesters(ctx, minCoursesThreshold)
+	years, terms := d.DetectActiveSemesters(ctx)
 
 	// Convert to Semester structs (should always be 4 semesters)
 	result := make([]Semester, len(years))

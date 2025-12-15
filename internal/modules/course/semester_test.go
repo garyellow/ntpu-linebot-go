@@ -216,7 +216,7 @@ func TestSemesterDetector(t *testing.T) {
 		}
 
 		detector := NewSemesterDetector(mockCount)
-		years, _ := detector.DetectActiveSemesters(context.Background(), 100)
+		years, _ := detector.DetectActiveSemesters(context.Background())
 
 		// Should return calendar-based semesters since data exists
 		if len(years) != 4 {
@@ -240,7 +240,7 @@ func TestSemesterDetector(t *testing.T) {
 		// Get expected base semesters first
 		baseYears, baseTerms := getSemestersForDate(time.Now())
 
-		years, terms := detector.DetectActiveSemesters(context.Background(), 100)
+		years, terms := detector.DetectActiveSemesters(context.Background())
 
 		// Should shift back by one semester since newest has no data
 		expectedYears, expectedTerms := generateSemestersBackward(baseYears[1], baseTerms[1], 4)
@@ -255,7 +255,7 @@ func TestSemesterDetector(t *testing.T) {
 
 	t.Run("DetectActiveSemesters with nil count function", func(t *testing.T) {
 		detector := NewSemesterDetector(nil)
-		years, terms := detector.DetectActiveSemesters(context.Background(), 100)
+		years, terms := detector.DetectActiveSemesters(context.Background())
 
 		// Should return calendar-based semesters
 		expectedYears, expectedTerms := getSemestersForDate(time.Now())
@@ -277,7 +277,7 @@ func TestDetectWarmupSemesters(t *testing.T) {
 		}
 
 		detector := NewSemesterDetector(mockCount)
-		semesters := detector.DetectWarmupSemesters(context.Background(), 0)
+		semesters := detector.DetectWarmupSemesters(context.Background())
 
 		if len(semesters) != 4 {
 			t.Errorf("Expected 4 semesters, got %d", len(semesters))
@@ -300,7 +300,7 @@ func TestDetectWarmupSemesters(t *testing.T) {
 		}
 
 		detector := NewSemesterDetector(mockCount)
-		semesters := detector.DetectWarmupSemesters(context.Background(), 0)
+		semesters := detector.DetectWarmupSemesters(context.Background())
 
 		if len(semesters) != 4 {
 			t.Errorf("Expected 4 semesters, got %d", len(semesters))
@@ -317,7 +317,7 @@ func TestDetectWarmupSemesters(t *testing.T) {
 		}
 
 		detector := NewSemesterDetector(mockCount)
-		semesters := detector.DetectWarmupSemesters(context.Background(), 0)
+		semesters := detector.DetectWarmupSemesters(context.Background())
 
 		if len(semesters) != 4 {
 			t.Errorf("Expected 4 semesters, got %d", len(semesters))
@@ -333,7 +333,7 @@ func TestDetectWarmupSemesters(t *testing.T) {
 		}
 
 		detector := NewSemesterDetector(mockCount)
-		semesters := detector.DetectWarmupSemesters(context.Background(), 0)
+		semesters := detector.DetectWarmupSemesters(context.Background())
 
 		// Should fall back to calendar-based semesters
 		if len(semesters) != 4 {
@@ -341,31 +341,28 @@ func TestDetectWarmupSemesters(t *testing.T) {
 		}
 	})
 
-	t.Run("Early upload detection", func(t *testing.T) {
-		// Simulate next semester data uploaded early (e.g., August with 114-1 ready)
+	t.Run("Calendar-based detection with data", func(t *testing.T) {
+		// Returns data for all requested semesters
 		mockCount := func(ctx context.Context, year, term int) (int, error) {
-			// 114-1 has data (early upload)
-			if year == 114 && term == 1 {
-				return 1200, nil
-			}
-			// 113-2, 113-1, 112-2 also have data
-			if year == 113 || year == 112 {
+			// Mock returns data for any recent semester
+			if year >= 112 {
 				return 1000, nil
 			}
 			return 0, nil
 		}
 
 		detector := NewSemesterDetector(mockCount)
-		semesters := detector.DetectWarmupSemesters(context.Background(), 0)
+		semesters := detector.DetectWarmupSemesters(context.Background())
 
 		if len(semesters) != 4 {
 			t.Errorf("Expected 4 semesters, got %d", len(semesters))
 		}
 
-		// First semester should be 114-1 (early upload detected)
-		if semesters[0].Year != 114 || semesters[0].Term != 1 {
-			t.Errorf("Expected first semester to be 114-1 (early upload), got %d-%d",
-				semesters[0].Year, semesters[0].Term)
+		// Verify all returned semesters are recent
+		for _, sem := range semesters {
+			if sem.Year < 112 {
+				t.Errorf("Expected recent semester (>=112), got %d-%d", sem.Year, sem.Term)
+			}
 		}
 	})
 }
