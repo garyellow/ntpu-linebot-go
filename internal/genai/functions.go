@@ -1,5 +1,9 @@
 // Package genai provides integration with Google's Generative AI APIs.
 // This file contains function declarations for the NLU intent parser.
+//
+// IMPORTANT: Function declarations use genai.Type* constants (e.g., genai.TypeString = "STRING").
+// When converting to other provider formats (e.g., Groq), ensure types are lowercased to match
+// JSON Schema spec ("string" not "STRING"). See buildGroqTools() in groq_intent.go for example.
 package genai
 
 import "google.golang.org/genai"
