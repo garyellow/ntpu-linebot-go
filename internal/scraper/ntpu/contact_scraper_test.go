@@ -96,14 +96,14 @@ func TestGenerateUID(t *testing.T) {
 // BenchmarkEncodeToBig5 benchmarks the Big5 encoding function
 func BenchmarkEncodeToBig5(b *testing.B) {
 	testString := "測試字串test123"
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = encodeToBig5(testString)
 	}
 }
 
 // BenchmarkGenerateUID benchmarks the UID generation function
 func BenchmarkGenerateUID(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = generateUID("學術單位", "資訊工程學系")
 	}
 }
