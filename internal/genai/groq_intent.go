@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/conneroisu/groq-go"
@@ -50,7 +51,14 @@ func newGroqIntentParser(_ context.Context, apiKey, model string) (*groqIntentPa
 	}, nil
 }
 
-// buildGroqTools converts our function declarations to Groq tool format
+// buildGroqTools converts our function declarations to Groq tool format.
+//
+// CRITICAL: Groq API requires lowercase JSON Schema types per Draft 2020-12 spec:
+// - Valid: "string", "number", "integer", "boolean", "array", "object", "null"
+// - Invalid: "STRING", "NUMBER", etc. (causes 400 error)
+//
+// Google's genai.Type* constants use uppercase (genai.TypeString = "STRING"),
+// so we must convert to lowercase using strings.ToLower().
 func buildGroqTools() []tools.Tool {
 	funcDecls := BuildIntentFunctions()
 	result := make([]tools.Tool, 0, len(funcDecls))
@@ -61,8 +69,11 @@ func buildGroqTools() []tools.Tool {
 		required := make([]string, 0)
 
 		for name, schema := range fd.Parameters.Properties {
+			// IMPORTANT: Convert genai.Type* constants to lowercase for Groq API compliance
+			// genai.TypeString = "STRING" → "string" (required by JSON Schema spec)
+			schemaType := strings.ToLower(string(schema.Type))
 			properties[name] = tools.PropertyDefinition{
-				Type:        string(schema.Type),
+				Type:        schemaType,
 				Description: schema.Description,
 			}
 
