@@ -17,10 +17,10 @@ import (
 
 // BM25 Configuration Constants
 //
-// Best Practices for BM25 Score Filtering (2024-2025):
+// Best Practices for BM25 Score Filtering:
 // - DO NOT use fixed global score thresholds (scores are not comparable across queries)
 // - Use rank cutoff (Top-K) as primary filtering method
-// - Optionally use relative score threshold (score >= maxScore * ratio)
+// - Use relative score (score / maxScore) for result classification
 //
 // References:
 // - Azure AI Search: No min_score support for BM25, recommends semantic reranking
@@ -28,30 +28,20 @@ import (
 // - OpenSearch: Supports min_score but officially recommends Top-K
 // - Academic research: Relative thresholds work better than absolute thresholds
 const (
-	// RelativeScoreThreshold defines the minimum score as a ratio of the maximum score.
-	// Results with score < maxScore * RelativeScoreThreshold are filtered out.
-	// Set to 0.0 to disable relative filtering (only use Top-K).
-	//
-	// Rationale: 0.3 (30%) filters out results that are significantly less relevant
-	// than the top result while being lenient enough to include potentially useful matches.
-	// For small corpora (~5000 docs), this helps remove noise without being too aggressive.
-	RelativeScoreThreshold = 0.3
-
-	// MinResultsBeforeFiltering is the minimum number of results required before
-	// applying relative score filtering. If fewer results exist, all are returned.
-	// This prevents over-filtering when very few matches exist.
-	MinResultsBeforeFiltering = 3
+	// MaxSearchResults is the maximum number of results to return.
+	// Top-K is the primary filtering method for BM25 searches.
+	MaxSearchResults = 10
 )
 
 // SearchResult represents a search result with confidence score.
-// Confidence is derived from BM25 rank position, not vector similarity.
+// Confidence is derived from relative BM25 score (score / maxScore).
 type SearchResult struct {
 	UID        string   // Course UID
 	Title      string   // Course title
 	Teachers   []string // Course teachers
 	Year       int      // Academic year
 	Term       int      // Semester
-	Confidence float32  // Rank-based confidence (0-1), higher = more relevant
+	Confidence float32  // Relative score (0-1), score / maxScore
 }
 
 // BM25Index provides keyword-based search using BM25 algorithm.
@@ -235,31 +225,8 @@ func (idx *BM25Index) Search(query string, topN int) ([]BM25Result, error) {
 		return 0
 	})
 
-	// Apply relative score threshold filtering (optional, based on best practices)
-	// This filters out results that are significantly less relevant than the top result.
-	// Only applied when:
-	// 1. RelativeScoreThreshold > 0 (filtering is enabled)
-	// 2. We have enough results (>= MinResultsBeforeFiltering)
-	// 3. The max score is positive (negative scores indicate poor matches overall)
-	if RelativeScoreThreshold > 0 && len(scoredDocs) >= MinResultsBeforeFiltering {
-		maxScore := scoredDocs[0].score
-		if maxScore > 0 {
-			threshold := maxScore * RelativeScoreThreshold
-			filtered := make([]scoredDoc, 0, len(scoredDocs))
-			for _, sd := range scoredDocs {
-				if sd.score >= threshold {
-					filtered = append(filtered, sd)
-				}
-			}
-			// Only use filtered results if we still have some
-			// This prevents returning empty results when all scores are low
-			if len(filtered) > 0 {
-				scoredDocs = filtered
-			}
-		}
-	}
-
 	// Limit results by Top-K (primary filtering method)
+	// No relative score filtering - let UI layer classify results instead
 	if topN > 0 && len(scoredDocs) > topN {
 		scoredDocs = scoredDocs[:topN]
 	}
@@ -288,12 +255,19 @@ func (idx *BM25Index) Search(query string, topN int) ([]BM25Result, error) {
 
 // SearchCourses performs BM25 search and returns SearchResult with confidence scores.
 // This is the primary search interface for course retrieval.
-// Context parameter is for API compatibility (not used in BM25).
+// Confidence is calculated as relative score (score / maxScore).
 func (idx *BM25Index) SearchCourses(_ context.Context, query string, topN int) ([]SearchResult, error) {
 	bm25Results, err := idx.Search(query, topN)
 	if err != nil {
 		return nil, err
 	}
+
+	if len(bm25Results) == 0 {
+		return nil, nil
+	}
+
+	// Get max score for relative confidence calculation
+	maxScore := bm25Results[0].Score
 
 	results := make([]SearchResult, len(bm25Results))
 	for i, r := range bm25Results {
@@ -303,26 +277,51 @@ func (idx *BM25Index) SearchCourses(_ context.Context, query string, topN int) (
 			Teachers:   r.Teachers,
 			Year:       r.Year,
 			Term:       r.Term,
-			Confidence: computeRankConfidence(r.Rank),
+			Confidence: computeRelativeConfidence(r.Score, maxScore),
 		}
 	}
 
 	return results, nil
 }
 
-// computeRankConfidence calculates confidence score from BM25 rank.
-// BM25 scores are unbounded and query-dependent, so we use rank as a proxy.
+// computeRelativeConfidence calculates confidence as relative BM25 score.
+// This is the standard approach for BM25 result classification.
 //
-// Formula: 1 / (1 + 0.05 * rank)
-//   - rank 1 → 0.95
-//   - rank 5 → 0.80
-//   - rank 10 → 0.67
-//   - rank 20 → 0.50
-func computeRankConfidence(rank int) float32 {
-	if rank <= 0 {
+// BM25 Score Distribution (Academic Research - Arampatzis et al., 2009):
+//   - Relevant documents: Normal (Gaussian) distribution at high scores
+//   - Non-relevant documents: Exponential distribution at low scores
+//   - This "Normal-Exponential mixture model" is the standard for BM25
+//
+// Why NOT use log transformation:
+//   - BM25's IDF already contains log: log((N-n+0.5)/(n+0.5)+1)
+//   - Log is for normalizing long-tail distributions, but Top-K is in Gaussian region
+//   - Log on negative scores (IDF edge case) causes mathematical issues
+//
+// Why use relative score (score/maxScore):
+//   - Absolute thresholds are not comparable across queries (Azure, Elasticsearch recommendation)
+//   - Relative thresholds work better than absolute ones (academic consensus)
+//   - Top-K + relative score is the industry standard approach
+//
+// Formula: score / maxScore
+//   - First result always has confidence = 1.0
+//   - Other results are relative to the best match
+//
+// Classification thresholds (in handler):
+//   - >= 0.8: "最佳匹配" (Best Match) - Normal distribution core
+//   - >= 0.6: "高度相關" (Highly Relevant) - Mixed region
+//   - < 0.6: "部分相關" (Partially Relevant) - Exponential tail
+func computeRelativeConfidence(score, maxScore float64) float32 {
+	if maxScore <= 0 {
 		return 0
 	}
-	return float32(1.0 / (1.0 + 0.05*float64(rank)))
+	confidence := score / maxScore
+	if confidence > 1.0 {
+		confidence = 1.0
+	}
+	if confidence < 0 {
+		confidence = 0
+	}
+	return float32(confidence)
 }
 
 // AddSyllabus adds a single syllabus to the index.

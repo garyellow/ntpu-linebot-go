@@ -1277,17 +1277,17 @@ func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []
 
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
-	// Create rank map for lookup (1-indexed based on result order)
-	rankMap := make(map[string]int)
-	for i, r := range results {
-		rankMap[r.UID] = i + 1 // 1-indexed rank
+	// Create confidence map for lookup
+	confidenceMap := make(map[string]float32)
+	for _, r := range results {
+		confidenceMap[r.UID] = r.Confidence
 	}
 
-	// Build bubbles with relevance badges based on rank
+	// Build bubbles with relevance badges based on confidence
 	bubbles := make([]messaging_api.FlexBubble, 0, len(courses))
 	for _, course := range courses {
-		rank := rankMap[course.UID]
-		bubble := h.buildSmartCourseBubble(course, rank)
+		confidence := confidenceMap[course.UID]
+		bubble := h.buildSmartCourseBubble(course, confidence)
 		bubbles = append(bubbles, *bubble.FlexBubble)
 	}
 
@@ -1312,9 +1312,9 @@ func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []
 
 	// Add header message with search guidance
 	// Provide tips when results are few to help users refine their queries
-	headerText := fmt.Sprintf("🔮 智慧搜尋找到 %d 門相關課程\n\n根據課程大綱內容智慧匹配", len(courses))
+	headerText := fmt.Sprintf("🔮 智慧搜尋：找到 %d 門課程", len(courses))
 	if len(courses) <= 3 {
-		headerText += "\n\n💡 提示：使用更具體的關鍵字（如「雲端運算」、「Python」）可獲得更多結果"
+		headerText += "\n💡 使用更具體的關鍵字可獲得更多結果"
 	}
 	headerMsg := lineutil.NewTextMessageWithConsistentSender(headerText, sender)
 	messages = append([]messaging_api.MessageInterface{headerMsg}, messages...)
@@ -1330,9 +1330,9 @@ func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []
 }
 
 // buildSmartCourseBubble creates a Flex Message bubble for a course with relevance badge
-func (h *Handler) buildSmartCourseBubble(course storage.Course, rank int) *lineutil.FlexBubble {
-	// Relevance badge based on ranking position (user-friendly labels)
-	relevanceBadge, relevanceColor := getRelevanceBadge(rank)
+func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float32) *lineutil.FlexBubble {
+	// Relevance badge based on confidence (user-friendly labels)
+	relevanceBadge, relevanceColor := getRelevanceBadge(confidence)
 
 	// Hero: Course title with course code
 	heroTitle := lineutil.FormatCourseTitleWithUID(course.Title, course.UID)
@@ -1398,19 +1398,29 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, rank int) *lineu
 	return bubble
 }
 
-// getRelevanceBadge returns a user-friendly relevance label based on ranking position.
+// getRelevanceBadge returns a user-friendly relevance label based on relative BM25 score.
 //
 // Design rationale:
-//   - No percentages: Users can't compare scores across different queries
-//   - Simple 2-tier system: Reduces cognitive load in chatbot context
-//   - Rank-based: Easier to understand ("top 3" vs abstract percentages)
+//   - Uses relative score (score / maxScore) from BM25 search
+//   - Simple 3-tier system: Clear differentiation without cognitive overload
+//   - Relative scoring: Comparable within the same query results
 //
-// Categories:
-//   - Top 3 results: "最相關" (highest relevance, strong recommendation)
-//   - Remaining results: "相關" (still matches the query)
-func getRelevanceBadge(rank int) (string, string) {
-	if rank <= 3 {
-		return "🎯 最相關", lineutil.ColorPrimary // LINE Green - top results
+// Academic foundation (Arampatzis et al., 2009):
+//   - BM25 follows Normal-Exponential mixture distribution
+//   - Relevant docs: Normal distribution (high scores)
+//   - Non-relevant docs: Exponential distribution (low scores)
+//   - Relative thresholds work better than absolute ones
+//
+// Categories (based on confidence = score / maxScore):
+//   - Confidence >= 0.8: "最佳匹配" (Best Match) - Normal distribution core
+//   - Confidence >= 0.6: "高度相關" (Highly Relevant) - Mixed region
+//   - Confidence < 0.6: "部分相關" (Partially Relevant) - Exponential tail
+func getRelevanceBadge(confidence float32) (string, string) {
+	if confidence >= 0.8 {
+		return "🎯 最佳匹配", lineutil.ColorPrimary // LINE Green - best matches
 	}
-	return "✨ 相關", lineutil.ColorSubtext // Gray - relevant but not top
+	if confidence >= 0.6 {
+		return "✨ 高度相關", lineutil.ColorLabel // Dark gray - highly relevant
+	}
+	return "📋 部分相關", lineutil.ColorSubtext // Light gray - partially relevant
 }

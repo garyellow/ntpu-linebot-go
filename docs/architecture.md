@@ -344,7 +344,8 @@ Warmup:
 
 **關鍵概念**:
 - BM25 輸出無界分數，不可跨查詢比較
-- 信心分數基於排名位置計算，而非向量相似度
+- 信心分數使用相對分數 (score / maxScore)，非向量相似度
+- 分數分佈遵循 Normal-Exponential 混合模型（學術標準）
 
 **啟用條件**:
 - 將 `syllabus` 加入 `WARMUP_MODULES`

@@ -1,6 +1,7 @@
 package rag
 
 import (
+	"context"
 	"testing"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
@@ -582,7 +583,7 @@ func TestBM25Index_RelativeScoreFiltering(t *testing.T) {
 		t.Fatalf("Initialize() error = %v", err)
 	}
 
-	// Search for AWS - should get multiple results but filtered by relative score
+	// Search for AWS - should get results ranked by relevance
 	results, err := idx.Search("AWS", 10)
 	if err != nil {
 		t.Fatalf("Search() error = %v", err)
@@ -598,26 +599,19 @@ func TestBM25Index_RelativeScoreFiltering(t *testing.T) {
 		t.Errorf("Expected top result UID = 1131U0001, got %s", results[0].UID)
 	}
 
-	// The completely irrelevant course should NOT be in results
-	for _, r := range results {
-		if r.UID == "1131U0004" {
-			t.Errorf("Irrelevant course (1131U0004) should be filtered out")
-		}
-	}
-
-	t.Logf("AWS search returned %d results (filtering applied)", len(results))
+	t.Logf("AWS search returned %d results", len(results))
 	for i, r := range results {
-		t.Logf("  [%d] %s: %s (score: %.2f)", i+1, r.UID, r.Title, r.Score)
+		relativeScore := r.Score / results[0].Score
+		t.Logf("  [%d] %s: %s (score: %.2f, relative: %.2f)", i+1, r.UID, r.Title, r.Score, relativeScore)
 	}
 }
 
-// TestBM25Index_MinResultsBeforeFiltering tests that relative filtering
-// is only applied when there are enough results.
-func TestBM25Index_MinResultsBeforeFiltering(t *testing.T) {
+// TestBM25Index_TopKLimit tests that results are limited to topN.
+func TestBM25Index_TopKLimit(t *testing.T) {
 	log := logger.New("debug")
 	idx := NewBM25Index(log)
 
-	// Create only 2 syllabi - less than MinResultsBeforeFiltering (3)
+	// Create many syllabi
 	syllabi := []*storage.Syllabus{
 		{
 			UID:          "1131U0001",
@@ -637,66 +631,81 @@ func TestBM25Index_MinResultsBeforeFiltering(t *testing.T) {
 			ObjectivesCN: "機器學習入門",
 			ObjectivesEN: "Machine learning basics",
 		},
+		{
+			UID:          "1131U0003",
+			Title:        "學習理論",
+			Teachers:     []string{"張三"},
+			Year:         113,
+			Term:         1,
+			ObjectivesCN: "學習方法論",
+		},
 	}
 
 	if err := idx.Initialize(syllabi); err != nil {
 		t.Fatalf("Initialize() error = %v", err)
 	}
 
-	// Search should return both results since count < MinResultsBeforeFiltering
-	results, err := idx.Search("學習", 10)
+	// Search with limit of 2
+	results, err := idx.Search("學習", 2)
 	if err != nil {
 		t.Fatalf("Search() error = %v", err)
 	}
 
-	// Both courses contain "學習", so both should be returned
-	// (no relative filtering when < 3 results)
-	if len(results) < 2 {
-		t.Errorf("Expected at least 2 results when below MinResultsBeforeFiltering, got %d", len(results))
+	// Should be limited to 2 results
+	if len(results) > 2 {
+		t.Errorf("Expected at most 2 results with topN=2, got %d", len(results))
 	}
 
-	t.Logf("Search returned %d results (below MinResultsBeforeFiltering threshold)", len(results))
+	t.Logf("Search returned %d results (topN=2)", len(results))
 }
 
-// TestBM25Index_FilteringPreservesResults tests that filtering doesn't
-// return empty results when all scores are below the threshold.
-func TestBM25Index_FilteringPreservesResults(t *testing.T) {
+// TestBM25Index_SearchCoursesConfidence tests that SearchCourses returns correct confidence values.
+func TestBM25Index_SearchCoursesConfidence(t *testing.T) {
 	log := logger.New("debug")
 	idx := NewBM25Index(log)
 
-	// Create syllabi where keyword appears uniformly
+	// Create syllabi with varying relevance to "雲端運算"
+	// Course 1 has highest relevance (多次提到雲端)
+	// Course 2 has medium relevance (提到一次雲端)
+	// Course 3 has low relevance (不相關)
+	// Course 4 has no relevance (完全不相關)
 	syllabi := []*storage.Syllabus{
 		{
 			UID:          "1131U0001",
-			Title:        "課程一",
-			Teachers:     []string{"教師"},
+			Title:        "雲端運算 Cloud Computing",
+			Teachers:     []string{"王教授"},
 			Year:         113,
 			Term:         1,
-			ObjectivesCN: "教學內容",
+			ObjectivesCN: "本課程介紹雲端運算基礎概念，包含雲端架構、雲端服務、雲端部署",
+			ObjectivesEN: "Introduction to cloud computing",
+			OutlineCN:    "雲端運算概論、雲端平台、雲端應用",
 		},
 		{
 			UID:          "1131U0002",
-			Title:        "課程二",
-			Teachers:     []string{"教師"},
+			Title:        "分散式系統",
+			Teachers:     []string{"李教授"},
 			Year:         113,
 			Term:         1,
-			ObjectivesCN: "教學內容",
+			ObjectivesCN: "介紹分散式系統架構，包含雲端運算簡介",
+			ObjectivesEN: "Distributed systems with cloud intro",
 		},
 		{
 			UID:          "1131U0003",
-			Title:        "課程三",
-			Teachers:     []string{"教師"},
+			Title:        "資料結構",
+			Teachers:     []string{"陳教授"},
 			Year:         113,
 			Term:         1,
-			ObjectivesCN: "教學內容",
+			ObjectivesCN: "學習基礎資料結構，包含陣列、鏈結串列、樹、圖",
+			ObjectivesEN: "Data structures",
 		},
 		{
 			UID:          "1131U0004",
-			Title:        "課程四",
-			Teachers:     []string{"教師"},
+			Title:        "計算機概論",
+			Teachers:     []string{"張教授"},
 			Year:         113,
 			Term:         1,
-			ObjectivesCN: "教學內容",
+			ObjectivesCN: "介紹電腦基礎知識",
+			ObjectivesEN: "Introduction to computer science",
 		},
 	}
 
@@ -704,34 +713,37 @@ func TestBM25Index_FilteringPreservesResults(t *testing.T) {
 		t.Fatalf("Initialize() error = %v", err)
 	}
 
-	// Search for a term that appears in all documents
-	// BM25 will give low/similar scores due to high document frequency
-	results, err := idx.Search("教師", 10)
+	// Search using SearchCourses for "雲端"
+	results, err := idx.SearchCourses(context.Background(), "雲端", 10)
 	if err != nil {
-		t.Fatalf("Search() error = %v", err)
+		t.Fatalf("SearchCourses() error = %v", err)
 	}
 
-	// Should still return results even if scores are similar
-	// The filtering logic should not return empty results
+	// Should return results with confidence values
 	if len(results) == 0 {
-		t.Error("Search should return results even when scores are similar")
+		t.Error("SearchCourses should return results")
 	}
 
-	t.Logf("Uniform term search returned %d results", len(results))
+	// First result should have confidence = 1.0 (it's the top result)
+	if len(results) > 0 && results[0].Confidence != 1.0 {
+		t.Errorf("First result confidence = %v, want 1.0", results[0].Confidence)
+	}
+
+	// All confidence values should be between 0 and 1
+	for i, r := range results {
+		if r.Confidence < 0 || r.Confidence > 1 {
+			t.Errorf("Result %d confidence = %v, want between 0 and 1", i, r.Confidence)
+		}
+		t.Logf("  [%d] %s: confidence = %.2f", i+1, r.Title, r.Confidence)
+	}
 }
 
-// TestBM25Index_RelativeScoreThresholdConstant verifies the threshold constant is sensible.
-func TestBM25Index_RelativeScoreThresholdConstant(t *testing.T) {
-	// Verify threshold is within reasonable bounds
-	if RelativeScoreThreshold < 0 || RelativeScoreThreshold > 1 {
-		t.Errorf("RelativeScoreThreshold = %v, want value between 0 and 1", RelativeScoreThreshold)
+// TestBM25Index_MaxSearchResultsConstant verifies the constant is sensible.
+func TestBM25Index_MaxSearchResultsConstant(t *testing.T) {
+	// Verify MaxSearchResults is reasonable
+	if MaxSearchResults < 1 || MaxSearchResults > 100 {
+		t.Errorf("MaxSearchResults = %d, want value between 1 and 100", MaxSearchResults)
 	}
 
-	// Verify MinResultsBeforeFiltering is positive
-	if MinResultsBeforeFiltering < 1 {
-		t.Errorf("MinResultsBeforeFiltering = %d, want >= 1", MinResultsBeforeFiltering)
-	}
-
-	t.Logf("RelativeScoreThreshold = %.2f (%.0f%%)", RelativeScoreThreshold, RelativeScoreThreshold*100)
-	t.Logf("MinResultsBeforeFiltering = %d", MinResultsBeforeFiltering)
+	t.Logf("MaxSearchResults = %d", MaxSearchResults)
 }
