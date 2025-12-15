@@ -146,7 +146,7 @@ All maintenance tasks use **fixed Taiwan time (Asia/Taipei)** for predictable sc
 
 **Scraper** (`internal/scraper/retry.go`): Fixed 2s delay after success, exponential backoff on failure (4s initial, max 5 retries, ±25% jitter), 60s HTTP timeout per request
 
-**Webhook**: Per-user (6 tokens, 1 token/5s refill), global (80 rps), silently drops excess requests
+**Webhook**: Per-user (6 tokens, 1 token/5s refill), global (100 rps), silently drops excess requests
 
 **LINE SDK Conventions**
 

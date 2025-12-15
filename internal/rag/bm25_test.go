@@ -519,3 +519,219 @@ func TestBM25Index_AddSyllabus_Nil(t *testing.T) {
 		t.Errorf("nil.AddSyllabus() error = %v, want nil", err)
 	}
 }
+
+// TestBM25Index_RelativeScoreFiltering tests the relative score threshold filtering behavior.
+// This ensures results significantly less relevant than the top result are filtered out.
+func TestBM25Index_RelativeScoreFiltering(t *testing.T) {
+	log := logger.New("debug")
+	idx := NewBM25Index(log)
+
+	// Create syllabi with varying relevance to "AWS"
+	// - Course 1: Highly relevant (many AWS mentions)
+	// - Course 2: Moderately relevant (some AWS mentions)
+	// - Course 3: Low relevance (one AWS mention)
+	// - Course 4: Completely irrelevant (no AWS)
+	syllabi := []*storage.Syllabus{
+		{
+			UID:          "1131U0001",
+			Title:        "AWS 雲端架構師課程",
+			Teachers:     []string{"王大明"},
+			Year:         113,
+			Term:         1,
+			ObjectivesCN: "深入學習 AWS 雲端服務，包含 AWS EC2, AWS S3, AWS Lambda, AWS RDS",
+			ObjectivesEN: "Master AWS cloud services: EC2, S3, Lambda, RDS",
+			OutlineCN:    "AWS 架構設計 AWS 安全 AWS 成本優化 AWS 部署策略",
+			OutlineEN:    "AWS Architecture, AWS Security, AWS Cost Optimization",
+		},
+		{
+			UID:          "1131U0002",
+			Title:        "雲端運算導論",
+			Teachers:     []string{"李小華"},
+			Year:         113,
+			Term:         1,
+			ObjectivesCN: "介紹雲端運算概念，包含 AWS 和其他雲端平台",
+			ObjectivesEN: "Introduction to cloud computing including AWS",
+			OutlineCN:    "雲端基礎 虛擬化技術 AWS 入門",
+			OutlineEN:    "Cloud Basics, Virtualization, AWS Introduction",
+		},
+		{
+			UID:          "1131U0003",
+			Title:        "程式設計基礎",
+			Teachers:     []string{"陳小明"},
+			Year:         113,
+			Term:         1,
+			ObjectivesCN: "學習程式設計基礎，可部署於 AWS 等雲端",
+			ObjectivesEN: "Learn programming basics, deployable to AWS cloud",
+			OutlineCN:    "變數 迴圈 函數 物件導向",
+			OutlineEN:    "Variables, Loops, Functions, OOP",
+		},
+		{
+			UID:          "1131U0004",
+			Title:        "資料結構與演算法",
+			Teachers:     []string{"張大華"},
+			Year:         113,
+			Term:         1,
+			ObjectivesCN: "學習基礎資料結構和演算法分析",
+			ObjectivesEN: "Learn data structures and algorithm analysis",
+			OutlineCN:    "陣列 鏈結串列 樹 圖 排序",
+			OutlineEN:    "Array, Linked List, Tree, Graph, Sorting",
+		},
+	}
+
+	if err := idx.Initialize(syllabi); err != nil {
+		t.Fatalf("Initialize() error = %v", err)
+	}
+
+	// Search for AWS - should get multiple results but filtered by relative score
+	results, err := idx.Search("AWS", 10)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+
+	// Should have some results
+	if len(results) == 0 {
+		t.Fatal("Expected at least one result for AWS search")
+	}
+
+	// Top result should be the highly relevant AWS course
+	if results[0].UID != "1131U0001" {
+		t.Errorf("Expected top result UID = 1131U0001, got %s", results[0].UID)
+	}
+
+	// The completely irrelevant course should NOT be in results
+	for _, r := range results {
+		if r.UID == "1131U0004" {
+			t.Errorf("Irrelevant course (1131U0004) should be filtered out")
+		}
+	}
+
+	t.Logf("AWS search returned %d results (filtering applied)", len(results))
+	for i, r := range results {
+		t.Logf("  [%d] %s: %s (score: %.2f)", i+1, r.UID, r.Title, r.Score)
+	}
+}
+
+// TestBM25Index_MinResultsBeforeFiltering tests that relative filtering
+// is only applied when there are enough results.
+func TestBM25Index_MinResultsBeforeFiltering(t *testing.T) {
+	log := logger.New("debug")
+	idx := NewBM25Index(log)
+
+	// Create only 2 syllabi - less than MinResultsBeforeFiltering (3)
+	syllabi := []*storage.Syllabus{
+		{
+			UID:          "1131U0001",
+			Title:        "深度學習 Deep Learning",
+			Teachers:     []string{"王大明"},
+			Year:         113,
+			Term:         1,
+			ObjectivesCN: "深度學習神經網路",
+			ObjectivesEN: "Deep learning neural networks",
+		},
+		{
+			UID:          "1131U0002",
+			Title:        "機器學習基礎",
+			Teachers:     []string{"李小華"},
+			Year:         113,
+			Term:         1,
+			ObjectivesCN: "機器學習入門",
+			ObjectivesEN: "Machine learning basics",
+		},
+	}
+
+	if err := idx.Initialize(syllabi); err != nil {
+		t.Fatalf("Initialize() error = %v", err)
+	}
+
+	// Search should return both results since count < MinResultsBeforeFiltering
+	results, err := idx.Search("學習", 10)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+
+	// Both courses contain "學習", so both should be returned
+	// (no relative filtering when < 3 results)
+	if len(results) < 2 {
+		t.Errorf("Expected at least 2 results when below MinResultsBeforeFiltering, got %d", len(results))
+	}
+
+	t.Logf("Search returned %d results (below MinResultsBeforeFiltering threshold)", len(results))
+}
+
+// TestBM25Index_FilteringPreservesResults tests that filtering doesn't
+// return empty results when all scores are below the threshold.
+func TestBM25Index_FilteringPreservesResults(t *testing.T) {
+	log := logger.New("debug")
+	idx := NewBM25Index(log)
+
+	// Create syllabi where keyword appears uniformly
+	syllabi := []*storage.Syllabus{
+		{
+			UID:          "1131U0001",
+			Title:        "課程一",
+			Teachers:     []string{"教師"},
+			Year:         113,
+			Term:         1,
+			ObjectivesCN: "教學內容",
+		},
+		{
+			UID:          "1131U0002",
+			Title:        "課程二",
+			Teachers:     []string{"教師"},
+			Year:         113,
+			Term:         1,
+			ObjectivesCN: "教學內容",
+		},
+		{
+			UID:          "1131U0003",
+			Title:        "課程三",
+			Teachers:     []string{"教師"},
+			Year:         113,
+			Term:         1,
+			ObjectivesCN: "教學內容",
+		},
+		{
+			UID:          "1131U0004",
+			Title:        "課程四",
+			Teachers:     []string{"教師"},
+			Year:         113,
+			Term:         1,
+			ObjectivesCN: "教學內容",
+		},
+	}
+
+	if err := idx.Initialize(syllabi); err != nil {
+		t.Fatalf("Initialize() error = %v", err)
+	}
+
+	// Search for a term that appears in all documents
+	// BM25 will give low/similar scores due to high document frequency
+	results, err := idx.Search("教師", 10)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+
+	// Should still return results even if scores are similar
+	// The filtering logic should not return empty results
+	if len(results) == 0 {
+		t.Error("Search should return results even when scores are similar")
+	}
+
+	t.Logf("Uniform term search returned %d results", len(results))
+}
+
+// TestBM25Index_RelativeScoreThresholdConstant verifies the threshold constant is sensible.
+func TestBM25Index_RelativeScoreThresholdConstant(t *testing.T) {
+	// Verify threshold is within reasonable bounds
+	if RelativeScoreThreshold < 0 || RelativeScoreThreshold > 1 {
+		t.Errorf("RelativeScoreThreshold = %v, want value between 0 and 1", RelativeScoreThreshold)
+	}
+
+	// Verify MinResultsBeforeFiltering is positive
+	if MinResultsBeforeFiltering < 1 {
+		t.Errorf("MinResultsBeforeFiltering = %d, want >= 1", MinResultsBeforeFiltering)
+	}
+
+	t.Logf("RelativeScoreThreshold = %.2f (%.0f%%)", RelativeScoreThreshold, RelativeScoreThreshold*100)
+	t.Logf("MinResultsBeforeFiltering = %d", MinResultsBeforeFiltering)
+}

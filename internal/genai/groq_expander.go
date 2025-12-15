@@ -49,12 +49,12 @@ func (e *groqQueryExpander) Expand(ctx context.Context, query string) (string, e
 		return query, nil
 	}
 
-	// Skip expansion for very long queries (already descriptive enough)
-	if len([]rune(query)) > MinQueryLengthForExpansion && !containsAbbreviation(query) {
-		return query, nil
-	}
-
-	prompt := buildExpansionPrompt(query)
+	// Let LLM handle ALL queries - it can:
+	// 1. Expand abbreviations (AWS → 雲端服務)
+	// 2. Add synonyms and related terms
+	// 3. Clean up verbose queries to extract key concepts
+	// 4. Handle mixed Chinese/English with different information density
+	prompt := QueryExpansionPrompt(query)
 
 	req := groq.ChatCompletionRequest{
 		Model: e.model,
