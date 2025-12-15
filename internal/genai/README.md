@@ -10,10 +10,12 @@
 
 ## 支援的 LLM 提供者
 
-| 提供者 | 主要模型 | 備援模型 | 特色 |
-|--------|---------|---------|------|
-| **Gemini** | `gemini-2.5-flash` | `gemini-2.5-flash-lite` | 高品質、多模態 |
-| **Groq** | `llama-3.1-8b-instant` | `llama-3.3-70b-versatile` | 極速推論、高吞吐量 |
+| 提供者 | 用途 | 主要模型 | 備援模型 | 特色 |
+|--------|------|---------|---------|------|
+| **Gemini** | Intent | `gemini-2.5-flash` | `gemini-2.5-flash-lite` | 高品質、多模態 |
+| **Gemini** | Expander | `gemini-2.5-flash` | `gemini-2.5-flash-lite` | 高品質、多模態 |
+| **Groq** | Intent | `llama-4-scout-17b-16e-instruct` | `llama-3.1-8b-instant` | 極速推論 (~750 TPS) |
+| **Groq** | Expander | `llama-4-maverick-17b-128e-instruct` | `llama-3.3-70b-versatile` | 強大文字生成 (~600 TPS) |
 
 ## 檔案結構
 
