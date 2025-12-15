@@ -110,7 +110,7 @@ const (
 	// WarmupProactive is the timeout for proactive cache warmup operations.
 	// Warmup involves concurrent scraping of multiple data sources:
 	//   - Students: ~252 departments × 12 years (~40 departments/10min observed)
-	//   - Courses: 2 years × 3 terms (6 scraping operations)
+	//   - Courses: 4 semesters (4 scraping operations, each with U/M/N/P codes)
 	//   - Contacts: Single organization scrape
 	//   - Syllabi: Hash-based incremental updates (~2000 courses, 243 processed/10min)
 	//

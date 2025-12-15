@@ -139,7 +139,9 @@ All maintenance tasks use **fixed Taiwan time (Asia/Taipei)** for predictable sc
 
 **Data availability**:
 - Student: 101-112 學年度 (≥113 shows deprecation notice)
-- Course: Cache: 2 years (4 semesters) | Query: 2 most recent semesters (auto-detect based on month)
+- Course: Query: 4 most recent semesters with intelligent detection (checks if current semester has any data)
+  - Warmup strategy: Scrapes 4 semesters individually using ScrapeCourses (4 requests per semester, 16 total)
+  - Delayed upload tolerance: If current semester has no data yet, falls back to previous semester
 - Contact: Real-time scraping
 
 ## Rate Limiting

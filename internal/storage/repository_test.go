@@ -999,6 +999,71 @@ func TestCountHistoricalCourses(t *testing.T) {
 	}
 }
 
+// TestCountCoursesBySemester tests counting courses by semester
+func TestCountCoursesBySemester(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+	ctx := context.Background()
+
+	// Count empty table
+	count, err := db.CountCoursesBySemester(ctx, 113, 1)
+	if err != nil {
+		t.Fatalf("CountCoursesBySemester failed: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("Expected 0 on empty table, got %d", count)
+	}
+
+	// Add courses for different semesters
+	courses := []*Course{
+		{UID: "1131U0001", Year: 113, Term: 1, No: "U0001", Title: "課程1", Teachers: []string{}},
+		{UID: "1131U0002", Year: 113, Term: 1, No: "U0002", Title: "課程2", Teachers: []string{}},
+		{UID: "1132U0001", Year: 113, Term: 2, No: "U0001", Title: "課程3", Teachers: []string{}},
+		{UID: "1121U0001", Year: 112, Term: 1, No: "U0001", Title: "課程4", Teachers: []string{}},
+	}
+	for _, c := range courses {
+		if err := db.SaveCourse(ctx, c); err != nil {
+			t.Fatalf("SaveCourse failed: %v", err)
+		}
+	}
+
+	// Count 113-1
+	count, err = db.CountCoursesBySemester(ctx, 113, 1)
+	if err != nil {
+		t.Fatalf("CountCoursesBySemester failed: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("Expected 2 for 113-1, got %d", count)
+	}
+
+	// Count 113-2
+	count, err = db.CountCoursesBySemester(ctx, 113, 2)
+	if err != nil {
+		t.Fatalf("CountCoursesBySemester failed: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("Expected 1 for 113-2, got %d", count)
+	}
+
+	// Count 112-1
+	count, err = db.CountCoursesBySemester(ctx, 112, 1)
+	if err != nil {
+		t.Fatalf("CountCoursesBySemester failed: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("Expected 1 for 112-1, got %d", count)
+	}
+
+	// Count non-existent semester
+	count, err = db.CountCoursesBySemester(ctx, 114, 1)
+	if err != nil {
+		t.Fatalf("CountCoursesBySemester failed: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("Expected 0 for non-existent 114-1, got %d", count)
+	}
+}
+
 // TestHistoricalCoursesArrayHandling tests JSON array serialization/deserialization
 func TestHistoricalCoursesArrayHandling(t *testing.T) {
 	db := setupTestDB(t)

@@ -854,6 +854,20 @@ func (db *DB) CountCourses(ctx context.Context) (int, error) {
 	return count, nil
 }
 
+// CountCoursesBySemester returns the number of courses for a specific semester
+// Returns 0 if no courses found (not an error)
+func (db *DB) CountCoursesBySemester(ctx context.Context, year, term int) (int, error) {
+	ttlTimestamp := db.getTTLTimestamp()
+	query := `SELECT COUNT(*) FROM courses WHERE year = ? AND term = ? AND cached_at > ?`
+
+	var count int
+	err := db.reader.QueryRowContext(ctx, query, year, term, ttlTimestamp).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count courses by semester: %w", err)
+	}
+	return count, nil
+}
+
 // Helper functions
 
 // nullString converts an empty string to sql.NullString
@@ -1075,7 +1089,7 @@ func (db *DB) GetStickerStats(ctx context.Context) (map[string]int, error) {
 }
 
 // HistoricalCourseRepository provides CRUD operations for historical_courses table
-// This table stores courses older than 2 years with on-demand caching and 7-day TTL
+// This table stores courses older than 4 semesters with on-demand caching and 7-day TTL
 
 // SaveHistoricalCourse inserts or updates a historical course record
 func (db *DB) SaveHistoricalCourse(ctx context.Context, course *Course) error {

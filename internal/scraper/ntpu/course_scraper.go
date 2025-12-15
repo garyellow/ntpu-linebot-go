@@ -27,8 +27,8 @@ var AllEduCodes = []string{"U", "M", "N", "P"}
 var classroomRegex = regexp.MustCompile(`(?:教室|上課地點)[:：為](.*?)(?:$|[ .，。；【])`)
 
 // ScrapeCoursesByYear scrapes ALL courses for a given year (both semesters)
-// More efficient for warmup: 4 requests per year vs 8 requests (4 per semester × 2)
 // This is a convenience wrapper around ScrapeCourses with term=0 and empty title
+// Note: Current warmup uses per-semester scraping (ScrapeCourses) for precise control
 func ScrapeCoursesByYear(ctx context.Context, client *scraper.Client, year int) ([]*storage.Course, error) {
 	return ScrapeCourses(ctx, client, year, 0, "")
 }
