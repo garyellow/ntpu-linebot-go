@@ -299,6 +299,7 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 - **主動 Warmup** (proactiveWarmup): 啟動時立即執行，之後每日凌晨 3:00 刷新資料
   - 刷新 `WARMUP_MODULES` 指定的模組（預設：sticker, id, contact, course）
   - **並行執行**：id, contact, sticker, course - 彼此無依賴
+  - **課程模組**：使用智慧檢測（檢查資料可用性）抓取 4 個學期，每學期 4 個 HTTP 請求（U/M/N/P），共 16 個請求
   - **可選 - syllabus**：如手動加入 `WARMUP_MODULES`，會等待 course 完成後開始（需要課程資料），與其他模組並行。因更新頻率低已從預設移除。
   - **注意**：sticker 可包含在 warmup 模組中進行初始填充
 - **Cache Cleanup**: 每 12 小時，刪除超過 Hard TTL 的資料 + VACUUM

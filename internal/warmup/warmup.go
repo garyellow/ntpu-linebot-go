@@ -12,6 +12,7 @@ import (
 
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
+	"github.com/garyellow/ntpu-linebot-go/internal/modules/course"
 	"github.com/garyellow/ntpu-linebot-go/internal/rag"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper/ntpu"
@@ -375,11 +376,15 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 	return nil
 }
 
-// warmupCourseModule warms course cache
-// Uses ScrapeCoursesByYear to fetch all courses for a year in one batch (no qTerm parameter)
-// Makes 4 HTTP requests per year (U/M/N/P education codes)
-// Only warms up 2 years (current + previous) for regular course queries
-// Historical courses (older than 2 years) use separate historical_courses table with on-demand scraping
+// warmupCourseModule warms course cache using semester as the minimal unit.
+// Uses ScrapeCourses to fetch courses for each semester individually.
+// Makes 4 HTTP requests per semester (U/M/N/P education codes).
+// Uses intelligent detection to determine which 4 semesters to warm up:
+// 1. First checks if the "next potential semester" has data (early upload detection)
+// 2. If yes, use it as the newest semester
+// 3. If no, use calendar-based newest semester
+// 4. Generate 4 semesters backward from the newest
+// This ensures we always warm up the most relevant 4 semesters.
 func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
 	startTime := time.Now()
 	defer func() {
@@ -388,63 +393,108 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 		}
 	}()
 
-	log.Info("Starting course module warmup")
+	log.Info("Starting course module warmup with intelligent semester detection")
 
-	currentYear := time.Now().Year() - 1911
-	// Load 2 years of course data (current + previous year)
-	// Historical courses (older than 2 years) are handled by separate historical_courses table
-	// with on-demand scraping via "課程 {year} {keyword}" syntax
-	var years []int
-	for year := currentYear; year > currentYear-2; year-- {
-		years = append(years, year)
-	}
+	// Use intelligent detection to determine which 4 semesters to warm up
+	// Detection: checks if semester has any data (> 0 courses)
+	semesters := detectWarmupSemesters(ctx, db, log)
 
-	// Each year makes 4 requests (U/M/N/P education codes)
-	estimatedRequests := len(years) * 4
-	log.WithField("years", years).
-		WithField("total_years", len(years)).
+	// Each semester makes 4 requests (U/M/N/P education codes)
+	estimatedRequests := len(semesters) * 4
+	log.WithField("semesters", formatSemesters(semesters)).
+		WithField("total_semesters", len(semesters)).
 		WithField("estimated_requests", estimatedRequests).
-		Info("Course warmup: fetching recent courses by year (no term filter)")
+		Info("Course warmup: fetching courses by semester (intelligent detection)")
 
-	// Scrape all courses for each year (both semesters in one request batch)
-	for _, year := range years {
+	// Scrape courses for each semester individually
+	for _, sem := range semesters {
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("course module canceled: %w", ctx.Err())
 		default:
 		}
 
-		// Fetch ALL courses for this year (both semesters) using ScrapeCoursesByYear
+		// Fetch courses for this specific semester using ScrapeCourses
 		// This makes 4 HTTP requests (one per education code: U/M/N/P)
-		courses, err := ntpu.ScrapeCoursesByYear(ctx, client, year)
+		courses, err := ntpu.ScrapeCourses(ctx, client, sem.Year, sem.Term, "")
 		if err != nil {
 			log.WithError(err).
-				WithField("year", year).
-				Warn("Failed to scrape courses for year")
+				WithField("year", sem.Year).
+				WithField("term", sem.Term).
+				Warn("Failed to scrape courses for semester")
 			continue
 		}
 
 		// Save using batch operation to reduce lock contention
 		if err := db.SaveCoursesBatch(ctx, courses); err != nil {
 			log.WithError(err).
-				WithField("year", year).
+				WithField("year", sem.Year).
+				WithField("term", sem.Term).
 				WithField("count", len(courses)).
 				Warn("Failed to save courses batch")
 			continue
 		}
 
 		stats.Courses.Add(int64(len(courses)))
-		log.WithField("year", year).
+		log.WithField("year", sem.Year).
+			WithField("term", sem.Term).
 			WithField("count", len(courses)).
 			WithField("total_cached", stats.Courses.Load()).
-			Info("Courses cached for year")
+			Info("Courses cached for semester")
 	}
 
 	log.WithField("total_courses", stats.Courses.Load()).
-		WithField("years_processed", len(years)).
+		WithField("semesters_processed", len(semesters)).
 		Info("Course module warmup complete")
 
 	return nil
+}
+
+// detectWarmupSemesters determines which 4 semesters should be warmed up.
+// It uses the SemesterDetector for intelligent data-driven detection instead
+// of calendar-based guesses. This ensures we warmup the most relevant semesters
+// based on actual data availability.
+//
+// Strategy (DATA-FIRST approach):
+// 1. Check if "next potential semester" has data (early upload detection)
+// 2. If yes, use it as the newest semester
+// 3. If no, use calendar-based newest semester
+// 4. Generate 4 semesters backward from the newest
+//
+// This handles edge cases like:
+// - Early uploads: Next semester uploaded before calendar date
+// - Delayed uploads: Current semester not ready yet
+// - Pre-registration: New semester opens early for course selection
+//
+// Key insight: Trust data availability over calendar calculations.
+func detectWarmupSemesters(ctx context.Context, db *storage.DB, log *logger.Logger) []course.Semester {
+	// Create semester detector with database count function
+	detector := course.NewSemesterDetector(db.CountCoursesBySemester)
+
+	// Use intelligent detection to get 4 semesters
+	// Pass 0 as threshold: any data (> 0 courses) means the semester is active
+	semesters := detector.DetectWarmupSemesters(ctx, 0)
+
+	log.WithField("semesters", formatSemesters(semesters)).
+		WithField("total_semesters", len(semesters)).
+		Info("Detected warmup semesters using intelligent data-driven detection")
+
+	return semesters
+}
+
+// formatSemesters formats semester list for logging
+// Example: [{113 2} {113 1} {112 2} {112 1}] -> "113-2, 113-1, 112-2, 112-1"
+func formatSemesters(semesters []course.Semester) string {
+	if len(semesters) == 0 {
+		return ""
+	}
+
+	var result strings.Builder
+	result.WriteString(fmt.Sprintf("%d-%d", semesters[0].Year, semesters[0].Term))
+	for i := 1; i < len(semesters); i++ {
+		result.WriteString(fmt.Sprintf(", %d-%d", semesters[i].Year, semesters[i].Term))
+	}
+	return result.String()
 }
 
 // warmupStickerModule warms sticker cache
