@@ -1,0 +1,503 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="content-type" content="text/html; charset=utf-8">
+<title>LMS</title>
+<style>@import URL("/sys/style/style.css");</style>
+<style>@import URL("/sys/style/dom.css");</style>
+<style>
+.K0 {background-color:#ff6;}
+.K1 {background-color:#ff6;}
+.K2 {background-color:#a0ffff;}
+.K3 {background-color:#9f9;}
+.K4 {background-color:#f99;}
+.emfont {color: #333}
+#searchbody {padding:0px 0px 10px 0px; text-align:left}
+</style>
+<script src='/sys/lib/js/dom.js'></script>
+<script src='/lib/js/login.js'></script>
+<script>
+    function changeFilter()
+	{ 
+	    var s = 1;
+	    if ($("fmScope2").checked) s = 2; 	   
+		var keyword = encodeURIComponent($('fmKeyword').value);
+		window.location.href = "/portfolio/search.php?fmKeyword=" + keyword + "&fmScope=" + s;		
+	} 
+
+    function getKey(e)
+    {
+        var e = (!e) ? window.event : e;
+        var key = e.keyCode;
+        switch(key)
+        {
+            // enter
+            case 13:
+                    changeFilter();
+                    e.returnValue = false;
+                    e.cancelBubble = true;
+                    //e.keyCode = 0;
+                    return true;
+                    break;
+            default:
+                return true;
+        }
+    }
+</script>
+</head>
+<body align='center'>
+<div id=wrapper>
+    <div id=base>
+        <div>
+            <div id=sysbar>
+    <div id=logo><a href=''><img src='/banner.gif' border=0></a></div>
+    <div id=sign>
+        <div id=login>
+            <script type="text/javascript">var gRedirectHome = false;</script><script type="text/javascript">
+    var res = {
+        account:  '帳號',
+        password: '密碼',
+        remember: '記住我的登入資訊',
+        passwd_forgot: '忘記密碼',
+        ok:       '確定',
+        login:    '登入',
+        help:     '登入說明',
+        noaccount:  '請輸入: 帳號',
+        nopassword: '請輸入: 密碼',
+        noseccode:  '請輸入: 校驗碼'
+    }, 
+    sysconf = {
+        domain    : 'lms.ntpu.edu.tw', 
+        ssl_login : 0    };
+    
+    var checkSecCode;		
+        checkSecCode = false;
+    function openDialog(title, url, w, h) { $showModal(title, url, w, h, onOpenDialogLoad); }
+    function onOpenDialogLoad() { $reload(); }
+</script>
+<script type="text/javascript" src='/lib/js/login.js'></script>
+<a href='/' id='_lms'>e-Learning</a><img src='/sys/res/icon/line.gif' style='padding: 0 5px;'><a href='/board/index.php' id='_cm'>社群(Sitemap)</a><img src='/sys/res/icon/line.gif' style='padding: 0 5px;'><a href='https://lms3.ntpu.edu.tw/' target=_blank>數位學苑3.0(LMS3.0)</a><img src='/sys/res/icon/line.gif' style='padding: 0 5px;'><a href='https://fms.ntpu.edu.tw/' target=_blank>演講活動網2.0(FMS2.0)</a><img src='/sys/res/icon/line.gif' style='padding: 0 5px;'><a href='javascript:login("")'>登入</a>        </div>
+
+        <div style='text-align:right;'>
+中文(台灣)<img src='/sys/res/icon/line.gif' style='padding: 0 8px;'><a href='javascript:m_changeLang("en-us")'>English(US)</a><img src='/sys/res/icon/line.gif' style='padding: 0 8px;'><a href='http://lms.ntpu.edu.tw/course/72' target=_blank>Q&amp;A</a><img src='/sys/res/icon/line.gif' style='padding: 0 8px;'>線上人數: <span id='counter'>35</span>&nbsp;        </div>
+    </div>
+
+    <div class=clear></div>
+</div>
+
+<script>
+    var gSessActiveLife = 300;
+    setTimeout("updateCount()", gSessActiveLife * 1000);
+
+    function updateCount()
+    {
+        var lim = gSessActiveLife;
+        var obj = $syncload("/http_get_count.php", {limit:lim});
+        if (obj && obj.ret && obj.ret.count)
+            $("counter").innerHTML = obj.ret.count;
+        setTimeout("updateCount()", lim * 1000);
+    }
+
+    function $searchEnter(e)
+    {
+        var evt = (window.event) ? event : e;
+        var key = (evt.charCode) ? evt.charCode : evt.keyCode;
+        if (key == 13) $searchSubmit();
+    }
+    function $searchSubmit()
+    {
+        var k = encodeURIComponent($V("txtSearch"));
+        if (k == "") return;
+window.open('/portfolio/search.php?fmScope=2&fmKeyword=' + k);    }
+    
+    function m_changeLang(newLang)
+    {
+        if (newLang == "all")
+        { 
+            $showModal("選擇語言版本", "/languages.php", 500, 300, onFinish); 
+        }
+        else
+        {
+            $setCookie("ck_locale", newLang, 365);
+            $load("/sys/lib/ajax/change_lang.php",{locale:newLang}, m_onChangeLang);
+        }
+    }
+
+    function m_onChangeLang(obj) { window.location.reload(); }
+</script>         </div>
+        <div id=mainbody>
+            <div id=searchbody>
+                    <div id=searchTool>
+                        <input type=text id=fmKeyword name=fmKeyword class=Text size=24 value="411271" onkeypress='getKey(event)' onclick='this.select();'>
+                        <input type=button class=button value='GO' onclick='changeFilter()'>
+<input type=radio id=fmScope1 name=fmScope value=1 onclick='changeFilter()' >老師 / 職涯檔案<input type=radio id=fmScope2 name=fmScope value=2 onclick='changeFilter()' checked>學生 / 學習歷程檔案                    </div>
+
+                    <div id=searchResult>
+
+                <div class=bloglist>
+                    <div class=bloglistTitle><a href='/411271201'>嚴堯禹</a></div>
+                    <div class=bloglistBody>
+                        <div style='float:left'>
+                <div class=blogimage onmouseover='this.className="blogimageOver"' onmouseout='this.className="blogimage"'><a href='/411271201'><img border=0   width=60px  height=60px src='/sysdata/user/56/411271201/photo/m.jpg'></a></div>
+           </div>
+                        <div class=bloglistInfo>
+                            <div>訪客: 0</div>
+                            <div>文件: 0</div>
+                            <div>討論: 0</div>
+                        </div>
+                        <div class=clear></div>
+                    </div>
+                </div>
+            
+                <div class=bloglist>
+                    <div class=bloglistTitle><a href='/411271202'>陳湘捷</a></div>
+                    <div class=bloglistBody>
+                        <div style='float:left'>
+                <div class=blogimage onmouseover='this.className="blogimageOver"' onmouseout='this.className="blogimage"'><a href='/411271202'><img border=0   width=60px  height=60px src='/sysdata/user/57/411271202/photo/m.jpg'></a></div>
+           </div>
+                        <div class=bloglistInfo>
+                            <div>訪客: 0</div>
+                            <div>文件: 0</div>
+                            <div>討論: 0</div>
+                        </div>
+                        <div class=clear></div>
+                    </div>
+                </div>
+            
+                <div class=bloglist>
+                    <div class=bloglistTitle><a href='/411271203'>宋元耀</a></div>
+                    <div class=bloglistBody>
+                        <div style='float:left'>
+                <div class=blogimage onmouseover='this.className="blogimageOver"' onmouseout='this.className="blogimage"'><a href='/411271203'><img border=0   width=60px  height=60px src='/sysdata/user/58/411271203/photo/m.jpg'></a></div>
+           </div>
+                        <div class=bloglistInfo>
+                            <div>訪客: 0</div>
+                            <div>文件: 0</div>
+                            <div>討論: 0</div>
+                        </div>
+                        <div class=clear></div>
+                    </div>
+                </div>
+            
+                <div class=bloglist>
+                    <div class=bloglistTitle><a href='/411271204'>柯德成</a></div>
+                    <div class=bloglistBody>
+                        <div style='float:left'>
+                <div class=blogimage onmouseover='this.className="blogimageOver"' onmouseout='this.className="blogimage"'><a href='/411271204'><img border=0   width=60px  height=60px src='/sysdata/user/59/411271204/photo/m.jpg'></a></div>
+           </div>
+                        <div class=bloglistInfo>
+                            <div>訪客: 0</div>
+                            <div>文件: 0</div>
+                            <div>討論: 0</div>
+                        </div>
+                        <div class=clear></div>
+                    </div>
+                </div>
+            <div class=clearLine></div>
+                <div class=bloglist>
+                    <div class=bloglistTitle><a href='/411271205'>王意涵</a></div>
+                    <div class=bloglistBody>
+                        <div style='float:left'>
+                <div class=blogimage onmouseover='this.className="blogimageOver"' onmouseout='this.className="blogimage"'><a href='/411271205'><img border=0   width=60px  height=60px src='/sysdata/user/60/411271205/photo/m.jpg'></a></div>
+           </div>
+                        <div class=bloglistInfo>
+                            <div>訪客: 0</div>
+                            <div>文件: 0</div>
+                            <div>討論: 0</div>
+                        </div>
+                        <div class=clear></div>
+                    </div>
+                </div>
+            
+                <div class=bloglist>
+                    <div class=bloglistTitle><a href='/411271206'>鄭承洋</a></div>
+                    <div class=bloglistBody>
+                        <div style='float:left'>
+                <div class=blogimage onmouseover='this.className="blogimageOver"' onmouseout='this.className="blogimage"'><a href='/411271206'><img border=0   width=60px  height=60px src='/sysdata/user/61/411271206/photo/m.jpg'></a></div>
+           </div>
+                        <div class=bloglistInfo>
+                            <div>訪客: 0</div>
+                            <div>文件: 0</div>
+                            <div>討論: 0</div>
+                        </div>
+                        <div class=clear></div>
+                    </div>
+                </div>
+            
+                <div class=bloglist>
+                    <div class=bloglistTitle><a href='/411271207'>陳詩涵</a></div>
+                    <div class=bloglistBody>
+                        <div style='float:left'>
+                <div class=blogimage onmouseover='this.className="blogimageOver"' onmouseout='this.className="blogimage"'><a href='/411271207'><img border=0   width=60px  height=60px src='/sysdata/user/62/411271207/photo/m.jpg'></a></div>
+           </div>
+                        <div class=bloglistInfo>
+                            <div>訪客: 0</div>
+                            <div>文件: 0</div>
+                            <div>討論: 0</div>
+                        </div>
+                        <div class=clear></div>
+                    </div>
+                </div>
+            
+                <div class=bloglist>
+                    <div class=bloglistTitle><a href='/411271208'>王宣淳</a></div>
+                    <div class=bloglistBody>
+                        <div style='float:left'>
+                <div class=blogimage onmouseover='this.className="blogimageOver"' onmouseout='this.className="blogimage"'><a href='/411271208'><img border=0   width=60px  height=60px src='/sysdata/user/63/411271208/photo/m.jpg'></a></div>
+           </div>
+                        <div class=bloglistInfo>
+                            <div>訪客: 0</div>
+                            <div>文件: 0</div>
+                            <div>討論: 0</div>
+                        </div>
+                        <div class=clear></div>
+                    </div>
+                </div>
+            <div class=clearLine></div>
+                <div class=bloglist>
+                    <div class=bloglistTitle><a href='/411271209'>顏吾文</a></div>
+                    <div class=bloglistBody>
+                        <div style='float:left'>
+                <div class=blogimage onmouseover='this.className="blogimageOver"' onmouseout='this.className="blogimage"'><a href='/411271209'><img border=0   width=60px  height=60px src='/sysdata/user/64/411271209/photo/m.jpg'></a></div>
+           </div>
+                        <div class=bloglistInfo>
+                            <div>訪客: 0</div>
+                            <div>文件: 0</div>
+                            <div>討論: 0</div>
+                        </div>
+                        <div class=clear></div>
+                    </div>
+                </div>
+            
+                <div class=bloglist>
+                    <div class=bloglistTitle><a href='/411271210'>蔡昕縈</a></div>
+                    <div class=bloglistBody>
+                        <div style='float:left'>
+                <div class=blogimage onmouseover='this.className="blogimageOver"' onmouseout='this.className="blogimage"'><a href='/411271210'><img border=0   width=60px  height=60px src='/sysdata/user/65/411271210/photo/m.jpg'></a></div>
+           </div>
+                        <div class=bloglistInfo>
+                            <div>訪客: 0</div>
+                            <div>文件: 0</div>
+                            <div>討論: 0</div>
+                        </div>
+                        <div class=clear></div>
+                    </div>
+                </div>
+            
+                <div class=bloglist>
+                    <div class=bloglistTitle><a href='/411271211'>莊宇翔</a></div>
+                    <div class=bloglistBody>
+                        <div style='float:left'>
+                <div class=blogimage onmouseover='this.className="blogimageOver"' onmouseout='this.className="blogimage"'><a href='/411271211'><img border=0   width=60px  height=60px src='/sysdata/user/66/411271211/photo/m.jpg'></a></div>
+           </div>
+                        <div class=bloglistInfo>
+                            <div>訪客: 0</div>
+                            <div>文件: 0</div>
+                            <div>討論: 0</div>
+                        </div>
+                        <div class=clear></div>
+                    </div>
+                </div>
+            
+                <div class=bloglist>
+                    <div class=bloglistTitle><a href='/411271212'>林緯霖</a></div>
+                    <div class=bloglistBody>
+                        <div style='float:left'>
+                <div class=blogimage onmouseover='this.className="blogimageOver"' onmouseout='this.className="blogimage"'><a href='/411271212'><img border=0   width=60px  height=60px src='/sysdata/user/67/411271212/photo/m.jpg'></a></div>
+           </div>
+                        <div class=bloglistInfo>
+                            <div>訪客: 0</div>
+                            <div>文件: 1</div>
+                            <div>討論: 0</div>
+                        </div>
+                        <div class=clear></div>
+                    </div>
+                </div>
+            <div class=clearLine></div><div class=clear></div><div style='padding: 5px 2px 2px 0px; text-align:left'><script>
+    function pageComboEnter(e)
+    {
+        var e = (!e) ? window.event : e;
+        var key = e.keyCode;
+        switch(key)
+        {
+            // enter
+            case 13:
+                    goPage('PageCombo', $V('PageCombo'));
+                    e.returnValue = false;
+                    e.cancelBubble = true;
+                    return true;
+                    break;
+            default:
+                return true;
+        }
+    }
+    function showPageCombo(total)
+    {
+        var comboList = new Array(comboTotal);
+        var i=0;
+        for(var j=1; j<=comboTotal; j++)
+        {
+            comboList[i++] = j;
+        }
+        showCombo('PageCombo', comboList, 'goPage', 'top')
+    }
+    function goPage(comboName, val)
+    {
+        if (!$isInt(val) || val < 1 || val > comboTotal)
+        {
+            alert('頁數錯誤，請重新輸入！');
+            $(comboName).focus();
+            $(comboName).select();
+            return;
+        }
+        window.location.href = comboUrl + val;
+    }
+    function changePageSize()
+    {
+        var ps = $V("pageSize");
+        window.location.href = comboUrl + "1&psize=" + ps;
+    }
+
+    function showPercentCombo()
+    {
+        var comboList = new Array(11);
+        var i=0;
+        for(var j=100; j>=0; j-=10)
+        {
+            comboList[i++] = j;
+        }
+        showCombo("fmScorePercent", comboList, "comboReturn", "top")
+    }
+
+    //combo
+    function showCombo(comboName, values, cb, align)
+    {
+        $hidePopup();
+        $(comboName).setAttribute("autocomplete","off");
+
+        $EvtListener(document, "mouseup", comboEventHide);
+        $EvtListener(document, "keyup"  , comboEventHide);
+
+        align = (align) ? align : "bottom";
+        var maxHeight = 200;
+        var a = $area($(comboName));
+        var curr = -1;
+        comboValue = $V(comboName);
+
+        //drop list.
+        var _body = "<div id=combo class=combo style='width:" + (a.width-2) + "px; overflow:auto' onmouseup='$EvtCancelBubble(event)'>";
+        for (var i=0; i<values.length; i++)
+        {
+            if (values[i].toString() == comboValue)
+            {
+                curr = i;
+                _body += "<div id=comboItem" + i + " class=curr onclick='" + cb + "(\"" + comboName + "\", " + values[i] + ")' >" + values[i] + "</div>";
+            }
+            else
+                _body += "<div id=comboItem" + i + " class=combo onclick='" + cb + "(\"" + comboName + "\", " + values[i] + ")' onmouseover='this.className=\"over\"' onmouseOut='this.className=\"combo\"'>" + values[i] + "</div>";
+        }
+        _body += "</div>";
+
+        var browserScreenHeight = $getBrowserSize().height;
+        if (document.body.scrollHeight > browserScreenHeight)
+            var bodyHeight = document.body.scrollHeight;
+        else
+            var bodyHeight = browserScreenHeight;
+        $showPopup2(_body, a.left, a.top+a.height, a.width-2, 50);
+
+        //limit height.
+        var combo_ctrl = $("combo");
+        if (combo_ctrl.offsetHeight > maxHeight)
+        {
+            combo_ctrl.style.height = maxHeight + "px";
+            combo_ctrl.style.width = a.width + 15;
+        }
+
+        //overflow.
+        var a2 = $area(combo_ctrl);
+        var newTop = a2.top - a2.height - a.height - 4;
+        if ( (align == "top") || ((a2.top + a2.height > bodyHeight) && newTop > 0) )
+        {
+            $("_popup").style.top = newTop + "px";
+            if ($("_popupMask")) $("_popupMask").style.top = newTop  + "px";
+        }
+
+        var a = $area($("_popup"));
+        $("_popupMask").style.height = a.height + 'px';
+
+        //scrolling.
+        if (curr != -1) $("combo").scrollTop = $("comboItem" + curr).offsetTop;
+    }
+
+    function comboReturn(comboName, val)
+    {
+        $(comboName).value=val;
+        $hidePopup();
+    }
+
+    function comboEventHide(e)
+    {
+        var _hide   = false;
+        var _cancel = false;
+
+        var evt = (window.event)   ? event : e;
+        var src = (evt.srcElement) ? evt.srcElement.id : evt.target.id;
+
+        if (gBrowser.isIE) { var _key=evt.keyCode; var _button=evt.button; if(_button==1 || _key == 27) _hide=true; if (_key == 27) _cancel=true; }
+        if (gBrowser.isNS) { var _key=evt.keyCode; var _button=evt.button; if(_button==0 || _key == 27) _hide=true; if (_key == 27) _cancel=true; }
+
+        if (_cancel)
+        {
+            $(src).value = comboValue;
+            $(src).blur();
+        }
+        if (_hide)
+        {
+            if (gBrowser.isIE) { document.detachEvent("onkeyup",comboEventHide); document.detachEvent("onmouseup", comboEventHide);}
+            if (gBrowser.isNS) { document.removeEventListener("keyup", comboEventHide, false); document.removeEventListener("mouseup", comboEventHide, false);}
+            $hidePopup();
+        }
+    }
+
+    function createPage(curr, total, func)
+    {
+        var pages = 10, _html = "";
+        _html += (curr > 1) ? "<span class=item><a href='JavaScript:" + func + ", " + (curr-1) + ")'>Prev</a></span>" : "<span class=item>Prev</span>";
+
+        var start = (curr < pages) ? 1 : curr - pages / 2;
+        var end   = start + pages - 1;
+        if (end > total) end = total;
+
+        for (var i=start; i<=end; i++)
+        {
+            if (i == curr)
+                _html += "<span class=curr>" + i + "</span>";
+            else
+                _html += "<span class=item><a href='JavaScript:" + func + ", " + i + ")'>" + i + "</a></span>";
+        }
+        _html += (curr < total) ? "<span class=item><a href='JavaScript:" + func + ", " + (curr+1) + ")'>Next</a></span>" : "<span class=item>Next</span>";
+
+        return "<span class=page>" + _html + "</span>";
+    }
+</script>
+            <script>
+                var comboTotal = 17;
+                var comboUrl = "search.php?fmKeyword=411271&fmScope=2&page=";
+                var comboValue = '';
+            </script>
+         <span class=page><span class=item>Prev</span><span class=curr>1</span><span class=item><a href='search.php?fmKeyword=411271&fmScope=2&page=2'>2</a></span><span class=item><a href='search.php?fmKeyword=411271&fmScope=2&page=3'>3</a></span><span class=item><a href='search.php?fmKeyword=411271&fmScope=2&page=4'>4</a></span><span class=item><a href='search.php?fmKeyword=411271&fmScope=2&page=5'>5</a></span><span class=item><a href='search.php?fmKeyword=411271&fmScope=2&page=6'>6</a></span><span class=item><a href='search.php?fmKeyword=411271&fmScope=2&page=7'>7</a></span><span class=item><a href='search.php?fmKeyword=411271&fmScope=2&page=8'>8</a></span><span class=item><a href='search.php?fmKeyword=411271&fmScope=2&page=9'>9</a></span><span class=item><a href='search.php?fmKeyword=411271&fmScope=2&page=10'>10</a></span><span class=item><a href='search.php?fmKeyword=411271&fmScope=2&page=2'>Next</a></span>
+                   <span class=item>
+                      Go: <input type=text id='PageCombo' class=input onclick='showPageCombo(); this.select()' onkeypress='pageComboEnter(event)' value='1'>
+                      / 17
+                   </span>
+               </span></div>                    </div>               
+            </div>
+        </div>
+        <div id="copyright">
+            <DIV style="TEXT-ALIGN: center">
+<DIV style="TEXT-ALIGN: center">&copy; 2009 Copyright National Taipei University　All rights reserved. </DIV>
+<DIV style="TEXT-ALIGN: center"><A href="http://www.powercam.com.tw/">台灣數位學習科技 建置</A> <BR>部落格/社群<A href="/?nav=news_show&amp;newsID=1602">使用規範</A>，<A href="/?nav=news_show&amp;newsID=1602#1">檢舉資訊</A> </DIV></DIV>        </div>
+    </div>
+</div>
+</body>
+</html>

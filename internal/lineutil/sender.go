@@ -43,21 +43,39 @@ func NewTextMessageWithConsistentSender(text string, sender *messaging_api.Sende
 // ================================================
 // Common Error Message Helpers
 // ================================================
+//
+// Error messages follow UX best practices:
+//   1. Acknowledge the problem (not blame user)
+//   2. Explain what happened briefly
+//   3. Provide actionable next steps
+//   4. Keep tone empathetic and helpful
+//
+// Reference: Nielsen Norman Group Heuristic #9 - Help users recognize,
+// diagnose, and recover from errors.
 
 const (
-	// Generic error message template
-	errorMessageTemplate = "❌ 系統暫時無法處理您的請求\n\n請稍後再試，或聯絡管理員協助。\n\n如問題持續發生，請提供查詢內容以便我們協助處理。"
+	// Generic error message template - used for unexpected system errors
+	// Structure: emoji + acknowledgment + what to do + how to get help
+	errorMessageTemplate = "😅 抱歉，系統暫時無法處理您的請求\n\n" +
+		"可能是暫時性的問題，建議您：\n" +
+		"• 稍後再試一次\n" +
+		"• 換個方式查詢\n\n" +
+		"如問題持續發生，請告知查詢內容，我們會協助處理。"
+
 	// Error message with detail template (prefix + detail + suffix)
-	errorDetailPrefix = "❌ "
-	errorDetailSuffix = "\n\n請稍後再試，或聯絡管理員協助。"
+	// For specific, contextual errors
+	errorDetailPrefix = "😅 "
+	errorDetailSuffix = "\n\n💡 建議稍後再試，或換個方式查詢。"
 )
 
 // ErrorMessageWithSender creates a user-friendly error message with a pre-created sender.
+// Used for unexpected system errors where we don't have specific context.
 func ErrorMessageWithSender(err error, sender *messaging_api.Sender) messaging_api.MessageInterface {
 	return NewTextMessageWithConsistentSender(errorMessageTemplate, sender)
 }
 
 // ErrorMessageWithDetailAndSender creates an error message with additional context.
+// Used when we know the specific issue (e.g., "搜尋課程時發生問題").
 func ErrorMessageWithDetailAndSender(userMessage string, sender *messaging_api.Sender) messaging_api.MessageInterface {
 	return NewTextMessageWithConsistentSender(errorDetailPrefix+userMessage+errorDetailSuffix, sender)
 }
@@ -65,6 +83,8 @@ func ErrorMessageWithDetailAndSender(userMessage string, sender *messaging_api.S
 // ErrorMessageWithQuickReply creates an error message with quick reply actions.
 // By default, it shows retry and help quick replies, but you can provide custom quick reply items.
 // If no quickReplies are provided, it falls back to retry/help pattern.
+//
+// This is the preferred error message function as it provides actionable next steps.
 func ErrorMessageWithQuickReply(userMessage string, sender *messaging_api.Sender, retryText string, quickReplies ...QuickReplyItem) *messaging_api.TextMessage {
 	msg := NewTextMessageWithConsistentSender(errorDetailPrefix+userMessage+errorDetailSuffix, sender)
 	if len(quickReplies) > 0 {
@@ -79,6 +99,8 @@ func ErrorMessageWithQuickReply(userMessage string, sender *messaging_api.Sender
 }
 
 // NotFoundMessage creates a standardized "not found" message with search suggestions.
+// This follows the UX pattern of providing alternatives when search fails.
+//
 // Parameters:
 //   - searchTerm: The term that was searched for
 //   - itemType: What was being searched (e.g., "課程", "聯絡資料", "學生")
@@ -105,4 +127,41 @@ func NotFoundMessage(searchTerm, itemType string, suggestions []string, sender *
 	}
 
 	return NewTextMessageWithConsistentSender(builder.String(), sender)
+}
+
+// ================================================
+// Context-Specific Error Builders
+// ================================================
+
+// SystemErrorMessage creates a friendly system error message with recovery options.
+// Used when something unexpected goes wrong during processing.
+func SystemErrorMessage(operation string, sender *messaging_api.Sender) *messaging_api.TextMessage {
+	msg := NewTextMessageWithConsistentSender(
+		"😅 "+operation+"時發生了一點問題\n\n"+
+			"這可能是暫時性的，建議：\n"+
+			"• 稍等幾秒後再試\n"+
+			"• 換個關鍵字查詢",
+		sender,
+	)
+	msg.QuickReply = NewQuickReply([]QuickReplyItem{
+		QuickReplyHelpAction(),
+	})
+	return msg
+}
+
+// NetworkErrorMessage creates an error message for network-related issues.
+// Used when scraping or external API calls fail.
+func NetworkErrorMessage(target string, sender *messaging_api.Sender) *messaging_api.TextMessage {
+	msg := NewTextMessageWithConsistentSender(
+		"🌐 無法連線到"+target+"\n\n"+
+			"可能原因：\n"+
+			"• 網站暫時維護中\n"+
+			"• 網路連線不穩定\n\n"+
+			"💡 建議稍後再試",
+		sender,
+	)
+	msg.QuickReply = NewQuickReply([]QuickReplyItem{
+		QuickReplyHelpAction(),
+	})
+	return msg
 }
