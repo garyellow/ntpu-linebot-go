@@ -42,4 +42,11 @@ const (
 	// Secondary buttons use default gray (no color override needed)
 	// Danger buttons use ColorDanger for urgent/destructive actions
 	ColorButtonPrimary = ColorPrimary // #06C755 - LINE Green for primary CTA
+
+	// Semantic Button Colors (UX Enhancement)
+	// External: Blue color for external website links (opens browser)
+	// Internal: Purple color for internal commands/postback actions
+	// These colors help users distinguish action types at a glance
+	ColorButtonExternal = "#469FD6" // Blue - external links (課程大綱, Dcard, 選課大全)
+	ColorButtonInternal = "#8B5CF6" // Purple - internal commands (教師課程, 查看成員)
 )

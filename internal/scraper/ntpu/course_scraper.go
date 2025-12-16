@@ -18,6 +18,10 @@ import (
 const (
 	courseQueryByKeywordPath       = "/pls/dev_stud/course_query_all.queryByKeyword"
 	courseQueryByAllConditionsPath = "/pls/dev_stud/course_query_all.queryByAllConditions"
+
+	// User-facing URLs use domain (not IP) for better UX
+	// Scraper uses IP for efficiency, but generated URLs should be domain-based
+	seaUserFacingURL = "https://sea.cc.ntpu.edu.tw"
 )
 
 // AllEduCodes contains education level codes (U=大學部, M=碩士班, N=碩士在職專班, P=博士班)
@@ -216,7 +220,7 @@ func parseCoursesPage(ctx context.Context, doc *goquery.Document, courseBaseURL 
 		}
 
 		// Extract teachers and teacher URLs (field 8)
-		teachers, teacherURLs := parseTeacherField(tds.Eq(8), courseBaseURL)
+		teachers, teacherURLs := parseTeacherField(tds.Eq(8))
 
 		// Extract times and locations (field 13)
 		times, locations := parseTimeLocationField(tds.Eq(13))
@@ -229,10 +233,10 @@ func parseCoursesPage(ctx context.Context, doc *goquery.Document, courseBaseURL 
 		// Generate UID
 		uid := fmt.Sprintf("%d%d%s", year, rowTerm, no)
 
-		// Build full detail URL
+		// Build full detail URL (use domain for user-facing URLs)
 		fullDetailURL := ""
 		if detailURL != "" {
-			fullDetailURL = courseBaseURL + "/pls/dev_stud/course_query.queryGuide" + detailURL
+			fullDetailURL = seaUserFacingURL + "/pls/dev_stud/course_query.queryGuide" + detailURL
 		}
 
 		course := &storage.Course{
@@ -291,7 +295,8 @@ func parseTitleField(td *goquery.Selection) (title, detailURL, note, location st
 }
 
 // parseTeacherField parses the teacher field to extract teacher names and URLs
-func parseTeacherField(td *goquery.Selection, courseBaseURL string) (teachers []string, teacherURLs []string) {
+// URLs are hard-coded to domain for user-facing display
+func parseTeacherField(td *goquery.Selection) (teachers []string, teacherURLs []string) {
 	teachers = make([]string, 0)
 	teacherURLs = make([]string, 0)
 
@@ -299,12 +304,12 @@ func parseTeacherField(td *goquery.Selection, courseBaseURL string) (teachers []
 		teacherName := strings.TrimSpace(a.Text())
 		teachers = append(teachers, teacherName)
 
-		// Get teacher URL
+		// Get teacher URL (use domain for user-facing URLs)
 		href, _ := a.Attr("href")
 		if href != "" {
 			parts := strings.Split(href, "?")
 			if len(parts) > 1 {
-				teacherURL := courseBaseURL + "/pls/faculty/tec_course_table.s_table?" + parts[1]
+				teacherURL := seaUserFacingURL + "/pls/faculty/tec_course_table.s_table?" + parts[1]
 				teacherURLs = append(teacherURLs, teacherURL)
 			}
 		}
