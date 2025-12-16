@@ -17,8 +17,8 @@ func TestHandleYearQuery_Boundaries(t *testing.T) {
 		year string
 		want bool // true if should return messages
 	}{
-		{"Year 89 (before NTPU)", "89", true},
-		{"Year 90 (NTPU founded)", "90", true},
+		{"Year 88 (before NTPU)", "88", true},
+		{"Year 89 (NTPU founded)", "89", true},
 		{"Year 94 (before digital)", "94", true},
 		{"Year 95 (valid start)", "95", true},
 		{"Year 112 (last valid)", "112", true},

@@ -34,8 +34,8 @@ func TestDataLimitConstants(t *testing.T) {
 	if LMSLaunchYear != 94 {
 		t.Errorf("LMSLaunchYear = %d, want 94", LMSLaunchYear)
 	}
-	if NTPUFoundedYear != 90 {
-		t.Errorf("NTPUFoundedYear = %d, want 90", NTPUFoundedYear)
+	if NTPUFoundedYear != 89 {
+		t.Errorf("NTPUFoundedYear = %d, want 89", NTPUFoundedYear)
 	}
 }
 

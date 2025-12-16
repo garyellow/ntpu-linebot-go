@@ -139,7 +139,7 @@ func TestParseYear(t *testing.T) {
 		{"Non-numeric - must error", "abc", 0, true},
 
 		// Boundary tests (parseYear only validates format, not range)
-		// Range validation (NTPU founded 90, data cutoff 114+) is done in handleYearQuery
+		// Range validation (NTPU founded 89, data cutoff 114+) is done in handleYearQuery
 		{"Year 89 (NTPU founded)", "89", 89, false},
 		{"Year 88 (valid format)", "88", 88, false},
 		{"Year 130 (valid format)", "130", 130, false},

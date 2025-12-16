@@ -41,9 +41,9 @@ const (
 	LMSLaunchYear = 94
 
 	// NTPUFoundedYear is the year when NTPU was established.
-	// Academic year 90 = 2001 (民國 90 年正式成立，合校).
-	// Note: year < 90 means school doesn't exist yet.
-	NTPUFoundedYear = 90
+	// Academic year 89 = 2000 (民國 89 年 2 月 1 日正式成立).
+	// Note: year < 89 means school doesn't exist yet.
+	NTPUFoundedYear = 89
 )
 
 // ================================================
@@ -97,7 +97,7 @@ const (
 
 	// IDYearTooOldMessage is the message for years before LMS existed.
 	// Friendly message with historical context.
-	IDYearTooOldMessage = "📚 數位學苑資料不完整嗎\n\n" +
+	IDYearTooOldMessage = "📚 這個年份的資料不完整喔\n\n" +
 		"數位學苑資料從民國 94 年起較完整，\n" +
 		"請輸入 94-113 學年度的年份。"
 
