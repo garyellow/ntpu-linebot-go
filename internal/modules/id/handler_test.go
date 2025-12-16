@@ -52,7 +52,7 @@ func TestCanHandle(t *testing.T) {
 		{"Valid 8-digit student ID", "學號 41247001", true},
 		{"Valid 9-digit student ID", "學號 412470011", true},
 		{"All department codes special", "所有系代碼", true},
-		{"Year query (data cutoff check)", "year 113", true},
+		{"Year query (data cutoff check)", "year 114", true},
 		{"Department lookup", "系 資工", true},
 
 		// Edge cases that must fail
@@ -119,7 +119,7 @@ func TestHandlePostback_Department(t *testing.T) {
 }
 
 // TestParseYear tests critical year conversion logic (ROC <-> AD)
-// This is essential for correct data retrieval and the 113學年度 cutoff warning
+// This is essential for correct data retrieval and the 114學年度 cutoff warning
 func TestParseYear(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -139,7 +139,7 @@ func TestParseYear(t *testing.T) {
 		{"Non-numeric - must error", "abc", 0, true},
 
 		// Boundary tests (parseYear only validates format, not range)
-		// Range validation (NTPU founded 89, data cutoff 113+) is done in handleYearQuery
+		// Range validation (NTPU founded 89, data cutoff 114+) is done in handleYearQuery
 		{"Year 89 (NTPU founded)", "89", 89, false},
 		{"Year 88 (valid format)", "88", 88, false},
 		{"Year 130 (valid format)", "130", 130, false},
@@ -256,14 +256,14 @@ func TestHandleYearQuery_FutureYear(t *testing.T) {
 	}
 }
 
-// TestHandleYearQuery_Year113Plus tests 113+ year data unavailable warning
-func TestHandleYearQuery_Year113Plus(t *testing.T) {
+// TestHandleYearQuery_Year114Plus tests 114+ year data unavailable warning
+func TestHandleYearQuery_Year114Plus(t *testing.T) {
 	h := setupTestHandler(t)
 
-	// Year >= 113 should show RIP image
-	msgs := h.handleYearQuery("113")
+	// Year >= 114 should show RIP image
+	msgs := h.handleYearQuery("114")
 	if len(msgs) < 2 { // Should have text + image
-		t.Error("Expected RIP warning with image for year 113+")
+		t.Error("Expected RIP warning with image for year 114+")
 	}
 }
 

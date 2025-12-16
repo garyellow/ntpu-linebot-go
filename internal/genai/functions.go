@@ -59,7 +59,7 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 		// ID module functions
 		{
 			Name:        "id_search",
-			Description: "依姓名搜尋學生資訊。**限制**：僅支援 112 學年度以前入學的學生資料，113 學年度以後無資料。可使用全名或部分姓名搜尋。",
+			Description: "依姓名搜尋學生資訊。**重要限制**：僅有 94-113 學年度（2005-2024）的學生資料。原因：數位學苑 2.0 已於 114 學年度停用，114 學年度以後入學的學生無法查詢。可使用全名或部分姓名搜尋。",
 			Parameters: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
@@ -73,7 +73,7 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 		},
 		{
 			Name:        "id_student_id",
-			Description: "依學號查詢學生資訊。學號為 8-9 位數字，開頭通常代表入學年度。**限制**：僅支援 112 學年度以前入學的學生，113 以後無資料。",
+			Description: "依學號查詢學生資訊。學號為 8-9 位數字，開頭通常代表入學年度。**重要限制**：僅有 94-113 學年度（2005-2024）的學生資料。原因：數位學苑 2.0 已於 114 學年度停用。114 開頭或更新的學號無法查詢。",
 			Parameters: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
@@ -87,7 +87,7 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 		},
 		{
 			Name:        "id_department",
-			Description: "查詢科系代碼或科系資訊。可輸入科系名稱查代碼，或輸入代碼查科系名稱。常見代碼：資工系(85)、企管系(35)、法律系(25)。",
+			Description: "查詢科系代碼或科系資訊。可輸入科系名稱查代碼，或輸入代碼查科系名稱。常見代碼：資工系(85)、企管系(35)、法律系(25)。注意：學生資料僅涵蓋 94-113 學年度。",
 			Parameters: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{

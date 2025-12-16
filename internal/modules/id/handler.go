@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
+	"github.com/garyellow/ntpu-linebot-go/internal/config"
 	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
@@ -210,7 +211,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		// No year provided - show guidance message
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			"📅 按學年查詢學生\n\n請輸入要查詢的學年度\n例如：學年 112、學年 110\n\n📋 查詢流程：\n1️⃣ 選擇學院群（文法商/公社電資）\n2️⃣ 選擇學院\n3️⃣ 選擇科系\n4️⃣ 查看該年度該科系所有學生\n\n⚠️ 僅提供 95-112 學年度資料",
+			"📅 按學年查詢學生\n\n請輸入要查詢的學年度\n例如：學年 112、學年 110\n\n📋 查詢流程：\n1️⃣ 選擇學院群（文法商/公社電資）\n2️⃣ 選擇學院\n3️⃣ 選擇科系\n4️⃣ 查看該年度該科系所有學生\n\n⚠️ 僅提供 94-113 學年度資料",
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -444,39 +445,49 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 	// Validate year - order matters for proper responses!
 	// 1. Check future year first
 	if year > currentYear {
-		msg := lineutil.NewTextMessageWithConsistentSender("🔮 哎呀～你是未來人嗎？", sender)
+		msg := lineutil.NewTextMessageWithConsistentSender(config.IDYearFutureMessage, sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", currentYear), fmt.Sprintf("學年 %d", currentYear))},
+			{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", min(currentYear, config.IDDataYearEnd)), fmt.Sprintf("學年 %d", min(currentYear, config.IDDataYearEnd)))},
+			lineutil.QuickReplyStudentAction(),
 			lineutil.QuickReplyHelpAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	// 2. Check for 2024+ data warning (year >= 113) - LMS 2.0 is deprecated
-	if year >= 113 {
+	// 2. Check for 2025+ data warning (year >= 114) - LMS 2.0 is deprecated
+	if year >= config.IDDataCutoffYear {
 		imageURL := "https://raw.githubusercontent.com/garyellow/ntpu-linebot-go/main/assets/rip.png"
+		msg := lineutil.NewTextMessageWithConsistentSender(config.IDYear114PlusMessage, sender)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			{Action: lineutil.NewMessageAction("📅 查詢 113 學年度", "學年 113")},
+			{Action: lineutil.NewMessageAction("📅 查詢 112 學年度", "學年 112")},
+			lineutil.QuickReplyStudentAction(),
+			lineutil.QuickReplyHelpAction(),
+		})
 		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithConsistentSender("數位學苑 2.0 已停止使用，無法取得資料", sender),
+			msg,
 			lineutil.NewImageMessage(imageURL, imageURL),
 		}
 	}
 
 	// 3. Check if year is before NTPU was founded (ROC 89 = 2000)
-	if year < 90 {
-		msg := lineutil.NewTextMessageWithConsistentSender("🏫 學校都還沒蓋好啦\n\n臺北大學於民國 89 年成立", sender)
+	if year < config.NTPUFoundedYear {
+		msg := lineutil.NewTextMessageWithConsistentSender(config.IDYearBeforeNTPUMessage, sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("📅 查詢 95 學年度", "學年 95")},
-			{Action: lineutil.NewMessageAction("🎓 查詢學號", "學號")},
+			{Action: lineutil.NewMessageAction("📅 查詢 94 學年度", "學年 94")},
+			lineutil.QuickReplyStudentAction(),
+			lineutil.QuickReplyHelpAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	// 4. Check if year is before LMS was launched (ROC 95)
-	if year >= 90 && year < 95 {
-		msg := lineutil.NewTextMessageWithConsistentSender("📚 數位學苑還沒出生喔\n\n請輸入 95 學年度以後的年份", sender)
+	// 4. Check if year is before LMS has complete data (90-93 have sparse data)
+	if year < config.LMSLaunchYear {
+		msg := lineutil.NewTextMessageWithConsistentSender(config.IDYearTooOldMessage, sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("📅 查詢 95 學年度", "學年 95")},
-			{Action: lineutil.NewMessageAction("🎓 查詢學號", "學號")},
+			{Action: lineutil.NewMessageAction("📅 查詢 94 學年度", "學年 94")},
+			lineutil.QuickReplyStudentAction(),
+			lineutil.QuickReplyHelpAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
@@ -606,10 +617,7 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	students = deduplicateStudents(students)
 
 	if len(students) == 0 {
-		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf(
-			"🔍 查無姓名包含「%s」的學生\n\n💡 請注意：\n• 僅提供 101-112 學年度資料\n• 請確認姓名拼寫是否正確\n• 可嘗試輸入完整姓名或部分姓名",
-			name,
-		), sender)
+		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf(config.IDNotFoundWithCutoffHint, name), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyStudentAction(),
 			lineutil.QuickReplyYearAction(),
@@ -707,6 +715,11 @@ func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_ap
 	// Add cache time hint (unobtrusive, right-aligned)
 	if hint := lineutil.NewCacheTimeHint(student.CachedAt); hint != nil {
 		body.AddComponent(hint.FlexText)
+	}
+
+	// Add data source hint (transparency about data limitations - UX best practice)
+	if dataHint := lineutil.NewDataRangeHint(); dataHint != nil {
+		body.AddComponent(dataHint.FlexText)
 	}
 
 	// Footer: Action buttons (內部指令使用紫色)
