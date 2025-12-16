@@ -82,7 +82,7 @@ func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, 
 			return nil, fmt.Errorf("failed to fetch courses: %w", err)
 		}
 
-		return parseCoursesPage(ctx, doc, courseBaseURL, year, term), nil
+		return parseCoursesPage(ctx, doc, year, term), nil
 	}
 
 	// Otherwise, use GET to queryByKeyword and iterate through all education codes
@@ -110,7 +110,7 @@ func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, 
 			continue
 		}
 
-		pageCourses := parseCoursesPage(ctx, doc, courseBaseURL, year, term)
+		pageCourses := parseCoursesPage(ctx, doc, year, term)
 		courses = append(courses, pageCourses...)
 	}
 
@@ -166,7 +166,7 @@ func ScrapeCourseByUID(ctx context.Context, client *scraper.Client, uid string) 
 		return nil, fmt.Errorf("failed to fetch course: %w", err)
 	}
 
-	courses := parseCoursesPage(ctx, doc, courseBaseURL, year, term)
+	courses := parseCoursesPage(ctx, doc, year, term)
 	if len(courses) == 0 {
 		return nil, fmt.Errorf("course not found: %s", uid)
 	}
@@ -176,7 +176,7 @@ func ScrapeCourseByUID(ctx context.Context, client *scraper.Client, uid string) 
 
 // parseCoursesPage extracts course information from a search result page
 // When term=0, extracts term from each row (field 2); otherwise uses the provided term value
-func parseCoursesPage(ctx context.Context, doc *goquery.Document, courseBaseURL string, year, term int) []*storage.Course {
+func parseCoursesPage(ctx context.Context, doc *goquery.Document, year, term int) []*storage.Course {
 	courses := make([]*storage.Course, 0)
 	cachedAt := time.Now().Unix()
 
