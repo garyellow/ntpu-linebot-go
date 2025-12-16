@@ -307,7 +307,7 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 	footer := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexButton(lineutil.NewURIAction("🚨 撥打三峽校安", "tel:"+sanxiaEmergencyPhone)).WithStyle("primary").WithColor(lineutil.ColorDanger).WithHeight("sm").FlexButton,
 		lineutil.NewFlexButton(lineutil.NewURIAction("🚨 撥打台北校安", "tel:"+taipeiEmergencyPhone)).WithStyle("primary").WithColor(lineutil.ColorDanger).WithHeight("sm").FlexButton,
-		lineutil.NewFlexButton(lineutil.NewURIAction("ℹ️ 查看更多", "https://new.ntpu.edu.tw/safety")).WithStyle("secondary").WithHeight("sm").FlexButton,
+		lineutil.NewFlexButton(lineutil.NewURIAction("ℹ️ 查看更多", "https://new.ntpu.edu.tw/safety")).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm").FlexButton,
 	).WithSpacing("sm")
 
 	bubble := lineutil.NewFlexBubble(
@@ -756,13 +756,13 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 					lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製信箱", c.Email)).WithStyle("secondary").WithHeight("sm"))
 			}
 
-			// Row 3: Website button (standalone row for visibility)
+			// Row 3: Website button (standalone row for visibility) (外部連結使用藍色)
 			if c.Website != "" {
 				row3Buttons = append(row3Buttons,
-					lineutil.NewFlexButton(lineutil.NewURIAction("🌐 開啟網站", c.Website)).WithStyle("secondary").WithHeight("sm"))
+					lineutil.NewFlexButton(lineutil.NewURIAction("🌐 開啟網站", c.Website)).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
 			}
 
-			// Row 4: View Members button for organizations (separate row for better UX)
+			// Row 4: View Members button for organizations (separate row for better UX) (內部指令使用紫色)
 			// Allows querying all members belonging to this organization
 			var row4Buttons []*lineutil.FlexButton
 			if c.Type == "organization" {
@@ -770,7 +770,7 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 				row4Buttons = append(row4Buttons,
 					lineutil.NewFlexButton(
 						lineutil.NewPostbackActionWithDisplayText("👥 查看成員", displayText, fmt.Sprintf("contact:members%s%s", bot.PostbackSplitChar, c.Name)),
-					).WithStyle("secondary").WithHeight("sm"))
+					).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm"))
 			}
 
 			// Assemble Bubble

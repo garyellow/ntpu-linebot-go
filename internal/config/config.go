@@ -128,6 +128,8 @@ func Load() (*Config, error) {
 		// Scraper Configuration
 		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", ScraperRequest),
 		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 5),
+		// IP first for faster scraping (avoids DNS lookup)
+		// URLs generated for users are hard-coded to domain in scrapers
 		ScraperBaseURLs: map[string][]string{
 			"lms": {
 				"http://120.126.197.52",

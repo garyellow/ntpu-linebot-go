@@ -709,14 +709,14 @@ func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_ap
 		body.AddComponent(hint.FlexText)
 	}
 
-	// Footer: Action buttons
+	// Footer: Action buttons (內部指令使用紫色)
 	footer := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexButton(
 			lineutil.NewClipboardAction("📋 複製學號", student.ID),
 		).WithStyle("primary").WithColor(lineutil.ColorButtonPrimary).WithHeight("sm").FlexButton,
 		lineutil.NewFlexButton(
 			lineutil.NewMessageAction("🔍 查詢其他學號", "學號"),
-		).WithStyle("secondary").WithHeight("sm").FlexButton,
+		).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm").FlexButton,
 	).WithSpacing("sm")
 
 	bubble := lineutil.NewFlexBubble(
