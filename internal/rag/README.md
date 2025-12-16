@@ -8,7 +8,7 @@ Retrieval-Augmented Generation (RAG) 模組，提供課程智慧搜尋功能。
 
 - **BM25Index**: BM25 關鍵字搜尋索引 (中文分詞優化)
 - **Query Expansion**: LLM 擴展查詢詞彙（同義詞、縮寫、翻譯）
-- **Rank-based Confidence**: 基於排名的信心分數
+- **Relative Confidence**: 基於相對 BM25 分數的信心度 (score / maxScore)
 
 ## 架構
 
@@ -20,7 +20,7 @@ Search Flow:
   │ BM25 Search (expanded keywords)  │
   │ - 中文 Unigram 分詞              │
   │ - IDF 加權                       │
-  │ - 排名信心分數                   │
+  │ - 相對信心分數 (score/maxScore) │
   └──────────────────────────────────┘
       ↓
   去重合併 → 排序結果
@@ -55,27 +55,42 @@ Search Flow:
 
 ### 設計原則
 
-BM25 輸出無界分數，不同查詢間無法比較。基於 chatbot UX 研究，我們採用**簡化兩層制**：
+BM25 輸出無界分數，不同查詢間無法比較。我們使用**相對分數** (score / maxScore) 進行分類：
 
-| 排名 | 顯示標籤 | 設計理由 |
+| 條件 | 顯示標籤 | 設計理由 |
 |------|----------|----------|
-| #1-3 | 🎯 最相關 | 前三名，高信心推薦 |
-| #4+ | ✨ 相關 | 後續結果，仍符合查詢 |
+| Confidence ≥ 0.8 | 🎯 最佳匹配 | Normal 分佈核心區域（學術建議） |
+| Confidence ≥ 0.6 | ✨ 高度相關 | Normal-Exponential 混合區域 |
+| Confidence < 0.6 | 📋 部分相關 | Exponential 分佈尾部 |
 
 **為什麼這樣設計？**
 
-1. **移除百分比**：使用者無法跨查詢比較數字，百分比造成虛假精確感
-2. **簡化分類**：4 層變 2 層，降低認知負擔
-3. **基於排名**：「前三名」比「80% 信心」更直觀
-4. **引導改進**：結果少時提示使用更具體關鍵字
+1. **相對分數**：使用 `score / maxScore` 計算，同一查詢內可比較（Azure、Elasticsearch 官方建議）
+2. **無過濾門檻**：不預先過濾結果，交由 UI 層分類顯示
+3. **三層分類**：0.8、0.6 分界點基於 Normal-Exponential 混合模型（Arampatzis et al., 2009）
+4. **Top-K 優先**：主要使用 Top-10 截斷，相對分數僅用於結果分類
+5. **不使用 log**：BM25 的 IDF 已包含 log 轉換，無需額外處理
 
-### 內部計算 (保留供參考)
+### 內部計算
 
 ```go
-// 內部信心分數計算（目前僅用於過濾，不顯示給使用者）
-confidence = 1 / (1 + 0.05 * rank)
-// rank 1: 95%, rank 5: 80%, rank 10: 67%
+// 相對分數計算（學術最佳實踐）
+confidence = score / maxScore
+// 第一名永遠是 1.0
+
+// 分類閾值（基於 Normal-Exponential 混合模型）
+// >= 0.8: 最佳匹配 (Normal 分佈核心)
+// >= 0.6: 高度相關 (混合區域)
+// < 0.6: 部分相關 (Exponential 尾部)
+
+// Top-K 截斷（主要過濾方法）
+MaxSearchResults = 10
 ```
+
+**學術依據**：
+- BM25 分數遵循 Normal-Exponential 混合分佈（相關文件=Normal，非相關=Exponential）
+- 相對閾值優於絕對閾值（Arampatzis et al., 2009）
+- Top-K 是 BM25 的標準過濾方法（Azure AI Search、Elasticsearch 推薦）
 
 ## 索引策略：Single Document (BM25 最佳實踐)
 

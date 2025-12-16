@@ -293,8 +293,7 @@ func isValidUTF8(s string) bool {
 // BenchmarkTruncateRunes benchmarks the TruncateRunes function
 func BenchmarkTruncateRunes(b *testing.B) {
 	testString := "這是一個測試字串，用來測試 TruncateRunes 函式的效能，包含中英文與數字 123"
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = TruncateRunes(testString, 20)
 	}
 }
@@ -419,8 +418,7 @@ func TestInfoRowStyles(t *testing.T) {
 // BenchmarkNewInfoRow benchmarks the NewInfoRow function
 func BenchmarkNewInfoRow(b *testing.B) {
 	style := DefaultInfoRowStyle()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = NewInfoRow("👨‍🏫", "授課教師", "王教授、李教授、陳教授", style)
 	}
 }

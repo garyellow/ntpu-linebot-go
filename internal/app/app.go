@@ -354,23 +354,18 @@ func (a *Application) Run() error {
 // startBackgroundJobs starts all background goroutines.
 // Each goroutine is tracked via WaitGroup for graceful shutdown.
 func (a *Application) startBackgroundJobs(ctx context.Context) {
-	a.wg.Add(4)
-	go func() {
-		defer a.wg.Done()
+	a.wg.Go(func() {
 		a.cacheCleanup(ctx)
-	}()
-	go func() {
-		defer a.wg.Done()
+	})
+	a.wg.Go(func() {
 		a.refreshStickers(ctx)
-	}()
-	go func() {
-		defer a.wg.Done()
+	})
+	a.wg.Go(func() {
 		a.proactiveWarmup(ctx)
-	}()
-	go func() {
-		defer a.wg.Done()
+	})
+	a.wg.Go(func() {
 		a.updateCacheSizeMetrics(ctx)
-	}()
+	})
 }
 
 // startHTTPServer starts the HTTP server in a goroutine.

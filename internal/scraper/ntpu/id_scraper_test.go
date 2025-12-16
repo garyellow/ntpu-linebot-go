@@ -126,7 +126,7 @@ func TestDetermineDepartment(t *testing.T) {
 // BenchmarkExtractYear benchmarks the year extraction function
 func BenchmarkExtractYear(b *testing.B) {
 	studentID := "410812345"
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = extractYear(studentID)
 	}
 }
@@ -134,7 +134,7 @@ func BenchmarkExtractYear(b *testing.B) {
 // BenchmarkDetermineDepartment benchmarks the department determination function
 func BenchmarkDetermineDepartment(b *testing.B) {
 	studentID := "410e12345"
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = determineDepartment(studentID)
 	}
 }

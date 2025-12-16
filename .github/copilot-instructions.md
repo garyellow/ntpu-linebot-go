@@ -85,7 +85,7 @@ LINE Webhook → Gin Handler
 - **Precise search**: `課程` keyword triggers SQL LIKE + fuzzy search on course title and teachers
 - **Smart search**: `找課` keyword triggers BM25 + Query Expansion search using syllabus content (requires `GEMINI_API_KEY` or `GROQ_API_KEY` for Query Expansion)
 - **BM25 search**: Keyword-based search with Chinese tokenization (unigram for CJK)
-- **Confidence scoring**: Rank-based confidence (not similarity). Higher rank = higher confidence.
+- **Confidence scoring**: Relative BM25 score (score / maxScore), not similarity. Range: 0-1, first result always 1.0.
 - **Query expansion**: LLM-based expansion for short queries and technical abbreviations (AWS→雲端運算, AI→人工智慧)
 - **Detached context**: Uses `ctxutil.PreserveTracing()` to prevent request context cancellation from aborting API calls (safer than WithoutCancel)
 - **Fallback**: Precise search → BM25 smart search (when no results and BM25Index enabled)
