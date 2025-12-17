@@ -9,9 +9,6 @@ func TestStats(t *testing.T) {
 	stats := &Stats{}
 
 	// Test initial values are zero
-	if stats.Students.Load() != 0 {
-		t.Errorf("Students should be 0 initially, got %d", stats.Students.Load())
-	}
 	if stats.Contacts.Load() != 0 {
 		t.Errorf("Contacts should be 0 initially, got %d", stats.Contacts.Load())
 	}
@@ -23,14 +20,10 @@ func TestStats(t *testing.T) {
 	}
 
 	// Test Add operations
-	stats.Students.Add(100)
 	stats.Contacts.Add(50)
 	stats.Courses.Add(200)
 	stats.Syllabi.Add(30)
 
-	if stats.Students.Load() != 100 {
-		t.Errorf("Students should be 100, got %d", stats.Students.Load())
-	}
 	if stats.Contacts.Load() != 50 {
 		t.Errorf("Contacts should be 50, got %d", stats.Contacts.Load())
 	}
@@ -52,9 +45,9 @@ func TestStatsConcurrent(t *testing.T) {
 	for range goroutines {
 		go func() {
 			for range incrementsPerGoroutine {
-				stats.Students.Add(1)
 				stats.Contacts.Add(1)
 				stats.Courses.Add(1)
+				stats.Syllabi.Add(1)
 			}
 			done <- struct{}{}
 		}()
@@ -66,14 +59,14 @@ func TestStatsConcurrent(t *testing.T) {
 	}
 
 	expected := int64(goroutines * incrementsPerGoroutine)
-	if stats.Students.Load() != expected {
-		t.Errorf("Students should be %d, got %d", expected, stats.Students.Load())
-	}
 	if stats.Contacts.Load() != expected {
 		t.Errorf("Contacts should be %d, got %d", expected, stats.Contacts.Load())
 	}
 	if stats.Courses.Load() != expected {
 		t.Errorf("Courses should be %d, got %d", expected, stats.Courses.Load())
+	}
+	if stats.Syllabi.Load() != expected {
+		t.Errorf("Syllabi should be %d, got %d", expected, stats.Syllabi.Load())
 	}
 }
 

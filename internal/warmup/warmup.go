@@ -26,10 +26,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// Stats tracks cache warming statistics
-// All fields use atomic operations for concurrent access
+// Stats tracks cache warming statistics for daily refresh operations.
+// All fields use atomic operations for concurrent access.
+// Note: Students are not tracked here as they are only warmed on startup (static data).
 type Stats struct {
-	Students atomic.Int64
 	Contacts atomic.Int64
 	Courses  atomic.Int64
 	Syllabi  atomic.Int64
@@ -39,7 +39,7 @@ type Stats struct {
 type Options struct {
 	Reset     bool
 	HasLLMKey bool // Enables syllabus module for smart search
-	WarmID    bool // Enables ID module warmup (static data, usually startup only)
+	WarmID    bool // Enables ID module warmup (static data, startup only, not used in daily refresh)
 	Metrics   *metrics.Metrics
 	BM25Index *rag.BM25Index
 }
@@ -142,8 +142,7 @@ func RunInBackground(_ context.Context, db *storage.DB, client *scraper.Client, 
 		if err != nil {
 			log.WithError(err).Warn("Background cache warming finished with errors")
 		} else {
-			log.WithField("students", stats.Students.Load()).
-				WithField("contacts", stats.Contacts.Load()).
+			log.WithField("contacts", stats.Contacts.Load()).
 				WithField("courses", stats.Courses.Load()).
 				WithField("syllabi", stats.Syllabi.Load()).
 				Info("Background cache warming completed successfully")
@@ -191,6 +190,7 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 
 	var completed int
 	var errorCount int
+	var studentCount int64
 	var errs []error
 
 	for year := fromYear; year > 100; year-- {
@@ -227,7 +227,7 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 				continue
 			}
 
-			stats.Students.Add(int64(len(students)))
+			studentCount += int64(len(students))
 			completed++
 
 			if completed%10 == 0 || completed == totalTasks {
@@ -235,7 +235,7 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 				avgTimePerTask := elapsed / time.Duration(completed)
 				estimatedRemaining := avgTimePerTask * time.Duration(totalTasks-completed)
 				log.WithField("progress", fmt.Sprintf("%d/%d", completed, totalTasks)).
-					WithField("students", stats.Students.Load()).
+					WithField("students", studentCount).
 					WithField("elapsed_min", int(elapsed.Minutes())).
 					WithField("est_remaining_min", int(estimatedRemaining.Minutes())).
 					Info("ID module progress")

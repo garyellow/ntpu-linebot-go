@@ -594,11 +594,16 @@ func (a *Application) performProactiveWarmup(ctx context.Context, warmID bool) {
 		return
 	}
 
-	a.logger.WithField("contacts", stats.Contacts.Load()).
+	logEntry := a.logger.WithField("contacts", stats.Contacts.Load()).
 		WithField("courses", stats.Courses.Load()).
 		WithField("syllabi", stats.Syllabi.Load()).
-		WithField("duration_ms", time.Since(startTime).Milliseconds()).
-		Info("Proactive warmup completed")
+		WithField("duration_ms", time.Since(startTime).Milliseconds())
+
+	if warmID {
+		logEntry.Info("Proactive warmup completed (startup: includes ID data)")
+	} else {
+		logEntry.Info("Proactive warmup completed (daily refresh)")
+	}
 
 	if a.bm25Index != nil && a.bm25Index.IsEnabled() {
 		a.logger.WithField("doc_count", a.bm25Index.Count()).Info("BM25 smart search enabled")
