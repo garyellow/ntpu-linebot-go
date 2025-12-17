@@ -279,23 +279,31 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 			// Validate department code format (1-3 digits) before lookup
 			if len(action) > 3 || len(action) == 0 {
 				sender := lineutil.GetSender(senderName, h.stickerManager)
-				return []messaging_api.MessageInterface{
-					lineutil.NewTextMessageWithConsistentSender(
-						"❌ 無效的系代碼格式\n\n系代碼應為 1-3 位數字",
-						sender,
-					),
-				}
+				msg := lineutil.NewTextMessageWithConsistentSender(
+					"❌ 無效的系代碼格式\n\n系代碼應為 1-3 位數字",
+					sender,
+				)
+				msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+					lineutil.QuickReplyYearAction(),
+					lineutil.QuickReplyDeptCodeAction(),
+					lineutil.QuickReplyHelpAction(),
+				})
+				return []messaging_api.MessageInterface{msg}
 			}
 
 			// Verify department code contains only digits
 			if _, err := strconv.Atoi(action); err != nil {
 				sender := lineutil.GetSender(senderName, h.stickerManager)
-				return []messaging_api.MessageInterface{
-					lineutil.NewTextMessageWithConsistentSender(
-						"❌ 無效的系代碼格式\n\n系代碼應為 1-3 位數字",
-						sender,
-					),
-				}
+				msg := lineutil.NewTextMessageWithConsistentSender(
+					"❌ 無效的系代碼格式\n\n系代碼應為 1-3 位數字",
+					sender,
+				)
+				msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+					lineutil.QuickReplyYearAction(),
+					lineutil.QuickReplyDeptCodeAction(),
+					lineutil.QuickReplyHelpAction(),
+				})
+				return []messaging_api.MessageInterface{msg}
 			}
 
 			if _, ok := ntpu.DepartmentNames[action]; ok {
@@ -863,9 +871,13 @@ func (h *Handler) handleCollegeSelection(college, year string) []messaging_api.M
 	info, ok := collegeMap[college]
 	if !ok {
 		sender := lineutil.GetSender(senderName, h.stickerManager)
-		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithConsistentSender("❌ 無效的學院選擇", sender),
-		}
+		msg := lineutil.NewTextMessageWithConsistentSender("❌ 無效的學院選擇\n\n請重新選擇學年度後操作", sender)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			lineutil.QuickReplyYearAction(),
+			lineutil.QuickReplyStudentAction(),
+			lineutil.QuickReplyHelpAction(),
+		})
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	return h.buildDepartmentSelectionTemplate(year, info.imageURL, info.departments, info.isLaw)
@@ -964,16 +976,24 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 
 	year, err := strconv.Atoi(yearStr)
 	if err != nil {
-		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithConsistentSender("❌ 無效的年份格式", sender),
-		}
+		msg := lineutil.NewTextMessageWithConsistentSender("❌ 無效的年份格式\n\n請重新選擇學年度", sender)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			lineutil.QuickReplyYearAction(),
+			lineutil.QuickReplyStudentAction(),
+			lineutil.QuickReplyHelpAction(),
+		})
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	deptName, ok := ntpu.DepartmentNames[deptCode]
 	if !ok {
-		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithConsistentSender("❌ 無效的系代碼", sender),
-		}
+		msg := lineutil.NewTextMessageWithConsistentSender("❌ 無效的系代碼\n\n請重新選擇學年度後操作", sender)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			lineutil.QuickReplyYearAction(),
+			lineutil.QuickReplyDeptCodeAction(),
+			lineutil.QuickReplyHelpAction(),
+		})
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	// Query students from cache using department name that matches determineDepartment logic

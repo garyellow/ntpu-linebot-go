@@ -164,7 +164,14 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
 // Use same sender for all messages in one reply
 ```
 
-**UX Best Practices**: Quick Reply for guidance, Loading Animation for long queries, Flex Messages for rich UI, actionable error options
+**UX Best Practices**:
+- **Quick Reply**: Always provide actionable options on ALL messages (including errors)
+- **Loading Animation**: Show for long queries (> 1s expected)
+- **Flex Messages**: Use for rich structured content (welcome, contact cards, course info)
+- **Error Recovery**: Include retry/help Quick Reply on all error messages
+- **Consistent Sender**: Same sender throughout a single reply batch
+- **Welcome Message**: Flex Message with feature overview + Quick Reply for immediate actions
+- **Rate Limit Messages**: Include guidance and Quick Reply for next steps
 
 **Flex Message 設計規範**:
 - **配色** (WCAG AA 符合):
