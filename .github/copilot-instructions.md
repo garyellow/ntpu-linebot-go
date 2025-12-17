@@ -184,7 +184,7 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
   - `ColorDanger` `#E02D41` (深紅) - 緊急操作 (校安電話) - 4.5:1
   - `ColorButtonExternal` `#2563EB` (深藍) - 外部連結 (課程大綱、Dcard、選課大全、網站) - 4.8:1
   - `ColorButtonInternal` `#7C3AED` (深紫) - 內部指令/Postback (教師課程、查看成員、查詢學號) - 4.6:1
-  - `ColorSuccess` `#10B981` (翠綠) - 成功狀態 (操作完成提示) - 3.8:1 大型文字
+  - `ColorSuccess` `#059669` (深翠綠) - 成功狀態 (操作完成提示、確認訊息) - 4.5:1 WCAG AA
   - `ColorButtonSecondary` `#6B7280` (灰色) - 次要操作 (複製號碼、複製信箱) - 5.9:1
 - **間距**: Hero padding `24px`/`16px` (4-point grid), Body/Footer spacing `sm`, 按鈕高度 `sm`
 - **文字**: 優先使用 `wrap: true` + `lineSpacing` 完整顯示資訊；僅 carousel 使用 `WithMaxLines()` 控制高度

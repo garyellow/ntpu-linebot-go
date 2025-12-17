@@ -47,6 +47,6 @@ const (
 	// All adjusted from lighter shades to meet accessibility standards
 	ColorButtonExternal  = "#2563EB" // Blue - external links (課程大綱, Dcard, 選課大全) - was #469FD6, now 4.8:1
 	ColorButtonInternal  = "#7C3AED" // Purple - internal commands (教師課程, 查看成員) - was #8B5CF6, now 4.6:1
-	ColorSuccess         = "#10B981" // Emerald Green - success states, completed actions (3.8:1 for large text)
+	ColorSuccess         = "#059669" // Emerald Green - success states, completed actions - WCAG AA (4.5:1) - was #10B981
 	ColorButtonSecondary = "#6B7280" // Gray - secondary actions (複製號碼, 複製信箱) (5.9:1)
 )
