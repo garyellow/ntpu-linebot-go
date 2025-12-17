@@ -83,7 +83,7 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, log *logge
 
 	if opts.WarmID {
 		g.Go(func() error {
-			if err := warmupIDModule(ctx, db, client, log, stats, opts.Metrics); err != nil {
+			if err := warmupIDModule(ctx, db, client, log, opts.Metrics); err != nil {
 				log.WithError(err).Error("ID module warmup failed")
 				return fmt.Errorf("id module: %w", err)
 			}
@@ -167,7 +167,7 @@ func resetCache(ctx context.Context, db *storage.DB) error {
 }
 
 // warmupIDModule warms student ID cache (sequential execution).
-func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
+func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, m *metrics.Metrics) error {
 	startTime := time.Now()
 	defer func() {
 		if m != nil {
