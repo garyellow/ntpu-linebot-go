@@ -73,14 +73,6 @@ const (
 
 // Background job intervals
 const (
-	// StickerRefreshInterval is how often sticker refresh runs (daily).
-	// Refresh runs at fixed time (2:00 AM Taiwan time).
-	StickerRefreshInterval = 24 * time.Hour
-
-	// StickerRefreshHour is the hour (0-23) when sticker refresh runs daily.
-	// Set to 2:00 AM Taiwan time, before warmup to ensure fresh sticker data.
-	StickerRefreshHour = 2
-
 	// CacheCleanupInterval is how often cache cleanup runs (daily).
 	// Cleanup runs at fixed time (4:00 AM Taiwan time) after warmup.
 	CacheCleanupInterval = 24 * time.Hour

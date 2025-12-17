@@ -1,5 +1,10 @@
-// Package warmup provides background cache warming functionality for
-// proactively fetching and caching student, course, contact, sticker, and syllabus data.
+// Package warmup provides background cache warming functionality.
+//
+// Daily refresh (3:00 AM Taiwan time):
+//   - contact, course: Always refreshed (7-day TTL)
+//   - syllabus: Auto-enabled when LLM API key is configured
+//
+// Not refreshed: id (static), sticker (startup only)
 package warmup
 
 import (
@@ -34,18 +39,18 @@ type Stats struct {
 
 // Options configures cache warming behavior
 type Options struct {
-	Modules   []string         // Modules to warm (id, contact, course, sticker, syllabus)
-	Reset     bool             // Whether to reset cache before warming
-	Metrics   *metrics.Metrics // Optional metrics recorder
-	BM25Index *rag.BM25Index   // Required for syllabus module: rebuilds BM25 index after saving syllabi
+	Reset     bool
+	HasLLMKey bool // Enables syllabus module for smart search
+	WarmID    bool // Enables ID module warmup (static data, usually startup only)
+	Metrics   *metrics.Metrics
+	BM25Index *rag.BM25Index
 }
 
-// Run executes cache warming with the given options
+// Run executes daily cache refresh: contact, course (always), syllabus (if HasLLMKey).
 func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, opts Options) (*Stats, error) {
 	stats := &Stats{}
 	startTime := time.Now()
 
-	// Reset cache if requested
 	if opts.Reset {
 		log.Info("Resetting cache data...")
 		if err := resetCache(ctx, db); err != nil {
@@ -54,123 +59,74 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 		log.Info("Cache reset complete")
 	}
 
-	// Separate modules:
-	// - Independent modules: can run concurrently (id, contact, sticker)
-	// - Course module: runs concurrently but syllabus waits for it
-	// - Syllabus module: depends on course data, starts after course completes
-	//   IMPORTANT: Syllabus module rebuilds BM25 index for smart search feature
-	//   Without syllabus data, BM25 smart search (找課) will be disabled
-	var independentModules []string
-	var hasCourse, hasSyllabus bool
-
-	for _, module := range opts.Modules {
-		switch module {
-		case "course":
-			hasCourse = true
-		case "syllabus":
-			hasSyllabus = true
-		default:
-			independentModules = append(independentModules, module)
-		}
-	}
+	hasSyllabus := opts.HasLLMKey
 
 	g, ctx := errgroup.WithContext(ctx)
 
 	// Channel to signal course completion (for syllabus dependency)
 	courseDone := make(chan struct{})
 
-	// Start independent modules concurrently
-	for _, module := range independentModules {
-		if ctx.Err() != nil {
-			return stats, fmt.Errorf("warmup canceled: %w", ctx.Err())
+	g.Go(func() error {
+		if err := warmupContactModule(ctx, db, client, log, stats, opts.Metrics); err != nil {
+			log.WithError(err).Error("Contact module warmup failed")
+			return fmt.Errorf("contact module: %w", err)
 		}
+		return nil
+	})
 
+	g.Go(func() error {
+		defer close(courseDone)
+		if err := warmupCourseModule(ctx, db, client, log, stats, opts.Metrics); err != nil {
+			log.WithError(err).Error("Course module warmup failed")
+			return fmt.Errorf("course module: %w", err)
+		}
+		return nil
+	})
+
+	if opts.WarmID {
 		g.Go(func() error {
-			switch module {
-			case "id":
-				if err := warmupIDModule(ctx, db, client, log, stats, opts.Metrics); err != nil {
-					log.WithError(err).Error("ID module warmup failed")
-					return fmt.Errorf("id module: %w", err)
-				}
-			case "contact":
-				if err := warmupContactModule(ctx, db, client, log, stats, opts.Metrics); err != nil {
-					log.WithError(err).Error("Contact module warmup failed")
-					return fmt.Errorf("contact module: %w", err)
-				}
-			case "sticker":
-				if err := warmupStickerModule(ctx, stickerMgr, log, stats, opts.Metrics); err != nil {
-					log.WithError(err).Error("Sticker module warmup failed")
-					return fmt.Errorf("sticker module: %w", err)
-				}
-			default:
-				log.WithField("module", module).Warn("Unknown module, skipping")
+			if err := warmupIDModule(ctx, db, client, log, stats, opts.Metrics); err != nil {
+				log.WithError(err).Error("ID module warmup failed")
+				return fmt.Errorf("id module: %w", err)
 			}
 			return nil
 		})
 	}
 
-	// Start course module (syllabus will wait for this)
-	if hasCourse {
-		g.Go(func() error {
-			defer close(courseDone)
-			if err := warmupCourseModule(ctx, db, client, log, stats, opts.Metrics); err != nil {
-				log.WithError(err).Error("Course module warmup failed")
-				return fmt.Errorf("course module: %w", err)
-			}
-			return nil
-		})
-	} else {
-		close(courseDone)
-	}
-
-	// Start syllabus module (waits for course to complete first)
 	if hasSyllabus {
 		g.Go(func() error {
-			if hasCourse {
-				log.Debug("Syllabus waiting for course module to complete")
-			}
 			select {
 			case <-ctx.Done():
-				return fmt.Errorf("syllabus canceled while waiting for course: %w", ctx.Err())
+				return ctx.Err()
 			case <-courseDone:
 			}
 
 			if opts.BM25Index == nil {
-				log.Info("Syllabus module skipped: BM25Index not configured")
 				return nil
 			}
 
 			if err := warmupSyllabusModule(ctx, db, client, opts.BM25Index, log, stats, opts.Metrics); err != nil {
 				log.WithError(err).Error("Syllabus module warmup failed")
-				return fmt.Errorf("syllabus module: %w", err)
+				return fmt.Errorf("syllabus: %w", err)
 			}
 			return nil
 		})
 	}
 
-	// Wait for all modules to complete
-	err := g.Wait()
+	if err := g.Wait(); err != nil {
+		return stats, fmt.Errorf("warmup: %w", err)
+	}
 
-	duration := time.Since(startTime)
-	log.WithField("duration", duration).
-		WithField("students", stats.Students.Load()).
+	log.WithField("duration", time.Since(startTime)).
 		WithField("contacts", stats.Contacts.Load()).
 		WithField("courses", stats.Courses.Load()).
-		WithField("stickers", stats.Stickers.Load()).
 		WithField("syllabi", stats.Syllabi.Load()).
 		Info("Cache warming complete")
-
-	if err != nil {
-		log.WithError(err).Warn("Some modules failed during warmup")
-		return stats, err
-	}
 
 	return stats, nil
 }
 
-// RunInBackground executes cache warming asynchronously
-// Returns immediately without blocking. Logs progress to the provided logger.
-// Uses context.Background() for independent operation that runs until completion.
+// RunInBackground executes cache warming asynchronously (non-blocking).
 //
 //nolint:contextcheck // Intentionally using context.Background() for independent background operation
 func RunInBackground(_ context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, opts Options) {
@@ -181,7 +137,7 @@ func RunInBackground(_ context.Context, db *storage.DB, client *scraper.Client, 
 			}
 		}()
 
-		log.WithField("modules", opts.Modules).
+		log.WithField("has_llm_key", opts.HasLLMKey).
 			Info("Starting background cache warming")
 
 		stats, err := Run(context.Background(), db, client, stickerMgr, log, opts)
@@ -196,22 +152,6 @@ func RunInBackground(_ context.Context, db *storage.DB, client *scraper.Client, 
 				Info("Background cache warming completed successfully")
 		}
 	}()
-}
-
-// ParseModules converts comma-separated string to module list
-func ParseModules(modules string) []string {
-	if modules == "" {
-		return []string{}
-	}
-
-	var result []string
-	for _, m := range strings.Split(modules, ",") {
-		m = strings.TrimSpace(m)
-		if m != "" {
-			result = append(result, m)
-		}
-	}
-	return result
 }
 
 // resetCache deletes all cached data
@@ -230,8 +170,7 @@ func resetCache(ctx context.Context, db *storage.DB) error {
 	return nil
 }
 
-// warmupIDModule warms student ID cache
-// Executes tasks sequentially (one at a time) to avoid overwhelming the server
+// warmupIDModule warms student ID cache (sequential execution).
 func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
 	startTime := time.Now()
 	defer func() {
@@ -251,13 +190,12 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 	}
 
 	totalTasks := (fromYear - 100) * len(departments)
-	log.WithField("tasks", totalTasks).Info("Starting ID module warmup (sequential)")
+	log.WithField("tasks", totalTasks).Info("Starting ID module warmup")
 
 	var completed int
 	var errorCount int
 	var errs []error
 
-	// Execute tasks sequentially (one at a time)
 	for year := fromYear; year > 100; year-- {
 		for _, dept := range departments {
 			select {
@@ -314,10 +252,7 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 	return nil
 }
 
-// warmupContactModule warms contact cache
-// Returns error only if BOTH administrative and academic contact scraping fail.
-// Allows partial success: if one source succeeds, the function returns nil.
-// Use logs to identify which source failed when partial success occurs.
+// warmupContactModule warms contact cache (allows partial success).
 func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
 	startTime := time.Now()
 	defer func() {
@@ -330,13 +265,11 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 
 	var errs []error
 
-	// Scrape administrative contacts
 	adminContacts, err := ntpu.ScrapeAdministrativeContacts(ctx, client)
 	if err != nil {
 		log.WithError(err).Warn("Failed to scrape administrative contacts, continuing anyway")
 		errs = append(errs, fmt.Errorf("administrative contacts: %w", err))
 	} else {
-		// Save using batch operation to reduce lock contention
 		if err := db.SaveContactsBatch(ctx, adminContacts); err != nil {
 			log.WithError(err).Warn("Failed to save administrative contacts batch")
 			errs = append(errs, fmt.Errorf("save administrative contacts: %w", err))
@@ -346,7 +279,6 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 		}
 	}
 
-	// Scrape academic contacts
 	academicContacts, err := ntpu.ScrapeAcademicContacts(ctx, client)
 	if err != nil {
 		log.WithError(err).Warn("Failed to scrape academic contacts, continuing anyway")
@@ -376,15 +308,8 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 	return nil
 }
 
-// warmupCourseModule warms course cache using semester as the minimal unit.
-// Uses ScrapeCourses to fetch courses for each semester individually.
-// Makes 4 HTTP requests per semester (U/M/N/P education codes).
-// Uses intelligent detection to determine which 4 semesters to warm up:
-// 1. Calculates the calendar-based newest semester
-// 2. Checks if that semester has data
-// 3. If yes, uses it as the newest semester; if no, shifts back one semester
-// 4. Generates 4 semesters backward from the newest
-// This ensures we always warm up the most relevant 4 semesters.
+// warmupCourseModule warms course cache for the 4 most recent semesters.
+// Uses intelligent detection based on actual data availability.
 func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
 	startTime := time.Now()
 	defer func() {
@@ -450,18 +375,7 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 	return nil
 }
 
-// detectWarmupSemesters determines which 4 semesters should be warmed up.
-// It uses the SemesterDetector for intelligent data-driven detection based on
-// actual course data availability, rather than relying solely on calendar-based guesses.
-//
-// Strategy (DATA-FIRST approach):
-// 1. Detect the most recent semesters that have any course data available
-// 2. Select up to 4 such semesters for warmup
-//
-// This approach ensures that the semesters with actual data are prioritized for cache warming,
-// handling cases where semesters may be delayed or out of sync with the calendar.
-//
-// Key insight: Trust data availability over calendar calculations.
+// detectWarmupSemesters determines which 4 semesters to warm up based on data availability.
 func detectWarmupSemesters(ctx context.Context, db *storage.DB, log *logger.Logger) []course.Semester {
 	// Create semester detector with database count function
 	detector := course.NewSemesterDetector(db.CountCoursesBySemester)
@@ -489,28 +403,6 @@ func formatSemesters(semesters []course.Semester) string {
 		result.WriteString(fmt.Sprintf(", %d-%d", semesters[i].Year, semesters[i].Term))
 	}
 	return result.String()
-}
-
-// warmupStickerModule warms sticker cache
-func warmupStickerModule(ctx context.Context, stickerMgr *sticker.Manager, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
-	startTime := time.Now()
-	defer func() {
-		if m != nil {
-			m.RecordJob("warmup", "sticker", time.Since(startTime).Seconds())
-		}
-	}()
-
-	log.Info("Starting sticker module warmup")
-
-	if err := stickerMgr.LoadStickers(ctx); err != nil {
-		return fmt.Errorf("failed to load stickers: %w", err)
-	}
-
-	count := stickerMgr.Count()
-	stats.Stickers.Store(int64(count))
-	log.WithField("count", count).Info("Stickers cached")
-
-	return nil
 }
 
 // warmupSyllabusModule warms syllabus cache and BM25 index

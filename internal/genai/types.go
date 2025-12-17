@@ -135,17 +135,17 @@ const (
 	DefaultGeminiExpanderFallbackModel = "gemini-2.5-flash-lite"
 
 	// DefaultGroqIntentModel is the default model for Groq intent parsing.
-	// Llama 4 Scout (Preview) offers excellent function calling with fast inference (~750 TPS).
-	DefaultGroqIntentModel = "meta-llama/llama-4-scout-17b-16e-instruct"
+	// Llama 4 Maverick (Preview) offers excellent function calling and intent classification with fast inference (~900 TPS).
+	DefaultGroqIntentModel = "meta-llama/llama-4-maverick-17b-128e-instruct"
 	// DefaultGroqIntentFallbackModel is the fallback model for Groq intent parsing.
-	// llama-3.1-8b-instant is Production-grade and provides reliable fallback.
-	DefaultGroqIntentFallbackModel = "llama-3.1-8b-instant"
+	// llama-3.3-70b-versatile is Production-grade and provides reliable fallback with strong accuracy.
+	DefaultGroqIntentFallbackModel = "llama-3.3-70b-versatile"
 	// DefaultGroqExpanderModel is the default model for Groq query expansion.
-	// Llama 4 Maverick (Preview) provides stronger text generation capabilities (~600 TPS).
-	DefaultGroqExpanderModel = "meta-llama/llama-4-maverick-17b-128e-instruct"
+	// Llama 4 Scout (Preview) offers efficient query expansion with fast inference (~750 TPS).
+	DefaultGroqExpanderModel = "meta-llama/llama-4-scout-17b-16e-instruct"
 	// DefaultGroqExpanderFallbackModel is the fallback model for Groq query expansion.
-	// llama-3.3-70b-versatile is Production-grade and provides reliable fallback.
-	DefaultGroqExpanderFallbackModel = "llama-3.3-70b-versatile"
+	// llama-3.1-8b-instant is Production-grade and provides fast, cost-efficient fallback.
+	DefaultGroqExpanderFallbackModel = "llama-3.1-8b-instant"
 
 	// Retry configuration defaults
 	DefaultMaxRetryAttempts  = 2

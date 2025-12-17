@@ -128,6 +128,11 @@ func (h *Handler) IsBM25SearchEnabled() bool {
 	return h.bm25Index != nil && h.bm25Index.IsEnabled()
 }
 
+// hasQueryExpander returns true if query expander is available.
+func (h *Handler) hasQueryExpander() bool {
+	return h.queryExpander != nil
+}
+
 // Intent names for NLU dispatcher
 const (
 	IntentSearch = "search" // Unified course/teacher search
@@ -732,6 +737,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 			fmt.Sprintf("❌ 無效的學年度：%d\n\n請輸入 89-%d 之間的學年度\n範例：課程 110 微積分", year, currentYear),
 			sender,
 		)
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyCourseNav(h.bm25Index != nil && h.bm25Index.IsEnabled()))
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -998,9 +1004,9 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging_api.MessageInterface {
 	if len(courses) == 0 {
 		sender := lineutil.GetSender(senderName, h.stickerManager)
-		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithConsistentSender("🔍 查無課程資料", sender),
-		}
+		msg := lineutil.NewTextMessageWithConsistentSender("🔍 查無課程資料", sender)
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyCourseNav(h.bm25Index != nil && h.bm25Index.IsEnabled()))
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	// Sort courses: year descending (recent first), then term descending (term 2 before term 1)
@@ -1189,7 +1195,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 	// This design maintains low coupling - the course handler doesn't need to know
 	// about webhook sources or user sessions, it just uses the chatID from context.
 	expandedQuery := query
-	if h.queryExpander != nil {
+	if h.hasQueryExpander() {
 		// Check LLM rate limit if limiter is available and we have a chatID in context
 		// The chatID is injected by webhook handler via ctxutil.WithChatID
 		chatID := ctxutil.GetChatID(ctx)

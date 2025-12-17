@@ -374,6 +374,10 @@ func TestHandlePostback_InvalidData(t *testing.T) {
 }
 
 func TestHandlePostback_WithPrefix(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network test in short mode")
+	}
+
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -657,6 +661,10 @@ func TestDispatchIntent_ParamValidation(t *testing.T) {
 // TestDispatchIntent_Integration tests the full dispatch flow with real dependencies.
 // These tests verify that valid parameters correctly route to handler methods.
 func TestDispatchIntent_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network test in short mode")
+	}
+
 	h := setupTestHandler(t)
 	ctx := context.Background()
 

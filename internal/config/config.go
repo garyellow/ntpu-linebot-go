@@ -53,9 +53,6 @@ type Config struct {
 	ScraperMaxRetries int
 	ScraperBaseURLs   map[string][]string
 
-	// Warmup Configuration
-	WarmupModules string // Comma-separated list of modules to warmup (default: "sticker,id,contact,course"). Add "syllabus" to enable syllabus warmup (requires GEMINI_API_KEY)
-
 	// Bot Configuration (embedded)
 	Bot BotConfig
 }
@@ -142,9 +139,6 @@ func Load() (*Config, error) {
 				"https://sea.cc.ntpu.edu.tw",
 			},
 		},
-
-		// Warmup Configuration
-		WarmupModules: getEnv("WARMUP_MODULES", "sticker,id,contact,course"),
 
 		// Bot Configuration
 		Bot: BotConfig{

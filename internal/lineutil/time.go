@@ -150,11 +150,13 @@ func NewDataSourceHint(text string) *FlexText {
 }
 
 // NewDataRangeHint creates a standardized hint about ID data availability.
-// Returns a Flex Text showing "📊 資料範圍：94-113 學年度".
+// Returns a Flex Text showing data source and department inference note.
 //
 // This provides transparency about data limitations following UX best practices.
+// The department info is inferred from student ID, which may not be accurate
+// if the student has transferred to a different department.
 func NewDataRangeHint() *FlexText {
-	return NewFlexText("📊 資料來源：數位學苑 2.0（94-113 學年度）").
+	return NewFlexText("📊 94-113 學年度｜系所由學號推測").
 		WithSize("xxs").
 		WithColor(ColorGray400).
 		WithAlign("end").

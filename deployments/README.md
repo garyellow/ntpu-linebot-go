@@ -36,14 +36,11 @@ LLM 進階設定（可選）：
 - `LLM_PRIMARY_PROVIDER` - 主要 LLM 提供者（預設：gemini，可選：groq）
 - `LLM_FALLBACK_PROVIDER` - 備援 LLM 提供者（預設：groq，可選：gemini）
 - `GEMINI_INTENT_MODEL` - Gemini 意圖分析模型（預設：gemini-2.5-flash）
-- `GROQ_INTENT_MODEL` - Groq 意圖分析模型（預設：meta-llama/llama-4-scout-17b-16e-instruct）
+- `GROQ_INTENT_MODEL` - Groq 意圖分析模型（預設：meta-llama/llama-4-maverick-17b-128e-instruct）
 - `LLM_RATE_LIMIT_PER_HOUR` - LLM API 速率限制（每位使用者每小時請求數，預設：50）
 
 其他可選：
 - `IMAGE_TAG` - 映像版本（預設：latest）
-- `WARMUP_MODULES` - 預熱模組（預設：sticker,id,contact,course）
-  - 可加入 `syllabus` 啟用課程大綱抓取與 BM25 智慧搜尋（「找課」功能）
-  - 範例：`WARMUP_MODULES=sticker,id,contact,course,syllabus`
 - `LOG_LEVEL` - 日誌層級（預設：info）
 - `WEBHOOK_TIMEOUT` - Webhook 處理超時時間（預設：60s，配合 LINE Loading Animation）
 - `USER_RATE_LIMIT_BURST` - 每位使用者的突發容量（預設：6）
@@ -51,11 +48,13 @@ LLM 進階設定（可選）：
 - `GLOBAL_RATE_LIMIT_RPS` - 全域速率限制（預設：100 requests/sec）
 - `GRAFANA_PASSWORD` - Grafana 密碼（預設：admin123）
 
+**每日刷新模組（硬編碼）**：
+- contact, course：每日凌晨 3:00 AM 刷新
+- syllabus：設定 LLM API Key 後自動啟用（智慧搜尋功能）
+- sticker：僅啟動時載入
+- id：不自動刷新（學生資料為靜態資料）
+
 ## 資料持久化
-
-應用使用 Docker named volume 持久化 SQLite 資料庫：
-
-- **Volume**: `data` → `/data` (容器內路徑)
 - **內容**: SQLite 資料庫檔案 (`cache.db`, `cache.db-wal`, `cache.db-shm`)
 - **權限**: 明確設定 `rw` (讀寫) 模式，因為容器啟用了 `read_only: true` 安全特性
 - **TTL**: 快取資料會在 7 天後自動過期 (Hard TTL)
