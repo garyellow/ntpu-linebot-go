@@ -18,9 +18,6 @@ func TestStats(t *testing.T) {
 	if stats.Courses.Load() != 0 {
 		t.Errorf("Courses should be 0 initially, got %d", stats.Courses.Load())
 	}
-	if stats.Stickers.Load() != 0 {
-		t.Errorf("Stickers should be 0 initially, got %d", stats.Stickers.Load())
-	}
 	if stats.Syllabi.Load() != 0 {
 		t.Errorf("Syllabi should be 0 initially, got %d", stats.Syllabi.Load())
 	}
@@ -29,7 +26,6 @@ func TestStats(t *testing.T) {
 	stats.Students.Add(100)
 	stats.Contacts.Add(50)
 	stats.Courses.Add(200)
-	stats.Stickers.Store(10)
 	stats.Syllabi.Add(30)
 
 	if stats.Students.Load() != 100 {
@@ -40,9 +36,6 @@ func TestStats(t *testing.T) {
 	}
 	if stats.Courses.Load() != 200 {
 		t.Errorf("Courses should be 200, got %d", stats.Courses.Load())
-	}
-	if stats.Stickers.Load() != 10 {
-		t.Errorf("Stickers should be 10, got %d", stats.Stickers.Load())
 	}
 	if stats.Syllabi.Load() != 30 {
 		t.Errorf("Syllabi should be 30, got %d", stats.Syllabi.Load())

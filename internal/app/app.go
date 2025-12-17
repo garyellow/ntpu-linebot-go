@@ -588,7 +588,7 @@ func (a *Application) performProactiveWarmup(ctx context.Context, warmID bool) {
 		BM25Index: a.bm25Index,
 	}
 
-	stats, err := warmup.Run(warmupCtx, a.db, a.scraperClient, a.stickerManager, a.logger, opts)
+	stats, err := warmup.Run(warmupCtx, a.db, a.scraperClient, a.logger, opts)
 	if err != nil {
 		a.logger.WithError(err).Error("Proactive warmup failed")
 		return

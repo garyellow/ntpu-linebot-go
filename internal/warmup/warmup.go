@@ -21,7 +21,6 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/rag"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper/ntpu"
-	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 	"github.com/garyellow/ntpu-linebot-go/internal/syllabus"
 	"golang.org/x/sync/errgroup"
@@ -33,7 +32,6 @@ type Stats struct {
 	Students atomic.Int64
 	Contacts atomic.Int64
 	Courses  atomic.Int64
-	Stickers atomic.Int64
 	Syllabi  atomic.Int64
 }
 
@@ -47,7 +45,7 @@ type Options struct {
 }
 
 // Run executes daily cache refresh: contact, course (always), syllabus (if HasLLMKey).
-func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, opts Options) (*Stats, error) {
+func Run(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, opts Options) (*Stats, error) {
 	stats := &Stats{}
 	startTime := time.Now()
 
@@ -129,7 +127,7 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, stickerMgr
 // RunInBackground executes cache warming asynchronously (non-blocking).
 //
 //nolint:contextcheck // Intentionally using context.Background() for independent background operation
-func RunInBackground(_ context.Context, db *storage.DB, client *scraper.Client, stickerMgr *sticker.Manager, log *logger.Logger, opts Options) {
+func RunInBackground(_ context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, opts Options) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -140,14 +138,13 @@ func RunInBackground(_ context.Context, db *storage.DB, client *scraper.Client, 
 		log.WithField("has_llm_key", opts.HasLLMKey).
 			Info("Starting background cache warming")
 
-		stats, err := Run(context.Background(), db, client, stickerMgr, log, opts)
+		stats, err := Run(context.Background(), db, client, log, opts)
 		if err != nil {
 			log.WithError(err).Warn("Background cache warming finished with errors")
 		} else {
 			log.WithField("students", stats.Students.Load()).
 				WithField("contacts", stats.Contacts.Load()).
 				WithField("courses", stats.Courses.Load()).
-				WithField("stickers", stats.Stickers.Load()).
 				WithField("syllabi", stats.Syllabi.Load()).
 				Info("Background cache warming completed successfully")
 		}
@@ -156,7 +153,7 @@ func RunInBackground(_ context.Context, db *storage.DB, client *scraper.Client, 
 
 // resetCache deletes all cached data
 func resetCache(ctx context.Context, db *storage.DB) error {
-	tables := []string{"students", "contacts", "courses", "stickers"}
+	tables := []string{"students", "contacts", "courses"}
 	for _, table := range tables {
 		query := fmt.Sprintf("DELETE FROM %s", table)
 		if _, err := db.ExecContext(ctx, query); err != nil {
