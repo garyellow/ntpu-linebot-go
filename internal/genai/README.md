@@ -127,7 +127,7 @@ if err != nil {
 
 - 所有智慧搜尋查詢都會自動觸發 Query Expansion（若 `queryExpander` 已配置）
 - 提供 graceful degradation：擴展失敗時使用原始查詢，不影響搜尋功能
-- 受 LLM Rate Limiter 限制（每個 chat 每日配額：50 次擴展）
+- 受 LLM Rate Limiter 限制（預設：每位使用者每小時 50 次擴展）
 
 ### 使用方式
 

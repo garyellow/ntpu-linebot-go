@@ -273,6 +273,7 @@ func (p *Processor) buildWelcomeFlexMessage(nluEnabled bool, sender *messaging_a
 		lineutil.NewFlexSeparator().WithMargin("lg").FlexSeparator,
 		lineutil.NewFlexText("📊 資料來源").WithWeight("bold").WithColor(lineutil.ColorText).WithSize("sm").WithMargin("lg").FlexText,
 		lineutil.NewFlexText("課程查詢系統、數位學苑 2.0、校園聯絡簿").WithSize("xs").WithColor(lineutil.ColorSubtext).WithMargin("sm").WithWrap(true).FlexText,
+		lineutil.NewFlexText("⚠️ 學號查詢的系所資訊由學號推測，轉系等情況可能與實際不同").WithSize("xs").WithColor(lineutil.ColorNote).WithMargin("md").WithWrap(true).FlexText,
 	)
 
 	body := lineutil.NewFlexBox("vertical", bodyContents...).WithSpacing("sm")
@@ -871,7 +872,7 @@ func (p *Processor) buildTipsFlexMessage(nluEnabled bool, sender *messaging_api.
 					WithSize("sm").
 					WithColor(lineutil.ColorSubtext).
 					WithFlex(0).FlexText,
-				lineutil.NewFlexText("資料每天自動更新").
+				lineutil.NewFlexText("課程/聯絡資料每天更新（快取保留 7 天）").
 					WithSize("sm").
 					WithColor(lineutil.ColorText).
 					WithMargin("sm").
@@ -918,7 +919,7 @@ func (p *Processor) buildTipsFlexMessage(nluEnabled bool, sender *messaging_api.
 					WithSize("sm").
 					WithColor(lineutil.ColorSubtext).
 					WithFlex(0).FlexText,
-				lineutil.NewFlexText("資料每天自動更新").
+				lineutil.NewFlexText("課程/聯絡資料每天更新（快取保留 7 天）").
 					WithSize("sm").
 					WithColor(lineutil.ColorText).
 					WithMargin("sm").

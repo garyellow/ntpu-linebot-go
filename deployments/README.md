@@ -52,7 +52,7 @@ LLM 進階設定（可選）：
 - contact, course：每日凌晨 3:00 AM 刷新
 - syllabus：設定 LLM API Key 後自動啟用（智慧搜尋功能）
 - sticker：僅啟動時載入
-- id：不自動刷新（學生資料為靜態資料）
+- id：不在每日刷新（學生資料為靜態資料，通常僅啟動時建立/更新快取）
 
 ## 資料持久化
 - **內容**: SQLite 資料庫檔案 (`cache.db`, `cache.db-wal`, `cache.db-shm`)

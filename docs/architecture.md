@@ -273,9 +273,9 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 
 ### 4. 並發模型選擇
 
-**Goroutine + WaitGroup**:
+**Goroutine + errgroup**:
 - 每日刷新：contact 與 course 並行，syllabus 等待 course 完成
-- 使用 `sync.WaitGroup` 等待所有模組完成
+- 使用 `errgroup.WithContext` 管理並發、錯誤與取消
 - 使用 `context.Context` 優雅取消
 - Scraper Rate Limiting: 2s 間隔
 
@@ -290,7 +290,7 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 | **Hard TTL** | 7 天 | 絕對過期，資料必須刪除 |
 
 **資料類型考量**:
-- 學生資料：學期內穩定（不自動刷新）
+- 學生資料：學期內穩定（不每日刷新；通常僅啟動時建立/更新快取）
 - 通訊錄：變動頻率低
 - 課程資料：學期內穩定
 - 課程大綱：學期內穩定（智慧搜尋用）

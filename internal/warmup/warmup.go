@@ -4,7 +4,7 @@
 //   - contact, course: Always refreshed (7-day TTL)
 //   - syllabus: Auto-enabled when LLM API key is configured
 //
-// Not refreshed: id (static), sticker (startup only)
+// Not in daily refresh: id (static; typically startup only), sticker (startup only)
 package warmup
 
 import (

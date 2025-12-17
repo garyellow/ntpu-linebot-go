@@ -328,12 +328,12 @@ func (m *Manager) fetchIchigoStickers(ctx context.Context, client *scraper.Clien
 
 // RefreshStickers refreshes stickers from web sources (called once on startup)
 func (m *Manager) RefreshStickers(ctx context.Context) error {
-	m.logger.Info("Starting sticker refresh")
+	m.logger.Debug("Starting sticker refresh")
 	if err := m.FetchAndSaveStickers(ctx); err != nil {
 		m.logger.WithError(err).Error("Failed to refresh stickers")
 		return err
 	}
-	m.logger.Info("Sticker refresh completed successfully")
+	m.logger.Debug("Sticker refresh completed successfully")
 	return nil
 }
 

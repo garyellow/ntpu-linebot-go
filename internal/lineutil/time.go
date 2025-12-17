@@ -150,7 +150,7 @@ func NewDataSourceHint(text string) *FlexText {
 }
 
 // NewDataRangeHint creates a standardized hint about ID data availability.
-// Returns a Flex Text showing data source and department inference note.
+// Returns a Flex Text showing data range and department inference note.
 //
 // This provides transparency about data limitations following UX best practices.
 // The department info is inferred from student ID, which may not be accurate
