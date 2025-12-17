@@ -470,6 +470,7 @@ func (p *Processor) getHelpMessage() []messaging_api.MessageInterface {
 }
 
 // getDetailedInstructionMessages returns detailed instruction messages
+// Total messages: 4 (AI mode) or 3 (keyword mode) - within LINE's 5-message limit
 func (p *Processor) getDetailedInstructionMessages() []messaging_api.MessageInterface {
 	senderName := "小幫手"
 	nluEnabled := p.intentParser != nil && p.intentParser.IsEnabled()
@@ -489,60 +490,146 @@ func (p *Processor) getDetailedInstructionMessages() []messaging_api.MessageInte
 		messages = append(messages, lineutil.NewTextMessageWithConsistentSender(aiMsg, sender))
 	}
 
-	// Keyword mode instructions (always show)
+	// Keyword mode instructions (always show) - MERGED into ONE message
 	keywordTitle := "📖 使用說明 - 關鍵字模式"
 	if nluEnabled {
 		keywordTitle = "📖 關鍵字模式"
 	}
 
-	courseMsg := keywordTitle + "\n\n" +
+	// Merge all keyword instructions into ONE message to stay within 5-message limit
+	allFeaturesMsg := keywordTitle + "\n\n" +
 		"📚 課程查詢\n" +
-		"• 精確搜尋：課程 或 老師\n" +
-		"  例：課程 微積分\n" +
-		"  例：老師 王教授\n" +
-		"• 智慧搜尋：找課 [描述]\n" +
-		"  例：找課 線上實體混合\n" +
-		"• 課號查詢：直接輸入\n" +
-		"  例：U0001 或 1131U0001"
-	messages = append(messages, lineutil.NewTextMessageWithConsistentSender(courseMsg, sender))
+		"• 精確：課程 微積分 / 老師 王教授\n" +
+		"• 智慧：找課 線上實體混合\n" +
+		"• 課號：U0001 或 1131U0001\n\n" +
+		"🎓 學號查詢\n" +
+		"• 姓名：學號 王小明\n" +
+		"• 科系：系 資工 / 系代碼 87\n" +
+		"• 學年：學年 112\n" +
+		"• 直接輸入：412345678\n\n" +
+		"📞 聯絡資訊\n" +
+		"• 單位：聯絡 資工系\n" +
+		"• 電話：電話 圖書館\n" +
+		"• 信箱：信箱 教務處\n" +
+		"• 緊急：緊急"
+	messages = append(messages, lineutil.NewTextMessageWithConsistentSender(allFeaturesMsg, sender))
 
-	studentMsg := "🎓 學號查詢\n" +
-		"• 姓名查詢：學號 [姓名]\n" +
-		"  例：學號 王小明\n" +
-		"• 科系查詢：系 [名稱]\n" +
-		"  例：系 資工\n" +
-		"• 學年查詢：學年 [年份]\n" +
-		"  例：學年 112\n" +
-		"• 系代碼：系代碼 [代碼]\n" +
-		"  例：系代碼 87\n" +
-		"• 直接輸入學號\n" +
-		"  例：412345678"
-	messages = append(messages, lineutil.NewTextMessageWithConsistentSender(studentMsg, sender))
-
-	contactMsg := "📞 聯絡資訊\n" +
-		"• 單位查詢：聯絡 [單位名]\n" +
-		"  例：聯絡 資工系\n" +
-		"• 電話查詢：電話 [名稱]\n" +
-		"  例：電話 圖書館\n" +
-		"• 信箱查詢：信箱 [名稱]\n" +
-		"  例：信箱 教務處\n" +
-		"• 緊急電話：緊急"
-	messages = append(messages, lineutil.NewTextMessageWithConsistentSender(contactMsg, sender))
-
-	// Tips message
+	// Tips message (combined with usage hints)
 	tipsMsg := "💡 使用提示\n" +
 		"• 關鍵字必須在句首，之後加空格\n" +
 		"• 支援中英文關鍵字\n" +
-		"• 大部分查詢支援模糊搜尋"
+		"• 大部分查詢支援模糊搜尋\n" +
+		"• 資料每 7 天自動更新"
 	if nluEnabled {
 		tipsMsg = "💡 使用提示\n" +
-			"• AI 模式：直接對話即可，不需關鍵字\n" +
+			"• AI 模式：直接對話，不需關鍵字\n" +
 			"• 關鍵字模式：關鍵字在句首 + 空格\n" +
-			"• AI 配額用盡時自動使用關鍵字查詢"
+			"• AI 配額用盡時自動使用關鍵字\n" +
+			"• 資料每 7 天自動更新"
 	}
 	messages = append(messages, lineutil.NewTextMessageWithConsistentSender(tipsMsg, sender))
 
+	// Add data source information with Flex Message
+	dataSourceFlex := p.buildDataSourceFlexMessage(sender)
+	messages = append(messages, dataSourceFlex)
+
 	return messages
+}
+
+// buildDataSourceFlexMessage creates a Flex Message displaying data sources
+func (p *Processor) buildDataSourceFlexMessage(sender *messaging_api.Sender) messaging_api.MessageInterface {
+	// Hero section
+	hero := lineutil.NewFlexBox("vertical",
+		lineutil.NewFlexText("📊 資料來源").
+			WithSize("lg").
+			WithWeight("bold").
+			WithColor("#FFFFFF"),
+	).
+		WithBackgroundColor(lineutil.ColorButtonPrimary).
+		WithPaddingAll("md").
+		WithPaddingBottom("lg")
+
+	// Body section with data sources (simplified)
+	body := lineutil.NewFlexBox("vertical",
+		lineutil.NewFlexText("所有查詢資料來自北大公開網站").
+			WithSize("sm").
+			WithColor(lineutil.ColorText).
+			WithWeight("bold").
+			WithMargin("none"),
+		lineutil.NewFlexSeparator().WithMargin("md"),
+
+		// Course data source
+		lineutil.NewFlexBox("horizontal",
+			lineutil.NewFlexText("📚").
+				WithSize("sm").
+				WithFlex(0),
+			lineutil.NewFlexText("課程查詢系統 (SEA)").
+				WithSize("sm").
+				WithColor(lineutil.ColorSubtext).
+				WithMargin("sm").
+				WithWrap(true),
+		).WithMargin("md").FlexBox,
+
+		// Student data source
+		lineutil.NewFlexBox("horizontal",
+			lineutil.NewFlexText("🎓").
+				WithSize("sm").
+				WithFlex(0),
+			lineutil.NewFlexText("數位學苑 2.0 (LMS)").
+				WithSize("sm").
+				WithColor(lineutil.ColorSubtext).
+				WithMargin("sm").
+				WithWrap(true),
+		).WithMargin("sm").FlexBox,
+
+		// Contact data source
+		lineutil.NewFlexBox("horizontal",
+			lineutil.NewFlexText("📞").
+				WithSize("sm").
+				WithFlex(0),
+			lineutil.NewFlexText("校園聯絡簿 (SEA)").
+				WithSize("sm").
+				WithColor(lineutil.ColorSubtext).
+				WithMargin("sm").
+				WithWrap(true),
+		).WithMargin("sm").FlexBox,
+
+		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
+
+		lineutil.NewFlexText("點擊下方按鈕查看原始網站").
+			WithSize("xs").
+			WithColor(lineutil.ColorNote).
+			WithMargin("md").
+			WithAlign("center").
+			WithWrap(true).FlexText,
+	).
+		WithSpacing("none")
+
+	// Footer with URL buttons
+	footer := lineutil.NewFlexBox("vertical",
+		lineutil.NewFlexButton(lineutil.NewURIAction("課程查詢系統", "https://sea.cc.ntpu.edu.tw/pls/dev_stud/course_query_all.html")).
+			WithStyle("primary").
+			WithColor(lineutil.ColorButtonExternal).
+			WithHeight("sm").FlexButton,
+		lineutil.NewFlexButton(lineutil.NewURIAction("數位學苑", "https://lms.ntpu.edu.tw")).
+			WithStyle("primary").
+			WithColor(lineutil.ColorButtonExternal).
+			WithHeight("sm").
+			WithMargin("sm").FlexButton,
+		lineutil.NewFlexButton(lineutil.NewURIAction("校園聯絡簿", "https://sea.cc.ntpu.edu.tw/pls/web_pro/stdcontactadm_showlist.show_list")).
+			WithStyle("primary").
+			WithColor(lineutil.ColorButtonExternal).
+			WithHeight("sm").
+			WithMargin("sm").FlexButton,
+	).
+		WithSpacing("sm")
+
+	bubble := lineutil.NewFlexBubble(hero, nil, body, footer)
+	msg := lineutil.NewFlexMessage("資料來源", bubble.FlexBubble)
+	if sender != nil {
+		msg.Sender = sender
+	}
+	return msg
 }
 
 // Helper functions
