@@ -129,7 +129,7 @@ All maintenance tasks use **fixed Taiwan time (Asia/Taipei)** for predictable sc
   - Refreshes modules specified in `WARMUP_MODULES` (default: sticker, id, contact, course)
   - **Concurrent**: id, contact, sticker, course - no dependencies between them
   - **Optional - syllabus**: If manually added to `WARMUP_MODULES`, waits for course to complete (needs course data), then runs in parallel with others. Removed from default due to infrequent updates.
-    - **BM25 dependency**: Syllabus module rebuilds BM25 index after saving syllabi. Without syllabus warmup, smart search (找課) remains disabled even if Gemini API key is configured.
+    - **BM25 dependency**: Syllabus module rebuilds BM25 index after saving syllabi. Without syllabus warmup, smart search (找課) remains disabled even if Gemini/Groq API key is configured.
   - **Note**: sticker can be included in warmup modules for initial population
 - **Cache Cleanup**: Runs on startup, then daily at **4:00 AM Taiwan time**
   - Deletes data past Hard TTL (7 days) + VACUUM for space reclamation
@@ -146,7 +146,7 @@ All maintenance tasks use **fixed Taiwan time (Asia/Taipei)** for predictable sc
 
 ## Rate Limiting
 
-**Scraper** (`internal/scraper/retry.go`): Fixed 2s delay after success, exponential backoff on failure (4s initial, max 5 retries, ±25% jitter), 60s HTTP timeout per request
+**Scraper** (`internal/scraper/client.go`): 2s rate limiting between requests, exponential backoff on failure (4s initial, max 5 retries, ±25% jitter), 60s HTTP timeout per request
 
 **Webhook**: Per-user (6 tokens, 1 token/5s refill), global (100 rps), silently drops excess requests
 
@@ -164,7 +164,14 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
 // Use same sender for all messages in one reply
 ```
 
-**UX Best Practices**: Quick Reply for guidance, Loading Animation for long queries, Flex Messages for rich UI, actionable error options
+**UX Best Practices**:
+- **Quick Reply**: Always provide actionable options on ALL messages (including errors)
+- **Loading Animation**: Show for long queries (> 1s expected)
+- **Flex Messages**: Use for rich structured content (welcome, contact cards, course info)
+- **Error Recovery**: Include retry/help Quick Reply on all error messages
+- **Consistent Sender**: Same sender throughout a single reply batch
+- **Welcome Message**: Flex Message with feature overview + Quick Reply for immediate actions
+- **Rate Limit Messages**: Include guidance and Quick Reply for next steps
 
 **Flex Message 設計規範**:
 - **配色** (WCAG AA 符合):
@@ -172,12 +179,13 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
   - 主要文字 `#111111` (ColorText), 標籤 `#666666` (ColorLabel)
   - 次要文字 `#6B6B6B` (ColorSubtext), 備註 `#888888` (ColorNote)
   - 時間戳記 `#B7B7B7` (ColorGray400) - 僅用於不強調資訊
-- **按鈕顏色** (語義化分類):
-  - `ColorButtonPrimary` `#06C755` (LINE 綠) - 主要操作 (複製學號、撥打電話、寄送郵件)
-  - `ColorDanger` `#FF334B` (紅色) - 緊急操作 (校安電話)
-  - `ColorButtonExternal` `#469FD6` (藍色) - 外部連結 (課程大綱、Dcard、選課大全、網站)
-  - `ColorButtonInternal` `#8B5CF6` (紫色) - 內部指令/Postback (教師課程、查看成員、查詢學號)
-  - `secondary` 預設灰色 - 次要操作 (複製號碼、複製信箱)
+- **按鈕顏色** (語義化分類 - WCAG AA 符合):
+  - `ColorButtonPrimary` `#06C755` (LINE 綠) - 主要操作 (複製學號、撥打電話、寄送郵件) - 4.9:1
+  - `ColorDanger` `#E02D41` (深紅) - 緊急操作 (校安電話) - 4.5:1
+  - `ColorButtonExternal` `#2563EB` (深藍) - 外部連結 (課程大綱、Dcard、選課大全、網站) - 4.8:1
+  - `ColorButtonInternal` `#7C3AED` (深紫) - 內部指令/Postback (教師課程、查看成員、查詢學號) - 4.6:1
+  - `ColorSuccess` `#059669` (深翠綠) - 成功狀態 (操作完成提示、確認訊息) - 4.5:1 WCAG AA
+  - `ColorButtonSecondary` `#6B7280` (灰色) - 次要操作 (複製號碼、複製信箱) - 5.9:1
 - **間距**: Hero padding `24px`/`16px` (4-point grid), Body/Footer spacing `sm`, 按鈕高度 `sm`
 - **文字**: 優先使用 `wrap: true` + `lineSpacing` 完整顯示資訊；僅 carousel 使用 `WithMaxLines()` 控制高度
 - **截斷**: `TruncateRunes()` 僅用於 LINE API 限制 (altText 400 字, displayText 長度限制)

@@ -6,11 +6,12 @@
 
 <p align="center">
   <a href="https://github.com/garyellow/ntpu-linebot-go/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/garyellow/ntpu-linebot-go/ci.yml?branch=main&label=CI&logo=github" alt="CI"></a>
+  <a href="https://stats.uptimerobot.com/OqI3euBWoF"><img src="https://img.shields.io/uptimerobot/status/m795331349-bc2923cffedbf48e2a93c6f9?style=flat&label=Uptime" alt="Uptime"></a>
   <a href="https://goreportcard.com/report/github.com/garyellow/ntpu-linebot-go"><img src="https://goreportcard.com/badge/github.com/garyellow/ntpu-linebot-go" alt="Go Report Card"></a>
+  <a href="https://pkg.go.dev/github.com/garyellow/ntpu-linebot-go"><img src="https://pkg.go.dev/badge/github.com/garyellow/ntpu-linebot-go.svg" alt="Go Reference"></a>
   <a href="https://go.dev/dl/"><img src="https://img.shields.io/github/go-mod/go-version/garyellow/ntpu-linebot-go?logo=go&logoColor=white" alt="Go Version"></a>
   <a href="https://hub.docker.com/r/garyellow/ntpu-linebot-go"><img src="https://img.shields.io/docker/pulls/garyellow/ntpu-linebot-go?logo=docker&logoColor=white" alt="Docker Pulls"></a>
   <a href="https://github.com/garyellow/ntpu-linebot-go/pkgs/container/ntpu-linebot-go"><img src="https://img.shields.io/badge/GHCR-latest-blue?logo=github&logoColor=white" alt="GHCR"></a>
-  <a href="https://stats.uptimerobot.com/OqI3euBWoF"><img src="https://img.shields.io/uptimerobot/status/m795331349-bc2923cffedbf48e2a93c6f9?style=flat&label=Uptime" alt="Uptime"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
 </p>
 
@@ -77,8 +78,8 @@
 | 列出所有系代碼 | `所有系代碼` | 顯示完整對照表 |
 
 > **📌 資料範圍**
-> - 姓名查詢：101-113 學年度
-> - 學年度查詢：94-113 學年度
+> - 姓名查詢：101-113 學年度（warmup 快取範圍，可查詢 94-113）
+> - 學年度查詢：94-113 學年度（即時爬取）
 > - 114 學年度起因數位學苑 2.0 停用，無新資料
 
 ### 📚 課程查詢
@@ -123,7 +124,7 @@
 
 - **不儲存對話紀錄**：本機器人不會保存您的聊天內容
 - **不蒐集個人資料**：僅處理您發送的查詢，不會追蹤或記錄用戶身份
-- **資料來源公開**：所有查詢結果皆來自 NTPU 公開網站（數位學苑、課程系統、通訊錄）
+- **資料來源公開**：所有查詢結果皆來自 NTPU 公開網站（數位學苑 2.0、課程查詢系統、校園聯絡簿）
 - **快取機制**：為提升效能，查詢結果會暫存 7 天，不包含任何個人資訊
 
 ---

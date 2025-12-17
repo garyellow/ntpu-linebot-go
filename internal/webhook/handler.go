@@ -164,10 +164,14 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 			h.logger.Warnf("Message count %d exceeds limit, truncating to %d", len(messages), h.maxMessagesPerReply)
 			messages = messages[:h.maxMessagesPerReply-1]
 			sender := lineutil.GetSender("系統小幫手", h.stickerManager)
-			messages = append(messages, lineutil.NewTextMessageWithConsistentSender(
-				"ℹ️ 由於訊息數量限制,部分內容未完全顯示。\n請使用更具體的關鍵字縮小搜尋範圍。",
+			msg := lineutil.NewTextMessageWithConsistentSender(
+				"ℹ️ 由於訊息數量限制，部分內容未完全顯示\n\n💡 請使用更具體的關鍵字縮小搜尋範圍",
 				sender,
-			))
+			)
+			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+				lineutil.QuickReplyHelpAction(),
+			})
+			messages = append(messages, msg)
 		}
 
 		replyToken := h.getReplyToken(event)

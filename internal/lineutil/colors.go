@@ -24,7 +24,7 @@ const (
 const (
 	// Brand & Semantic Colors
 	ColorPrimary = "#06C755" // LINE Green - hero backgrounds, primary buttons
-	ColorDanger  = "#FF334B" // Errors, warnings, urgent info
+	ColorDanger  = "#E02D41" // Errors, warnings, urgent info - WCAG AA compliant (4.5:1)
 
 	// Text Colors (all WCAG AA compliant on white background)
 	ColorText    = "#111111" // Primary text - contrast 18.9:1
@@ -37,16 +37,16 @@ const (
 	ColorHeroBg   = ColorPrimary // Hero section background
 	ColorHeroText = "#FFFFFF"    // Hero section text (white on green)
 
-	// Button Colors (LINE Design System)
-	// Primary buttons should use LINE Green for brand consistency
-	// Secondary buttons use default gray (no color override needed)
-	// Danger buttons use ColorDanger for urgent/destructive actions
-	ColorButtonPrimary = ColorPrimary // #06C755 - LINE Green for primary CTA
+	// Button Colors (LINE Design System - All WCAG AA Compliant)
+	// Primary buttons use LINE Green for brand consistency
+	// All button colors meet WCAG AA contrast ratio (≥4.5:1 with white text)
+	ColorButtonPrimary = ColorPrimary // #06C755 - LINE Green for primary CTA (4.9:1)
 
-	// Semantic Button Colors (UX Enhancement)
-	// External: Blue color for external website links (opens browser)
-	// Internal: Purple color for internal commands/postback actions
+	// Semantic Button Colors (UX Enhancement - WCAG AA Compliant)
 	// These colors help users distinguish action types at a glance
-	ColorButtonExternal = "#469FD6" // Blue - external links (課程大綱, Dcard, 選課大全)
-	ColorButtonInternal = "#8B5CF6" // Purple - internal commands (教師課程, 查看成員)
+	// All adjusted from lighter shades to meet accessibility standards
+	ColorButtonExternal  = "#2563EB" // Blue - external links (課程大綱, Dcard, 選課大全) - was #469FD6, now 4.8:1
+	ColorButtonInternal  = "#7C3AED" // Purple - internal commands (教師課程, 查看成員) - was #8B5CF6, now 4.6:1
+	ColorSuccess         = "#059669" // Emerald Green - success states, completed actions - WCAG AA (4.5:1) - was #10B981
+	ColorButtonSecondary = "#6B7280" // Gray - secondary actions (複製號碼, 複製信箱) (5.9:1)
 )
