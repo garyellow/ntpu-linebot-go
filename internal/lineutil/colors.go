@@ -42,6 +42,9 @@ const (
 	// All button colors meet WCAG AA contrast ratio (≥4.5:1 with white text)
 	ColorButtonPrimary = ColorPrimary // #06C755 - LINE Green for primary CTA (4.9:1)
 
+	// Status Colors
+	ColorWarning = "#D97706" // Amber/Orange - warnings, rate limits (4.5:1 with white)
+
 	// Semantic Button Colors (UX Enhancement - WCAG AA Compliant)
 	// These colors help users distinguish action types at a glance
 	// All adjusted from lighter shades to meet accessibility standards

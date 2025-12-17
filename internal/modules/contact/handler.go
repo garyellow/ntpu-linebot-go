@@ -178,11 +178,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			// If no search term provided, give helpful message
 			sender := lineutil.GetSender(senderName, h.stickerManager)
 			msg := lineutil.NewTextMessageWithConsistentSender("📞 請輸入查詢內容\n\n例如：\n• 聯絡 資工系\n• 電話 圖書館\n• 分機 學務處\n\n💡 也可直接輸入「緊急」查看緊急聯絡電話", sender)
-			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				lineutil.QuickReplyEmergencyAction(),
-				lineutil.QuickReplyContactAction(),
-				lineutil.QuickReplyHelpAction(),
-			})
+			msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyContactNav())
 			return []messaging_api.MessageInterface{msg}
 		}
 		return h.handleContactSearch(ctx, searchTerm)
@@ -202,11 +198,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		// No search term - provide guidance
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender("📞 請輸入要查詢的單位或人員\n\n例如：\n• 電話 資工系\n• 分機 圖書館", sender)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyEmergencyAction(),
-			lineutil.QuickReplyContactAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyContactNav())
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -436,11 +428,10 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 			h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 			msg := lineutil.ErrorMessageWithDetailAndSender("無法取得聯絡資料，可能是網路問題或資料來源暫時無法使用", sender)
 			if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
-				textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-					lineutil.QuickReplyRetryAction("聯絡 " + searchTerm),
+				textMsg.QuickReply = lineutil.NewQuickReply(append(
+					lineutil.QuickReplyErrorRecovery("聯絡 "+searchTerm),
 					lineutil.QuickReplyEmergencyAction(),
-					lineutil.QuickReplyHelpAction(),
-				})
+				))
 			}
 			return []messaging_api.MessageInterface{msg}
 		}
@@ -459,11 +450,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 			"🔍 查無包含「%s」的聯絡資料\n\n建議：\n• 確認關鍵字拼寫是否正確\n• 嘗試使用單位全名或簡稱\n• 若查詢人名，可嘗試只輸入姓氏",
 			searchTerm,
 		), sender)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyContactAction(),
-			lineutil.QuickReplyEmergencyAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyContactNav())
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -495,6 +482,9 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 		log.WithError(err).Error("Failed to query organization members from cache")
 		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		msg := lineutil.ErrorMessageWithDetailAndSender("查詢成員時發生問題", sender)
+		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+			textMsg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyContactNav())
+		}
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -524,11 +514,10 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 			fmt.Sprintf("⚠️ 無法取得「%s」的成員資料\n\n💡 可能原因：\n• 網路問題\n• 該單位尚無成員資料", orgName),
 			sender,
 		)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyRetryAction("聯絡 " + orgName),
+		msg.QuickReply = lineutil.NewQuickReply(append(
+			lineutil.QuickReplyErrorRecovery("聯絡 "+orgName),
 			lineutil.QuickReplyEmergencyAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
+		))
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -550,11 +539,7 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 			fmt.Sprintf("🔍 查無「%s」的成員資料\n\n💡 該單位可能尚未建立成員資訊", orgName),
 			sender,
 		)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyContactAction(),
-			lineutil.QuickReplyEmergencyAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyContactNav())
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -804,7 +789,7 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 	// Append warning message at the end if results were truncated
 	if truncated {
 		warningMsg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("⚠️ 搜尋結果達到上限 %d 筆\n\n可能有更多結果未顯示,建議使用更精確的關鍵字搜尋。", h.maxContactsLimit),
+			fmt.Sprintf("⚠️ 搜尋結果達到上限 %d 筆\n\n可能有更多結果未顯示，建議使用更精確的關鍵字搜尋。", h.maxContactsLimit),
 			sender,
 		)
 		messages = append(messages, warningMsg)

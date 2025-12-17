@@ -315,21 +315,56 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 	return []messaging_api.MessageInterface{}
 }
 
-// handleAllDepartmentCodes returns all department codes
+// handleAllDepartmentCodes returns all department codes organized by college
 func (h *Handler) handleAllDepartmentCodes() []messaging_api.MessageInterface {
 	var builder strings.Builder
-	builder.WriteString("📋 所有系代碼：\n")
+	builder.WriteString("📋 所有系代碼一覽\n")
 
-	// Group by department
-	for name, code := range ntpu.DepartmentCodes {
-		builder.WriteString(fmt.Sprintf("\n%s系 → %s", name, code))
-	}
+	// 人文學院
+	builder.WriteString("\n📖 人文學院")
+	builder.WriteString("\n  中文系 → 81")
+	builder.WriteString("\n  應外系 → 82")
+	builder.WriteString("\n  歷史系 → 83")
+
+	// 法律學院
+	builder.WriteString("\n\n⚖️ 法律學院")
+	builder.WriteString("\n  法學組 → 712")
+	builder.WriteString("\n  司法組 → 714")
+	builder.WriteString("\n  財法組 → 716")
+
+	// 商學院
+	builder.WriteString("\n\n💼 商學院")
+	builder.WriteString("\n  企管系 → 79")
+	builder.WriteString("\n  金融系 → 80")
+	builder.WriteString("\n  會計系 → 77")
+	builder.WriteString("\n  統計系 → 78")
+	builder.WriteString("\n  休運系 → 84")
+
+	// 公共事務學院
+	builder.WriteString("\n\n🏛️ 公共事務學院")
+	builder.WriteString("\n  公行系 → 72")
+	builder.WriteString("\n  財政系 → 75")
+	builder.WriteString("\n  不動系 → 76")
+
+	// 社會科學學院
+	builder.WriteString("\n\n👥 社會科學學院")
+	builder.WriteString("\n  經濟系 → 73")
+	builder.WriteString("\n  社學系 → 742")
+	builder.WriteString("\n  社工系 → 744")
+
+	// 電機資訊學院
+	builder.WriteString("\n\n💻 電機資訊學院")
+	builder.WriteString("\n  電機系 → 87")
+	builder.WriteString("\n  資工系 → 85")
+	builder.WriteString("\n  通訊系 → 86")
+
+	builder.WriteString("\n\n💡 使用方式：學年 112 後選擇科系")
 
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	msg := lineutil.NewTextMessageWithConsistentSender(builder.String(), sender)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		lineutil.QuickReplyStudentAction(),
 		lineutil.QuickReplyYearAction(),
+		lineutil.QuickReplyStudentAction(),
 		lineutil.QuickReplyHelpAction(),
 	})
 	return []messaging_api.MessageInterface{msg}
@@ -1011,9 +1046,15 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 	students, err := h.db.GetStudentsByDepartment(ctx, queryDeptName, year)
 	if err != nil {
 		log.WithError(err).Error("Failed to search students by year and department")
-		return []messaging_api.MessageInterface{
-			lineutil.ErrorMessageWithDetailAndSender("查詢學生名單時發生問題", sender),
+		msg := lineutil.ErrorMessageWithDetailAndSender("查詢學生名單時發生問題", sender)
+		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+				lineutil.QuickReplyYearAction(),
+				lineutil.QuickReplyDeptCodeAction(),
+				lineutil.QuickReplyHelpAction(),
+			})
 		}
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	// If not found in cache, try scraping
@@ -1026,9 +1067,15 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 		if err != nil {
 			log.WithError(err).Errorf("Failed to scrape students for year %d dept %s", year, deptCode)
 			h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
-			return []messaging_api.MessageInterface{
-				lineutil.ErrorMessageWithDetailAndSender("查詢學生名單時發生問題，可能是學校網站暫時無法存取", sender),
+			msg := lineutil.ErrorMessageWithDetailAndSender("查詢學生名單時發生問題，可能是學校網站暫時無法存取", sender)
+			if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+				textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+					lineutil.QuickReplyRetryAction(fmt.Sprintf("學年 %d", year)),
+					lineutil.QuickReplyYearAction(),
+					lineutil.QuickReplyHelpAction(),
+				})
 			}
+			return []messaging_api.MessageInterface{msg}
 		}
 
 		if len(scrapedStudents) > 0 {

@@ -775,6 +775,13 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 		log.WithError(err).Error("Failed to search historical courses in cache")
 		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		msg := lineutil.ErrorMessageWithDetailAndSender("搜尋歷史課程時發生問題", sender)
+		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+				lineutil.QuickReplyRetryAction(fmt.Sprintf("課程 %d %s", year, keyword)),
+				lineutil.QuickReplyCourseAction(),
+				lineutil.QuickReplyHelpAction(),
+			})
+		}
 		return []messaging_api.MessageInterface{msg}
 	}
 

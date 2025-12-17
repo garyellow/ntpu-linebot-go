@@ -474,6 +474,101 @@ func QuickReplySmartSearchAction() QuickReplyItem {
 }
 
 // ================================================
+// Quick Reply Presets (Standardized combinations for consistent UX)
+// ================================================
+// Quick Reply presets are designed for different scenarios:
+//   - MainNav: Primary navigation to all main features
+//   - ErrorRecovery: For error situations with retry option
+//   - ModuleNav: For module-specific navigation
+
+// QuickReplyMainNav returns the main navigation quick reply items.
+// Use this for welcome messages, help messages, and general navigation.
+// Order: 📚 課程 → 🎓 學號 → 📞 聯絡 → 🚨 緊急 → 📖 說明
+func QuickReplyMainNav() []QuickReplyItem {
+	return []QuickReplyItem{
+		QuickReplyCourseAction(),
+		QuickReplyStudentAction(),
+		QuickReplyContactAction(),
+		QuickReplyEmergencyAction(),
+		QuickReplyHelpAction(),
+	}
+}
+
+// QuickReplyMainNavCompact returns compact main navigation (without emergency).
+// Use this for general error recovery or when space is limited.
+// Order: 📚 課程 → 🎓 學號 → 📞 聯絡 → 📖 說明
+func QuickReplyMainNavCompact() []QuickReplyItem {
+	return []QuickReplyItem{
+		QuickReplyCourseAction(),
+		QuickReplyStudentAction(),
+		QuickReplyContactAction(),
+		QuickReplyHelpAction(),
+	}
+}
+
+// QuickReplyMainFeatures returns main features without help (for use in instruction messages).
+// Use this when the message itself is help/instruction content.
+// Order: 📚 課程 → 🎓 學號 → 📞 聯絡 → 🚨 緊急
+func QuickReplyMainFeatures() []QuickReplyItem {
+	return []QuickReplyItem{
+		QuickReplyCourseAction(),
+		QuickReplyStudentAction(),
+		QuickReplyContactAction(),
+		QuickReplyEmergencyAction(),
+	}
+}
+
+// QuickReplyErrorRecovery returns quick reply items for error recovery.
+// Use this when an error occurs and user needs retry option.
+// Parameters:
+//   - retryText: The text to send when user clicks retry
+//
+// Order: 🔄 重試 → 📖 說明
+func QuickReplyErrorRecovery(retryText string) []QuickReplyItem {
+	return []QuickReplyItem{
+		QuickReplyRetryAction(retryText),
+		QuickReplyHelpAction(),
+	}
+}
+
+// QuickReplyCourseNav returns quick reply items for course module navigation.
+// Use this after course-related responses.
+// Order: 📚 課程 → 🔮 找課 (if smartSearch) → 📖 說明
+func QuickReplyCourseNav(smartSearchEnabled bool) []QuickReplyItem {
+	items := []QuickReplyItem{
+		QuickReplyCourseAction(),
+	}
+	if smartSearchEnabled {
+		items = append(items, QuickReplySmartSearchAction())
+	}
+	items = append(items, QuickReplyHelpAction())
+	return items
+}
+
+// QuickReplyStudentNav returns quick reply items for student/ID module navigation.
+// Use this after student-related responses.
+// Order: 🎓 學號 → 📅 學年 → 📋 系代碼 → 📖 說明
+func QuickReplyStudentNav() []QuickReplyItem {
+	return []QuickReplyItem{
+		QuickReplyStudentAction(),
+		QuickReplyYearAction(),
+		QuickReplyDeptCodeAction(),
+		QuickReplyHelpAction(),
+	}
+}
+
+// QuickReplyContactNav returns quick reply items for contact module navigation.
+// Use this after contact-related responses.
+// Order: 📞 聯絡 → 🚨 緊急 → 📖 說明
+func QuickReplyContactNav() []QuickReplyItem {
+	return []QuickReplyItem{
+		QuickReplyContactAction(),
+		QuickReplyEmergencyAction(),
+		QuickReplyHelpAction(),
+	}
+}
+
+// ================================================
 // Message Helper Functions
 // ================================================
 
