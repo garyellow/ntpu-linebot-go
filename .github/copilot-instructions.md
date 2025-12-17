@@ -129,7 +129,7 @@ All maintenance tasks use **fixed Taiwan time (Asia/Taipei)** for predictable sc
   - Refreshes modules specified in `WARMUP_MODULES` (default: sticker, id, contact, course)
   - **Concurrent**: id, contact, sticker, course - no dependencies between them
   - **Optional - syllabus**: If manually added to `WARMUP_MODULES`, waits for course to complete (needs course data), then runs in parallel with others. Removed from default due to infrequent updates.
-    - **BM25 dependency**: Syllabus module rebuilds BM25 index after saving syllabi. Without syllabus warmup, smart search (找課) remains disabled even if Gemini API key is configured.
+    - **BM25 dependency**: Syllabus module rebuilds BM25 index after saving syllabi. Without syllabus warmup, smart search (找課) remains disabled even if Gemini/Groq API key is configured.
   - **Note**: sticker can be included in warmup modules for initial population
 - **Cache Cleanup**: Runs on startup, then daily at **4:00 AM Taiwan time**
   - Deletes data past Hard TTL (7 days) + VACUUM for space reclamation
@@ -146,7 +146,7 @@ All maintenance tasks use **fixed Taiwan time (Asia/Taipei)** for predictable sc
 
 ## Rate Limiting
 
-**Scraper** (`internal/scraper/retry.go`): Fixed 2s delay after success, exponential backoff on failure (4s initial, max 5 retries, ±25% jitter), 60s HTTP timeout per request
+**Scraper** (`internal/scraper/client.go`): 2s rate limiting between requests, exponential backoff on failure (4s initial, max 5 retries, ±25% jitter), 60s HTTP timeout per request
 
 **Webhook**: Per-user (6 tokens, 1 token/5s refill), global (100 rps), silently drops excess requests
 

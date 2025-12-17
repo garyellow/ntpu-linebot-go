@@ -25,7 +25,7 @@ type Handler interface {
 
 ### NLU DispatchIntent（可選功能）
 
-各模組額外實作 `DispatchIntent` 方法支援 NLU 意圖分發（需設定 `GEMINI_API_KEY`）：
+各模組額外實作 `DispatchIntent` 方法支援 NLU 意圖分發（需設定 `GEMINI_API_KEY` 或 `GROQ_API_KEY`）：
 
 ```go
 // DispatchIntent 處理 NLU 解析後的意圖
@@ -36,7 +36,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 
 **為何不在 `Handler` 介面中定義？**
 
-NLU 是**可選功能**（需要 `GEMINI_API_KEY`），不是所有部署環境都啟用。遵循 Go 的介面設計原則：
+NLU 是**可選功能**（需要 `GEMINI_API_KEY` 或 `GROQ_API_KEY`），不是所有部署環境都啟用。遵循 Go 的介面設計原則：
 
 1. **介面最小化**：`Handler` 介面只包含必要方法（`CanHandle`, `HandleMessage`, `HandlePostback`）
 2. **可選性檢測**：Webhook 使用類型斷言 `.(interface{ DispatchIntent(...) })` 動態檢測支援
@@ -88,7 +88,7 @@ return handler.HandleMessage(ctx, rawText)
   - 課程編號查詢（UID 格式）
   - 統一查詢（2-tier 並行搜尋：同時搜尋課程名稱和教師姓名）
   - 歷史課程查詢（`課程 {年度} {關鍵字}`）
-  - 智慧搜尋（BM25 + Query Expansion 智慧匹配，需設定 `GEMINI_API_KEY` 以啟用 Query Expansion）
+  - 智慧搜尋（BM25 + Query Expansion 智慧匹配，需設定 `GEMINI_API_KEY` 或 `GROQ_API_KEY` 以啟用 Query Expansion）
 - **搜尋策略**：
   - 精確搜尋（課程）：SQL LIKE (title, teachers) + 模糊 ContainsAllRunes (title, teachers)
   - 智慧搜尋（找課）：BM25 索引搜尋 + LLM Query Expansion
