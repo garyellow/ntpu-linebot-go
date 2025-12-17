@@ -109,14 +109,12 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 	maxLen := 20000 // LINE API limit
 	if len(text) > maxLen {
 		p.logger.Infof("Text message too long: %d characters (limit: %d)", len(text), maxLen)
-		sender := lineutil.GetSender("系統小幫手", p.stickerManager)
+		sender := lineutil.GetSender("北大小幫手", p.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
 			fmt.Sprintf("❌ 訊息內容過長\n\n訊息長度超過 %d 字元，請縮短後重試。", maxLen),
 			sender,
 		)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyHelpAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNavCompact())
 		return []messaging_api.MessageInterface{msg}, nil
 	}
 
@@ -169,14 +167,9 @@ func (p *Processor) ProcessPostback(ctx context.Context, event webhook.PostbackE
 	}
 	if len(data) > 300 { // LINE postback data limit is 300 bytes
 		p.logger.Infof("Postback data too long: %d bytes (limit: 300)", len(data))
-		sender := lineutil.GetSender("系統小幫手", p.stickerManager)
+		sender := lineutil.GetSender("北大小幫手", p.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender("❌ 操作資料異常\n\n請使用下方按鈕重新操作", sender)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyCourseAction(),
-			lineutil.QuickReplyStudentAction(),
-			lineutil.QuickReplyContactAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNavCompact())
 		return []messaging_api.MessageInterface{msg}, nil
 	}
 
@@ -203,14 +196,9 @@ func (p *Processor) ProcessPostback(ctx context.Context, event webhook.PostbackE
 	}
 
 	// No handler matched - provide helpful guidance
-	sender := lineutil.GetSender("系統小幫手", p.stickerManager)
+	sender := lineutil.GetSender("北大小幫手", p.stickerManager)
 	msg := lineutil.NewTextMessageWithConsistentSender("⚠️ 操作已過期或無效\n\n請使用下方按鈕重新操作", sender)
-	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		lineutil.QuickReplyCourseAction(),
-		lineutil.QuickReplyStudentAction(),
-		lineutil.QuickReplyContactAction(),
-		lineutil.QuickReplyHelpAction(),
-	})
+	msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNavCompact())
 	return []messaging_api.MessageInterface{msg}, nil
 }
 
@@ -220,7 +208,7 @@ func (p *Processor) ProcessFollow(event webhook.FollowEvent) ([]messaging_api.Me
 	p.logger.Info("New user followed the bot")
 
 	nluEnabled := p.intentParser != nil && p.intentParser.IsEnabled()
-	sender := lineutil.GetSender("初階小幫手", p.stickerManager)
+	sender := lineutil.GetSender("北大小幫手", p.stickerManager)
 
 	// Build welcome Flex Message
 	welcomeMsg := p.buildWelcomeFlexMessage(nluEnabled, sender)
@@ -247,7 +235,7 @@ func (p *Processor) buildWelcomeFlexMessage(nluEnabled bool, sender *messaging_a
 			lineutil.NewFlexBox("horizontal",
 				lineutil.NewFlexText("💬").WithSize("sm").WithFlex(0).FlexText,
 				lineutil.NewFlexText("直接用自然語言問我").WithSize("sm").WithColor(lineutil.ColorText).WithMargin("sm").WithWrap(true).FlexText,
-			).FlexBox,
+			).WithMargin("xs").FlexBox,
 		)
 	}
 
@@ -255,15 +243,19 @@ func (p *Processor) buildWelcomeFlexMessage(nluEnabled bool, sender *messaging_a
 		lineutil.NewFlexBox("horizontal",
 			lineutil.NewFlexText("📚").WithSize("sm").WithFlex(0).FlexText,
 			lineutil.NewFlexText("課程查詢：課程 微積分").WithSize("sm").WithColor(lineutil.ColorText).WithMargin("sm").WithWrap(true).FlexText,
-		).FlexBox,
+		).WithMargin("xs").FlexBox,
+		lineutil.NewFlexBox("horizontal",
+			lineutil.NewFlexText("🔮").WithSize("sm").WithFlex(0).FlexText,
+			lineutil.NewFlexText("智慧搜尋：找課 資料分析").WithSize("sm").WithColor(lineutil.ColorText).WithMargin("sm").WithWrap(true).FlexText,
+		).WithMargin("xs").FlexBox,
 		lineutil.NewFlexBox("horizontal",
 			lineutil.NewFlexText("🎓").WithSize("sm").WithFlex(0).FlexText,
 			lineutil.NewFlexText("學號查詢：學號 王小明").WithSize("sm").WithColor(lineutil.ColorText).WithMargin("sm").WithWrap(true).FlexText,
-		).FlexBox,
+		).WithMargin("xs").FlexBox,
 		lineutil.NewFlexBox("horizontal",
 			lineutil.NewFlexText("📞").WithSize("sm").WithFlex(0).FlexText,
 			lineutil.NewFlexText("聯絡查詢：聯絡 資工系").WithSize("sm").WithColor(lineutil.ColorText).WithMargin("sm").WithWrap(true).FlexText,
-		).FlexBox,
+		).WithMargin("xs").FlexBox,
 	)
 
 	// Body section
@@ -289,7 +281,7 @@ func (p *Processor) buildWelcomeFlexMessage(nluEnabled bool, sender *messaging_a
 			WithStyle("primary").
 			WithColor(lineutil.ColorButtonPrimary).
 			WithHeight("sm").FlexButton,
-		lineutil.NewFlexButton(lineutil.NewURIAction("❓ 常見問題 / 回報 Bug", "https://github.com/garyellow/ntpu-linebot-go")).
+		lineutil.NewFlexButton(lineutil.NewURIAction("❓ 回報 Bug", "https://github.com/garyellow/ntpu-linebot-go/issues")).
 			WithStyle("secondary").
 			WithHeight("sm").
 			WithMargin("sm").FlexButton,
@@ -300,13 +292,7 @@ func (p *Processor) buildWelcomeFlexMessage(nluEnabled bool, sender *messaging_a
 	msg.Sender = sender
 
 	// Add Quick Reply for immediate actions
-	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		lineutil.QuickReplyCourseAction(),
-		lineutil.QuickReplyStudentAction(),
-		lineutil.QuickReplyContactAction(),
-		lineutil.QuickReplyEmergencyAction(),
-		lineutil.QuickReplyHelpAction(),
-	})
+	msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNav())
 
 	return msg
 }
@@ -372,15 +358,10 @@ func (p *Processor) handleWithNLU(ctx context.Context, text string, source webho
 	if result.ClarificationText != "" {
 		p.logger.WithField("clarification", result.ClarificationText).Debug("NLU returned clarification")
 
-		sender := lineutil.GetSender("小幫手", p.stickerManager)
+		sender := lineutil.GetSender("北大小幫手", p.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(result.ClarificationText, sender)
 		// Add Quick Reply to guide user for clarification responses
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyCourseAction(),
-			lineutil.QuickReplyStudentAction(),
-			lineutil.QuickReplyContactAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNavCompact())
 		return []messaging_api.MessageInterface{msg}, nil
 	}
 
@@ -435,18 +416,13 @@ func (p *Processor) checkUserRateLimit(source webhook.SourceInterface, chatID st
 	p.logger.WithField("chat_id", logChatID).Warn("User rate limit exceeded")
 
 	if IsPersonalChat(source) {
-		sender := lineutil.GetSender("系統小幫手", p.stickerManager)
+		sender := lineutil.GetSender("北大小幫手", p.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
 			"⏳ 訊息過於頻繁，請稍後再試\n\n💡 稍等幾秒後即可繼續使用",
 			sender,
 		)
 		// Add Quick Reply to guide user when rate limit expires
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyCourseAction(),
-			lineutil.QuickReplyStudentAction(),
-			lineutil.QuickReplyContactAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNavCompact())
 		return false, []messaging_api.MessageInterface{msg}
 	}
 
@@ -476,24 +452,8 @@ func (p *Processor) checkLLMRateLimit(source webhook.SourceInterface, chatID str
 			resetMinutes = 1
 		}
 
-		sender := lineutil.GetSender("系統小幫手", p.stickerManager)
-		message := fmt.Sprintf(
-			"⏳ AI 功能使用次數已達上限\n\n"+
-				"📊 本小時配額：%.0f 次（已用完）\n"+
-				"⏰ 約 %d 分鐘後重置\n\n"+
-				"💡 您仍可使用關鍵字查詢：\n"+
-				"• 課程：課程 微積分\n"+
-				"• 學號：學生 王小明\n"+
-				"• 聯絡：聯繫 資工系",
-			p.llmRateLimitPerHour,
-			resetMinutes,
-		)
-
-		msg := lineutil.NewTextMessageWithConsistentSender(message, sender)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyHelpAction(),
-			lineutil.QuickReplyCourseAction(),
-		})
+		sender := lineutil.GetSender("北大小幫手", p.stickerManager)
+		msg := p.buildLLMRateLimitFlexMessage(int(p.llmRateLimitPerHour), resetMinutes, sender)
 
 		return false, []messaging_api.MessageInterface{
 			msg,
@@ -542,6 +502,7 @@ func (p *Processor) getHelpMessage() []messaging_api.MessageInterface {
 			"• 「找課 Python」（智慧搜尋）\n\n" +
 			"🎓 學號查詢\n" +
 			"• 「學號 王小明」「系 資工」\n" +
+			"• 「所有系代碼」（查看全部科系）\n" +
 			"• 「412345678」（直接輸入學號）\n\n" +
 			"📞 聯絡資訊\n" +
 			"• 「聯絡 資工系」「電話 學務處」\n" +
@@ -549,83 +510,387 @@ func (p *Processor) getHelpMessage() []messaging_api.MessageInterface {
 			"💡 輸入「使用說明」查看完整說明"
 	}
 
-	sender := lineutil.GetSender("幫助小幫手", p.stickerManager)
+	sender := lineutil.GetSender("北大小幫手", p.stickerManager)
 	msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
-	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		lineutil.QuickReplyCourseAction(),
-		lineutil.QuickReplyStudentAction(),
-		lineutil.QuickReplyContactAction(),
-		lineutil.QuickReplyEmergencyAction(),
-		lineutil.QuickReplyHelpAction(),
-	})
+	msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNav())
 	return []messaging_api.MessageInterface{msg}
 }
 
 // getDetailedInstructionMessages returns detailed instruction messages
-// Total messages: 4 (AI mode) or 3 (keyword mode) - within LINE's 5-message limit
+// Total messages: 3 or 4 Flex Messages - within LINE's 5-message limit
 func (p *Processor) getDetailedInstructionMessages() []messaging_api.MessageInterface {
-	senderName := "小幫手"
 	nluEnabled := p.intentParser != nil && p.intentParser.IsEnabled()
-	sender := lineutil.GetSender(senderName, p.stickerManager)
+	sender := lineutil.GetSender("北大小幫手", p.stickerManager)
 
 	var messages []messaging_api.MessageInterface
 
 	// AI mode introduction (if enabled)
 	if nluEnabled {
-		aiMsg := "🤖 使用說明 - AI 模式\n\n" +
-			"💬 直接用自然語言問我，例如：\n" +
-			"• 「微積分的課有哪些」\n" +
-			"• 「王小明的學號是多少」\n" +
-			"• 「資工系辦公室在哪裡」\n" +
-			"• 「緊急電話幾號」\n\n" +
-			"✨ AI 會自動理解您的問題"
-		messages = append(messages, lineutil.NewTextMessageWithConsistentSender(aiMsg, sender))
+		aiModeFlex := p.buildAIModeFlexMessage(sender)
+		messages = append(messages, aiModeFlex)
 	}
 
-	// Keyword mode instructions (always show) - MERGED into ONE message
-	keywordTitle := "📖 使用說明 - 關鍵字模式"
-	if nluEnabled {
-		keywordTitle = "📖 關鍵字模式"
-	}
+	// Keyword mode instructions (always show)
+	keywordFlex := p.buildKeywordModeFlexMessage(nluEnabled, sender)
+	messages = append(messages, keywordFlex)
 
-	// Merge all keyword instructions into ONE message to stay within 5-message limit
-	allFeaturesMsg := keywordTitle + "\n\n" +
-		"📚 課程查詢\n" +
-		"• 精確：課程 微積分 / 老師 王教授\n" +
-		"• 智慧：找課 線上實體混合\n" +
-		"• 課號：U0001 或 1131U0001\n\n" +
-		"🎓 學號查詢\n" +
-		"• 姓名：學號 王小明\n" +
-		"• 科系：系 資工 / 系代碼 87\n" +
-		"• 學年：學年 112\n" +
-		"• 直接輸入：412345678\n\n" +
-		"📞 聯絡資訊\n" +
-		"• 單位：聯絡 資工系\n" +
-		"• 電話：電話 圖書館\n" +
-		"• 信箱：信箱 教務處\n" +
-		"• 緊急：緊急"
-	messages = append(messages, lineutil.NewTextMessageWithConsistentSender(allFeaturesMsg, sender))
-
-	// Tips message (combined with usage hints)
-	tipsMsg := "💡 使用提示\n" +
-		"• 關鍵字必須在句首，之後加空格\n" +
-		"• 支援中英文關鍵字\n" +
-		"• 大部分查詢支援模糊搜尋\n" +
-		"• 資料每 7 天自動更新"
-	if nluEnabled {
-		tipsMsg = "💡 使用提示\n" +
-			"• AI 模式：直接對話，不需關鍵字\n" +
-			"• 關鍵字模式：關鍵字在句首 + 空格\n" +
-			"• AI 配額用盡時自動使用關鍵字\n" +
-			"• 資料每 7 天自動更新"
-	}
-	messages = append(messages, lineutil.NewTextMessageWithConsistentSender(tipsMsg, sender))
+	// Tips message
+	tipsFlex := p.buildTipsFlexMessage(nluEnabled, sender)
+	messages = append(messages, tipsFlex)
 
 	// Add data source information with Flex Message
 	dataSourceFlex := p.buildDataSourceFlexMessage(sender)
 	messages = append(messages, dataSourceFlex)
 
 	return messages
+}
+
+// buildAIModeFlexMessage creates a Flex Message for AI mode instructions
+func (p *Processor) buildAIModeFlexMessage(sender *messaging_api.Sender) messaging_api.MessageInterface {
+	// Hero section
+	hero := lineutil.NewFlexBox("vertical",
+		lineutil.NewFlexText("🤖 AI 模式").
+			WithSize("lg").
+			WithWeight("bold").
+			WithColor(lineutil.ColorHeroText).FlexText,
+		lineutil.NewFlexText("直接用自然語言問我").
+			WithSize("md").
+			WithColor(lineutil.ColorHeroText).
+			WithMargin("sm").FlexText,
+	).
+		WithBackgroundColor(lineutil.ColorHeroBg).
+		WithPaddingAll("xl").
+		WithPaddingBottom("lg")
+
+	// Body section with examples
+	body := lineutil.NewFlexBox("vertical",
+		lineutil.NewFlexText("💬 使用範例").
+			WithWeight("bold").
+			WithColor(lineutil.ColorText).
+			WithSize("sm").
+			WithMargin("none").FlexText,
+		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
+
+		// Example 1
+		lineutil.NewFlexBox("horizontal",
+			lineutil.NewFlexText("•").
+				WithSize("sm").
+				WithColor(lineutil.ColorSubtext).
+				WithFlex(0).FlexText,
+			lineutil.NewFlexText("「微積分的課有哪些」").
+				WithSize("sm").
+				WithColor(lineutil.ColorText).
+				WithMargin("sm").
+				WithWrap(true).FlexText,
+		).WithMargin("md").FlexBox,
+
+		// Example 2
+		lineutil.NewFlexBox("horizontal",
+			lineutil.NewFlexText("•").
+				WithSize("sm").
+				WithColor(lineutil.ColorSubtext).
+				WithFlex(0).FlexText,
+			lineutil.NewFlexText("「王小明的學號是多少」").
+				WithSize("sm").
+				WithColor(lineutil.ColorText).
+				WithMargin("sm").
+				WithWrap(true).FlexText,
+		).WithMargin("sm").FlexBox,
+
+		// Example 3
+		lineutil.NewFlexBox("horizontal",
+			lineutil.NewFlexText("•").
+				WithSize("sm").
+				WithColor(lineutil.ColorSubtext).
+				WithFlex(0).FlexText,
+			lineutil.NewFlexText("「資工系辦公室在哪裡」").
+				WithSize("sm").
+				WithColor(lineutil.ColorText).
+				WithMargin("sm").
+				WithWrap(true).FlexText,
+		).WithMargin("sm").FlexBox,
+
+		// Example 4
+		lineutil.NewFlexBox("horizontal",
+			lineutil.NewFlexText("•").
+				WithSize("sm").
+				WithColor(lineutil.ColorSubtext).
+				WithFlex(0).FlexText,
+			lineutil.NewFlexText("「緊急電話幾號」").
+				WithSize("sm").
+				WithColor(lineutil.ColorText).
+				WithMargin("sm").
+				WithWrap(true).FlexText,
+		).WithMargin("sm").FlexBox,
+
+		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
+
+		lineutil.NewFlexText("✨ AI 會自動理解您的問題").
+			WithSize("xs").
+			WithColor(lineutil.ColorNote).
+			WithMargin("md").
+			WithAlign("center").
+			WithWrap(true).FlexText,
+	).WithSpacing("none")
+
+	bubble := lineutil.NewFlexBubble(hero, nil, body, nil)
+	msg := lineutil.NewFlexMessage("AI 模式說明", bubble.FlexBubble)
+	if sender != nil {
+		msg.Sender = sender
+	}
+
+	// Add Quick Reply for convenient navigation
+	msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainFeatures())
+
+	return msg
+}
+
+// buildKeywordModeFlexMessage creates a Flex Message for keyword mode instructions
+func (p *Processor) buildKeywordModeFlexMessage(nluEnabled bool, sender *messaging_api.Sender) messaging_api.MessageInterface {
+	titleText := "📖 關鍵字模式"
+	if !nluEnabled {
+		titleText = "📖 使用說明"
+	}
+
+	// Hero section
+	hero := lineutil.NewFlexBox("vertical",
+		lineutil.NewFlexText(titleText).
+			WithSize("lg").
+			WithWeight("bold").
+			WithColor(lineutil.ColorHeroText).FlexText,
+		lineutil.NewFlexText("使用關鍵字進行查詢").
+			WithSize("md").
+			WithColor(lineutil.ColorHeroText).
+			WithMargin("sm").FlexText,
+	).
+		WithBackgroundColor(lineutil.ColorButtonPrimary).
+		WithPaddingAll("xl").
+		WithPaddingBottom("lg")
+
+	// Body section with all features
+	body := lineutil.NewFlexBox("vertical",
+		// Course search
+		lineutil.NewFlexText("📚 課程查詢").
+			WithWeight("bold").
+			WithColor(lineutil.ColorText).
+			WithSize("sm").
+			WithMargin("none").FlexText,
+		lineutil.NewFlexText("• 精確：課程 微積分 / 老師 王教授").
+			WithSize("xs").
+			WithColor(lineutil.ColorSubtext).
+			WithMargin("sm").
+			WithWrap(true).FlexText,
+		lineutil.NewFlexText("• 智慧：找課 線上實體混合").
+			WithSize("xs").
+			WithColor(lineutil.ColorSubtext).
+			WithMargin("xs").
+			WithWrap(true).FlexText,
+		lineutil.NewFlexText("• 課號：U0001 或 1131U0001").
+			WithSize("xs").
+			WithColor(lineutil.ColorSubtext).
+			WithMargin("xs").
+			WithWrap(true).FlexText,
+
+		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
+
+		// Student ID search
+		lineutil.NewFlexText("🎓 學號查詢").
+			WithWeight("bold").
+			WithColor(lineutil.ColorText).
+			WithSize("sm").
+			WithMargin("md").FlexText,
+		lineutil.NewFlexText("• 姓名：學號 王小明").
+			WithSize("xs").
+			WithColor(lineutil.ColorSubtext).
+			WithMargin("sm").
+			WithWrap(true).FlexText,
+		lineutil.NewFlexText("• 科系：系 資工 / 系代碼 87").
+			WithSize("xs").
+			WithColor(lineutil.ColorSubtext).
+			WithMargin("xs").
+			WithWrap(true).FlexText,
+		lineutil.NewFlexText("• 學年：學年 112").
+			WithSize("xs").
+			WithColor(lineutil.ColorSubtext).
+			WithMargin("xs").
+			WithWrap(true).FlexText,
+		lineutil.NewFlexText("• 所有代碼：所有系代碼").
+			WithSize("xs").
+			WithColor(lineutil.ColorSubtext).
+			WithMargin("xs").
+			WithWrap(true).FlexText,
+		lineutil.NewFlexText("• 直接輸入：412345678").
+			WithSize("xs").
+			WithColor(lineutil.ColorSubtext).
+			WithMargin("xs").
+			WithWrap(true).FlexText,
+
+		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
+
+		// Contact search
+		lineutil.NewFlexText("📞 聯絡資訊").
+			WithWeight("bold").
+			WithColor(lineutil.ColorText).
+			WithSize("sm").
+			WithMargin("md").FlexText,
+		lineutil.NewFlexText("• 單位：聯絡 資工系").
+			WithSize("xs").
+			WithColor(lineutil.ColorSubtext).
+			WithMargin("sm").
+			WithWrap(true).FlexText,
+		lineutil.NewFlexText("• 電話：電話 圖書館").
+			WithSize("xs").
+			WithColor(lineutil.ColorSubtext).
+			WithMargin("xs").
+			WithWrap(true).FlexText,
+		lineutil.NewFlexText("• 信箱：信箱 教務處").
+			WithSize("xs").
+			WithColor(lineutil.ColorSubtext).
+			WithMargin("xs").
+			WithWrap(true).FlexText,
+		lineutil.NewFlexText("• 緊急：緊急").
+			WithSize("xs").
+			WithColor(lineutil.ColorSubtext).
+			WithMargin("xs").
+			WithWrap(true).FlexText,
+	).WithSpacing("none")
+
+	bubble := lineutil.NewFlexBubble(hero, nil, body, nil)
+	msg := lineutil.NewFlexMessage("關鍵字模式說明", bubble.FlexBubble)
+	if sender != nil {
+		msg.Sender = sender
+	}
+
+	// Add Quick Reply for convenient navigation
+	msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainFeatures())
+
+	return msg
+}
+
+// buildTipsFlexMessage creates a Flex Message for usage tips
+func (p *Processor) buildTipsFlexMessage(nluEnabled bool, sender *messaging_api.Sender) messaging_api.MessageInterface {
+	// Hero section
+	hero := lineutil.NewFlexBox("vertical",
+		lineutil.NewFlexText("💡 使用提示").
+			WithSize("lg").
+			WithWeight("bold").
+			WithColor(lineutil.ColorHeroText).FlexText,
+	).
+		WithBackgroundColor(lineutil.ColorButtonInternal).
+		WithPaddingAll("xl").
+		WithPaddingBottom("lg")
+
+	// Body section with tips
+	var bodyContents []messaging_api.FlexComponentInterface
+
+	if nluEnabled {
+		bodyContents = []messaging_api.FlexComponentInterface{
+			lineutil.NewFlexBox("horizontal",
+				lineutil.NewFlexText("•").
+					WithSize("sm").
+					WithColor(lineutil.ColorSubtext).
+					WithFlex(0).FlexText,
+				lineutil.NewFlexText("AI 模式：直接對話，不需關鍵字").
+					WithSize("sm").
+					WithColor(lineutil.ColorText).
+					WithMargin("sm").
+					WithWrap(true).FlexText,
+			).WithMargin("none").FlexBox,
+			lineutil.NewFlexBox("horizontal",
+				lineutil.NewFlexText("•").
+					WithSize("sm").
+					WithColor(lineutil.ColorSubtext).
+					WithFlex(0).FlexText,
+				lineutil.NewFlexText("關鍵字模式：關鍵字在句首 + 空格").
+					WithSize("sm").
+					WithColor(lineutil.ColorText).
+					WithMargin("sm").
+					WithWrap(true).FlexText,
+			).WithMargin("sm").FlexBox,
+			lineutil.NewFlexBox("horizontal",
+				lineutil.NewFlexText("•").
+					WithSize("sm").
+					WithColor(lineutil.ColorSubtext).
+					WithFlex(0).FlexText,
+				lineutil.NewFlexText("AI 配額用盡時自動使用關鍵字").
+					WithSize("sm").
+					WithColor(lineutil.ColorText).
+					WithMargin("sm").
+					WithWrap(true).FlexText,
+			).WithMargin("sm").FlexBox,
+			lineutil.NewFlexBox("horizontal",
+				lineutil.NewFlexText("•").
+					WithSize("sm").
+					WithColor(lineutil.ColorSubtext).
+					WithFlex(0).FlexText,
+				lineutil.NewFlexText("資料每 7 天自動更新").
+					WithSize("sm").
+					WithColor(lineutil.ColorText).
+					WithMargin("sm").
+					WithWrap(true).FlexText,
+			).WithMargin("sm").FlexBox,
+		}
+	} else {
+		bodyContents = []messaging_api.FlexComponentInterface{
+			lineutil.NewFlexBox("horizontal",
+				lineutil.NewFlexText("•").
+					WithSize("sm").
+					WithColor(lineutil.ColorSubtext).
+					WithFlex(0).FlexText,
+				lineutil.NewFlexText("關鍵字必須在句首，之後加空格").
+					WithSize("sm").
+					WithColor(lineutil.ColorText).
+					WithMargin("sm").
+					WithWrap(true).FlexText,
+			).WithMargin("none").FlexBox,
+			lineutil.NewFlexBox("horizontal",
+				lineutil.NewFlexText("•").
+					WithSize("sm").
+					WithColor(lineutil.ColorSubtext).
+					WithFlex(0).FlexText,
+				lineutil.NewFlexText("支援中英文關鍵字").
+					WithSize("sm").
+					WithColor(lineutil.ColorText).
+					WithMargin("sm").
+					WithWrap(true).FlexText,
+			).WithMargin("sm").FlexBox,
+			lineutil.NewFlexBox("horizontal",
+				lineutil.NewFlexText("•").
+					WithSize("sm").
+					WithColor(lineutil.ColorSubtext).
+					WithFlex(0).FlexText,
+				lineutil.NewFlexText("大部分查詢支援模糊搜尋").
+					WithSize("sm").
+					WithColor(lineutil.ColorText).
+					WithMargin("sm").
+					WithWrap(true).FlexText,
+			).WithMargin("sm").FlexBox,
+			lineutil.NewFlexBox("horizontal",
+				lineutil.NewFlexText("•").
+					WithSize("sm").
+					WithColor(lineutil.ColorSubtext).
+					WithFlex(0).FlexText,
+				lineutil.NewFlexText("資料每 7 天自動更新").
+					WithSize("sm").
+					WithColor(lineutil.ColorText).
+					WithMargin("sm").
+					WithWrap(true).FlexText,
+			).WithMargin("sm").FlexBox,
+		}
+	}
+
+	body := lineutil.NewFlexBox("vertical", bodyContents...).WithSpacing("none")
+
+	bubble := lineutil.NewFlexBubble(hero, nil, body, nil)
+	msg := lineutil.NewFlexMessage("使用提示", bubble.FlexBubble)
+	if sender != nil {
+		msg.Sender = sender
+	}
+
+	// Add Quick Reply for convenient navigation
+	msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainFeatures())
+
+	return msg
 }
 
 // buildDataSourceFlexMessage creates a Flex Message displaying data sources
@@ -635,10 +900,10 @@ func (p *Processor) buildDataSourceFlexMessage(sender *messaging_api.Sender) mes
 		lineutil.NewFlexText("📊 資料來源").
 			WithSize("lg").
 			WithWeight("bold").
-			WithColor("#FFFFFF"),
+			WithColor(lineutil.ColorHeroText),
 	).
-		WithBackgroundColor(lineutil.ColorButtonPrimary).
-		WithPaddingAll("md").
+		WithBackgroundColor(lineutil.ColorHeroBg).
+		WithPaddingAll("xl").
 		WithPaddingBottom("lg")
 
 	// Body section with data sources (simplified)
@@ -655,7 +920,7 @@ func (p *Processor) buildDataSourceFlexMessage(sender *messaging_api.Sender) mes
 			lineutil.NewFlexText("📚").
 				WithSize("sm").
 				WithFlex(0),
-			lineutil.NewFlexText("課程查詢系統 (SEA)").
+			lineutil.NewFlexText("課程查詢系統").
 				WithSize("sm").
 				WithColor(lineutil.ColorSubtext).
 				WithMargin("sm").
@@ -667,7 +932,7 @@ func (p *Processor) buildDataSourceFlexMessage(sender *messaging_api.Sender) mes
 			lineutil.NewFlexText("🎓").
 				WithSize("sm").
 				WithFlex(0),
-			lineutil.NewFlexText("數位學苑 2.0 (LMS)").
+			lineutil.NewFlexText("數位學苑 2.0").
 				WithSize("sm").
 				WithColor(lineutil.ColorSubtext).
 				WithMargin("sm").
@@ -679,7 +944,7 @@ func (p *Processor) buildDataSourceFlexMessage(sender *messaging_api.Sender) mes
 			lineutil.NewFlexText("📞").
 				WithSize("sm").
 				WithFlex(0),
-			lineutil.NewFlexText("校園聯絡簿 (SEA)").
+			lineutil.NewFlexText("校園聯絡簿").
 				WithSize("sm").
 				WithColor(lineutil.ColorSubtext).
 				WithMargin("sm").
@@ -699,16 +964,16 @@ func (p *Processor) buildDataSourceFlexMessage(sender *messaging_api.Sender) mes
 
 	// Footer with URL buttons
 	footer := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexButton(lineutil.NewURIAction("課程查詢系統", "https://sea.cc.ntpu.edu.tw/pls/dev_stud/course_query_all.html")).
+		lineutil.NewFlexButton(lineutil.NewURIAction("課程查詢系統", "https://sea.cc.ntpu.edu.tw/pls/dev_stud/course_query_all.chi_main")).
 			WithStyle("primary").
 			WithColor(lineutil.ColorButtonExternal).
 			WithHeight("sm").FlexButton,
-		lineutil.NewFlexButton(lineutil.NewURIAction("數位學苑", "https://lms.ntpu.edu.tw")).
+		lineutil.NewFlexButton(lineutil.NewURIAction("數位學苑 2.0", "https://lms.ntpu.edu.tw")).
 			WithStyle("primary").
 			WithColor(lineutil.ColorButtonExternal).
 			WithHeight("sm").
 			WithMargin("sm").FlexButton,
-		lineutil.NewFlexButton(lineutil.NewURIAction("校園聯絡簿", "https://sea.cc.ntpu.edu.tw/pls/web_pro/stdcontactadm_showlist.show_list")).
+		lineutil.NewFlexButton(lineutil.NewURIAction("校園聯絡簿", "https://sea.cc.ntpu.edu.tw/pls/ld/campus_dir_m.main")).
 			WithStyle("primary").
 			WithColor(lineutil.ColorButtonExternal).
 			WithHeight("sm").
@@ -721,6 +986,81 @@ func (p *Processor) buildDataSourceFlexMessage(sender *messaging_api.Sender) mes
 	if sender != nil {
 		msg.Sender = sender
 	}
+
+	// Add Quick Reply for convenient navigation
+	msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainFeatures())
+
+	return msg
+}
+
+// buildLLMRateLimitFlexMessage creates a Flex Message for LLM rate limit notification.
+// It displays quota status, reset time, and alternative keyword options.
+func (p *Processor) buildLLMRateLimitFlexMessage(quotaPerHour int, resetMinutes int, sender *messaging_api.Sender) *messaging_api.FlexMessage {
+	// Hero section - warning style
+	hero := lineutil.NewFlexBox("vertical",
+		lineutil.NewFlexText("⏳ AI 功能配額已用完").
+			WithSize("md").
+			WithWeight("bold").
+			WithColor(lineutil.ColorHeroText).FlexText,
+	).
+		WithBackgroundColor(lineutil.ColorWarning).
+		WithPaddingAll("lg").
+		WithPaddingBottom("md")
+
+	// Body section - quota info and alternatives
+	body := lineutil.NewFlexBox("vertical",
+		// Quota status
+		lineutil.NewFlexBox("horizontal",
+			lineutil.NewFlexText("📊").WithSize("sm").WithFlex(0).FlexText,
+			lineutil.NewFlexText(fmt.Sprintf("本小時配額：%d 次（已用完）", quotaPerHour)).
+				WithSize("sm").
+				WithColor(lineutil.ColorText).
+				WithMargin("sm").
+				WithWrap(true).FlexText,
+		).FlexBox,
+
+		// Reset time
+		lineutil.NewFlexBox("horizontal",
+			lineutil.NewFlexText("⏰").WithSize("sm").WithFlex(0).FlexText,
+			lineutil.NewFlexText(fmt.Sprintf("約 %d 分鐘後重置", resetMinutes)).
+				WithSize("sm").
+				WithColor(lineutil.ColorText).
+				WithMargin("sm").FlexText,
+		).WithMargin("sm").FlexBox,
+
+		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
+
+		// Alternative options header
+		lineutil.NewFlexText("💡 您仍可使用關鍵字查詢").
+			WithSize("sm").
+			WithWeight("bold").
+			WithColor(lineutil.ColorText).
+			WithMargin("md").FlexText,
+
+		// Alternative options list
+		lineutil.NewFlexBox("horizontal",
+			lineutil.NewFlexText("•").WithSize("xs").WithColor(lineutil.ColorSubtext).WithFlex(0).FlexText,
+			lineutil.NewFlexText("課程 微積分").WithSize("xs").WithColor(lineutil.ColorSubtext).WithMargin("sm").FlexText,
+		).WithMargin("sm").FlexBox,
+		lineutil.NewFlexBox("horizontal",
+			lineutil.NewFlexText("•").WithSize("xs").WithColor(lineutil.ColorSubtext).WithFlex(0).FlexText,
+			lineutil.NewFlexText("學號 王小明").WithSize("xs").WithColor(lineutil.ColorSubtext).WithMargin("sm").FlexText,
+		).WithMargin("xs").FlexBox,
+		lineutil.NewFlexBox("horizontal",
+			lineutil.NewFlexText("•").WithSize("xs").WithColor(lineutil.ColorSubtext).WithFlex(0).FlexText,
+			lineutil.NewFlexText("聯絡 資工系").WithSize("xs").WithColor(lineutil.ColorSubtext).WithMargin("sm").FlexText,
+		).WithMargin("xs").FlexBox,
+	).WithSpacing("none")
+
+	bubble := lineutil.NewFlexBubble(hero, nil, body, nil)
+	msg := lineutil.NewFlexMessage("AI 功能配額已用完", bubble.FlexBubble)
+	if sender != nil {
+		msg.Sender = sender
+	}
+
+	// Add Quick Reply for convenient access to keyword features
+	msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNavCompact())
+
 	return msg
 }
 

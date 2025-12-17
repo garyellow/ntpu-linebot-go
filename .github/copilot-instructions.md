@@ -158,14 +158,27 @@ lineutil.NewTextMessage(text)                    // Simple text
 lineutil.NewFlexMessage(altText, contents)       // Flex Message
 lineutil.NewQuickReply(items)                    // Quick Reply (max 13)
 
-// Consistent Sender pattern (REQUIRED)
-sender := lineutil.GetSender("模組名", stickerManager)  // Once at handler start
+// Quick Reply Presets (use these for consistency)
+lineutil.QuickReplyMainNav()        // 課程→學號→聯絡→緊急→說明 (welcome, help)
+lineutil.QuickReplyMainNavCompact() // 課程→學號→聯絡→說明 (errors, rate limit)
+lineutil.QuickReplyMainFeatures()   // 課程→學號→聯絡→緊急 (instruction messages)
+lineutil.QuickReplyContactNav()     // 聯絡→緊急→說明 (contact module)
+lineutil.QuickReplyStudentNav()     // 學號→學年→系代碼→說明 (id module)
+lineutil.QuickReplyCourseNav(bool)  // 課程→找課(if smart)→說明 (course module)
+lineutil.QuickReplyErrorRecovery(retryText) // 重試→說明 (errors with retry)
+
+// Sender pattern (REQUIRED)
+// System/Help: "北大小幫手" (unified for bot-level messages)
+// Modules: "課程小幫手", "學號小幫手", "聯繫小幫手" (module-specific)
+// Special: "貼圖小幫手" (sticker responses only)
+sender := lineutil.GetSender("北大小幫手", stickerManager)  // Once at handler start
 msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
 // Use same sender for all messages in one reply
 ```
 
 **UX Best Practices**:
 - **Quick Reply**: Always provide actionable options on ALL messages (including errors)
+- **Quick Reply Presets**: Use `lineutil.QuickReply*` functions for consistency
 - **Loading Animation**: Show for long queries (> 1s expected)
 - **Flex Messages**: Use for rich structured content (welcome, contact cards, course info)
 - **Error Recovery**: Include retry/help Quick Reply on all error messages
@@ -182,6 +195,7 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
 - **按鈕顏色** (語義化分類 - WCAG AA 符合):
   - `ColorButtonPrimary` `#06C755` (LINE 綠) - 主要操作 (複製學號、撥打電話、寄送郵件) - 4.9:1
   - `ColorDanger` `#E02D41` (深紅) - 緊急操作 (校安電話) - 4.5:1
+  - `ColorWarning` `#D97706` (琥珀色) - 警告訊息 (配額用盡、限流提示) - 4.5:1
   - `ColorButtonExternal` `#2563EB` (深藍) - 外部連結 (課程大綱、Dcard、選課大全、網站) - 4.8:1
   - `ColorButtonInternal` `#7C3AED` (深紫) - 內部指令/Postback (教師課程、查看成員、查詢學號) - 4.6:1
   - `ColorSuccess` `#059669` (深翠綠) - 成功狀態 (操作完成提示、確認訊息) - 4.5:1 WCAG AA
