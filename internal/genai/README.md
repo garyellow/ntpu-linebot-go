@@ -14,8 +14,8 @@
 |--------|------|---------|---------|------|
 | **Gemini** | Intent | `gemini-2.5-flash` | `gemini-2.5-flash-lite` | 高品質、多模態 |
 | **Gemini** | Expander | `gemini-2.5-flash` | `gemini-2.5-flash-lite` | 高品質、多模態 |
-| **Groq** | Intent | `llama-4-scout-17b-16e-instruct` | `llama-3.1-8b-instant` | 極速推論 (~750 TPS) |
-| **Groq** | Expander | `llama-4-maverick-17b-128e-instruct` | `llama-3.3-70b-versatile` | 強大文字生成 (~600 TPS) |
+| **Groq** | Intent | `llama-4-maverick-17b-128e-instruct` | `llama-3.3-70b-versatile` | 極速推論 (~900 TPS) |
+| **Groq** | Expander | `llama-4-scout-17b-16e-instruct` | `llama-3.1-8b-instant` | 極速推論 (~750 TPS) |
 
 ## 檔案結構
 
@@ -125,8 +125,9 @@ if err != nil {
 
 ### 觸發條件
 
-- 查詢長度 ≤ 15 字（runes）
-- 或包含技術縮寫（AWS, AI, ML, SQL, API 等）
+- 所有智慧搜尋查詢都會自動觸發 Query Expansion（若 `queryExpander` 已配置）
+- 提供 graceful degradation：擴展失敗時使用原始查詢，不影響搜尋功能
+- 受 LLM Rate Limiter 限制（預設：每位使用者每小時 50 次擴展）
 
 ### 使用方式
 
@@ -202,10 +203,10 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 | `GEMINI_INTENT_FALLBACK_MODEL` | gemini-2.5-flash-lite | Gemini 意圖解析備援模型 |
 | `GEMINI_EXPANDER_MODEL` | gemini-2.5-flash | Gemini 查詢擴展模型 |
 | `GEMINI_EXPANDER_FALLBACK_MODEL` | gemini-2.5-flash-lite | Gemini 查詢擴展備援模型 |
-| `GROQ_INTENT_MODEL` | meta-llama/llama-4-scout-17b-16e-instruct | Groq 意圖解析模型 (Preview) |
-| `GROQ_INTENT_FALLBACK_MODEL` | llama-3.1-8b-instant | Groq 意圖解析備援模型 (Production) |
-| `GROQ_EXPANDER_MODEL` | meta-llama/llama-4-maverick-17b-128e-instruct | Groq 查詢擴展模型 (Preview) |
-| `GROQ_EXPANDER_FALLBACK_MODEL` | llama-3.3-70b-versatile | Groq 查詢擴展備援模型 (Production) |
+| `GROQ_INTENT_MODEL` | meta-llama/llama-4-maverick-17b-128e-instruct | Groq 意圖解析模型 (Preview) |
+| `GROQ_INTENT_FALLBACK_MODEL` | llama-3.3-70b-versatile | Groq 意圖解析備援模型 (Production) |
+| `GROQ_EXPANDER_MODEL` | meta-llama/llama-4-scout-17b-16e-instruct | Groq 查詢擴展模型 (Preview) |
+| `GROQ_EXPANDER_FALLBACK_MODEL` | llama-3.1-8b-instant | Groq 查詢擴展備援模型 (Production) |
 
 #### Rate Limiting
 

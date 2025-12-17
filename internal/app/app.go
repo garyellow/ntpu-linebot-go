@@ -98,16 +98,11 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		} else {
 			log.WithField("doc_count", bm25Index.Count()).Info("BM25 index initialized")
 		}
-	} else {
-		// BM25 index is empty - this is normal on first startup
-		// It will be populated by warmup job (if syllabus module is enabled)
-		log.Debug("BM25 index empty, will be populated by warmup if configured")
 	}
 
 	var intentParser genai.IntentParser
 	var queryExpander genai.QueryExpander
 	if cfg.HasLLMProvider() {
-		// Build LLM configuration from config
 		llmCfg := buildLLMConfig(cfg)
 
 		if intentParser, err = genai.CreateIntentParser(ctx, llmCfg); err != nil {
@@ -126,8 +121,6 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 			}
 			log.WithField("providers", providers).Info("LLM features enabled")
 		}
-	} else {
-		log.Info("No LLM provider configured, NLU and query expansion disabled")
 	}
 
 	llmRateLimiter := ratelimit.NewLLMRateLimiter(cfg.Bot.LLMRateLimitPerHour, config.RateLimiterCleanupInterval, m)
@@ -213,11 +206,9 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 func buildLLMConfig(cfg *config.Config) genai.LLMConfig {
 	llmCfg := genai.DefaultLLMConfig()
 
-	// Set API keys
 	llmCfg.Gemini.APIKey = cfg.GeminiAPIKey
 	llmCfg.Groq.APIKey = cfg.GroqAPIKey
 
-	// Set custom models if provided
 	if cfg.GeminiIntentModel != "" {
 		llmCfg.Gemini.IntentModel = cfg.GeminiIntentModel
 	}
@@ -243,7 +234,6 @@ func buildLLMConfig(cfg *config.Config) genai.LLMConfig {
 		llmCfg.Groq.ExpanderFallbackModel = cfg.GroqExpanderFallbackModel
 	}
 
-	// Set provider order
 	if cfg.LLMPrimaryProvider == "groq" {
 		llmCfg.PrimaryProvider = genai.ProviderGroq
 	} else {
@@ -479,11 +469,8 @@ func (a *Application) runCacheCleanup(ctx context.Context) {
 
 	var totalDeleted int64
 
-	if deleted, err := a.db.DeleteExpiredStudents(ctx, a.cfg.CacheTTL); err != nil {
-		a.logger.WithError(err).Error("Failed to cleanup expired students")
-	} else {
-		totalDeleted += deleted
-	}
+	// Note: Students and stickers don't expire - they are only loaded once on startup,
+	// so no cleanup needed for them
 
 	if deleted, err := a.db.DeleteExpiredContacts(ctx, a.cfg.CacheTTL); err != nil {
 		a.logger.WithError(err).Error("Failed to cleanup expired contacts")
@@ -503,12 +490,6 @@ func (a *Application) runCacheCleanup(ctx context.Context) {
 		totalDeleted += deleted
 	}
 
-	if deleted, err := a.db.CleanupExpiredStickers(ctx); err != nil {
-		a.logger.WithError(err).Error("Failed to cleanup expired stickers")
-	} else {
-		totalDeleted += deleted
-	}
-
 	// VACUUM to reclaim space
 	if _, err := a.db.Writer().Exec("VACUUM"); err != nil {
 		a.logger.WithError(err).Warn("Failed to VACUUM database")
@@ -524,44 +505,22 @@ func (a *Application) runCacheCleanup(ctx context.Context) {
 	}
 }
 
-// refreshStickers runs daily sticker refresh at 2:00 AM Taiwan time (configurable via config.StickerRefreshHour).
-// Exits cleanly when context is canceled during shutdown.
+// refreshStickers loads stickers once on startup (no periodic refresh).
 func (a *Application) refreshStickers(ctx context.Context) {
 	a.logger.Debug("Sticker refresh job started")
 	defer a.logger.Debug("Sticker refresh job stopped")
 
-	// Run initial refresh on startup with independent context
 	initialCtx, initialCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer initialCancel()
 	//nolint:contextcheck // Intentionally using independent context
 	a.performStickerRefresh(initialCtx)
-	initialCancel()
 
-	// Schedule daily refresh at fixed time (4:00 AM Taiwan time)
-	taipeiTZ := lineutil.GetTaipeiLocation()
-	for {
-		now := time.Now().In(taipeiTZ)
-		next := time.Date(now.Year(), now.Month(), now.Day(), config.StickerRefreshHour, 0, 0, 0, taipeiTZ)
-		if now.After(next) {
-			next = next.Add(24 * time.Hour)
-		}
-
-		waitDuration := time.Until(next)
-		a.logger.WithField("next_run", next.Format(time.RFC3339)).
-			Info("Scheduled next sticker refresh (Taiwan time)")
-
-		select {
-		case <-ctx.Done():
-			a.logger.Debug("Sticker refresh received shutdown signal")
-			return
-		case <-time.After(waitDuration):
-			a.performStickerRefresh(ctx)
-		}
-	}
+	<-ctx.Done()
+	a.logger.Debug("Sticker refresh received shutdown signal")
 }
 
-// performStickerRefresh performs the actual sticker refresh operation.
 func (a *Application) performStickerRefresh(ctx context.Context) {
-	a.logger.Info("Starting periodic sticker refresh...")
+	a.logger.Info("Starting sticker refresh...")
 	startTime := time.Now()
 
 	refreshCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
@@ -582,21 +541,16 @@ func (a *Application) performStickerRefresh(ctx context.Context) {
 	}
 }
 
-// proactiveWarmup runs initial warmup on startup, then daily at 3:00 AM.
-// Exits cleanly when context is canceled during shutdown.
+// proactiveWarmup runs initial warmup on startup, then daily at 3:00 AM Taiwan time.
 func (a *Application) proactiveWarmup(ctx context.Context) {
 	a.logger.Debug("Proactive warmup job started")
 	defer a.logger.Debug("Proactive warmup job stopped")
 
-	// Initial warmup on startup with independent context
-	// Uses Background() to prevent cancellation from shutdown signals during startup
-	// This ensures the application has cached data before serving requests
 	initialCtx, initialCancel := context.WithTimeout(context.Background(), config.WarmupProactive)
-	//nolint:contextcheck // Intentionally using independent context to prevent shutdown signal interruption
-	a.performProactiveWarmup(initialCtx)
+	//nolint:contextcheck // Intentionally using independent context
+	a.performProactiveWarmup(initialCtx, true)
 	initialCancel()
 
-	// Schedule daily warmup at fixed time (3:00 AM Taiwan time)
 	taipeiTZ := lineutil.GetTaipeiLocation()
 	for {
 		now := time.Now().In(taipeiTZ)
@@ -614,54 +568,49 @@ func (a *Application) proactiveWarmup(ctx context.Context) {
 			a.logger.Debug("Proactive warmup received shutdown signal")
 			return
 		case <-time.After(waitDuration):
-			a.performProactiveWarmup(ctx)
+			a.performProactiveWarmup(ctx, false)
 		}
 	}
 }
 
-// performProactiveWarmup performs the actual warmup operation.
-func (a *Application) performProactiveWarmup(ctx context.Context) {
+func (a *Application) performProactiveWarmup(ctx context.Context, warmID bool) {
 	a.logger.Info("Starting proactive warmup...")
 	startTime := time.Now()
 
-	// Use generous timeout for warmup (can involve significant scraping)
 	warmupCtx, cancel := context.WithTimeout(ctx, config.WarmupProactive)
 	defer cancel()
 
 	opts := warmup.Options{
-		Modules:   warmup.ParseModules(a.cfg.WarmupModules),
 		Reset:     false,
+		HasLLMKey: a.cfg.HasLLMProvider(),
+		WarmID:    warmID,
 		Metrics:   a.metrics,
 		BM25Index: a.bm25Index,
 	}
 
-	stats, err := warmup.Run(warmupCtx, a.db, a.scraperClient, a.stickerManager, a.logger, opts)
+	stats, err := warmup.Run(warmupCtx, a.db, a.scraperClient, a.logger, opts)
 	if err != nil {
 		a.logger.WithError(err).Error("Proactive warmup failed")
-	} else {
-		a.logger.WithField("students", stats.Students.Load()).
-			WithField("contacts", stats.Contacts.Load()).
-			WithField("courses", stats.Courses.Load()).
-			WithField("syllabi", stats.Syllabi.Load()).
-			WithField("stickers", stats.Stickers.Load()).
-			WithField("duration_ms", time.Since(startTime).Milliseconds()).
-			Info("Proactive warmup completed")
+		return
+	}
 
-		// Check BM25 status after warmup
-		if a.bm25Index != nil {
-			if a.bm25Index.IsEnabled() {
-				a.logger.WithField("doc_count", a.bm25Index.Count()).Info("BM25 smart search enabled")
-			} else if stats.Courses.Load() > 0 {
-				// Have courses but BM25 still disabled - syllabus module not in warmup
-				a.logger.WithField("course_count", stats.Courses.Load()).
-					Info("BM25 smart search disabled. Add 'syllabus' to WARMUP_MODULES to enable (找課 功能)")
-			}
-		}
+	logEntry := a.logger.WithField("contacts", stats.Contacts.Load()).
+		WithField("courses", stats.Courses.Load()).
+		WithField("syllabi", stats.Syllabi.Load()).
+		WithField("duration_ms", time.Since(startTime).Milliseconds())
+
+	if warmID {
+		logEntry.Info("Proactive warmup completed (startup: includes ID data)")
+	} else {
+		logEntry.Info("Proactive warmup completed (daily refresh)")
+	}
+
+	if a.bm25Index != nil && a.bm25Index.IsEnabled() {
+		a.logger.WithField("doc_count", a.bm25Index.Count()).Info("BM25 smart search enabled")
 	}
 }
 
 // updateCacheSizeMetrics periodically updates cache size metrics.
-// Exits cleanly when context is canceled during shutdown.
 func (a *Application) updateCacheSizeMetrics(ctx context.Context) {
 	a.logger.Debug("Cache metrics job started")
 	defer a.logger.Debug("Cache metrics job stopped")
@@ -680,35 +629,25 @@ func (a *Application) updateCacheSizeMetrics(ctx context.Context) {
 	}
 }
 
-// recordCacheSizeMetrics records current cache sizes to metrics.
 func (a *Application) recordCacheSizeMetrics(ctx context.Context) {
+	if a.metrics == nil {
+		return
+	}
+
 	studentCount, _ := a.db.CountStudents(ctx)
 	contactCount, _ := a.db.CountContacts(ctx)
 	courseCount, _ := a.db.CountCourses(ctx)
 	syllabiCount, _ := a.db.CountSyllabi(ctx)
 	stickerCount := a.stickerManager.Count()
 
-	a.logger.WithField("students", studentCount).
-		WithField("contacts", contactCount).
-		WithField("courses", courseCount).
-		WithField("syllabi", syllabiCount).
-		WithField("stickers", stickerCount).
-		Debug("Cache size metrics updated")
+	a.metrics.SetCacheSize("students", studentCount)
+	a.metrics.SetCacheSize("contacts", contactCount)
+	a.metrics.SetCacheSize("courses", courseCount)
+	a.metrics.SetCacheSize("syllabi", syllabiCount)
+	a.metrics.SetCacheSize("stickers", stickerCount)
 
-	if a.bm25Index != nil && a.bm25Index.IsEnabled() {
-		a.logger.WithField("bm25_docs", a.bm25Index.Count()).Debug("BM25 index size")
-	}
-
-	// Update Prometheus gauges
-	if a.metrics != nil {
-		a.metrics.SetCacheSize("students", studentCount)
-		a.metrics.SetCacheSize("contacts", contactCount)
-		a.metrics.SetCacheSize("courses", courseCount)
-		a.metrics.SetCacheSize("syllabi", syllabiCount)
-		a.metrics.SetCacheSize("stickers", stickerCount)
-		if a.bm25Index != nil {
-			a.metrics.SetIndexSize("bm25", a.bm25Index.Count())
-		}
+	if a.bm25Index != nil {
+		a.metrics.SetIndexSize("bm25", a.bm25Index.Count())
 	}
 }
 

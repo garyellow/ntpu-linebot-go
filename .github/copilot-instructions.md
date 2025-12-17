@@ -38,7 +38,7 @@ LINE Webhook → Gin Handler
       Bot Handlers (id/contact/course)
                 ↓ (ctxutil.PreserveTracing() with 60s timeout)
       Storage Repository (cache-first)
-                ↓ (7-day TTL check)
+                ↓ (TTL check for contacts/courses only)
       Scraper Client (rate-limited)
                 ↓ (exponential backoff, failover URLs)
           NTPU Websites (lms/sea)
@@ -47,102 +47,69 @@ LINE Webhook → Gin Handler
 ```
 
 **Critical Flow Details:**
-- **Async processing**: HTTP 200 returned immediately after signature verification (< 2s), events processed in goroutine
-- **LINE Best Practice**: Responds within 2s to prevent request_timeout errors, processes asynchronously to handle long operations
-- **Context handling**: Webhook uses `context.Background()` for async processing, Bot operations use `ctxutil.PreserveTracing()` with 60s timeout
-  - **Webhook layer**: Uses `context.Background()` directly (no parent context)
-  - **Processor layer**: Calls `ctxutil.PreserveTracing(ctx)` to preserve tracing values from event source
-  - **PreserveTracing()**: Creates new context with only necessary tracing values (userID, chatID, requestID)
-  - **Why not WithoutCancel()**: Avoids memory leaks from parent references (see Go issue #64478)
-  - **Why not Background()**: `Background()` loses all tracing data needed for log correlation, so it's not suitable for the processor layer even though it's used in the webhook layer
-  - **Cancellation independence**: Detached context timeout is independent from HTTP request lifecycle
-- **Detached context rationale**: LINE may close connection before processing completes; detached cancellation ensures DB queries and scraping finish, reply token remains valid (~20 min)
-- **Observability**: Request ID and user ID flow through entire async operation for log correlation
-- **Message batching**: LINE allows max 5 messages per reply; webhook auto-truncates to 4 + warning
-- **References**:
-  - LINE guidelines: https://developers.line.biz/en/docs/partner-docs/development-guidelines/
-  - Context safety: https://github.com/golang/go/issues/64478
+- **Async processing**: HTTP 200 returned immediately (< 2s), events processed in goroutine
+- **Context handling**:
+  - Webhook: `context.Background()` for async processing
+  - Bot operations: `ctxutil.PreserveTracing()` preserves tracing (userID, chatID, requestID) with 60s timeout
+  - Prevents memory leaks while maintaining log correlation (Go issue #64478)
+- **Message batching**: Max 5 messages per reply; auto-truncates to 4 + warning
+- **References**: [LINE guidelines](https://developers.line.biz/en/docs/partner-docs/development-guidelines/), [Context safety](https://github.com/golang/go/issues/64478)
 
 ## Bot Module Registration Pattern
 
 **When adding new modules**:
 
-1. **Implement `bot.Handler` interface** (`internal/bot/handler.go`)
-2. **Create handler in app.Initialize()** with required dependencies
-3. **Register via `registry.Register(handler)` before creating webhook handler
-4. **Use prefix convention** for postback routing (e.g., `"course:"`, `"id:"`, `"contact:"`)
-5. **Direct constructors** - Pass all dependencies (including optional nil values) directly in constructor
-6. **Warmup support** is automatic if module implements cache warming
+1. Implement `bot.Handler` interface (`internal/bot/handler.go`)
+2. Create handler in app.Initialize() with dependencies
+3. Register via `registry.Register(handler)`
+4. Use prefix convention for postback routing (`"course:"`, `"id:"`, `"contact:"`)
+5. Pass nil for optional dependencies (e.g., `bm25Index`, `queryExpander`, `llmRateLimiter`)
 
-**Handler constructor patterns**:
-- **All handlers**: Direct constructors with all dependencies as parameters
-- **Optional dependencies**: Pass nil if feature disabled (e.g., `bm25Index`, `queryExpander`, `llmRateLimiter`)
-- **No setter injection**: All dependencies passed at construction time to avoid circular dependencies
-- **BotConfig**: Embedded in main Config as `cfg.Bot` (no separate constructor needed)
+**Course Module**:
+- **Precise search** (`課程`): SQL LIKE + fuzzy search
+- **Smart search** (`找課`): BM25 + Query Expansion (requires LLM API key)
+- **Confidence scoring**: Relative BM25 score (0-1, first result always 1.0)
+- **Fallback**: Precise → Smart search (if BM25Index enabled)
 
-**Module-specific features**:
-
-- **Precise search**: `課程` keyword triggers SQL LIKE + fuzzy search on course title and teachers
-- **Smart search**: `找課` keyword triggers BM25 + Query Expansion search using syllabus content (requires `GEMINI_API_KEY` or `GROQ_API_KEY` for Query Expansion)
-- **BM25 search**: Keyword-based search with Chinese tokenization (unigram for CJK)
-- **Confidence scoring**: Relative BM25 score (score / maxScore), not similarity. Range: 0-1, first result always 1.0.
-- **Query expansion**: LLM-based expansion for short queries and technical abbreviations (AWS→雲端運算, AI→人工智慧)
-- **Detached context**: Uses `ctxutil.PreserveTracing()` to prevent request context cancellation from aborting API calls (safer than WithoutCancel)
-- **Fallback**: Precise search → BM25 smart search (when no results and BM25Index enabled)
-- **UX terminology**: Uses "精確搜尋" (precise) for keyword search, "智慧搜尋" (smart) for BM25 search
-
-**Contact Module**: Emergency phones (hardcoded), multilingual keywords, organization/individual contacts, Flex Message cards
-- **SQL LIKE fields**: name, title (fast path)
-- **Fuzzy search fields**: name, title, organization, superior (complete matching)
-- **Sorting**: Organizations by hierarchy (top-level first), individuals by match count → name → title → organization
+**Contact Module**:
+- Emergency phones, multilingual keywords, Flex Message cards
+- **2-tier parallel search**: SQL LIKE + fuzzy `ContainsAllRunes()`, merged and deduplicated
+- **Sorting**: Organizations by hierarchy, individuals by match count
 
 **All modules**:
-- Prefer text wrapping over truncation for complete info display
-- Use `TruncateRunes()` only for LINE API limits (altText, displayText)
+- Prefer text wrapping; use `TruncateRunes()` only for LINE API limits
 - Consistent Sender pattern, cache-first strategy
-- **2-tier parallel search**: SQL LIKE + fuzzy `ContainsAllRunes()` always run together, results merged and deduplicated
 
-## Data Layer: Cache-First Strategy with Daily Warmup
+## Data Layer: Cache-First Strategy
 
 **SQLite cache** (`internal/storage/`):
-- WAL mode, Hard TTL (7 days), pure Go (`modernc.org/sqlite`)
-- **Hard TTL (7 days)**: Data absolutely expired, must be deleted
-- TTL enforced at SQL level: `WHERE cached_at > ?`
+- WAL mode, pure Go (`modernc.org/sqlite`)
+- **Cache Strategy by Data Type**:
+  - **Students**: Never expires, not refreshed (static data)
+  - **Stickers**: Never expires, loaded once on startup
+  - **Contacts/Courses**: 7-day Hard TTL, refreshed daily at 3:00 AM Taiwan time
+  - **Syllabi**: 7-day Hard TTL, auto-enabled when LLM API key is configured
+- TTL enforced at SQL level for contacts/courses: `WHERE cached_at > ?`
 - **Syllabi table**: Stores syllabus content + SHA256 hash for incremental updates
 
 **BM25 Index** (`internal/rag/`):
-- Uses [iwilltry42/bm25-go](https://github.com/iwilltry42/bm25-go) (k1=1.5, b=0.75)
-- Maintained by k3d-io/k3d (⭐6.1k) maintainer - reliable and actively fixed
-- In-memory index (rebuilt on startup from SQLite)
-- Chinese tokenization with unigram for CJK characters
-- Single document strategy: 1 course = 1 document (no chunking)
-- Combined with LLM Query Expansion for effective retrieval
-- Optional: Gemini API Key enables Query Expansion
-- **Important**: BM25 requires syllabus data - add `syllabus` to `WARMUP_MODULES` to enable smart search (找課)
+- [iwilltry42/bm25-go](https://github.com/iwilltry42/bm25-go) (k1=1.5, b=0.75)
+- In-memory index rebuilt on startup from SQLite
+- Chinese tokenization (unigram for CJK), 1 course = 1 document
+- Combined with LLM Query Expansion (auto-enabled when LLM API key configured)
 
-**Background Jobs** (`internal/app/app.go`):
-All maintenance tasks use **fixed Taiwan time (Asia/Taipei)** for predictable scheduling:
-- **Sticker Refresh**: Runs on startup, then daily at **2:00 AM Taiwan time**
-  - Updates sticker URLs from external sources
-  - Runs first to ensure fresh sticker data before warmup
-- **Daily Warmup** (proactiveWarmup): Runs on startup, then daily at **3:00 AM Taiwan time**
-  - Refreshes modules specified in `WARMUP_MODULES` (default: sticker, id, contact, course)
-  - **Concurrent**: id, contact, sticker, course - no dependencies between them
-  - **Optional - syllabus**: If manually added to `WARMUP_MODULES`, waits for course to complete (needs course data), then runs in parallel with others. Removed from default due to infrequent updates.
-    - **BM25 dependency**: Syllabus module rebuilds BM25 index after saving syllabi. Without syllabus warmup, smart search (找課) remains disabled even if Gemini/Groq API key is configured.
-  - **Note**: sticker can be included in warmup modules for initial population
-- **Cache Cleanup**: Runs on startup, then daily at **4:00 AM Taiwan time**
-  - Deletes data past Hard TTL (7 days) + VACUUM for space reclamation
-  - Runs after warmup to avoid deleting freshly cached data
-- **Metrics Update**: Every 5 minutes (uses Ticker for high-frequency monitoring)
-- **Rate Limiter Cleanup**: Every 5 minutes (uses Ticker for high-frequency cleanup)
+**Background Jobs** (Taiwan time/Asia/Taipei):
+- **Sticker**: Startup only
+- **Daily Refresh** (3:00 AM): contact, course (always), syllabus (auto-enabled if LLM API key)
+- **Cache Cleanup** (4:00 AM): Delete expired contacts/courses/syllabi (7-day TTL) + VACUUM
+- **Metrics/Rate Limiter Cleanup**: Every 5 minutes
 
 **Data availability**:
-- Student: 94-113 學年度 (≥114 shows deprecation notice)
-- Course: Query: 4 most recent semesters with intelligent detection (checks if current semester has any data)
-  - Warmup strategy: Scrapes 4 semesters individually using ScrapeCourses (4 requests per semester, 16 total)
-  - Delayed upload tolerance: If current semester has no data yet, falls back to previous semester
-- Contact: Real-time scraping
+- Student: 94-113 學年度 (static, not refreshed)
+- Course: 4 most recent semesters, 7-day TTL
+- Contact: 7-day TTL
+- Sticker: Startup only, never expires
+- Syllabus: Auto-enabled when LLM API key configured
 
 ## Rate Limiting
 
@@ -177,14 +144,12 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
 ```
 
 **UX Best Practices**:
-- **Quick Reply**: Always provide actionable options on ALL messages (including errors)
-- **Quick Reply Presets**: Use `lineutil.QuickReply*` functions for consistency
-- **Loading Animation**: Show for long queries (> 1s expected)
-- **Flex Messages**: Use for rich structured content (welcome, contact cards, course info)
-- **Error Recovery**: Include retry/help Quick Reply on all error messages
-- **Consistent Sender**: Same sender throughout a single reply batch
-- **Welcome Message**: Flex Message with feature overview + Quick Reply for immediate actions
-- **Rate Limit Messages**: Include guidance and Quick Reply for next steps
+- Always provide Quick Reply (including errors)
+- Use `lineutil.QuickReply*` presets for consistency
+- Show loading animation for long queries (> 1s)
+- Use Flex Messages for rich content
+- Include retry/help Quick Reply on errors
+- Same sender throughout reply batch
 
 **Flex Message 設計規範**:
 - **配色** (WCAG AA 符合):
@@ -195,7 +160,7 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
 - **按鈕顏色** (語義化分類 - WCAG AA 符合):
   - `ColorButtonPrimary` `#06C755` (LINE 綠) - 主要操作 (複製學號、撥打電話、寄送郵件) - 4.9:1
   - `ColorDanger` `#E02D41` (深紅) - 緊急操作 (校安電話) - 4.5:1
-  - `ColorWarning` `#D97706` (琥珀色) - 警告訊息 (配額用盡、限流提示) - 4.5:1
+  - `ColorWarning` `#D97706` (琥珀色) - 警告訊息 (配額達上限、限流提示) - 4.5:1
   - `ColorButtonExternal` `#2563EB` (深藍) - 外部連結 (課程大綱、Dcard、選課大全、網站) - 4.8:1
   - `ColorButtonInternal` `#7C3AED` (深紫) - 內部指令/Postback (教師課程、查看成員、查詢學號) - 4.6:1
   - `ColorSuccess` `#059669` (深翠綠) - 成功狀態 (操作完成提示、確認訊息) - 4.5:1 WCAG AA
@@ -204,6 +169,7 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
 - **文字**: 優先使用 `wrap: true` + `lineSpacing` 完整顯示資訊；僅 carousel 使用 `WithMaxLines()` 控制高度
 - **截斷**: `TruncateRunes()` 僅用於 LINE API 限制 (altText 400 字, displayText 長度限制)
 - **設計原則**: 對稱、現代、一致 - 確保視覺和諧，完整呈現資訊
+- **資料說明**: 學號查詢結果的系所資訊由學號推測，可能因轉系等原因有所不同
 
 **Postback format** (300 byte limit): Use module prefix `"module:data"` for routing (e.g., `"course:1132U2236"`). Reply token is single-use - batch all messages into one array.
 
@@ -353,7 +319,7 @@ Fallback → getHelpMessage() + Warning Log
 
 **Default Models**:
 - Gemini: `gemini-2.5-flash` (primary), `gemini-2.5-flash-lite` (fallback)
-- Groq: `meta-llama/llama-4-scout-17b-16e-instruct` (intent), `meta-llama/llama-4-maverick-17b-128e-instruct` (expander), with Llama 3.x Production fallbacks
+- Groq: `meta-llama/llama-4-maverick-17b-128e-instruct` (intent), `meta-llama/llama-4-scout-17b-16e-instruct` (expander), with Llama 3.x Production fallbacks
 
 ## Key File Locations
 

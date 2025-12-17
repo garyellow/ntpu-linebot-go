@@ -273,11 +273,11 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 
 ### 4. 並發模型選擇
 
-**Goroutine + WaitGroup**:
-- ✅ Warmup 模組並行執行（id, contact, sticker 同時進行；course 並行，syllabus 等待 course 完成）
-- ✅ 使用 `sync.WaitGroup` 等待所有模組完成
-- ✅ 使用 `context.Context` 優雅取消
-- ✅ Scraper 層使用 Rate Limiting（2s）避免過度請求
+**Goroutine + errgroup**:
+- 每日刷新：contact 與 course 並行，syllabus 等待 course 完成
+- 使用 `errgroup.WithContext` 管理並發、錯誤與取消
+- 使用 `context.Context` 優雅取消
+- Scraper Rate Limiting: 2s 間隔
 
 ## 效能優化
 
@@ -290,59 +290,26 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 | **Hard TTL** | 7 天 | 絕對過期，資料必須刪除 |
 
 **資料類型考量**:
-- 學生資料：學期內穩定
+- 學生資料：學期內穩定（不每日刷新；通常僅啟動時建立/更新快取）
 - 通訊錄：變動頻率低
 - 課程資料：學期內穩定
 - 課程大綱：學期內穩定（智慧搜尋用）
 
-**背景任務排程**:
-- **Sticker Refresh** (refreshStickers): 啟動時立即執行，之後每日凌晨 2:00 更新貼圖 URL
-  - 獨立的定期任務，在 warmup 之前執行確保有新鮮貼圖資料
-- **主動 Warmup** (proactiveWarmup): 啟動時立即執行，之後每日凌晨 3:00 刷新資料
-  - 刷新 `WARMUP_MODULES` 指定的模組（預設：sticker, id, contact, course）
-  - **並行執行**：id, contact, sticker, course 彼此無依賴，同時進行
-  - **課程模組**：使用智慧檢測（檢查資料可用性）抓取 4 個學期，每學期 4 個 HTTP 請求（U/M/N/P），共 16 個請求
-  - **可選 - syllabus**：如手動加入 `WARMUP_MODULES`，會等待 course 完成後開始（需要課程資料），然後與其他模組並行執行。因更新頻率低已從預設移除。
-    - **BM25 依賴**：Syllabus 模組保存大綱後會重建 BM25 索引。若未包含 syllabus 預熱，即使設定了 Gemini/Groq API key，智慧搜尋（找課）仍保持停用。
-  - **注意**：sticker 可包含在 warmup 模組中進行初始填充
-- **Cache Cleanup**: 啟動時立即執行，之後每日凌晨 4:00，刪除超過 Hard TTL（7天）的資料 + VACUUM
+**背景任務排程** (臺灣時間):
+- **Sticker**: 啟動時一次
+- **每日刷新** (3:00 AM): contact, course (每日), syllabus (若設定 LLM API Key)
+- **Cache Cleanup** (4:00 AM): 刪除過期資料 (7 天 TTL) + VACUUM
 
-### 2. 智慧搜尋架構（可選功能）
+### 2. 智慧搜尋架構（可選）
 
-```
-BM25 + Query Expansion 流程:
+**BM25 + Query Expansion 流程**:
+1. **Warmup**: 課程列表 → 抓取大綱 → 存入 SQLite + 建立 BM25 索引
+2. **查詢**: 輸入 → Query Expansion (LLM) → BM25 Search → Confidence Scoring
 
-Warmup:
-  課程列表 → 抓取大綱 → 合併文字 → 計算 Hash → 存入 SQLite
-              ↓                       ↓
-          syllabus/              content_hash
-          scraper.go             (增量更新)
-                                       ↓
-                               建立 BM25 索引 (記憶體)
-
-查詢:
-  「找課 想學機器學習」
-              ↓
-    ┌────────┴────────┐
-    ▼
-  Query Expansion
-  (Gemini/Groq LLM)
-  擴展: 「AI」 → 「人工智慧 AI 機器學習 深度學習」
-    │
-    ▼
-  BM25 Search
-  (關鍵字匹配)
-    │
-    ▼
-  Confidence Scoring
-  (相對分數: score / maxScore)
-    ↓
-  回傳信心分數排序結果
-```
-
-**BM25 + Query Expansion 策略**:
-- **Query Expansion**: LLM 擴展查詢，處理同義詞、縮寫、跨語言轉換
-- **BM25**: 精確關鍵字匹配，中文 unigram 分詞
+**特性**:
+- **Query Expansion**: LLM 擴展同義詞、縮寫
+- **BM25**: 中文 unigram 分詞，精確關鍵字匹配
+- **Confidence**: 相對分數 (score / maxScore)，0-1 範圍
 
 **關鍵概念**:
 - BM25 輸出無界分數，不可跨查詢比較
@@ -350,9 +317,9 @@ Warmup:
 - 分數分佈遵循 Normal-Exponential 混合模型（學術標準）
 
 **啟用條件**:
-- 將 `syllabus` 加入 `WARMUP_MODULES`
-- 設定 `GEMINI_API_KEY` 或 `GROQ_API_KEY`（Query Expansion 需要）
-- 即使沒有 API Key，基本 BM25 搜尋仍可使用
+- 設定 `GEMINI_API_KEY` 或 `GROQ_API_KEY`（自動啟用 syllabus 模組）
+- Query Expansion 需要 LLM API Key
+- 即使沒有 API Key，基本 BM25 搜尋仍可使用（但需手動載入大綱資料）
 
 **關鍵實作**:
 - `internal/genai/gemini_expander.go`: Query Expansion（Gemini）

@@ -76,7 +76,6 @@ func TestBackgroundJobIntervals(t *testing.T) {
 		expected time.Duration
 	}{
 		{"CacheCleanupInterval", CacheCleanupInterval, 24 * time.Hour},
-		{"StickerRefreshInterval", StickerRefreshInterval, 24 * time.Hour},
 		{"MetricsUpdateInterval", MetricsUpdateInterval, 5 * time.Minute},
 		{"RateLimiterCleanupInterval", RateLimiterCleanupInterval, 5 * time.Minute},
 	}
@@ -97,9 +96,8 @@ func TestBackgroundJobScheduleHours(t *testing.T) {
 		got      int
 		expected int
 	}{
-		{"StickerRefreshHour", StickerRefreshHour, 2}, // 2:00 AM - refresh stickers first
-		{"WarmupHour", WarmupHour, 3},                 // 3:00 AM - warmup cache
-		{"CacheCleanupHour", CacheCleanupHour, 4},     // 4:00 AM - cleanup after warmup
+		{"WarmupHour", WarmupHour, 3},             // 3:00 AM - warmup cache
+		{"CacheCleanupHour", CacheCleanupHour, 4}, // 4:00 AM - cleanup after warmup
 	}
 
 	for _, tt := range tests {
@@ -113,12 +111,6 @@ func TestBackgroundJobScheduleHours(t *testing.T) {
 
 // TestScheduleOrderIsLogical verifies jobs run in logical order
 func TestScheduleOrderIsLogical(t *testing.T) {
-	// Sticker refresh should happen before warmup
-	if StickerRefreshHour >= WarmupHour {
-		t.Errorf("StickerRefreshHour (%d) should be < WarmupHour (%d) to ensure fresh stickers before warmup",
-			StickerRefreshHour, WarmupHour)
-	}
-
 	// Warmup should happen before cache cleanup
 	if WarmupHour >= CacheCleanupHour {
 		t.Errorf("WarmupHour (%d) should be < CacheCleanupHour (%d) to avoid deleting fresh data",
@@ -126,9 +118,6 @@ func TestScheduleOrderIsLogical(t *testing.T) {
 	}
 
 	// All should be in early morning (0-6 AM)
-	if StickerRefreshHour < 0 || StickerRefreshHour > 6 {
-		t.Errorf("StickerRefreshHour (%d) should be in early morning (0-6 AM)", StickerRefreshHour)
-	}
 	if WarmupHour < 0 || WarmupHour > 6 {
 		t.Errorf("WarmupHour (%d) should be in early morning (0-6 AM)", WarmupHour)
 	}

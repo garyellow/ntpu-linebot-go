@@ -298,7 +298,7 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 	// Footer: Quick Action Buttons
 	footer := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexButton(lineutil.NewURIAction("🚨 撥打三峽校安", "tel:"+sanxiaEmergencyPhone)).WithStyle("primary").WithColor(lineutil.ColorDanger).WithHeight("sm").FlexButton,
-		lineutil.NewFlexButton(lineutil.NewURIAction("🚨 撥打台北校安", "tel:"+taipeiEmergencyPhone)).WithStyle("primary").WithColor(lineutil.ColorDanger).WithHeight("sm").FlexButton,
+		lineutil.NewFlexButton(lineutil.NewURIAction("🚨 撥打臺北校安", "tel:"+taipeiEmergencyPhone)).WithStyle("primary").WithColor(lineutil.ColorDanger).WithHeight("sm").FlexButton,
 		lineutil.NewFlexButton(lineutil.NewURIAction("ℹ️ 查看更多", "https://new.ntpu.edu.tw/safety")).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm").FlexButton,
 	).WithSpacing("sm")
 
@@ -556,9 +556,9 @@ func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_a
 func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, searchTerm string) []messaging_api.MessageInterface {
 	if len(contacts) == 0 {
 		sender := lineutil.GetSender(senderName, h.stickerManager)
-		return []messaging_api.MessageInterface{
-			lineutil.NewTextMessageWithConsistentSender("🔍 查無聯絡資料", sender),
-		}
+		msg := lineutil.NewTextMessageWithConsistentSender("🔍 查無聯絡資料", sender)
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyContactNav())
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	// Sort contacts based on type:

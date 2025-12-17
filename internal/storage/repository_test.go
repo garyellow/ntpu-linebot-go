@@ -266,79 +266,46 @@ func TestCourseArrayHandling(t *testing.T) {
 	}
 }
 
-func TestDeleteExpiredStudents(t *testing.T) {
+func TestStudentDataNeverExpires(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
 	ctx := context.Background()
 
-	// Insert fresh student
-	fresh := &Student{
+	// Insert student
+	student := &Student{
 		ID:         "41247001",
-		Name:       "新生",
+		Name:       "學生",
 		Department: "資工系",
 		Year:       113,
 	}
-	if err := db.SaveStudent(ctx, fresh); err != nil {
+	if err := db.SaveStudent(ctx, student); err != nil {
 		t.Fatalf("SaveStudent failed: %v", err)
 	}
 
-	// Insert old student (manually set cached_at to 8 days ago)
-	old := &Student{
-		ID:         "41247002",
-		Name:       "舊生",
-		Department: "電機系",
-		Year:       112,
-	}
+	// Insert "old" student with cached_at 30 days ago (should still be accessible since students never expire)
 	query := `INSERT INTO students (id, name, department, year, cached_at) VALUES (?, ?, ?, ?, ?)`
-	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.writer.ExecContext(ctx, query, old.ID, old.Name, old.Department, old.Year, oldTime)
+	oldTime := time.Now().Add(-30 * 24 * time.Hour).Unix()
+	_, err := db.writer.ExecContext(ctx, query, "41247002", "舊生", "電機系", 112, oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
 
-	// Count before delete (only counts non-expired due to TTL filtering)
-	countBefore, err := db.CountStudents(ctx)
+	// Both students should be accessible (no TTL filtering)
+	count, err := db.CountStudents(ctx)
 	if err != nil {
 		t.Fatalf("CountStudents failed: %v", err)
 	}
-	if countBefore != 1 {
-		t.Errorf("Expected 1 student before delete (TTL-filtered), got %d", countBefore)
+	if count != 2 {
+		t.Errorf("Expected 2 students (students never expire), got %d", count)
 	}
 
-	// Delete expired
-	deleted, err := db.DeleteExpiredStudents(ctx, 7*24*time.Hour)
-	if err != nil {
-		t.Fatalf("DeleteExpiredStudents failed: %v", err)
-	}
-	if deleted != 1 {
-		t.Errorf("Expected 1 deleted, got %d", deleted)
-	}
-
-	// Count after delete
-	countAfter, err := db.CountStudents(ctx)
-	if err != nil {
-		t.Fatalf("CountStudents failed: %v", err)
-	}
-	if countAfter != 1 {
-		t.Errorf("Expected 1 student after delete, got %d", countAfter)
-	}
-
-	// Verify fresh student still exists
-	retrieved, err := db.GetStudentByID(ctx, fresh.ID)
+	// Old student should still be retrievable
+	retrieved, err := db.GetStudentByID(ctx, "41247002")
 	if err != nil {
 		t.Fatalf("GetStudentByID failed: %v", err)
 	}
 	if retrieved == nil {
-		t.Error("Fresh student should still exist")
-	}
-
-	// Verify old student is gone
-	retrieved, err = db.GetStudentByID(ctx, old.ID)
-	if err != nil {
-		t.Fatalf("GetStudentByID failed: %v", err)
-	}
-	if retrieved != nil {
-		t.Error("Old student should be deleted")
+		t.Error("Old student should still exist (students never expire)")
 	}
 }
 
@@ -455,7 +422,7 @@ func TestDeleteExpiredCourses(t *testing.T) {
 	}
 }
 
-func TestCleanupExpiredStickers(t *testing.T) {
+func TestStickerDataNeverExpires(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
 	ctx := context.Background()
@@ -469,33 +436,18 @@ func TestCleanupExpiredStickers(t *testing.T) {
 		t.Fatalf("SaveSticker failed: %v", err)
 	}
 
-	// Insert old sticker (manually set cached_at to 8 days ago)
+	// Insert old sticker (manually set cached_at to 30 days ago)
 	query := `INSERT INTO stickers (url, source, cached_at, success_count, failure_count) VALUES (?, ?, ?, ?, ?)`
-	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
+	oldTime := time.Now().Add(-30 * 24 * time.Hour).Unix()
 	_, err := db.writer.ExecContext(ctx, query, "https://example.com/old.png", "spy_family", oldTime, 0, 0)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
 
-	// Verify we have 1 non-expired sticker (CountStickers now filters by TTL)
+	// Both stickers should be counted (no TTL filtering for stickers)
 	count, _ := db.CountStickers(ctx)
-	if count != 1 {
-		t.Fatalf("Expected 1 sticker (TTL-filtered), got %d", count)
-	}
-
-	// Cleanup expired
-	deleted, err := db.CleanupExpiredStickers(ctx)
-	if err != nil {
-		t.Fatalf("CleanupExpiredStickers failed: %v", err)
-	}
-	if deleted != 1 {
-		t.Errorf("Expected 1 deleted, got %d", deleted)
-	}
-
-	// Verify only fresh sticker remains
-	count, _ = db.CountStickers(ctx)
-	if count != 1 {
-		t.Errorf("Expected 1 sticker remaining, got %d", count)
+	if count != 2 {
+		t.Errorf("Expected 2 stickers (stickers never expire), got %d", count)
 	}
 }
 
