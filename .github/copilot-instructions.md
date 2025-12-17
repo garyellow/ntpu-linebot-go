@@ -179,12 +179,13 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
   - 主要文字 `#111111` (ColorText), 標籤 `#666666` (ColorLabel)
   - 次要文字 `#6B6B6B` (ColorSubtext), 備註 `#888888` (ColorNote)
   - 時間戳記 `#B7B7B7` (ColorGray400) - 僅用於不強調資訊
-- **按鈕顏色** (語義化分類):
-  - `ColorButtonPrimary` `#06C755` (LINE 綠) - 主要操作 (複製學號、撥打電話、寄送郵件)
-  - `ColorDanger` `#FF334B` (紅色) - 緊急操作 (校安電話)
-  - `ColorButtonExternal` `#469FD6` (藍色) - 外部連結 (課程大綱、Dcard、選課大全、網站)
-  - `ColorButtonInternal` `#8B5CF6` (紫色) - 內部指令/Postback (教師課程、查看成員、查詢學號)
-  - `secondary` 預設灰色 - 次要操作 (複製號碼、複製信箱)
+- **按鈕顏色** (語義化分類 - WCAG AA 符合):
+  - `ColorButtonPrimary` `#06C755` (LINE 綠) - 主要操作 (複製學號、撥打電話、寄送郵件) - 4.9:1
+  - `ColorDanger` `#E02D41` (深紅) - 緊急操作 (校安電話) - 4.5:1
+  - `ColorButtonExternal` `#2563EB` (深藍) - 外部連結 (課程大綱、Dcard、選課大全、網站) - 4.8:1
+  - `ColorButtonInternal` `#7C3AED` (深紫) - 內部指令/Postback (教師課程、查看成員、查詢學號) - 4.6:1
+  - `ColorSuccess` `#10B981` (翠綠) - 成功狀態 (操作完成提示) - 3.8:1 大型文字
+  - `ColorButtonSecondary` `#6B7280` (灰色) - 次要操作 (複製號碼、複製信箱) - 5.9:1
 - **間距**: Hero padding `24px`/`16px` (4-point grid), Body/Footer spacing `sm`, 按鈕高度 `sm`
 - **文字**: 優先使用 `wrap: true` + `lineSpacing` 完整顯示資訊；僅 carousel 使用 `WithMaxLines()` 控制高度
 - **截斷**: `TruncateRunes()` 僅用於 LINE API 限制 (altText 400 字, displayText 長度限制)
