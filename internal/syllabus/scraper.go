@@ -29,12 +29,9 @@ func NewScraper(client *scraper.Client) *Scraper {
 	return &Scraper{client: client}
 }
 
-// ScrapeSyllabus extracts syllabus content from a course's detail URL
-// Supports both formats:
-//   - Merged: "教學目標 Course Objectives：" (single field)
-//   - Separate: "教學目標" + "Course Objectives：" (two fields)
-//
-// Returns the merged content (教學目標 + 內容綱要 + 教學進度) for BM25 indexing
+// ScrapeSyllabus extracts syllabus content from a course's detail URL.
+// Returns structured fields (objectives, outline, schedule) or error if URL is invalid.
+// Empty syllabi are valid - use Fields.IsEmpty to check.
 func (s *Scraper) ScrapeSyllabus(ctx context.Context, course *storage.Course) (*Fields, error) {
 	if course.DetailURL == "" {
 		return nil, fmt.Errorf("course %s has no detail URL", course.UID)
@@ -70,12 +67,8 @@ func (s *Scraper) ScrapeSyllabus(ctx context.Context, course *storage.Course) (*
 	return fields, nil
 }
 
-// parseSyllabusPage extracts syllabus fields from HTML document
-// Supports both merged and separate formats:
-//   - Merged: "教學目標 Course Objectives：" (single TD with both CN+EN)
-//   - Separate: "教學目標：" and "Course Objectives：" (two separate TDs)
-//
-// Returns unified Fields with objectives, outline, and schedule
+// parseSyllabusPage extracts syllabus fields from HTML document.
+// Handles multiple page formats and returns empty fields if parsing fails.
 func parseSyllabusPage(doc *goquery.Document) *Fields {
 	fields := &Fields{}
 

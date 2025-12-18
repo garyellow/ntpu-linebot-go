@@ -171,9 +171,8 @@ func createHistoricalCoursesTable(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-// createSyllabiTable creates table for course syllabus content
-// All content fields store merged CN+EN content from show_info=all format
-// Uses content_hash for incremental update detection
+// createSyllabiTable creates table for course syllabus search content.
+// Stores unified CN+EN text for BM25 indexing with SHA256 hash for change detection.
 func createSyllabiTable(ctx context.Context, db *sql.DB) error {
 	query := `
 	CREATE TABLE IF NOT EXISTS syllabi (

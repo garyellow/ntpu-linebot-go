@@ -80,7 +80,7 @@ func TestParseSyllabusPage(t *testing.T) {
 			wantEmpty: true,
 		},
 		{
-			name: "merged format with font-c13 span (show_info=all)",
+			name: "merged format with font-c13 span",
 			html: `<html><body>
 				<table>
 					<tr><td>教學目標 Course Objectives：<span class="font-c13">培養程式設計能力</span></td></tr>
@@ -176,7 +176,7 @@ func TestParseSyllabusPage(t *testing.T) {
 			wantSchedule:   "Week 1: 課程介紹與環境設定",
 		},
 		{
-			name: "schedule table filters 彈性補充教學 rows",
+			name: "schedule table filters flexible teaching rows",
 			html: `<html><body>
 				<table>
 					<tr><td>教學進度(Teaching Schedule)：
