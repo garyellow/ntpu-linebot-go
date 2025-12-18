@@ -1,6 +1,5 @@
-// Package ctxutil provides type-safe context value management for the application.
-// It uses private key types to prevent context key collisions and provides
-// safe getter/setter functions following Go best practices.
+// Package ctxutil provides type-safe context value management.
+// Uses private key types to prevent collisions, following Go best practices.
 package ctxutil
 
 import (
@@ -97,25 +96,11 @@ func MustGetRequestID(ctx context.Context) string {
 // PreserveTracing creates a detached context that preserves tracing values.
 // The new context is independent of the parent's cancellation and deadlines.
 //
-// Note on context.WithoutCancel (Go 1.21+):
-// While context.WithoutCancel is the standard way to detach a context, it keeps
-// a reference to the parent context. If the parent context is heavy or part of
-// a long chain (like a web request context), this can lead to memory leaks
-// where the parent context is not garbage collected until the child is done.
-// PreserveTracing avoids this by creating a fresh context.Background() and
-// only copying the specific values we need.
+// This function creates a fresh context.Background() and copies only tracing values,
+// avoiding memory leaks from retaining parent context references (Go issue #64478).
 //
-// Use cases:
-// - Async webhook processing (parent HTTP request may close before completion)
-// - Background jobs triggered by webhooks (DB writes, scraping, cache updates)
-//
-// This is safer than context.WithoutCancel for long-running operations because:
-// 1. No parent context reference is held (prevents memory leaks)
-// 2. Only essential tracing values are copied
-// 3. Parent value mutations don't affect the new context
-//
-// Use for async operations that need tracing but must outlive the parent context
-// (e.g., LINE webhook processing that continues after HTTP response is sent).
+// Use for async operations that need tracing but must outlive the parent context,
+// such as LINE webhook processing that continues after HTTP response is sent.
 func PreserveTracing(ctx context.Context) context.Context {
 	newCtx := context.Background()
 

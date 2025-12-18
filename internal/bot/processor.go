@@ -127,10 +127,7 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 	}
 
 	// Sanitize input: normalize whitespace, remove punctuation
-	text = strings.TrimSpace(text)
-	text = normalizeWhitespace(text)
-	text = removePunctuation(text)
-	text = normalizeWhitespace(text) // Final normalization after punctuation removal
+	text = sanitizeText(text)
 	if len(text) == 0 {
 		return nil, nil // Empty after sanitization
 	}
@@ -316,10 +313,7 @@ func (p *Processor) handleUnmatchedMessage(ctx context.Context, source webhook.S
 				return p.getHelpMessage(), nil
 			}
 			// Apply same sanitization as original text processing
-			sanitizedText = strings.TrimSpace(mentionlessText)
-			sanitizedText = normalizeWhitespace(sanitizedText)
-			sanitizedText = removePunctuation(sanitizedText)
-			sanitizedText = normalizeWhitespace(sanitizedText)
+			sanitizedText = sanitizeText(mentionlessText)
 			if sanitizedText == "" {
 				return p.getHelpMessage(), nil
 			}
@@ -1112,6 +1106,18 @@ func (p *Processor) buildLLMRateLimitFlexMessage(quotaPerHour int, resetMinutes 
 }
 
 // Helper functions
+
+// sanitizeText performs complete text sanitization:
+// 1. Trim spaces
+// 2. Normalize whitespace
+// 3. Remove punctuation
+// 4. Final normalization
+func sanitizeText(text string) string {
+	text = strings.TrimSpace(text)
+	text = normalizeWhitespace(text)
+	text = removePunctuation(text)
+	return normalizeWhitespace(text)
+}
 
 func normalizeWhitespace(s string) string {
 	return strings.Join(strings.Fields(s), " ")

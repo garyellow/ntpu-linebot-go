@@ -1,18 +1,9 @@
 // Package config provides data availability and limitation constants.
-// These constants define the boundaries of available data and user-facing messages
-// explaining data limitations, following UX best practices.
+// Defines data boundaries and user-facing messages for explaining data limitations.
 //
-// # Data Availability Context
-//
-// The NTPU LMS (數位學苑 2.0) was deprecated in 2024, but existing data remains accessible:
-//   - Student ID data: LMS has data from year 94-113 (earlier years have sparse data)
-//   - New enrollments (114+): No longer tracked in LMS 2.0
-//
-// Query capabilities (verified 2024-12):
-//   - Year-based query (學年度查詢): 94-113 (live scraping)
-//   - Name-based query (姓名查詢): 101-113 (cached data only, warmup range)
-//
-// These constants ensure consistent messaging across all modules about data limitations.
+// NTPU LMS (數位學苑 2.0) deprecated in 2024:
+//   - Student ID data: 94-113 (live scraping), 101-113 (cached)
+//   - New enrollments (114+): No data available
 package config
 
 // ================================================
@@ -20,47 +11,25 @@ package config
 // ================================================
 
 const (
-	// IDDataYearStart is the earliest academic year included in cache warmup.
-	// Academic year 101 = 2012.
-	// Note: This is a warmup optimization choice, not a hard data limit.
-	// LMS actually has data from year 90, but warmup only fetches 101+ for efficiency.
-	// Users can still query years 90-100 via live scraping (slower, not cached).
+	// IDDataYearStart is the earliest academic year included in cache warmup (101 = 2012).
+	// LMS has data from year 90, but warmup only fetches 101+ for efficiency.
 	IDDataYearStart = 101
 
-	// IDDataYearEnd is the latest academic year with complete student data.
-	// Academic year 113 = 2024 (verified 2024-12: LMS 2.0 still has 113 data).
+	// IDDataYearEnd is the latest academic year with complete student data (113 = 2024).
 	IDDataYearEnd = 113
 
-	// IDDataCutoffYear is the first year WITHOUT available data.
-	// Academic year 114 = 2025 (LMS 2.0 deprecated, no new data).
+	// IDDataCutoffYear is the first year WITHOUT available data (114 = 2025, LMS 2.0 deprecated).
 	IDDataCutoffYear = 114
 
-	// LMSLaunchYear is the earliest year with complete data in LMS (數位學苑).
-	// Academic year 94 = 2005 (verified 2024-12: earlier years have sparse/incomplete data).
-	// Note: LMS has some data from year 90, but 94+ has more complete coverage.
+	// LMSLaunchYear is the earliest year with complete data in LMS (94 = 2005).
 	LMSLaunchYear = 94
 
-	// NTPUFoundedYear is the year when NTPU was established.
-	// Academic year 89 = 2000 (民國 89 年 2 月 1 日正式成立).
-	// Note: year < 89 means school doesn't exist yet.
+	// NTPUFoundedYear is when NTPU was established (89 = 2000).
 	NTPUFoundedYear = 89
 )
 
-// ================================================
-// User-Facing Messages: Data Limitation Explanations
-// ================================================
-//
-// These messages follow UX best practices:
-//   1. Acknowledge the limitation clearly
-//   2. Explain WHY the limitation exists
-//   3. Provide actionable alternatives
-//   4. Use friendly, non-technical language
-//
-// Message structure:
-//   - Emoji + Clear statement of the problem
-//   - Brief explanation of the reason
-//   - Suggested next steps
-
+// User-facing messages explaining data limitations.
+// Structure: Emoji + Clear statement + Brief explanation + Actionable alternatives.
 const (
 	// IDDataCutoffNotice is the main notice for the 114+ year cutoff.
 	// Used when users query years >= 114.
