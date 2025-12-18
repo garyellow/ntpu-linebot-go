@@ -172,12 +172,7 @@ func createHistoricalCoursesTable(ctx context.Context, db *sql.DB) error {
 }
 
 // createSyllabiTable creates table for course syllabus content
-// Stores separate fields for Chinese and English content:
-// - objectives_cn: 教學目標 (Chinese)
-// - objectives_en: Course Objectives (English, may be empty if merged)
-// - outline_cn: 內容綱要 (Chinese)
-// - outline_en: Course Outline (English, may be empty if merged)
-// - schedule: 教學進度 (schedule content only)
+// All content fields store merged CN+EN content from show_info=all format
 // Uses content_hash for incremental update detection
 func createSyllabiTable(ctx context.Context, db *sql.DB) error {
 	query := `
@@ -187,10 +182,8 @@ func createSyllabiTable(ctx context.Context, db *sql.DB) error {
 		term INTEGER NOT NULL,
 		title TEXT NOT NULL,
 		teachers TEXT,
-		objectives_cn TEXT,
-		objectives_en TEXT,
-		outline_cn TEXT,
-		outline_en TEXT,
+		objectives TEXT,
+		outline TEXT,
 		schedule TEXT,
 		content_hash TEXT NOT NULL,
 		cached_at INTEGER NOT NULL

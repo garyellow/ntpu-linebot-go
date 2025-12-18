@@ -123,11 +123,9 @@ func (idx *BM25Index) Initialize(syllabi []*storage.Syllabus) error {
 
 		// Create single document from all fields
 		fields := &syllabus.Fields{
-			ObjectivesCN: syl.ObjectivesCN,
-			ObjectivesEN: syl.ObjectivesEN,
-			OutlineCN:    syl.OutlineCN,
-			OutlineEN:    syl.OutlineEN,
-			Schedule:     syl.Schedule,
+			Objectives: syl.Objectives,
+			Outline:    syl.Outline,
+			Schedule:   syl.Schedule,
 		}
 		content := fields.ContentForIndexing(syl.Title)
 
@@ -351,11 +349,9 @@ func (idx *BM25Index) AddSyllabus(syl *storage.Syllabus) error {
 
 	// Create single document from all fields
 	fields := &syllabus.Fields{
-		ObjectivesCN: syl.ObjectivesCN,
-		ObjectivesEN: syl.ObjectivesEN,
-		OutlineCN:    syl.OutlineCN,
-		OutlineEN:    syl.OutlineEN,
-		Schedule:     syl.Schedule,
+		Objectives: syl.Objectives,
+		Outline:    syl.Outline,
+		Schedule:   syl.Schedule,
 	}
 	content := fields.ContentForIndexing(syl.Title)
 

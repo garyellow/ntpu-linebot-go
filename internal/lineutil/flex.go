@@ -132,6 +132,12 @@ func (b *FlexBox) WithBackgroundColor(color string) *FlexBox {
 	return b
 }
 
+// WithCornerRadius sets the corner radius of the box.
+func (b *FlexBox) WithCornerRadius(radius string) *FlexBox {
+	b.CornerRadius = radius
+	return b
+}
+
 // FlexText wrapper for messaging_api.FlexText with fluent API.
 type FlexText struct {
 	*messaging_api.FlexText

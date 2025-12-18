@@ -25,11 +25,34 @@ func NewSemesterDetector(countFunc func(ctx context.Context, year, term int) (in
 	return &SemesterDetector{countFunc: countFunc}
 }
 
-// getSemestersToSearch returns 4 semesters to search based on current date.
-// This is the simple calendar-based version.
-// For intelligent detection that checks actual data, use SemesterDetector.DetectActiveSemesters.
+// getSemestersToSearch returns 2 recent semesters to search based on current date.
+// This is the default for user queries - most students only care about recent courses.
+// For warmup or extended search, use getExtendedSemesters (4 semesters).
 func getSemestersToSearch() ([]int, []int) {
+	return getRecentSemestersForDate(time.Now())
+}
+
+// getExtendedSemesters returns 4 semesters for extended search.
+// Use this when user explicitly wants to see more historical courses.
+// Note: For warmup, use SemesterDetector.DetectWarmupSemesters() for intelligent detection.
+func getExtendedSemesters() ([]int, []int) {
 	return getSemestersForDate(time.Now())
+}
+
+// getRecentSemestersForDate returns 2 recent semesters based on a specific date.
+// This is optimized for user queries - most students only need current + previous semester.
+//
+// Examples (returning 2 semesters, newest first):
+//   - 2025/03 → [113-2, 113-1] (Spring semester in progress)
+//   - 2025/09 → [114-1, 113-2] (Fall semester just started)
+//   - 2026/01 → [114-1, 113-2] (Winter break)
+func getRecentSemestersForDate(date time.Time) ([]int, []int) {
+	years, terms := getSemestersForDate(date)
+	// Return only first 2 semesters
+	if len(years) >= 2 {
+		return years[:2], terms[:2]
+	}
+	return years, terms
 }
 
 // getSemestersForDate returns 4 semesters to search based on a specific date.

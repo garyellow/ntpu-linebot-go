@@ -414,6 +414,53 @@ func FormatSemester(year, term int) string {
 	return fmt.Sprintf("%d 學年度 %s", year, termStr)
 }
 
+// FormatSemesterShort formats year and term into a compact semester string.
+// Parameters:
+//   - year: Academic year in ROC calendar (e.g., 113)
+//   - term: 1 for 上學期, 2 for 下學期
+//
+// Returns: Formatted string like "113-2" (year-term format)
+func FormatSemesterShort(year, term int) string {
+	return fmt.Sprintf("%d-%d", year, term)
+}
+
+// SemesterBadgeInfo contains display information for a semester badge.
+type SemesterBadgeInfo struct {
+	Text  string // Badge text (e.g., "🆕 本學期", "📅 上學期")
+	Color string // Badge background color
+}
+
+// GetSemesterBadge returns badge info based on the semester's position relative to current date.
+// This helps users quickly identify which semester a course belongs to.
+//
+// Badge types:
+//   - "🆕 本學期" (Green) - Current semester (index 0)
+//   - "📅 上學期" (Blue) - Previous semester (index 1)
+//   - "📦 過去" (Gray) - Older semesters (index 2+)
+//
+// Parameters:
+//   - year, term: The semester to get badge for
+//   - recentYears, recentTerms: Recent semesters from getSemestersToSearch() for comparison
+//
+// Returns: SemesterBadgeInfo with text and color
+func GetSemesterBadge(year, term int, recentYears, recentTerms []int) SemesterBadgeInfo {
+	// Find the position of this semester in the recent list
+	for i := range recentYears {
+		if recentYears[i] == year && recentTerms[i] == term {
+			switch i {
+			case 0:
+				return SemesterBadgeInfo{Text: "🆕 本學期", Color: ColorPrimary}
+			case 1:
+				return SemesterBadgeInfo{Text: "📅 上學期", Color: ColorButtonExternal}
+			default:
+				return SemesterBadgeInfo{Text: "📦 過去", Color: ColorButtonSecondary}
+			}
+		}
+	}
+	// Not in recent list - treat as historical
+	return SemesterBadgeInfo{Text: "📦 過去", Color: ColorButtonSecondary}
+}
+
 // FormatTeachers formats teacher names with optional truncation.
 // If more than maxCount teachers, shows first maxCount names + "等 N 人".
 // Parameters:
@@ -497,6 +544,16 @@ func QuickReplyRetryAction(retryText string) QuickReplyItem {
 // QuickReplySmartSearchAction returns a "找課" smart search quick reply item
 func QuickReplySmartSearchAction() QuickReplyItem {
 	return QuickReplyItem{Action: NewMessageAction("🔮 找課", "找課")}
+}
+
+// QuickReplyMoreSemestersAction returns a "更多學期" quick reply item for searching older courses.
+// Parameters:
+//   - keyword: The search keyword to preserve when expanding search range
+//
+// Returns a quick reply that triggers extended semester search
+func QuickReplyMoreSemestersAction(keyword string) QuickReplyItem {
+	// Use a special prefix to indicate extended search
+	return QuickReplyItem{Action: NewMessageAction("📅 更多學期", "課程歷史 "+keyword)}
 }
 
 // ================================================

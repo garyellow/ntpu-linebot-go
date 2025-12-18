@@ -4,7 +4,6 @@ package course
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -81,8 +80,15 @@ var (
 		"找課", "找課程", "搜課",
 	}
 
+	// Extended search keywords (searches 4 semesters instead of 2)
+	// 課程歷史: triggered by "更多學期" Quick Reply
+	validExtendedSearchKeywords = []string{
+		"課程歷史", "歷史課程", "更多學期",
+	}
+
 	courseRegex            = bot.BuildKeywordRegex(validCourseKeywords)
 	smartSearchCourseRegex = bot.BuildKeywordRegex(validSmartSearchKeywords)
+	extendedSearchRegex    = bot.BuildKeywordRegex(validExtendedSearchKeywords)
 	// UID format: {year}{term}{no} where:
 	// - year: 2-3 digits (e.g., 113, 99)
 	// - term: 1 digit (1=上學期, 2=下學期)
@@ -276,6 +282,30 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		}
 
 		return h.handleSmartSearch(ctx, searchTerm)
+	}
+
+	// Check for extended search keywords (課程歷史/更多學期) - searches 4 semesters
+	// This is triggered by "📅 更多學期" Quick Reply
+	if extendedSearchRegex.MatchString(text) {
+		match := extendedSearchRegex.FindString(text)
+		searchTerm := bot.ExtractSearchTerm(text, match)
+
+		if searchTerm == "" {
+			sender := lineutil.GetSender(senderName, h.stickerManager)
+			helpText := "📅 更多學期搜尋說明\n\n" +
+				"請提供搜尋關鍵字：\n" +
+				"• 課程歷史 微積分\n" +
+				"• 課程歷史 王小明\n\n" +
+				"💡 這會搜尋近 4 個學期的課程"
+			msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
+			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+				lineutil.QuickReplyCourseAction(),
+				lineutil.QuickReplyHelpAction(),
+			})
+			return []messaging_api.MessageInterface{msg}
+		}
+
+		return h.handleExtendedCourseSearch(ctx, searchTerm)
 	}
 
 	// Check for course title search - extract term after keyword
@@ -577,7 +607,7 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 	if len(courses) > 0 {
 		h.metrics.RecordCacheHit(ModuleName)
 		log.Infof("Found %d courses in cache for search term: %s", len(courses), searchTerm)
-		return h.formatCourseListResponse(courses)
+		return h.formatCourseListResponseWithOptions(courses, searchTerm, false)
 	}
 
 	// Step 3: Cache miss - Try scraping from current and previous semester
@@ -665,7 +695,7 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 		for i, c := range foundCourses {
 			courses[i] = *c
 		}
-		return h.formatCourseListResponse(courses)
+		return h.formatCourseListResponseWithOptions(courses, searchTerm, false)
 	}
 
 	// Step 4: No keyword results - try BM25 smart search as last resort
@@ -698,9 +728,9 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 	// No results found even after scraping and smart search
 	h.metrics.RecordScraperRequest(ModuleName, "not_found", time.Since(startTime).Seconds())
 
-	// Build help message with smart search suggestion
+	// Build help message with suggestions
 	helpText := fmt.Sprintf(
-		"🔍 查無「%s」的相關課程\n\n💡 建議嘗試\n• 縮短關鍵字（如「線性」→「線」）\n• 只輸入教師姓氏\n• 換個描述方式",
+		"🔍 查無「%s」的近期課程\n\n💡 建議嘗試\n• 試試「📅 更多學期」查看過去課程\n• 縮短關鍵字（如「線性」→「線」）\n• 只輸入教師姓氏",
 		searchTerm,
 	)
 	if h.bm25Index != nil && h.bm25Index.IsEnabled() {
@@ -709,7 +739,166 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 
 	msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
 
-	// Build quick reply items
+	// Build quick reply items - include "More Semesters" option
+	quickReplyItems := []lineutil.QuickReplyItem{
+		lineutil.QuickReplyCourseAction(),
+		lineutil.QuickReplyMoreSemestersAction(searchTerm),
+	}
+	if h.bm25Index != nil && h.bm25Index.IsEnabled() {
+		quickReplyItems = append(quickReplyItems,
+			lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("🔮 找課", "找課 "+searchTerm)},
+		)
+	}
+	quickReplyItems = append(quickReplyItems, lineutil.QuickReplyHelpAction())
+	msg.QuickReply = lineutil.NewQuickReply(quickReplyItems)
+	return []messaging_api.MessageInterface{msg}
+}
+
+// handleExtendedCourseSearch handles extended course search (4 semesters instead of default 2).
+// This is triggered by "課程歷史" or "更多學期" keywords, typically from Quick Reply.
+// It searches the same way as handleUnifiedCourseSearch but with expanded semester range.
+func (h *Handler) handleExtendedCourseSearch(ctx context.Context, searchTerm string) []messaging_api.MessageInterface {
+	log := h.logger.WithModule(ModuleName)
+	startTime := time.Now()
+	sender := lineutil.GetSender(senderName, h.stickerManager)
+
+	log.Infof("Handling extended course search (4 semesters): %s", searchTerm)
+
+	var courses []storage.Course
+
+	// Step 1: Try SQL LIKE search for title
+	titleCourses, err := h.db.SearchCoursesByTitle(ctx, searchTerm)
+	if err != nil {
+		log.WithError(err).Error("Failed to search courses by title in cache")
+		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
+		return []messaging_api.MessageInterface{
+			lineutil.ErrorMessageWithQuickReply("搜尋課程時發生問題", sender, "課程歷史 "+searchTerm),
+		}
+	}
+	courses = append(courses, titleCourses...)
+
+	// Step 1b: Also try SQL LIKE search for teacher
+	teacherCourses, err := h.db.SearchCoursesByTeacher(ctx, searchTerm)
+	if err != nil {
+		log.WithError(err).Warn("Failed to search courses by teacher in cache")
+	} else {
+		courses = append(courses, teacherCourses...)
+	}
+
+	// Step 2: Fuzzy character-set matching on all recent courses
+	allCourses, err := h.db.GetCoursesByRecentSemesters(ctx)
+	if err == nil && len(allCourses) > 0 {
+		for _, c := range allCourses {
+			titleMatch := bot.ContainsAllRunes(c.Title, searchTerm)
+			teacherMatch := false
+			for _, teacher := range c.Teachers {
+				if bot.ContainsAllRunes(teacher, searchTerm) {
+					teacherMatch = true
+					break
+				}
+			}
+			if titleMatch || teacherMatch {
+				courses = append(courses, c)
+			}
+		}
+	}
+
+	// Deduplicate results
+	courses = sliceutil.Deduplicate(courses, func(c storage.Course) string { return c.UID })
+
+	if len(courses) > 0 {
+		h.metrics.RecordCacheHit(ModuleName)
+		log.Infof("Found %d courses in extended search for: %s", len(courses), searchTerm)
+		// Mark as extended search - no "more semesters" option needed
+		return h.formatCourseListResponseWithOptions(courses, searchTerm, true)
+	}
+
+	// Step 3: Cache miss - scrape from 4 semesters (extended range)
+	log.Infof("Cache miss for extended search: %s, scraping 4 semesters...", searchTerm)
+	h.metrics.RecordCacheMiss(ModuleName)
+
+	// Use extended semesters (4 instead of 2)
+	searchYears, searchTerms := getExtendedSemesters()
+
+	foundCourses := make([]*storage.Course, 0)
+	existingUIDs := make(map[string]bool)
+
+	for i := range searchYears {
+		year := searchYears[i]
+		term := searchTerms[i]
+
+		scrapedCourses, err := ntpu.ScrapeCourses(ctx, h.scraper, year, term, searchTerm)
+		if err != nil {
+			log.WithError(err).WithField("year", year).WithField("term", term).
+				Debug("Failed to scrape courses for year/term")
+			continue
+		}
+
+		for _, course := range scrapedCourses {
+			if err := h.db.SaveCourse(ctx, course); err != nil {
+				log.WithError(err).Warn("Failed to save course to cache")
+			}
+			if !existingUIDs[course.UID] {
+				foundCourses = append(foundCourses, course)
+				existingUIDs[course.UID] = true
+			}
+		}
+	}
+
+	// Try scraping all courses for teacher search if no results
+	if len(foundCourses) == 0 {
+		for i := range searchYears {
+			year := searchYears[i]
+			term := searchTerms[i]
+
+			scrapedCourses, err := ntpu.ScrapeCourses(ctx, h.scraper, year, term, "")
+			if err != nil {
+				continue
+			}
+
+			for _, course := range scrapedCourses {
+				if err := h.db.SaveCourse(ctx, course); err != nil {
+					log.WithError(err).Warn("Failed to save course to cache")
+				}
+
+				titleMatch := bot.ContainsAllRunes(course.Title, searchTerm)
+				teacherMatch := false
+				for _, teacher := range course.Teachers {
+					if bot.ContainsAllRunes(teacher, searchTerm) {
+						teacherMatch = true
+						break
+					}
+				}
+
+				if (titleMatch || teacherMatch) && !existingUIDs[course.UID] {
+					foundCourses = append(foundCourses, course)
+					existingUIDs[course.UID] = true
+				}
+			}
+		}
+	}
+
+	if len(foundCourses) > 0 {
+		h.metrics.RecordScraperRequest(ModuleName, "success", time.Since(startTime).Seconds())
+		courses := make([]storage.Course, len(foundCourses))
+		for i, c := range foundCourses {
+			courses[i] = *c
+		}
+		return h.formatCourseListResponseWithOptions(courses, searchTerm, true)
+	}
+
+	// No results found
+	h.metrics.RecordScraperRequest(ModuleName, "not_found", time.Since(startTime).Seconds())
+
+	helpText := fmt.Sprintf(
+		"🔍 在近 4 個學期中查無「%s」的課程\n\n💡 建議嘗試\n• 縮短關鍵字（如「線性」→「線」）\n• 只輸入教師姓氏\n• 確認課程名稱是否正確",
+		searchTerm,
+	)
+	if h.bm25Index != nil && h.bm25Index.IsEnabled() {
+		helpText += "\n\n🔮 或用智慧搜尋\n「找課 " + searchTerm + "」"
+	}
+
+	msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
 	quickReplyItems := []lineutil.QuickReplyItem{
 		lineutil.QuickReplyCourseAction(),
 	}
@@ -768,8 +957,8 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	}
 
 	if len(courses) > 0 {
-		log.WithField("count", len(courses)).Info("Found courses in historical cache")
-		h.metrics.RecordScraperRequest(ModuleName, "success", time.Since(startTime).Seconds())
+		h.metrics.RecordCacheHit(ModuleName)
+		log.Infof("Found %d historical courses in cache for year=%d, keyword=%s", len(courses), year, keyword)
 		// Limit results
 		if len(courses) > MaxCoursesPerSearch {
 			courses = courses[:MaxCoursesPerSearch]
@@ -777,30 +966,9 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 		return h.formatCourseListResponse(courses)
 	}
 
-	err := errors.New("no courses found in cache")
-	if err != nil {
-		log.WithError(err).Error("Failed to search historical courses in cache")
-		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
-		msg := lineutil.ErrorMessageWithDetailAndSender("搜尋歷史課程時發生問題", sender)
-		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
-			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				lineutil.QuickReplyRetryAction(fmt.Sprintf("課程 %d %s", year, keyword)),
-				lineutil.QuickReplyCourseAction(),
-				lineutil.QuickReplyHelpAction(),
-			})
-		}
-		return []messaging_api.MessageInterface{msg}
-	}
-
-	if len(courses) > 0 {
-		h.metrics.RecordCacheHit(ModuleName)
-		log.Infof("Found %d historical courses in cache for year=%d, keyword=%s", len(courses), year, keyword)
-		return h.formatCourseListResponse(courses)
-	}
-
 	// Cache miss - scrape from historical course system
-	log.Infof("Cache miss for historical course: year=%d, keyword=%s, scraping...", year, keyword)
 	h.metrics.RecordCacheMiss(ModuleName)
+	log.Infof("Cache miss for historical course: year=%d, keyword=%s, scraping...", year, keyword)
 
 	// Use term=0 to query both semesters at once (more efficient)
 	scrapedCourses, err := ntpu.ScrapeCourses(ctx, h.scraper, year, 0, keyword)
@@ -1001,8 +1169,19 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 	return []messaging_api.MessageInterface{msg}
 }
 
-// formatCourseListResponse formats a list of courses as LINE messages
+// formatCourseListResponse formats a list of courses as LINE messages with semester badges.
+// Courses are sorted by semester (newest first) and each bubble shows a badge indicating
+// whether it's from the current semester, previous semester, or historical.
 func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging_api.MessageInterface {
+	return h.formatCourseListResponseWithOptions(courses, "", false)
+}
+
+// formatCourseListResponseWithOptions formats courses with extended options.
+// Parameters:
+//   - courses: List of courses to display
+//   - searchKeyword: Original search keyword (for "more semesters" Quick Reply)
+//   - isExtendedSearch: True if this is already an extended (4-semester) search
+func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, searchKeyword string, isExtendedSearch bool) []messaging_api.MessageInterface {
 	if len(courses) == 0 {
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender("🔍 查無課程資料", sender)
@@ -1018,10 +1197,13 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 		return b.Term - a.Term // Term: 2 (下學期) before 1 (上學期)
 	})
 
+	// Get recent semesters for badge calculation
+	recentYears, recentTerms := getSemestersToSearch()
+
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	var messages []messaging_api.MessageInterface
 
-	// Limit to 50 courses - track if truncated for warning message
+	// Limit to 40 courses - track if truncated for warning message
 	originalCount := len(courses)
 	truncated := len(courses) > MaxCoursesPerSearch
 	if truncated {
@@ -1031,17 +1213,24 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 	// Create bubbles for carousel (LINE API limit: max 10 bubbles per Flex Carousel)
 	bubbles := make([]messaging_api.FlexBubble, 0, len(courses))
 	for _, course := range courses {
-		// Hero: Course title with course code in format `{課程名稱} ({課程代碼})`
+		// Get semester badge info
+		badge := lineutil.GetSemesterBadge(course.Year, course.Term, recentYears, recentTerms)
+
+		// Hero: Course title with course code + semester badge
 		heroTitle := lineutil.FormatCourseTitleWithUID(course.Title, course.UID)
 		hero := lineutil.NewCompactHeroBox(heroTitle)
 
 		// Build body contents with improved layout
-		// 第一列：學期資訊
-		semesterText := lineutil.FormatSemester(course.Year, course.Term)
+		// 第一列：學期徽章 + 學期資訊
+		semesterShort := lineutil.FormatSemesterShort(course.Year, course.Term)
 		contents := []messaging_api.FlexComponentInterface{
 			lineutil.NewFlexBox("horizontal",
-				lineutil.NewFlexText("📅 開課學期：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
-				lineutil.NewFlexText(semesterText).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).FlexText,
+				// Badge with background color
+				lineutil.NewFlexBox("horizontal",
+					lineutil.NewFlexText(badge.Text).WithSize("xxs").WithColor(lineutil.ColorHeroText).WithWeight("bold").FlexText,
+				).WithBackgroundColor(badge.Color).WithPaddingAll("4px").WithCornerRadius("4px").FlexBox,
+				// Semester text
+				lineutil.NewFlexText(semesterShort).WithSize("xs").WithColor(lineutil.ColorSubtext).WithMargin("sm").FlexText,
 			).WithMargin("sm").WithSpacing("sm").FlexBox,
 			lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 		}
@@ -1124,11 +1313,34 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 		messages = append(messages, warningMsg)
 	}
 
-	// Add Quick Reply to the last message
-	lineutil.AddQuickReplyToMessages(messages,
+	// Build Quick Reply items based on context
+	quickReplyItems := []lineutil.QuickReplyItem{
 		lineutil.QuickReplyCourseAction(),
-		lineutil.QuickReplyHelpAction(),
-	)
+	}
+
+	// Add "More Semesters" option if:
+	// 1. Not already an extended search
+	// 2. Have a search keyword to pass along
+	if !isExtendedSearch && searchKeyword != "" {
+		quickReplyItems = append(quickReplyItems, lineutil.QuickReplyMoreSemestersAction(searchKeyword))
+	}
+
+	// Add smart search option if enabled
+	if h.bm25Index != nil && h.bm25Index.IsEnabled() {
+		// Preserve original keyword (if any) so users can switch to smart search seamlessly.
+		if searchKeyword != "" {
+			quickReplyItems = append(quickReplyItems,
+				lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("🔮 找課", "找課 "+searchKeyword)},
+			)
+		} else {
+			quickReplyItems = append(quickReplyItems, lineutil.QuickReplySmartSearchAction())
+		}
+	}
+
+	quickReplyItems = append(quickReplyItems, lineutil.QuickReplyHelpAction())
+
+	// Add Quick Reply to the last message
+	lineutil.AddQuickReplyToMessages(messages, quickReplyItems...)
 
 	return messages
 }

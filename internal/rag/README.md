@@ -110,11 +110,12 @@ MaxSearchResults = 10
 
 ```
 【課程名稱】
-教學目標：{ObjectivesCN}
-Course Objectives: {ObjectivesEN}
-內容綱要：{OutlineCN}
-Course Outline: {OutlineEN}
-教學進度：{Schedule}
+教學目標：本課程介紹雲端運算基礎概念，包含 AWS EC2, S3, Lambda 等服務
+Introduction to cloud computing with AWS services
+內容綱要：1. 雲端運算概論 2. AWS 架構 3. EC2 虛擬機器 4. S3 儲存服務
+1. Cloud Computing Overview 2. AWS Architecture 3. EC2 4. S3
+教學進度：Week 1: 課程介紹
+Week 2: AWS Academy
 ```
 
 **設計原則**:
@@ -122,6 +123,7 @@ Course Outline: {OutlineEN}
 - BM25 長度正規化 (b=0.75) 自動處理不同長度的文檔
 - 課程名稱前綴提供上下文，改善短查詢的匹配
 - 無需去重邏輯：1 UID = 1 document
+- 使用 show_info=all 格式，所有欄位已包含中英文合併內容
 
 ## 使用
 
