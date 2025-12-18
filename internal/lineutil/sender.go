@@ -57,10 +57,10 @@ const (
 	// Generic error message template - used for unexpected system errors
 	// Structure: emoji + acknowledgment + what to do + how to get help
 	errorMessageTemplate = "😅 抱歉，系統暫時無法處理您的請求\n\n" +
-		"可能是暫時性的問題，建議您：\n" +
+		"這可能是暫時性的問題，建議您：\n" +
 		"• 稍後再試一次\n" +
 		"• 換個方式查詢\n\n" +
-		"如問題持續發生，請告知查詢內容，我們會協助處理。"
+		"若問題持續發生，請告知查詢內容，我們將協助處理。"
 
 	// Error message with detail template (prefix + detail + suffix)
 	// For specific, contextual errors

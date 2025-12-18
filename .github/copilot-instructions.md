@@ -107,9 +107,12 @@ LINE Webhook → Gin Handler
 **Data availability**:
 - Student:
   - **Cache range**: 101-113 學年度 (warmup auto-loads)
-  - **Query range**: 94-113 學年度 (all data, real-time scraping)
-  - **Status**: Static data, no new data after 114 (LMS 2.0 deprecated)
-- Course: 4 most recent semesters, 7-day TTL
+  - **Query range**: 94-113 學年度 (real-time scraping, hard limit due to LMS 2.0 deprecated)
+  - **Status**: Static data, no new data after 114
+- Course:
+  - **Cache range**: 4 most recent semesters (7-day TTL, warmup auto-loads)
+  - **Query range**: 90-current year (Course system launched 90, real-time scraping supported)
+  - **Validation**: Uses `config.CourseSystemLaunchYear` as minimum, not limited by cache content
 - Contact: 7-day TTL
 - Sticker: Startup only, never expires
 - Syllabus: Auto-enabled when LLM API key configured

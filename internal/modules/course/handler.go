@@ -81,9 +81,10 @@ var (
 	}
 
 	// Extended search keywords (searches 4 semesters instead of 2)
-	// 課程歷史: triggered by "更多學期" Quick Reply
+	// Triggered by "📅 更多學期" Quick Reply
+	// "歷史課程" kept for backward compatibility
 	validExtendedSearchKeywords = []string{
-		"課程歷史", "歷史課程", "更多學期",
+		"更多學期", "歷史課程",
 	}
 
 	courseRegex            = bot.BuildKeywordRegex(validCourseKeywords)
@@ -269,7 +270,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 					"🔍 若知道課名，建議用「課程 名稱」"
 			} else {
 				helpText = "⚠️ 智慧搜尋目前未啟用\n\n" +
-					"請使用精確搜尋：\n" +
+					"請使用精確查詢：\n" +
 					"• 課程 微積分\n" +
 					"• 課程 王小明"
 			}
@@ -284,7 +285,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		return h.handleSmartSearch(ctx, searchTerm)
 	}
 
-	// Check for extended search keywords (課程歷史/更多學期) - searches 4 semesters
+	// Check for extended search keywords (更多學期) - searches 4 semesters
 	// This is triggered by "📅 更多學期" Quick Reply
 	if extendedSearchRegex.MatchString(text) {
 		match := extendedSearchRegex.FindString(text)
@@ -293,10 +294,13 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		if searchTerm == "" {
 			sender := lineutil.GetSender(senderName, h.stickerManager)
 			helpText := "📅 更多學期搜尋說明\n\n" +
-				"請提供搜尋關鍵字：\n" +
-				"• 課程歷史 微積分\n" +
-				"• 課程歷史 王小明\n\n" +
-				"💡 這會搜尋近 4 個學期的課程"
+				"🔍 搜尋範圍：近 4 個學期\n" +
+				"（比一般搜尋的 2 個學期更廣）\n\n" +
+				"用法範例：\n" +
+				"• 更多學期 微積分\n" +
+				"• 更多學期 王小明\n\n" +
+				"📆 需要指定年份的課程？\n" +
+				"使用：「課程 110 微積分」"
 			msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
 			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 				lineutil.QuickReplyCourseAction(),
@@ -323,13 +327,17 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			if h.bm25Index != nil && h.bm25Index.IsEnabled() {
 				// Smart search enabled - mention it as an option
 				helpText = "📚 課程查詢方式\n\n" +
-					"🔍 精確搜尋\n" +
+					"🔍 精確搜尋（近 2 學期）\n" +
 					"• 課程 微積分\n" +
 					"• 課程 王小明\n" +
 					"• 課程 線代 王\n\n" +
-					"🔮 智慧搜尋\n" +
+					"🔮 智慧搜尋（近 2 學期）\n" +
 					"• 找課 想學資料分析\n" +
 					"• 找課 Python 入門\n\n" +
+					"📅 更多學期（近 4 學期）\n" +
+					"• 更多學期 微積分\n\n" +
+					"📆 指定年份（任意年份）\n" +
+					"• 課程 110 微積分\n\n" +
 					"💡 直接輸入課號（如 U0001）\n" +
 					"   或完整課號（如 1131U0001）"
 				quickReplyItems = []lineutil.QuickReplyItem{
@@ -338,10 +346,14 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 				}
 			} else {
 				helpText = "📚 課程查詢方式\n\n" +
-					"🔍 精確搜尋\n" +
+					"🔍 精確搜尋（近 2 學期）\n" +
 					"• 課程 微積分\n" +
 					"• 課程 王小明\n" +
 					"• 課程 線代 王\n\n" +
+					"📅 更多學期（近 4 學期）\n" +
+					"• 更多學期 微積分\n\n" +
+					"📆 指定年份（任意年份）\n" +
+					"• 課程 110 微積分\n\n" +
 					"💡 直接輸入課號（如 U0001）\n" +
 					"   或完整課號（如 1131U0001）"
 				quickReplyItems = []lineutil.QuickReplyItem{
@@ -423,7 +435,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 			log.WithError(err).Errorf("Failed to scrape course UID: %s (error type: %T)", uid, err)
 			h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		}
-		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 請確認課程編號是否正確", uid), sender)
+		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🔍 查無此課程編號\n\n課程編號：%s\n💡 請確認編號格式是否正確", uid), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyCourseAction(),
 			lineutil.QuickReplyHelpAction(),
@@ -598,7 +610,7 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 		// Build retry text based on extended flag
 		retryText := "課程 " + searchTerm
 		if extended {
-			retryText = "課程歷史 " + searchTerm
+			retryText = "更多學期 " + searchTerm
 		}
 
 		return []messaging_api.MessageInterface{
@@ -775,19 +787,21 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 	var helpText string
 	if extended {
 		helpText = fmt.Sprintf(
-			"🔍 在%s中查無「%s」的課程\n\n💡 建議嘗試\n• 縮短關鍵字（如「線性」→「線」）\n• 只輸入教師姓氏\n• 確認課程名稱是否正確",
+			"🔍 查無相關課程\n\n查詢內容：%s\n📅 搜尋範圍：%s\n\n💡 建議嘗試：\n• 縮短關鍵字（如「線性」→「線」）\n• 只輸入教師姓氏\n• 指定年份：「課程 110 %s」",
+			searchTerm,
 			semesterType,
 			searchTerm,
 		)
 	} else {
 		helpText = fmt.Sprintf(
-			"🔍 查無「%s」的近期課程\n\n💡 建議嘗試\n• 試試「📅 更多學期」查看過去課程\n• 縮短關鍵字（如「線性」→「線」）\n• 只輸入教師姓氏",
+			"🔍 查無「%s」的相關課程\n\n📅 已搜尋範圍：近 2 個學期\n\n💡 建議嘗試：\n• 「📅 更多學期」查 4 個學期\n• 縮短關鍵字（如「線性」→「線」）\n• 指定年份：「課程 110 %s」",
+			searchTerm,
 			searchTerm,
 		)
 	}
 
 	if h.bm25Index != nil && h.bm25Index.IsEnabled() {
-		helpText += "\n\n🔮 或用智慧搜尋\n「找課 " + searchTerm + "」"
+		helpText += "\n• 智慧搜尋：「找課 " + searchTerm + "」"
 	}
 
 	msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
@@ -815,16 +829,18 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 // handleHistoricalCourseSearch handles historical course queries using "課程 {year} {keyword}" syntax
 // Uses separate historical_courses table with 7-day TTL for on-demand caching
 // This function is called for courses older than the regular warmup range (4 semesters)
+// Supports real-time scraping for any academic year since NTPU was founded
 func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, keyword string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(ModuleName)
 	startTime := time.Now()
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
-	// Validate year range (ROC year: 89 = AD 2000 to current year)
+	// Validate year range: Course system launch year to current year
+	// Course system supports real-time scraping from year 90 onwards
 	currentYear := time.Now().Year() - 1911
-	if year < 89 || year > currentYear {
+	if year < config.CourseSystemLaunchYear || year > currentYear {
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("❌ 無效的學年度：%d\n\n請輸入 89-%d 之間的學年度\n例如：課程 110 微積分", year, currentYear),
+			fmt.Sprintf("❌ 無效的學年度：%d\n\n📅 可查詢範圍：%d-%d 學年度\n（民國 %d-%d 年 = 西元 %d-%d 年）\n\n範例：\n• 課程 110 微積分\n• 課 108 線性代數", year, config.CourseSystemLaunchYear, currentYear, config.CourseSystemLaunchYear, currentYear, config.CourseSystemLaunchYear+1911, currentYear+1911),
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyCourseNav(h.bm25Index != nil && h.bm25Index.IsEnabled()))

@@ -21,6 +21,12 @@ func TestDataLimitConstants(t *testing.T) {
 		t.Errorf("NTPUFoundedYear (%d) should be less than or equal to LMSLaunchYear (%d)", NTPUFoundedYear, LMSLaunchYear)
 	}
 
+	// CourseSystemLaunchYear should be between NTPUFoundedYear and LMSLaunchYear
+	if CourseSystemLaunchYear < NTPUFoundedYear || CourseSystemLaunchYear > LMSLaunchYear {
+		t.Errorf("CourseSystemLaunchYear (%d) should be between NTPUFoundedYear (%d) and LMSLaunchYear (%d)",
+			CourseSystemLaunchYear, NTPUFoundedYear, LMSLaunchYear)
+	}
+
 	// Verify specific values (document expectations)
 	if IDDataYearStart != 101 {
 		t.Errorf("IDDataYearStart = %d, want 101", IDDataYearStart)
@@ -36,6 +42,9 @@ func TestDataLimitConstants(t *testing.T) {
 	}
 	if NTPUFoundedYear != 89 {
 		t.Errorf("NTPUFoundedYear = %d, want 89", NTPUFoundedYear)
+	}
+	if CourseSystemLaunchYear != 90 {
+		t.Errorf("CourseSystemLaunchYear = %d, want 90", CourseSystemLaunchYear)
 	}
 }
 
