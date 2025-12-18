@@ -9,6 +9,32 @@ import (
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
+// Standard message format functions for consistent UX across all modules.
+
+// FormatError creates a standardized error message with title and detail.
+// Format: "❌ {title}\n\n{detail}"
+func FormatError(title, detail string) string {
+	return fmt.Sprintf("❌ %s\n\n%s", title, detail)
+}
+
+// FormatInfo creates a standardized info message with title and detail.
+// Format: "ℹ️ {title}\n\n{detail}"
+func FormatInfo(title, detail string) string {
+	return fmt.Sprintf("ℹ️ %s\n\n%s", title, detail)
+}
+
+// FormatWarning creates a standardized warning message with title and detail.
+// Format: "⚠️ {title}\n\n{detail}"
+func FormatWarning(title, detail string) string {
+	return fmt.Sprintf("⚠️ %s\n\n%s", title, detail)
+}
+
+// FormatSuccess creates a standardized success message with title and detail.
+// Format: "✅ {title}\n\n{detail}"
+func FormatSuccess(title, detail string) string {
+	return fmt.Sprintf("✅ %s\n\n%s", title, detail)
+}
+
 // CarouselColumn represents a column in a carousel template.
 type CarouselColumn struct {
 	ThumbnailImageURL    string

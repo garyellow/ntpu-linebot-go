@@ -71,18 +71,22 @@ func NewProcessor(cfg ProcessorConfig) *Processor {
 	}
 }
 
-// ProcessMessage handles a text message event.
-func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEvent) ([]messaging_api.MessageInterface, error) {
-	// Extract and inject context values for tracing and logging
-	chatID := GetChatID(event.Source)
-	userID := GetUserID(event.Source)
-
-	// Inject context values for downstream handlers
+// injectContextValues adds tracing values (chatID, userID) to context for logging and monitoring.
+func (p *Processor) injectContextValues(ctx context.Context, source webhook.SourceInterface) context.Context {
+	chatID := GetChatID(source)
+	userID := GetUserID(source)
 	ctx = ctxutil.WithChatID(ctx, chatID)
 	ctx = ctxutil.WithUserID(ctx, userID)
+	return ctx
+}
+
+// ProcessMessage handles a text message event.
+func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEvent) ([]messaging_api.MessageInterface, error) {
+	// Inject context values for tracing and logging
+	ctx = p.injectContextValues(ctx, event.Source)
 
 	// Check rate limit early to avoid unnecessary processing
-	if allowed, rateLimitMsg := p.checkUserRateLimit(event.Source, chatID); !allowed {
+	if allowed, rateLimitMsg := p.checkUserRateLimit(event.Source, GetChatID(event.Source)); !allowed {
 		return rateLimitMsg, nil
 	}
 
@@ -107,16 +111,15 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 
 	text := textMsg.Text
 
-	// Validate text length (LINE API allows up to 20000 characters)
+	// Validate text length (LINE API allows up to config.LINEMaxTextMessageLength characters)
 	if len(text) == 0 {
 		return nil, nil // Empty message, ignore
 	}
-	maxLen := 20000 // LINE API limit
-	if len(text) > maxLen {
-		p.logger.Infof("Text message too long: %d characters (limit: %d)", len(text), maxLen)
+	if len(text) > config.LINEMaxTextMessageLength {
+		p.logger.Infof("Text message too long: %d characters (limit: %d)", len(text), config.LINEMaxTextMessageLength)
 		sender := lineutil.GetSender("北大小幫手", p.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("❌ 訊息內容過長\n\n訊息長度超過 %d 字元，請縮短後重試。", maxLen),
+			fmt.Sprintf("❌ 訊息內容過長\n\n訊息長度超過 %d 字元，請縮短後重試。", config.LINEMaxTextMessageLength),
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNavCompact())
@@ -155,13 +158,8 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 
 // ProcessPostback handles a postback event.
 func (p *Processor) ProcessPostback(ctx context.Context, event webhook.PostbackEvent) ([]messaging_api.MessageInterface, error) {
-	// Extract and inject context values for tracing and logging
-	chatID := GetChatID(event.Source)
-	userID := GetUserID(event.Source)
-
-	// Inject context values for downstream handlers
-	ctx = ctxutil.WithChatID(ctx, chatID)
-	ctx = ctxutil.WithUserID(ctx, userID)
+	// Inject context values for tracing and logging
+	ctx = p.injectContextValues(ctx, event.Source)
 
 	data := event.Postback.Data
 
@@ -170,8 +168,8 @@ func (p *Processor) ProcessPostback(ctx context.Context, event webhook.PostbackE
 		p.logger.Debug("Empty postback data")
 		return nil, nil
 	}
-	if len(data) > 300 { // LINE postback data limit is 300 bytes
-		p.logger.Infof("Postback data too long: %d bytes (limit: 300)", len(data))
+	if len(data) > config.LINEMaxPostbackDataLength {
+		p.logger.Infof("Postback data too long: %d bytes (limit: %d)", len(data), config.LINEMaxPostbackDataLength)
 		sender := lineutil.GetSender("北大小幫手", p.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender("❌ 操作資料異常\n\n請使用下方按鈕重新操作", sender)
 		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNavCompact())

@@ -105,7 +105,10 @@ LINE Webhook → Gin Handler
 - **Metrics/Rate Limiter Cleanup**: Every 5 minutes
 
 **Data availability**:
-- Student: 94-113 學年度 (static, not refreshed)
+- Student:
+  - **Cache range**: 101-113 學年度 (warmup auto-loads)
+  - **Query range**: 94-113 學年度 (all data, real-time scraping)
+  - **Status**: Static data, no new data after 114 (LMS 2.0 deprecated)
 - Course: 4 most recent semesters, 7-day TTL
 - Contact: 7-day TTL
 - Sticker: Startup only, never expires
