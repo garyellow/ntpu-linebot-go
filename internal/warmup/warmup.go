@@ -465,9 +465,10 @@ processLoop:
 			continue
 		}
 
-		// Compute content hash from all fields (including title) for change detection
-		// This ensures re-indexing when course title changes
-		contentForHash := course.Title + "\n" + fields.Objectives + "\n" + fields.Outline + "\n" + fields.Schedule
+		// Compute content hash from syllabus content fields for change detection
+		// Note: Course title is stored separately and not included in hash to avoid
+		// unnecessary re-indexing when only the title changes (content remains same)
+		contentForHash := fields.Objectives + "\n" + fields.Outline + "\n" + fields.Schedule
 		contentHash := syllabus.ComputeContentHash(contentForHash)
 
 		// Check if content has changed (incremental update)

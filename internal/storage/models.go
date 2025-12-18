@@ -52,17 +52,21 @@ type Sticker struct {
 }
 
 // Syllabus represents a course syllabus record for smart search
-// Stores unified syllabus content from show_info=all format
-// Each field stores merged CN+EN content (combined during scraping)
+// Syllabus stores unified syllabus content from NTPU course detail pages
+// Supports both merged format (show_info=all) and separate CN/EN formats:
+//   - Merged: "教學目標 Course Objectives：" (single field with CN+EN)
+//   - Separate: "教學目標：" + "Course Objectives：" (two fields merged during scraping)
+//
+// Each field stores merged CN+EN content for BM25 search indexing
 type Syllabus struct {
-	UID         string   `json:"uid"`          // Course unique identifier
+	UID         string   `json:"uid"`          // Course unique identifier (e.g., "1132U3009")
 	Year        int      `json:"year"`         // Academic year
 	Term        int      `json:"term"`         // Semester (1 or 2)
 	Title       string   `json:"title"`        // Course title
 	Teachers    []string `json:"teachers"`     // Course instructors
-	Objectives  string   `json:"objectives"`   // 教學目標 Course Objectives (merged content)
-	Outline     string   `json:"outline"`      // 內容綱要/Course Outline (merged content)
-	Schedule    string   `json:"schedule"`     // 教學進度 (weekly schedule)
-	ContentHash string   `json:"content_hash"` // SHA256 hash for change detection
+	Objectives  string   `json:"objectives"`   // 教學目標 + Course Objectives (merged CN+EN)
+	Outline     string   `json:"outline"`      // 內容綱要 + Course Outline (merged CN+EN)
+	Schedule    string   `json:"schedule"`     // 教學進度 weekly schedule (教學預定進度 column only)
+	ContentHash string   `json:"content_hash"` // SHA256 hash for incremental update detection
 	CachedAt    int64    `json:"cached_at"`    // Unix timestamp when cached
 }

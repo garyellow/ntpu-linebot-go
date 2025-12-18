@@ -15,12 +15,16 @@ func ComputeContentHash(content string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-// Fields represents parsed syllabus fields from the course detail page
-// Uses show_info=all format which provides complete data in a consistent structure
+// Fields represents parsed syllabus fields from the course detail page.
+// Supports both merged and separate CN/EN formats:
+//   - Merged: "教學目標 Course Objectives：" (single TD cell)
+//   - Separate: "教學目標：" + "Course Objectives：" (two TD cells, merged during parsing)
+//
+// All fields store combined CN+EN content for BM25 search indexing
 type Fields struct {
-	Objectives string // 教學目標 Course Objectives (combined CN+EN content)
-	Outline    string // 內容綱要/Course Outline (combined CN+EN content)
-	Schedule   string // 教學進度 (weekly schedule content)
+	Objectives string // 教學目標 + Course Objectives (merged CN+EN content)
+	Outline    string // 內容綱要 + Course Outline (merged CN+EN content)
+	Schedule   string // 教學進度 weekly schedule (教學預定進度 column only)
 }
 
 // ContentForIndexing returns a single document string for BM25 search indexing.

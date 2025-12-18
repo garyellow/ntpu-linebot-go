@@ -29,7 +29,11 @@ func NewScraper(client *scraper.Client) *Scraper {
 	return &Scraper{client: client}
 }
 
-// ScrapeSyllabus extracts syllabus content from a course's detail URL (show_info=all format)
+// ScrapeSyllabus extracts syllabus content from a course's detail URL
+// Supports both formats:
+//   - Merged: "教學目標 Course Objectives：" (single field)
+//   - Separate: "教學目標" + "Course Objectives：" (two fields)
+//
 // Returns the merged content (教學目標 + 內容綱要 + 教學進度) for BM25 indexing
 func (s *Scraper) ScrapeSyllabus(ctx context.Context, course *storage.Course) (*Fields, error) {
 	if course.DetailURL == "" {
@@ -67,14 +71,16 @@ func (s *Scraper) ScrapeSyllabus(ctx context.Context, course *storage.Course) (*
 }
 
 // parseSyllabusPage extracts syllabus fields from HTML document
-// Expects show_info=all format with merged CN+EN content in single TD cells:
-// - "教學目標 Course Objectives：" (objectives)
-// - "內容綱要/Course Outline：" (outline)
-// - "教學進度(Teaching Schedule)：" (schedule table)
+// Supports both merged and separate formats:
+//   - Merged: "教學目標 Course Objectives：" (single TD with both CN+EN)
+//   - Separate: "教學目標：" and "Course Objectives：" (two separate TDs)
+//
+// Returns unified Fields with objectives, outline, and schedule
 func parseSyllabusPage(doc *goquery.Document) *Fields {
 	fields := &Fields{}
 
-	// findContentByPrefix locates TD starting with the prefix and extracts font-c13 content
+	// findContentByPrefix extracts content from TD starting with the prefix
+	// Supports multiple font-c13 elements and falls back to text content if none found
 	findContentByPrefix := func(prefix string) string {
 		var content string
 
@@ -88,34 +94,77 @@ func parseSyllabusPage(doc *goquery.Document) *Fields {
 				return
 			}
 
-			// Extract content from font-c13 span (most common format)
-			if span := td.Find("span.font-c13"); span.Length() > 0 {
-				content = strings.TrimSpace(span.First().Text())
+			// Try to extract all font-c13 elements (both span and div)
+			var parts []string
+			td.Find("span.font-c13, div.font-c13").Each(func(j int, elem *goquery.Selection) {
+				if part := strings.TrimSpace(elem.Text()); part != "" {
+					parts = append(parts, part)
+				}
+			})
+
+			if len(parts) > 0 {
+				content = strings.Join(parts, "")
 				return
 			}
 
-			// Fallback: try div.font-c13
-			if div := td.Find("div.font-c13"); div.Length() > 0 {
-				content = strings.TrimSpace(div.First().Text())
-				return
-			}
+			// Fallback: extract text content after prefix (for pages without font-c13)
+			// Remove prefix and colon, trim whitespace
+			afterPrefix := strings.TrimSpace(strings.TrimPrefix(text, prefix))
+			afterPrefix = strings.TrimPrefix(afterPrefix, "：")
+			afterPrefix = strings.TrimPrefix(afterPrefix, ":")
+			content = strings.TrimSpace(afterPrefix)
 		})
 
 		return content
 	}
 
-	// findObjectives extracts merged objectives content from show_info=all format
+	// findObjectives extracts objectives content, supporting both merged and separate formats
 	findObjectives := func() string {
-		return findContentByPrefix("教學目標 Course Objectives")
+		// Try merged format first: "教學目標 Course Objectives："
+		merged := findContentByPrefix("教學目標 Course Objectives")
+		if merged != "" {
+			return merged
+		}
+
+		// Try separate format: "教學目標：" and "Course Objectives："
+		cn := findContentByPrefix("教學目標")
+		en := findContentByPrefix("Course Objectives")
+
+		// Merge CN and EN if both exist
+		if cn != "" && en != "" {
+			return cn + " " + en
+		}
+		if cn != "" {
+			return cn
+		}
+		return en
 	}
 
-	// findOutline extracts merged outline content from show_info=all format
+	// findOutline extracts outline content, supporting both merged and separate formats
 	findOutline := func() string {
-		return findContentByPrefix("內容綱要/Course Outline")
+		// Try merged format first: "內容綱要/Course Outline："
+		merged := findContentByPrefix("內容綱要/Course Outline")
+		if merged != "" {
+			return merged
+		}
+
+		// Try separate format: "內容綱要：" and "Course Outline："
+		cn := findContentByPrefix("內容綱要")
+		en := findContentByPrefix("Course Outline")
+
+		// Merge CN and EN if both exist
+		if cn != "" && en != "" {
+			return cn + " " + en
+		}
+		if cn != "" {
+			return cn
+		}
+		return en
 	}
 
 	// findSchedule extracts schedule from table format
 	// Table structure: 週別 | 日期 | 教學預定進度 | 教學方法與教學活動
+	// Validates table by checking for "週別" or "Weekly" in header row
 	findSchedule := func() string {
 		var items []string
 
@@ -175,19 +224,6 @@ func parseSyllabusPage(doc *goquery.Document) *Fields {
 	fields.Schedule = cleanContent(findSchedule())
 
 	return fields
-}
-
-// joinNonEmpty joins two strings with newline, skipping empty strings
-func joinNonEmpty(a, b string) string {
-	a = strings.TrimSpace(a)
-	b = strings.TrimSpace(b)
-	if a == "" {
-		return b
-	}
-	if b == "" {
-		return a
-	}
-	return a + "\n" + b
 }
 
 // cleanContent normalizes whitespace

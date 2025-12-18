@@ -80,7 +80,7 @@ func TestParseSyllabusPage(t *testing.T) {
 			wantEmpty: true,
 		},
 		{
-			name: "standard format with font-c13 span",
+			name: "merged format with font-c13 span (show_info=all)",
 			html: `<html><body>
 				<table>
 					<tr><td>教學目標 Course Objectives：<span class="font-c13">培養程式設計能力</span></td></tr>
@@ -96,6 +96,41 @@ func TestParseSyllabusPage(t *testing.T) {
 			wantObjectives: "培養程式設計能力",
 			wantOutline:    "變數與資料型態",
 			wantSchedule:   "Week 1: 課程介紹",
+		},
+		{
+			name: "separate format CN and EN objectives",
+			html: `<html><body>
+				<table>
+					<tr><td>教學目標：<span class="font-c13">本課程介紹研習財務工程學所需之數學理論</span></td></tr>
+					<tr><td>Course Objectives：<span class="font-c13">This course introduces the mathematical theory</span></td></tr>
+					<tr><td>內容綱要：<span class="font-c13">1. Brownian Motion 2. Ito integral</span></td></tr>
+					<tr><td>Course Outline：<span class="font-c13">1. Brownian Motion 2. Ito integral</span></td></tr>
+				</table>
+			</body></html>`,
+			wantObjectives: "本課程介紹研習財務工程學所需之數學理論 This course introduces the mathematical theory",
+			wantOutline:    "1. Brownian Motion 2. Ito integral 1. Brownian Motion 2. Ito integral",
+		},
+		{
+			name: "separate format CN only",
+			html: `<html><body>
+				<table>
+					<tr><td>教學目標：精進程式語言的的程式設計語法和實作技巧</td></tr>
+					<tr><td>內容綱要：精進C語言的程式設計語法和實作技巧</td></tr>
+				</table>
+			</body></html>`,
+			wantObjectives: "精進程式語言的的程式設計語法和實作技巧",
+			wantOutline:    "精進C語言的程式設計語法和實作技巧",
+		},
+		{
+			name: "separate format EN only",
+			html: `<html><body>
+				<table>
+					<tr><td>Course Objectives：To practice basic ideas and techniques</td></tr>
+					<tr><td>Course Outline：1. Introduction 2. Structured Program Development</td></tr>
+				</table>
+			</body></html>`,
+			wantObjectives: "To practice basic ideas and techniques",
+			wantOutline:    "1. Introduction 2. Structured Program Development",
 		},
 		{
 			name: "standard format with font-c13 div",
@@ -185,6 +220,96 @@ func TestParseSyllabusPage(t *testing.T) {
 			</body></html>`,
 			wantSchedule: "",
 		},
+		{
+			name: "missing font-c13 class falls back to text content",
+			html: `<html><body>
+				<table>
+					<tr><td>教學目標 Course Objectives：培養批判性思維</td></tr>
+					<tr><td>內容綱要/Course Outline：論證分析、邏輯推理</td></tr>
+				</table>
+			</body></html>`,
+			wantObjectives: "培養批判性思維",
+			wantOutline:    "論證分析、邏輯推理",
+		},
+		{
+			name: "multiple font-c13 elements concatenated",
+			html: `<html><body>
+				<table>
+					<tr><td>教學目標 Course Objectives：<span class="font-c13">目標一</span><span class="font-c13">目標二</span></td></tr>
+				</table>
+			</body></html>`,
+			wantObjectives: "目標一目標二",
+		},
+		{
+			name: "nested tables in schedule section",
+			html: `<html><body>
+				<table>
+					<tr><td>教學進度(Teaching Schedule)：
+						<table>
+							<tr><td>週別</td><td>內容</td></tr>
+							<tr>
+								<td>Week 1</td>
+								<td>
+									<table><tr><td>子表格內容</td></tr></table>
+								</td>
+							</tr>
+						</table>
+					</td></tr>
+				</table>
+			</body></html>`,
+			wantSchedule: "", // 因 header 驗證失敗應返回空
+		},
+		{
+			name: "excessive whitespace normalized",
+			html: `<html><body>
+				<table>
+					<tr><td>教學目標 Course Objectives：<span class="font-c13">   多餘    空白   測試   </span></td></tr>
+					<tr><td>內容綱要/Course Outline：<span class="font-c13">
+
+						多行
+
+						換行
+
+						測試
+
+					</span></td></tr>
+				</table>
+			</body></html>`,
+			wantObjectives: "多餘 空白 測試",
+			wantOutline:    "多行\n\n換行\n\n測試",
+		},
+		{
+			name: "HTML entities decoded",
+			html: `<html><body>
+				<table>
+					<tr><td>教學目標 Course Objectives：<span class="font-c13">學習 C&amp;C++ &lt;程式設計&gt;</span></td></tr>
+				</table>
+			</body></html>`,
+			wantObjectives: "學習 C&C++ <程式設計>",
+		},
+		{
+			name: "mixed span and div with font-c13",
+			html: `<html><body>
+				<table>
+					<tr><td>教學目標 Course Objectives：<span class="font-c13">Span內容</span><div class="font-c13">Div內容</div></td></tr>
+				</table>
+			</body></html>`,
+			wantObjectives: "Span內容Div內容",
+		},
+		{
+			name: "schedule with only 3 columns (no method column)",
+			html: `<html><body>
+				<table>
+					<tr><td>教學進度(Teaching Schedule)：
+						<table>
+							<tr><td>週別</td><td>日期</td><td>教學預定進度</td></tr>
+							<tr><td>Week 1</td><td>20250911</td><td>課程介紹</td></tr>
+						</table>
+					</td></tr>
+				</table>
+			</body></html>`,
+			wantSchedule: "Week 1: 課程介紹",
+		},
 	}
 
 	for _, tt := range tests {
@@ -211,67 +336,6 @@ func TestParseSyllabusPage(t *testing.T) {
 			}
 			if tt.wantSchedule != "" && !strings.Contains(fields.Schedule, tt.wantSchedule) {
 				t.Errorf("Schedule = %q, want to contain %q", fields.Schedule, tt.wantSchedule)
-			}
-		})
-	}
-}
-
-func TestJoinNonEmpty(t *testing.T) {
-	tests := []struct {
-		name string
-		a    string
-		b    string
-		want string
-	}{
-		{
-			name: "both non-empty",
-			a:    "中文內容",
-			b:    "English content",
-			want: "中文內容\nEnglish content",
-		},
-		{
-			name: "a empty",
-			a:    "",
-			b:    "English content",
-			want: "English content",
-		},
-		{
-			name: "b empty",
-			a:    "中文內容",
-			b:    "",
-			want: "中文內容",
-		},
-		{
-			name: "both empty",
-			a:    "",
-			b:    "",
-			want: "",
-		},
-		{
-			name: "a only whitespace",
-			a:    "   ",
-			b:    "English content",
-			want: "English content",
-		},
-		{
-			name: "b only whitespace",
-			a:    "中文內容",
-			b:    "\t\n  ",
-			want: "中文內容",
-		},
-		{
-			name: "both whitespace",
-			a:    "  ",
-			b:    "\t\n",
-			want: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := joinNonEmpty(tt.a, tt.b)
-			if got != tt.want {
-				t.Errorf("joinNonEmpty(%q, %q) = %q, want %q", tt.a, tt.b, got, tt.want)
 			}
 		})
 	}
