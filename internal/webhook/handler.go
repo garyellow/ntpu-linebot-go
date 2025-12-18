@@ -165,7 +165,7 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 			messages = messages[:h.maxMessagesPerReply-1]
 			sender := lineutil.GetSender("北大小幫手", h.stickerManager)
 			msg := lineutil.NewTextMessageWithConsistentSender(
-				"ℹ️ 由於訊息數量限制，部分內容未完全顯示\n\n💡 請使用更具體的關鍵字縮小搜尋範圍",
+				"ℹ️ 由於訊息數量限制，部分內容未完整顯示\n\n💡 請使用更具體的關鍵字縮小查詢範圍",
 				sender,
 			)
 			msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNavCompact())

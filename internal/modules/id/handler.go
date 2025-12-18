@@ -212,7 +212,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		// No year provided - show guidance message
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			"📅 按學年查詢學生\n\n請輸入要查詢的學年度\n例如：學年 112、學年 110\n\n📋 查詢流程：\n1️⃣ 選擇學院群（文法商/公社電資）\n2️⃣ 選擇學院\n3️⃣ 選擇科系\n4️⃣ 查看該年度該科系所有學生\n\n⚠️ 僅提供 94-113 學年度資料",
+			"📅 按學年度查詢學生\n\n請輸入學年度進行查詢\n例如：學年 112、學年 110\n\n📋 查詢流程：\n1️⃣ 選擇學院群（文法商/公社電資）\n2️⃣ 選擇學院\n3️⃣ 選擇系所\n4️⃣ 查看該系所所有學生\n\n⚠️ 僅提供 94-113 學年度資料",
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -476,7 +476,7 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 	// Parse year
 	year, err := parseYear(yearStr)
 	if err != nil {
-		msg := lineutil.NewTextMessageWithConsistentSender("📅 無效的年份格式\n\n請輸入 2-4 位數字\n例如：112 或 2023", sender)
+		msg := lineutil.NewTextMessageWithConsistentSender("📅 年份格式不正確\n\n請輸入 2-4 位數字\n例如：112 或 2023", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			{Action: lineutil.NewMessageAction("📅 查詢 112 學年度", "學年 112")},
 			lineutil.QuickReplyHelpAction(),
@@ -537,7 +537,7 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 	}
 
 	// Create confirmation message with flow explanation + meme buttons
-	confirmText := fmt.Sprintf("📅 %d 學年度學生查詢\n\n📋 查詢流程：\n1️⃣ 選擇學院群\n2️⃣ 選擇學院\n3️⃣ 選擇科系\n\n確定要查詢嗎？", year)
+	confirmText := fmt.Sprintf("📅 %d 學年度學生查詢\n\n📋 查詢流程：\n1️⃣ 選擇學院群\n2️⃣ 選擇學院\n3️⃣ 選擇系所\n\n確定要開始查詢？", year)
 	confirmMsg := lineutil.NewConfirmTemplate(
 		"確認學年度",
 		confirmText,
@@ -603,7 +603,7 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	if err != nil {
 		log.WithError(err).Errorf("Failed to scrape student ID: %s", studentID)
 		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
-		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🔍 學號 %s 不存在喔\n\n請確認學號是否正確", studentID), sender)
+		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🔍 查無此學號\n\n學號：%s\n請確認學號格式是否正確", studentID), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyStudentAction(),
 			lineutil.QuickReplyDeptCodeAction(),

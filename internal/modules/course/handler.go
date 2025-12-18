@@ -270,7 +270,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 					"🔍 若知道課名，建議用「課程 名稱」"
 			} else {
 				helpText = "⚠️ 智慧搜尋目前未啟用\n\n" +
-					"請使用精確搜尋：\n" +
+					"請使用精確查詢：\n" +
 					"• 課程 微積分\n" +
 					"• 課程 王小明"
 			}
@@ -435,7 +435,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 			log.WithError(err).Errorf("Failed to scrape course UID: %s (error type: %T)", uid, err)
 			h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		}
-		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 請確認課程編號是否正確", uid), sender)
+		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🔍 查無此課程編號\n\n課程編號：%s\n💡 請確認編號格式是否正確", uid), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyCourseAction(),
 			lineutil.QuickReplyHelpAction(),
@@ -787,7 +787,7 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 	var helpText string
 	if extended {
 		helpText = fmt.Sprintf(
-			"🔍 查無「%s」的相關課程\n\n📅 已搜尋範圍：%s\n\n💡 建議嘗試：\n• 縮短關鍵字（如「線性」→「線」）\n• 只輸入教師姓氏\n• 指定年份：「課程 110 %s」",
+			"🔍 查無相關課程\n\n查詢內容：%s\n📅 搜尋範圍：%s\n\n💡 建議嘗試：\n• 縮短關鍵字（如「線性」→「線」）\n• 只輸入教師姓氏\n• 指定年份：「課程 110 %s」",
 			searchTerm,
 			semesterType,
 			searchTerm,
