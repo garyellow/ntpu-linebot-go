@@ -514,7 +514,7 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 		}
 	}
 
-	// 3. Check if year is before NTPU was founded (ROC 89 = 2000)
+	// 3. Check if year is before NTPU was founded
 	if year < config.NTPUFoundedYear {
 		msg := lineutil.NewTextMessageWithConsistentSender(config.IDYearBeforeNTPUMessage, sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{

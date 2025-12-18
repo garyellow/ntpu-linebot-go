@@ -829,16 +829,18 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 // handleHistoricalCourseSearch handles historical course queries using "課程 {year} {keyword}" syntax
 // Uses separate historical_courses table with 7-day TTL for on-demand caching
 // This function is called for courses older than the regular warmup range (4 semesters)
+// Supports real-time scraping for any academic year since NTPU was founded
 func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, keyword string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(ModuleName)
 	startTime := time.Now()
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
-	// Validate year range (ROC year: 89 = AD 2000 to current year)
+	// Validate year range: Course system launch year to current year
+	// Course system supports real-time scraping from year 90 onwards
 	currentYear := time.Now().Year() - 1911
-	if year < 89 || year > currentYear {
+	if year < config.CourseSystemLaunchYear || year > currentYear {
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("❌ 無效的學年度：%d\n\n📅 可查詢範圍：%d-%d 學年度\n（民國 %d 年 = 西元 %d 年）\n\n範例：\n• 課程 110 微積分\n• 課 108 線性代數", year, 89, currentYear, 89, 2000),
+			fmt.Sprintf("❌ 無效的學年度：%d\n\n📅 可查詢範圍：%d-%d 學年度\n（民國 %d-%d 年 = 西元 %d-%d 年）\n\n範例：\n• 課程 110 微積分\n• 課 108 線性代數", year, config.CourseSystemLaunchYear, currentYear, config.CourseSystemLaunchYear, currentYear, config.CourseSystemLaunchYear+1911, currentYear+1911),
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyCourseNav(h.bm25Index != nil && h.bm25Index.IsEnabled()))

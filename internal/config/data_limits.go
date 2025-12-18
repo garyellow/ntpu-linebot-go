@@ -25,7 +25,12 @@ const (
 	LMSLaunchYear = 94
 
 	// NTPUFoundedYear is when NTPU was established (89 = 2000).
+	// Note: Used for ID module validation only (before LMS existed).
 	NTPUFoundedYear = 89
+
+	// CourseSystemLaunchYear is the earliest year with course data available (90 = 2001).
+	// Course query system started from year 90.
+	CourseSystemLaunchYear = 90
 )
 
 // User-facing messages explaining data limitations.
