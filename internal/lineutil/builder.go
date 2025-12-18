@@ -550,10 +550,10 @@ func QuickReplySmartSearchAction() QuickReplyItem {
 // Parameters:
 //   - keyword: The search keyword to preserve when expanding search range
 //
-// Returns a quick reply that triggers extended semester search
+// Returns a quick reply that triggers extended semester search (4 semesters)
 func QuickReplyMoreSemestersAction(keyword string) QuickReplyItem {
-	// Use a special prefix to indicate extended search
-	return QuickReplyItem{Action: NewMessageAction("📅 更多學期", "課程歷史 "+keyword)}
+	// Trigger extended search with consistent terminology
+	return QuickReplyItem{Action: NewMessageAction("📅 更多學期", "更多學期 "+keyword)}
 }
 
 // ================================================
