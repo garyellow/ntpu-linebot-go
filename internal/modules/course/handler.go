@@ -24,6 +24,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/ratelimit"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper/ntpu"
+	"github.com/garyellow/ntpu-linebot-go/internal/sliceutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
@@ -571,7 +572,7 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 	}
 
 	// Deduplicate results by UID (SQL LIKE and fuzzy may find overlapping results)
-	courses = deduplicateCourses(courses)
+	courses = sliceutil.Deduplicate(courses, func(c storage.Course) string { return c.UID })
 
 	if len(courses) > 0 {
 		h.metrics.RecordCacheHit(ModuleName)
@@ -1130,19 +1131,6 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 	)
 
 	return messages
-}
-
-// deduplicateCourses removes duplicate courses by UID while preserving order
-func deduplicateCourses(courses []storage.Course) []storage.Course {
-	seen := make(map[string]bool)
-	result := make([]storage.Course, 0, len(courses))
-	for _, c := range courses {
-		if !seen[c.UID] {
-			seen[c.UID] = true
-			result = append(result, c)
-		}
-	}
-	return result
 }
 
 // handleSmartSearch performs smart search using BM25 + Query Expansion
