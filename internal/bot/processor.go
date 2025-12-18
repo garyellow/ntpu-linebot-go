@@ -864,7 +864,7 @@ func (p *Processor) buildTipsFlexMessage(nluEnabled bool, sender *messaging_api.
 					WithSize("sm").
 					WithColor(lineutil.ColorSubtext).
 					WithFlex(0).FlexText,
-				lineutil.NewFlexText("課程/聯絡資料每天更新（快取保留 7 天）").
+				lineutil.NewFlexText("課程/聯絡資料每天更新").
 					WithSize("sm").
 					WithColor(lineutil.ColorText).
 					WithMargin("sm").
@@ -911,7 +911,7 @@ func (p *Processor) buildTipsFlexMessage(nluEnabled bool, sender *messaging_api.
 					WithSize("sm").
 					WithColor(lineutil.ColorSubtext).
 					WithFlex(0).FlexText,
-				lineutil.NewFlexText("課程/聯絡資料每天更新（快取保留 7 天）").
+				lineutil.NewFlexText("課程/聯絡資料每天更新").
 					WithSize("sm").
 					WithColor(lineutil.ColorText).
 					WithMargin("sm").
