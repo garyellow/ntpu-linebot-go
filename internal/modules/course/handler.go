@@ -255,7 +255,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			var helpText string
 			if h.bm25Index != nil && h.bm25Index.IsEnabled() {
 				helpText = "🔮 智慧搜尋說明\n\n" +
-					"請描述您想找的課程內容：\n" +
+					"請描述您想找的課程內容\n" +
 					"• 找課 想學資料分析\n" +
 					"• 找課 Python 機器學習\n" +
 					"• 找課 商業管理相關\n\n" +
@@ -393,7 +393,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 			log.WithError(err).Errorf("Failed to scrape course UID: %s (error type: %T)", uid, err)
 			h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		}
-		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🔍 查無課程編號 %s\n\n請確認課程編號是否正確", uid), sender)
+		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 請確認課程編號是否正確", uid), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyCourseAction(),
 			lineutil.QuickReplyHelpAction(),
@@ -406,7 +406,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 		log.Warnf("Course UID %s not found after scraping", uid)
 		h.metrics.RecordScraperRequest(ModuleName, "not_found", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("🔍 查無課程編號 %s\n\n請確認\n• 課程編號拼寫是否正確\n• 該課程是否在近期開設", uid),
+			fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 建議\n• 確認課程編號拼寫是否正確\n• 該課程是否在近期開設", uid),
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -491,7 +491,7 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 
 	// Build helpful message
 	msg := lineutil.NewTextMessageWithConsistentSender(
-		fmt.Sprintf("🔍 查無課程編號 %s\n\n請確認\n• 課程編號拼寫是否正確（如 U0001）\n• 該課程是否在近期開設\n\n💡 或使用「課程 課名」查詢", courseNo),
+		fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 建議\n• 確認課程編號拼寫是否正確（如 U0001）\n• 該課程是否在近期開設\n• 或使用「課程 課名」查詢", courseNo),
 		sender,
 	)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -735,7 +735,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	currentYear := time.Now().Year() - 1911
 	if year < 89 || year > currentYear {
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("❌ 無效的學年度：%d\n\n請輸入 89-%d 之間的學年度\n範例：課程 110 微積分", year, currentYear),
+			fmt.Sprintf("❌ 無效的學年度：%d\n\n請輸入 89-%d 之間的學年度\n例如：課程 110 微積分", year, currentYear),
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyCourseNav(h.bm25Index != nil && h.bm25Index.IsEnabled()))
@@ -1118,7 +1118,7 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 	// Append warning message at the end if results were truncated
 	if truncated {
 		warningMsg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("⚠️ 搜尋結果超過 %d 門課程，僅顯示前 %d 門。\n\n建議使用更精確的搜尋條件以縮小範圍。", originalCount, MaxCoursesPerSearch),
+			fmt.Sprintf("⚠️ 搜尋結果超過 %d 門課程，僅顯示前 %d 門\n\n建議使用更精確的搜尋條件以縮小範圍", originalCount, MaxCoursesPerSearch),
 			sender,
 		)
 		messages = append(messages, warningMsg)
