@@ -41,9 +41,6 @@ services:
       - SCRAPER_TIMEOUT=${SCRAPER_TIMEOUT:-60s}
       - SCRAPER_MAX_RETRIES=${SCRAPER_MAX_RETRIES:-5}
 
-      # Daily refresh: contact, course (hardcoded)
-      # Syllabus auto-enabled when LLM API key is set
-
       # Webhook Configuration
       - WEBHOOK_TIMEOUT=${WEBHOOK_TIMEOUT:-60s}
 

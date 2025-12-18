@@ -87,8 +87,8 @@ LINE Webhook → Gin Handler
 - **Cache Strategy by Data Type**:
   - **Students**: Never expires, not refreshed (static data)
   - **Stickers**: Never expires, loaded once on startup
-  - **Contacts/Courses**: 7-day Hard TTL, refreshed daily at 3:00 AM Taiwan time
-  - **Syllabi**: 7-day Hard TTL, auto-enabled when LLM API key is configured
+  - **Contacts/Courses**: 7-day TTL, refreshed daily at 3:00 AM Taiwan time
+  - **Syllabi**: 7-day TTL, auto-enabled when LLM API key is configured
 - TTL enforced at SQL level for contacts/courses: `WHERE cached_at > ?`
 - **Syllabi table**: Stores syllabus content + SHA256 hash for incremental updates
 

@@ -141,7 +141,7 @@ func createStickersTable(ctx context.Context, db *sql.DB) error {
 
 // createHistoricalCoursesTable creates table for historical course queries
 // This table stores courses from semesters older than the regular warmup range (4 semesters)
-// Uses 7-day hard TTL for cache management, same structure as regular courses table
+// Uses 7-day TTL for cache management, same structure as regular courses table
 func createHistoricalCoursesTable(ctx context.Context, db *sql.DB) error {
 	query := `
 	CREATE TABLE IF NOT EXISTS historical_courses (

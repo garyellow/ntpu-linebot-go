@@ -46,7 +46,7 @@ type Config struct {
 
 	// Data Configuration
 	DataDir  string        // Data directory for SQLite database
-	CacheTTL time.Duration // Hard TTL: absolute expiration for cache entries (default: 7 days)
+	CacheTTL time.Duration // TTL: absolute expiration for cache entries (default: 7 days)
 
 	// Scraper Configuration
 	ScraperTimeout    time.Duration
@@ -120,7 +120,7 @@ func Load() (*Config, error) {
 
 		// Data Configuration
 		DataDir:  getEnv("DATA_DIR", getDefaultDataDir()),
-		CacheTTL: getDurationEnv("CACHE_TTL", 168*time.Hour), // Hard TTL: 7 days
+		CacheTTL: getDurationEnv("CACHE_TTL", 168*time.Hour), // TTL: 7 days
 
 		// Scraper Configuration
 		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", ScraperRequest),
