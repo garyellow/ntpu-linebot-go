@@ -2,10 +2,205 @@ package lineutil
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
+
+// TestFormatError tests the FormatError function
+func TestFormatError(t *testing.T) {
+	tests := []struct {
+		name   string
+		title  string
+		detail string
+		want   string
+	}{
+		{
+			name:   "Standard error",
+			title:  "操作失敗",
+			detail: "請稍後再試",
+			want:   "❌ 操作失敗\n\n請稍後再試",
+		},
+		{
+			name:   "Empty detail",
+			title:  "錯誤",
+			detail: "",
+			want:   "❌ 錯誤\n\n",
+		},
+		{
+			name:   "Multi-line detail",
+			title:  "驗證失敗",
+			detail: "原因一\n原因二",
+			want:   "❌ 驗證失敗\n\n原因一\n原因二",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FormatError(tt.title, tt.detail)
+			if got != tt.want {
+				t.Errorf("FormatError() = %q, want %q", got, tt.want)
+			}
+			// Verify emoji is present
+			if !strings.HasPrefix(got, "❌") {
+				t.Error("FormatError() should start with ❌ emoji")
+			}
+		})
+	}
+}
+
+// TestFormatInfo tests the FormatInfo function
+func TestFormatInfo(t *testing.T) {
+	tests := []struct {
+		name   string
+		title  string
+		detail string
+		want   string
+	}{
+		{
+			name:   "Standard info",
+			title:  "系統通知",
+			detail: "伺服器維護中",
+			want:   "ℹ️ 系統通知\n\n伺服器維護中",
+		},
+		{
+			name:   "Empty title",
+			title:  "",
+			detail: "詳細資訊",
+			want:   "ℹ️ \n\n詳細資訊",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FormatInfo(tt.title, tt.detail)
+			if got != tt.want {
+				t.Errorf("FormatInfo() = %q, want %q", got, tt.want)
+			}
+			// Verify emoji is present
+			if !strings.HasPrefix(got, "ℹ️") {
+				t.Error("FormatInfo() should start with ℹ️ emoji")
+			}
+		})
+	}
+}
+
+// TestFormatWarning tests the FormatWarning function
+func TestFormatWarning(t *testing.T) {
+	tests := []struct {
+		name   string
+		title  string
+		detail string
+		want   string
+	}{
+		{
+			name:   "Standard warning",
+			title:  "配額警告",
+			detail: "即將達到上限",
+			want:   "⚠️ 配額警告\n\n即將達到上限",
+		},
+		{
+			name:   "Long detail",
+			title:  "注意",
+			detail: "這是一個很長的警告訊息，包含許多細節和說明",
+			want:   "⚠️ 注意\n\n這是一個很長的警告訊息，包含許多細節和說明",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FormatWarning(tt.title, tt.detail)
+			if got != tt.want {
+				t.Errorf("FormatWarning() = %q, want %q", got, tt.want)
+			}
+			// Verify emoji is present
+			if !strings.HasPrefix(got, "⚠️") {
+				t.Error("FormatWarning() should start with ⚠️ emoji")
+			}
+		})
+	}
+}
+
+// TestFormatSuccess tests the FormatSuccess function
+func TestFormatSuccess(t *testing.T) {
+	tests := []struct {
+		name   string
+		title  string
+		detail string
+		want   string
+	}{
+		{
+			name:   "Standard success",
+			title:  "操作完成",
+			detail: "資料已成功儲存",
+			want:   "✅ 操作完成\n\n資料已成功儲存",
+		},
+		{
+			name:   "Simple success",
+			title:  "成功",
+			detail: "完成",
+			want:   "✅ 成功\n\n完成",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FormatSuccess(tt.title, tt.detail)
+			if got != tt.want {
+				t.Errorf("FormatSuccess() = %q, want %q", got, tt.want)
+			}
+			// Verify emoji is present
+			if !strings.HasPrefix(got, "✅") {
+				t.Error("FormatSuccess() should start with ✅ emoji")
+			}
+		})
+	}
+}
+
+// TestFormatFunctionsConsistency tests that all format functions have consistent structure
+func TestFormatFunctionsConsistency(t *testing.T) {
+	title := "標題"
+	detail := "詳細內容"
+
+	formats := []struct {
+		name  string
+		fn    func(string, string) string
+		emoji string
+	}{
+		{"FormatError", FormatError, "❌"},
+		{"FormatInfo", FormatInfo, "ℹ️"},
+		{"FormatWarning", FormatWarning, "⚠️"},
+		{"FormatSuccess", FormatSuccess, "✅"},
+	}
+
+	for _, f := range formats {
+		t.Run(f.name, func(t *testing.T) {
+			result := f.fn(title, detail)
+
+			// Check structure: emoji + space + title + double newline + detail
+			expectedPattern := f.emoji + " " + title + "\n\n" + detail
+			if result != expectedPattern {
+				t.Errorf("%s() = %q, want pattern %q", f.name, result, expectedPattern)
+			}
+
+			// Check that result contains title
+			if !strings.Contains(result, title) {
+				t.Errorf("%s() result should contain title %q", f.name, title)
+			}
+
+			// Check that result contains detail
+			if !strings.Contains(result, detail) {
+				t.Errorf("%s() result should contain detail %q", f.name, detail)
+			}
+
+			// Check double newline separator
+			if !strings.Contains(result, "\n\n") {
+				t.Errorf("%s() result should contain double newline separator", f.name)
+			}
+		})
+	}
+}
 
 func TestNewMessageAction(t *testing.T) {
 	label := "Click me"

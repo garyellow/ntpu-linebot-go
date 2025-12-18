@@ -1,6 +1,7 @@
 package sliceutil
 
 import (
+	"strconv"
 	"testing"
 )
 
@@ -125,7 +126,7 @@ func TestDeduplicatePreservesOrder(t *testing.T) {
 func BenchmarkDeduplicate(b *testing.B) {
 	items := make([]testItem, 1000)
 	for i := 0; i < 1000; i++ {
-		items[i] = testItem{ID: string(rune(i % 100)), Name: "test"}
+		items[i] = testItem{ID: strconv.Itoa(i % 100), Name: "test"}
 	}
 
 	keyFunc := func(t testItem) string { return t.ID }
