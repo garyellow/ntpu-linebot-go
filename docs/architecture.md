@@ -281,13 +281,13 @@ func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageE
 
 ## 效能優化
 
-### 1. 快取策略（Hard TTL）
+### 1. 快取策略（TTL）
 
 採用單層 TTL 策略：
 
 | TTL 類型 | 預設值 | 用途 |
 |---------|--------|------|
-| **Hard TTL** | 7 天 | 絕對過期，資料必須刪除 |
+| **TTL** | 7 天 | 絕對過期，資料必須刪除 |
 
 **資料類型考量**:
 - 學生資料：學期內穩定（不每日刷新；通常僅啟動時建立/更新快取）

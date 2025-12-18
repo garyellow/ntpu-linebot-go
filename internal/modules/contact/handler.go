@@ -16,6 +16,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper/ntpu"
+	"github.com/garyellow/ntpu-linebot-go/internal/sliceutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
@@ -389,7 +390,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	}
 
 	// Deduplicate results by UID (SQL LIKE and fuzzy may find overlapping results)
-	contacts = deduplicateContacts(contacts)
+	contacts = sliceutil.Deduplicate(contacts, func(c storage.Contact) string { return c.UID })
 
 	// If found in cache, return results
 	if len(contacts) > 0 {
@@ -917,17 +918,4 @@ func countMatchRunes(c storage.Contact, searchTerm string) int {
 	}
 
 	return count
-}
-
-// deduplicateContacts removes duplicate contacts by UID while preserving order
-func deduplicateContacts(contacts []storage.Contact) []storage.Contact {
-	seen := make(map[string]bool)
-	result := make([]storage.Contact, 0, len(contacts))
-	for _, c := range contacts {
-		if !seen[c.UID] {
-			seen[c.UID] = true
-			result = append(result, c)
-		}
-	}
-	return result
 }

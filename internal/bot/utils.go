@@ -11,21 +11,13 @@ import (
 // Example: "action$data1$data2" where "$" is the split character.
 const PostbackSplitChar = "$"
 
-// BuildKeywordRegex creates a regex pattern from keywords that matches at the START of text.
-// Keywords are sorted by length (longest first) to ensure correct alternation matching.
-// For example, "課程" should match before "課" to prevent partial matches.
+// BuildKeywordRegex creates a regex pattern matching keywords at the START of text.
+// Keywords are sorted by length (longest first) to prevent partial matches.
+// Uses ^ anchor to match only at beginning. Panics if keywords is empty.
 //
-// The regex uses ^ anchor to ensure keywords only match at the beginning of text.
-// This prevents false positives like "我想找課程" matching "課程".
+// Example:
 //
-// Panics if keywords is empty, as this indicates a programming error.
-//
-// Usage:
-//
-//	keywords := []string{"課", "課程", "課名"}
-//	regex := BuildKeywordRegex(keywords)
-//	match := regex.FindString("課程 微積分") // Returns "課程"
-//	match := regex.FindString("微積分課程") // Returns "" (no match - keyword not at start)
+//	BuildKeywordRegex([]string{"課", "課程"}).FindString("課程 微積分") // Returns "課程"
 func BuildKeywordRegex(keywords []string) *regexp.Regexp {
 	if len(keywords) == 0 {
 		panic("BuildKeywordRegex: keywords cannot be empty")
@@ -46,13 +38,8 @@ func BuildKeywordRegex(keywords []string) *regexp.Regexp {
 	return regexp.MustCompile(pattern)
 }
 
-// ExtractSearchTerm extracts the search term from text by removing the matched keyword.
-// Handles three cases:
-//   - Keyword at beginning: "課程 微積分" → "微積分"
-//   - Keyword at end: "微積分課程" → "微積分"
-//   - Keyword in middle: "查詢課程微積分" → "查詢微積分"
-//
-// Returns the trimmed search term.
+// ExtractSearchTerm extracts the search term by removing the matched keyword.
+// Handles keyword at beginning, end, or middle of text. Returns trimmed result.
 func ExtractSearchTerm(text, keyword string) string {
 	if keyword == "" {
 		return strings.TrimSpace(text)
@@ -74,11 +61,9 @@ func ExtractSearchTerm(text, keyword string) string {
 	}
 }
 
-// ContainsAllRunes checks if string s contains all runes from string chars,
-// counting character occurrences (e.g., "aa" requires at least 2 'a's in s).
-// Example: ContainsAllRunes("資訊工程學系", "資工系") returns true
-// because all characters in "資工系" exist in "資訊工程學系".
-// This is case-insensitive for ASCII characters.
+// ContainsAllRunes checks if s contains all runes from chars (case-insensitive for ASCII).
+// Counts character occurrences: "aa" requires at least 2 'a's in s.
+// Example: ContainsAllRunes("資訊工程學系", "資工系") returns true.
 func ContainsAllRunes(s, chars string) bool {
 	if chars == "" {
 		return true

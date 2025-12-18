@@ -46,7 +46,7 @@ type Config struct {
 
 	// Data Configuration
 	DataDir  string        // Data directory for SQLite database
-	CacheTTL time.Duration // Hard TTL: absolute expiration for cache entries (default: 7 days)
+	CacheTTL time.Duration // TTL: absolute expiration for cache entries (default: 7 days)
 
 	// Scraper Configuration
 	ScraperTimeout    time.Duration
@@ -120,7 +120,7 @@ func Load() (*Config, error) {
 
 		// Data Configuration
 		DataDir:  getEnv("DATA_DIR", getDefaultDataDir()),
-		CacheTTL: getDurationEnv("CACHE_TTL", 168*time.Hour), // Hard TTL: 7 days
+		CacheTTL: getDurationEnv("CACHE_TTL", 168*time.Hour), // TTL: 7 days
 
 		// Scraper Configuration
 		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", ScraperRequest),
@@ -147,11 +147,11 @@ func Load() (*Config, error) {
 			UserRateLimitRefillPerSec: getFloatEnv("USER_RATE_LIMIT_REFILL_PER_SEC", 1.0/5.0),
 			LLMRateLimitPerHour:       getFloatEnv("LLM_RATE_LIMIT_PER_HOUR", 50.0),
 			GlobalRateLimitRPS:        getFloatEnv("GLOBAL_RATE_LIMIT_RPS", 100.0),
-			MaxMessagesPerReply:       5,
+			MaxMessagesPerReply:       LINEMaxMessagesPerReply,
 			MaxEventsPerWebhook:       100,
 			MinReplyTokenLength:       10,
-			MaxMessageLength:          20000,
-			MaxPostbackDataSize:       300,
+			MaxMessageLength:          LINEMaxTextMessageLength,
+			MaxPostbackDataSize:       LINEMaxPostbackDataLength,
 			MaxCoursesPerSearch:       40,
 			MaxTitleDisplayChars:      60,
 			MaxStudentsPerSearch:      500,

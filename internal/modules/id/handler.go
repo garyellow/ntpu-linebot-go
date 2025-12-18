@@ -18,6 +18,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper/ntpu"
+	"github.com/garyellow/ntpu-linebot-go/internal/sliceutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
@@ -657,7 +658,7 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	}
 
 	// Deduplicate results by student ID (SQL LIKE and fuzzy may find overlapping results)
-	students = deduplicateStudents(students)
+	students = sliceutil.Deduplicate(students, func(s storage.Student) string { return s.ID })
 
 	if len(students) == 0 {
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf(config.IDNotFoundWithCutoffHint, name), sender)
@@ -798,19 +799,6 @@ func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_ap
 
 // Helper functions
 // Note: isNumeric has been moved to internal/stringutil package
-
-// deduplicateStudents removes duplicate students by ID while preserving order
-func deduplicateStudents(students []storage.Student) []storage.Student {
-	seen := make(map[string]bool)
-	result := make([]storage.Student, 0, len(students))
-	for _, s := range students {
-		if !seen[s.ID] {
-			seen[s.ID] = true
-			result = append(result, s)
-		}
-	}
-	return result
-}
 
 // parseYear parses a year string (2-4 digits) to ROC year
 // Only validates format, not range (range validation is done in handleYearQuery for proper error messages)

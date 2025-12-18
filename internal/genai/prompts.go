@@ -1,4 +1,4 @@
-// Package genai provides integration with Google's Generative AI APIs.
+// Package genai provides integration with LLM APIs (Gemini and Groq).
 // This file contains system prompts for the NLU intent parser.
 package genai
 
