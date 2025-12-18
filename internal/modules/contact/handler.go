@@ -448,7 +448,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	if len(contacts) == 0 {
 		h.metrics.RecordScraperRequest(ModuleName, "not_found", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf(
-			"🔍 查無包含「%s」的聯絡資料\n\n建議：\n• 確認關鍵字拼寫是否正確\n• 嘗試使用單位全名或簡稱\n• 若查詢人名，可嘗試只輸入姓氏",
+			"🔍 查無「%s」的聯絡資料\n\n💡 建議\n• 確認關鍵字拼寫是否正確\n• 嘗試使用單位全名或簡稱\n• 若查詢人名，可嘗試只輸入姓氏",
 			searchTerm,
 		), sender)
 		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyContactNav())
@@ -790,7 +790,7 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 	// Append warning message at the end if results were truncated
 	if truncated {
 		warningMsg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("⚠️ 搜尋結果達到上限 %d 筆\n\n可能有更多結果未顯示，建議使用更精確的關鍵字搜尋。", h.maxContactsLimit),
+			fmt.Sprintf("⚠️ 搜尋結果達到上限 %d 筆\n\n可能有更多結果未顯示，建議使用更精確的關鍵字搜尋", h.maxContactsLimit),
 			sender,
 		)
 		messages = append(messages, warningMsg)

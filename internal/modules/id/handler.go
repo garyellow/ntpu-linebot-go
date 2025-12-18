@@ -432,7 +432,7 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 		for _, m := range matches {
 			builder.WriteString(fmt.Sprintf("• %s → %s\n", m.name, m.code))
 		}
-		builder.WriteString("\n請輸入更完整的系名以縮小範圍")
+		builder.WriteString("\n💡 請輸入更完整的系名以縮小範圍")
 		msg := lineutil.NewTextMessageWithConsistentSender(builder.String(), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyDeptCodeAction(),
@@ -440,7 +440,7 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	msg := lineutil.NewTextMessageWithConsistentSender("🔍 找不到該系所\n\n請輸入正確的系名，例如：資工、法律、企管", sender)
+	msg := lineutil.NewTextMessageWithConsistentSender("🔍 查無該系所\n\n請輸入正確的系名\n例如：資工、法律、企管", sender)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 		lineutil.QuickReplyDeptCodeAction(),
 		lineutil.QuickReplyHelpAction(),
@@ -461,7 +461,7 @@ func (h *Handler) handleDepartmentCodeQuery(code string) []messaging_api.Message
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	msg := lineutil.NewTextMessageWithConsistentSender("🔍 找不到該系代碼\n\n請輸入正確的系代碼，例如：85（資工系）", sender)
+	msg := lineutil.NewTextMessageWithConsistentSender("🔍 查無該系代碼\n\n請輸入正確的系代碼\n例如：85（資工系）", sender)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 		lineutil.QuickReplyDeptCodeAction(),
 		lineutil.QuickReplyHelpAction(),
