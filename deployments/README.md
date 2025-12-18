@@ -118,6 +118,11 @@ task access:down
 # 或 Linux/Mac: cd deployments && ./access.sh down
 ```
 
+**網路架構說明**：
+- 主服務 (`compose.yaml`) 建立 `ntpu_bot_network` 網路供內部服務通訊
+- Access gateway (`access/compose.yml`) 連接到相同網路以轉發請求到監控服務
+- 確保主服務已啟動，access gateway 才能正常連接
+
 ## 目錄結構
 
 - **prometheus/** - Prometheus 設定

@@ -192,3 +192,7 @@ volumes:
   prometheus-data:
   alertmanager-data:
   grafana-data:
+
+networks:
+  default:
+    name: ntpu_bot_network
