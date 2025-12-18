@@ -223,7 +223,7 @@ task access:down      # 關閉監控儀表板
 | 服務無法啟動 | 檢查 `.env` 是否正確設定 LINE 憑證 |
 | 首次回應緩慢 | 服務啟動後會在背景預熱快取（約 5-10 分鐘） |
 | Webhook 驗證失敗 | 確認 `LINE_CHANNEL_SECRET` 正確 |
-| Docker 權限錯誤 | 執行 `docker compose down && rm -rf ./data && docker compose up -d` |
+| 需要清空所有資料 | 執行 `docker compose down -v && docker compose up -d`（會刪除所有 volumes） |
 
 啟用詳細日誌：
 

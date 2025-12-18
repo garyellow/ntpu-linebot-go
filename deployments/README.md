@@ -167,12 +167,19 @@ task compose:restart -- alertmanager
 
 ## 疑難排解
 
-**資料重置**：
+**完整資料重置**（會清空所有快取和監控資料）：
 ```bash
+# 方法 1: 一次刪除所有 volumes（推薦）
+docker compose down -v
+docker compose up -d
+
+# 方法 2: 手動刪除特定 volume
 docker compose down
-docker volume rm deployments_data
+docker volume rm deployments_data  # 僅刪除 Bot 資料
 docker compose up -d
 ```
+
+**注意**: 正常操作不需要刪除資料。應用程式已自動處理目錄權限和快取更新。
 
 **更新至最新版本**：
 ```bash

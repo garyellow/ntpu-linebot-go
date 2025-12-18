@@ -516,10 +516,12 @@ services:
     ports:
       - "10000:10000"
     volumes:
-      - ./data:/data
+      - data:/data
     environment:
-      - LINE_CHANNEL_ACCESS_TOKEN=${TOKEN}
-      - LINE_CHANNEL_SECRET=${SECRET}
+      - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN}
+      - LINE_CHANNEL_SECRET=${LINE_CHANNEL_SECRET}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
     depends_on:
       - prometheus
 
@@ -535,7 +537,10 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
+
+volumes:
+  data:
 ```
 
 ### Kubernetes（未來擴展）
