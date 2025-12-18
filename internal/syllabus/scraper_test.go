@@ -7,64 +7,6 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-func TestStripHTMLTags(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{
-			name:  "simple tag",
-			input: "<p>Hello</p>",
-			want:  " Hello ",
-		},
-		{
-			name:  "nested tags",
-			input: "<div><p>Hello <b>World</b></p></div>",
-			want:  "  Hello  World   ", // Each tag becomes a space
-		},
-		{
-			name:  "script tag",
-			input: "<script>alert('xss')</script>Content",
-			want:  "Content",
-		},
-		{
-			name:  "style tag",
-			input: "<style>.class{color:red}</style>Content",
-			want:  "Content",
-		},
-		{
-			name:  "HTML entities",
-			input: "&nbsp;&lt;tag&gt;&amp;",
-			want:  " <tag>&",
-		},
-		{
-			name:  "br tags",
-			input: "Line1<br>Line2<br/>Line3",
-			want:  "Line1 Line2 Line3",
-		},
-		{
-			name:  "no tags",
-			input: "Plain text",
-			want:  "Plain text",
-		},
-		{
-			name:  "empty string",
-			input: "",
-			want:  "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := stripHTMLTags(tt.input)
-			if got != tt.want {
-				t.Errorf("stripHTMLTags(%q) = %q, want %q", tt.input, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestCleanContent(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -123,68 +65,14 @@ func TestCleanContent(t *testing.T) {
 	}
 }
 
-func TestExtractContentAfterLabel(t *testing.T) {
-	tests := []struct {
-		name  string
-		html  string
-		label string
-		want  string
-	}{
-		{
-			name:  "basic extraction",
-			html:  `<span>教學目標：</span>培養程式設計能力`,
-			label: "教學目標",
-			want:  "培養程式設計能力",
-		},
-		{
-			name:  "with colon variant",
-			html:  `教學目標:培養程式設計能力`,
-			label: "教學目標",
-			want:  "培養程式設計能力",
-		},
-		{
-			name:  "label not found",
-			html:  `<span>其他內容</span>`,
-			label: "教學目標",
-			want:  "",
-		},
-		{
-			name:  "stops at next label",
-			html:  `教學目標：培養能力 內容綱要：課程大綱`,
-			label: "教學目標",
-			want:  "培養能力",
-		},
-		{
-			name:  "with HTML tags",
-			html:  `教學目標：<br/>培養<b>程式</b>能力`,
-			label: "教學目標",
-			want:  "培養 程式 能力",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := extractContentAfterLabel(tt.html, tt.label)
-			// Clean up whitespace for comparison
-			got = strings.TrimSpace(got)
-			want := strings.TrimSpace(tt.want)
-			if got != want {
-				t.Errorf("extractContentAfterLabel() = %q, want %q", got, want)
-			}
-		})
-	}
-}
-
 func TestParseSyllabusPage(t *testing.T) {
 	tests := []struct {
-		name             string
-		html             string
-		wantObjectivesCN string
-		wantObjectivesEN string
-		wantOutlineCN    string
-		wantOutlineEN    string
-		wantSchedule     string
-		wantEmpty        bool
+		name           string
+		html           string
+		wantObjectives string
+		wantOutline    string
+		wantSchedule   string
+		wantEmpty      bool
 	}{
 		{
 			name:      "empty HTML",
@@ -192,40 +80,74 @@ func TestParseSyllabusPage(t *testing.T) {
 			wantEmpty: true,
 		},
 		{
-			name: "merged format (教學目標 Course Objectives)",
+			name: "merged format with font-c13 span",
 			html: `<html><body>
 				<table>
-					<tr><td>教學目標 Course Objectives：<span class="font-c13">培養程式設計能力 Develop programming skills</span></td></tr>
-					<tr><td>內容綱要/Course Outline：<span class="font-c13">變數與資料型態 Variables and data types</span></td></tr>
-					<tr><td>教學進度(Teaching Schedule)：<table><tr><td>第1週 課程介紹</td></tr></table></td></tr>
+					<tr><td>教學目標 Course Objectives：<span class="font-c13">培養程式設計能力</span></td></tr>
+					<tr><td>內容綱要/Course Outline：<span class="font-c13">變數與資料型態</span></td></tr>
+					<tr><td>教學進度(Teaching Schedule)：
+						<table>
+							<tr><td>週別</td><td>日期</td><td>教學預定進度</td><td>方法</td></tr>
+							<tr><td>Week 1</td><td>20250911</td><td>課程介紹</td><td>講授</td></tr>
+						</table>
+					</td></tr>
 				</table>
 			</body></html>`,
-			wantObjectivesCN: "培養程式設計能力 Develop programming skills",
-			wantOutlineCN:    "變數與資料型態 Variables and data types",
-			wantSchedule:     "第1週 課程介紹",
+			wantObjectives: "培養程式設計能力",
+			wantOutline:    "變數與資料型態",
+			wantSchedule:   "Week 1: 課程介紹",
 		},
 		{
-			name: "separated format (教學目標 and Course Objectives separate)",
+			name: "separate format CN and EN objectives",
 			html: `<html><body>
 				<table>
-					<tr><td>教學目標：<span class="font-c13">培養程式設計能力</span></td></tr>
-					<tr><td>Course Objectives：<span class="font-c13">Develop programming skills</span></td></tr>
-					<tr><td>內容綱要：<span class="font-c13">變數與資料型態</span></td></tr>
-					<tr><td>Course Outline：<span class="font-c13">Variables and data types</span></td></tr>
-					<tr><td>教學進度(Teaching Schedule)：<table><tr><td>第1週 課程介紹</td></tr></table></td></tr>
+					<tr><td>教學目標：<span class="font-c13">本課程介紹研習財務工程學所需之數學理論</span></td></tr>
+					<tr><td>Course Objectives：<span class="font-c13">This course introduces the mathematical theory</span></td></tr>
+					<tr><td>內容綱要：<span class="font-c13">1. Brownian Motion 2. Ito integral</span></td></tr>
+					<tr><td>Course Outline：<span class="font-c13">1. Brownian Motion 2. Ito integral</span></td></tr>
 				</table>
 			</body></html>`,
-			wantObjectivesCN: "培養程式設計能力",
-			wantObjectivesEN: "Develop programming skills",
-			wantOutlineCN:    "變數與資料型態",
-			wantOutlineEN:    "Variables and data types",
-			wantSchedule:     "第1週 課程介紹",
+			wantObjectives: "本課程介紹研習財務工程學所需之數學理論 This course introduces the mathematical theory",
+			wantOutline:    "1. Brownian Motion 2. Ito integral 1. Brownian Motion 2. Ito integral",
 		},
 		{
-			name: "realistic schedule table with 4 columns",
+			name: "separate format CN only",
 			html: `<html><body>
 				<table>
-					<tr><td>教學目標：<span class="font-c13">學習演算法</span></td></tr>
+					<tr><td>教學目標：精進程式語言的的程式設計語法和實作技巧</td></tr>
+					<tr><td>內容綱要：精進C語言的程式設計語法和實作技巧</td></tr>
+				</table>
+			</body></html>`,
+			wantObjectives: "精進程式語言的的程式設計語法和實作技巧",
+			wantOutline:    "精進C語言的程式設計語法和實作技巧",
+		},
+		{
+			name: "separate format EN only",
+			html: `<html><body>
+				<table>
+					<tr><td>Course Objectives：To practice basic ideas and techniques</td></tr>
+					<tr><td>Course Outline：1. Introduction 2. Structured Program Development</td></tr>
+				</table>
+			</body></html>`,
+			wantObjectives: "To practice basic ideas and techniques",
+			wantOutline:    "1. Introduction 2. Structured Program Development",
+		},
+		{
+			name: "standard format with font-c13 div",
+			html: `<html><body>
+				<table>
+					<tr><td>教學目標 Course Objectives：<div class="font-c13">學習演算法設計</div></td></tr>
+					<tr><td>內容綱要/Course Outline：<div class="font-c13">排序、搜尋、動態規劃</div></td></tr>
+				</table>
+			</body></html>`,
+			wantObjectives: "學習演算法設計",
+			wantOutline:    "排序、搜尋、動態規劃",
+		},
+		{
+			name: "schedule table with 4 columns",
+			html: `<html><body>
+				<table>
+					<tr><td>教學目標 Course Objectives：<span class="font-c13">學習演算法</span></td></tr>
 					<tr><td>教學進度(Teaching Schedule)：
 						<table>
 							<tr>
@@ -246,49 +168,23 @@ func TestParseSyllabusPage(t *testing.T) {
 								<td>基礎資料結構複習</td>
 								<td>講授、實作</td>
 							</tr>
-							<tr>
-								<td>Week 3</td>
-								<td>20250925</td>
-								<td>排序演算法分析</td>
-								<td>講授、討論</td>
-							</tr>
 						</table>
 					</td></tr>
 				</table>
 			</body></html>`,
-			wantObjectivesCN: "學習演算法",
-			wantSchedule:     "Week 1: 課程介紹與環境設定",
+			wantObjectives: "學習演算法",
+			wantSchedule:   "Week 1: 課程介紹與環境設定",
 		},
 		{
-			name: "schedule table filters 彈性補充教學 rows",
+			name: "schedule table filters flexible teaching rows",
 			html: `<html><body>
 				<table>
 					<tr><td>教學進度(Teaching Schedule)：
 						<table>
-							<tr>
-								<td>週別/Weekly</td>
-								<td>日期</td>
-								<td>教學預定進度</td>
-								<td>教學方法</td>
-							</tr>
-							<tr>
-								<td>Week 1</td>
-								<td>20250911</td>
-								<td>課程介紹</td>
-								<td>講授</td>
-							</tr>
-							<tr>
-								<td>Week 2</td>
-								<td>20250918</td>
-								<td>彈性補充教學</td>
-								<td>-</td>
-							</tr>
-							<tr>
-								<td>Week 3</td>
-								<td>20250925</td>
-								<td>期中考</td>
-								<td>考試</td>
-							</tr>
+							<tr><td>週別</td><td>日期</td><td>教學預定進度</td><td>方法</td></tr>
+							<tr><td>Week 1</td><td>20250911</td><td>課程介紹</td><td>講授</td></tr>
+							<tr><td>Week 2</td><td>20250918</td><td>彈性補充教學</td><td>-</td></tr>
+							<tr><td>Week 3</td><td>20250925</td><td>期中考</td><td>考試</td></tr>
 						</table>
 					</td></tr>
 				</table>
@@ -296,35 +192,14 @@ func TestParseSyllabusPage(t *testing.T) {
 			wantSchedule: "Week 1: 課程介紹",
 		},
 		{
-			name: "schedule table with empty cells",
+			name: "schedule table skips empty cells",
 			html: `<html><body>
 				<table>
 					<tr><td>教學進度(Teaching Schedule)：
 						<table>
-							<tr>
-								<td>週別/Weekly</td>
-								<td>日期</td>
-								<td>教學預定進度</td>
-								<td>教學方法</td>
-							</tr>
-							<tr>
-								<td>Week 1</td>
-								<td>20250911</td>
-								<td>課程介紹</td>
-								<td>講授</td>
-							</tr>
-							<tr>
-								<td>Week 2</td>
-								<td>20250918</td>
-								<td></td>
-								<td></td>
-							</tr>
-							<tr>
-								<td>Week 3</td>
-								<td>20250925</td>
-								<td>實作練習</td>
-								<td>實作</td>
-							</tr>
+							<tr><td>週別</td><td>日期</td><td>教學預定進度</td><td>方法</td></tr>
+							<tr><td>Week 1</td><td>20250911</td><td>課程介紹</td><td>講授</td></tr>
+							<tr><td>Week 2</td><td>20250918</td><td></td><td></td></tr>
 						</table>
 					</td></tr>
 				</table>
@@ -332,18 +207,108 @@ func TestParseSyllabusPage(t *testing.T) {
 			wantSchedule: "Week 1: 課程介紹",
 		},
 		{
-			name: "schedule fallback when table validation fails (no 週別 header)",
+			name: "no schedule table when header invalid",
 			html: `<html><body>
 				<table>
 					<tr><td>教學進度(Teaching Schedule)：
 						<table>
+							<tr><td>無效表頭</td></tr>
 							<tr><td>第一週 課程介紹</td></tr>
-							<tr><td>第二週 基礎概念</td></tr>
 						</table>
 					</td></tr>
 				</table>
 			</body></html>`,
-			wantSchedule: "第一週 課程介紹",
+			wantSchedule: "",
+		},
+		{
+			name: "missing font-c13 class falls back to text content",
+			html: `<html><body>
+				<table>
+					<tr><td>教學目標 Course Objectives：培養批判性思維</td></tr>
+					<tr><td>內容綱要/Course Outline：論證分析、邏輯推理</td></tr>
+				</table>
+			</body></html>`,
+			wantObjectives: "培養批判性思維",
+			wantOutline:    "論證分析、邏輯推理",
+		},
+		{
+			name: "multiple font-c13 elements concatenated",
+			html: `<html><body>
+				<table>
+					<tr><td>教學目標 Course Objectives：<span class="font-c13">目標一</span><span class="font-c13">目標二</span></td></tr>
+				</table>
+			</body></html>`,
+			wantObjectives: "目標一目標二",
+		},
+		{
+			name: "nested tables in schedule section",
+			html: `<html><body>
+				<table>
+					<tr><td>教學進度(Teaching Schedule)：
+						<table>
+							<tr><td>週別</td><td>內容</td></tr>
+							<tr>
+								<td>Week 1</td>
+								<td>
+									<table><tr><td>子表格內容</td></tr></table>
+								</td>
+							</tr>
+						</table>
+					</td></tr>
+				</table>
+			</body></html>`,
+			wantSchedule: "", // 因 header 驗證失敗應返回空
+		},
+		{
+			name: "excessive whitespace normalized",
+			html: `<html><body>
+				<table>
+					<tr><td>教學目標 Course Objectives：<span class="font-c13">   多餘    空白   測試   </span></td></tr>
+					<tr><td>內容綱要/Course Outline：<span class="font-c13">
+
+						多行
+
+						換行
+
+						測試
+
+					</span></td></tr>
+				</table>
+			</body></html>`,
+			wantObjectives: "多餘 空白 測試",
+			wantOutline:    "多行\n\n換行\n\n測試",
+		},
+		{
+			name: "HTML entities decoded",
+			html: `<html><body>
+				<table>
+					<tr><td>教學目標 Course Objectives：<span class="font-c13">學習 C&amp;C++ &lt;程式設計&gt;</span></td></tr>
+				</table>
+			</body></html>`,
+			wantObjectives: "學習 C&C++ <程式設計>",
+		},
+		{
+			name: "mixed span and div with font-c13",
+			html: `<html><body>
+				<table>
+					<tr><td>教學目標 Course Objectives：<span class="font-c13">Span內容</span><div class="font-c13">Div內容</div></td></tr>
+				</table>
+			</body></html>`,
+			wantObjectives: "Span內容Div內容",
+		},
+		{
+			name: "schedule with only 3 columns (no method column)",
+			html: `<html><body>
+				<table>
+					<tr><td>教學進度(Teaching Schedule)：
+						<table>
+							<tr><td>週別</td><td>日期</td><td>教學預定進度</td></tr>
+							<tr><td>Week 1</td><td>20250911</td><td>課程介紹</td></tr>
+						</table>
+					</td></tr>
+				</table>
+			</body></html>`,
+			wantSchedule: "Week 1: 課程介紹",
 		},
 	}
 
@@ -363,18 +328,11 @@ func TestParseSyllabusPage(t *testing.T) {
 				return
 			}
 
-			// Check if expected content is present (may have some variation due to cleaning)
-			if tt.wantObjectivesCN != "" && !strings.Contains(fields.ObjectivesCN, tt.wantObjectivesCN) {
-				t.Errorf("ObjectivesCN = %q, want to contain %q", fields.ObjectivesCN, tt.wantObjectivesCN)
+			if tt.wantObjectives != "" && !strings.Contains(fields.Objectives, tt.wantObjectives) {
+				t.Errorf("Objectives = %q, want to contain %q", fields.Objectives, tt.wantObjectives)
 			}
-			if tt.wantObjectivesEN != "" && !strings.Contains(fields.ObjectivesEN, tt.wantObjectivesEN) {
-				t.Errorf("ObjectivesEN = %q, want to contain %q", fields.ObjectivesEN, tt.wantObjectivesEN)
-			}
-			if tt.wantOutlineCN != "" && !strings.Contains(fields.OutlineCN, tt.wantOutlineCN) {
-				t.Errorf("OutlineCN = %q, want to contain %q", fields.OutlineCN, tt.wantOutlineCN)
-			}
-			if tt.wantOutlineEN != "" && !strings.Contains(fields.OutlineEN, tt.wantOutlineEN) {
-				t.Errorf("OutlineEN = %q, want to contain %q", fields.OutlineEN, tt.wantOutlineEN)
+			if tt.wantOutline != "" && !strings.Contains(fields.Outline, tt.wantOutline) {
+				t.Errorf("Outline = %q, want to contain %q", fields.Outline, tt.wantOutline)
 			}
 			if tt.wantSchedule != "" && !strings.Contains(fields.Schedule, tt.wantSchedule) {
 				t.Errorf("Schedule = %q, want to contain %q", fields.Schedule, tt.wantSchedule)

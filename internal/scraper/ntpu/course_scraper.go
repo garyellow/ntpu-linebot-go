@@ -233,10 +233,12 @@ func parseCoursesPage(ctx context.Context, doc *goquery.Document, year, term int
 		// Generate UID
 		uid := fmt.Sprintf("%d%d%s", year, rowTerm, no)
 
-		// Build full detail URL (use domain for user-facing URLs)
+		// Build full detail URL with show_info=all for complete syllabus data
+		// Original detailURL format: "?g_serial=U3556&g_year=114&g_term=1"
+		// Target format: queryguide?g_year=114&g_term=1&g_serial=U3556&show_info=all
 		fullDetailURL := ""
 		if detailURL != "" {
-			fullDetailURL = seaUserFacingURL + "/pls/dev_stud/course_query.queryGuide" + detailURL
+			fullDetailURL = seaUserFacingURL + "/pls/dev_stud/course_query.queryguide" + detailURL + "&show_info=all"
 		}
 
 		course := &storage.Course{

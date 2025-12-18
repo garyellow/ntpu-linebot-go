@@ -112,30 +112,16 @@ func TestFields_IsEmpty(t *testing.T) {
 			want:   true,
 		},
 		{
-			name: "objectives_cn set",
+			name: "objectives set",
 			fields: Fields{
-				ObjectivesCN: "培養能力",
+				Objectives: "培養能力",
 			},
 			want: false,
 		},
 		{
-			name: "objectives_en set",
+			name: "outline set",
 			fields: Fields{
-				ObjectivesEN: "Learn skills",
-			},
-			want: false,
-		},
-		{
-			name: "outline_cn set",
-			fields: Fields{
-				OutlineCN: "課程內容",
-			},
-			want: false,
-		},
-		{
-			name: "outline_en set",
-			fields: Fields{
-				OutlineEN: "Course content",
+				Outline: "課程內容",
 			},
 			want: false,
 		},
@@ -149,22 +135,18 @@ func TestFields_IsEmpty(t *testing.T) {
 		{
 			name: "all whitespace only",
 			fields: Fields{
-				ObjectivesCN: "   ",
-				ObjectivesEN: "   ",
-				OutlineCN:    "\n\n",
-				OutlineEN:    "\n\n",
-				Schedule:     "\t\t",
+				Objectives: "   ",
+				Outline:    "\n\n",
+				Schedule:   "\t\t",
 			},
 			want: true,
 		},
 		{
 			name: "mixed whitespace and content",
 			fields: Fields{
-				ObjectivesCN: "   ",
-				ObjectivesEN: "   ",
-				OutlineCN:    "Valid content",
-				OutlineEN:    "",
-				Schedule:     "\t\t",
+				Objectives: "   ",
+				Outline:    "Valid content",
+				Schedule:   "\t\t",
 			},
 			want: false,
 		},
@@ -195,59 +177,29 @@ func TestFields_ContentForIndexing(t *testing.T) {
 			wantEmpty:   true,
 		},
 		{
-			name: "objectives_cn only",
+			name: "objectives only",
 			fields: Fields{
-				ObjectivesCN: "培養程式設計能力",
+				Objectives: "培養程式設計能力",
 			},
 			courseTitle:  "程式設計",
 			wantEmpty:    false,
 			wantContains: []string{"【程式設計】", "教學目標：", "培養程式設計能力"},
 		},
 		{
-			name: "objectives_cn and objectives_en",
+			name: "all fields",
 			fields: Fields{
-				ObjectivesCN: "培養程式設計能力",
-				ObjectivesEN: "Develop programming skills",
-			},
-			courseTitle:  "程式設計",
-			wantEmpty:    false,
-			wantContains: []string{"【程式設計】", "教學目標：", "培養程式設計能力", "Course Objectives:", "Develop programming skills"},
-		},
-		{
-			name: "all fields (CN only)",
-			fields: Fields{
-				ObjectivesCN: "培養程式設計能力",
-				OutlineCN:    "變數、迴圈、函式",
-				Schedule:     "第1週：課程介紹",
+				Objectives: "培養程式設計能力",
+				Outline:    "變數、迴圈、函式",
+				Schedule:   "第1週：課程介紹",
 			},
 			courseTitle:  "程式設計",
 			wantEmpty:    false,
 			wantContains: []string{"教學目標：", "培養程式設計能力", "內容綱要：", "變數、迴圈、函式", "教學進度：", "第1週：課程介紹"},
 		},
 		{
-			name: "all fields (CN + EN)",
-			fields: Fields{
-				ObjectivesCN: "培養程式設計能力",
-				ObjectivesEN: "Develop programming skills",
-				OutlineCN:    "變數、迴圈、函式",
-				OutlineEN:    "Variables, loops, functions",
-				Schedule:     "第1週：課程介紹",
-			},
-			courseTitle: "程式設計",
-			wantEmpty:   false,
-			wantContains: []string{
-				"【程式設計】",
-				"教學目標：", "培養程式設計能力",
-				"Course Objectives:", "Develop programming skills",
-				"內容綱要：", "變數、迴圈、函式",
-				"Course Outline:", "Variables, loops, functions",
-				"教學進度：", "第1週：課程介紹",
-			},
-		},
-		{
 			name: "empty course title",
 			fields: Fields{
-				ObjectivesCN: "培養能力",
+				Objectives: "培養能力",
 			},
 			courseTitle:  "",
 			wantEmpty:    false,
@@ -256,11 +208,9 @@ func TestFields_ContentForIndexing(t *testing.T) {
 		{
 			name: "whitespace only fields are skipped",
 			fields: Fields{
-				ObjectivesCN: "   ",    // whitespace only - should be skipped
-				ObjectivesEN: "   ",    // whitespace only - should be skipped
-				OutlineCN:    "\n\t\n", // whitespace only - should be skipped
-				OutlineEN:    "\n\t\n", // whitespace only - should be skipped
-				Schedule:     "第1週導論",  // valid content
+				Objectives: "   ",    // whitespace only - should be skipped
+				Outline:    "\n\t\n", // whitespace only - should be skipped
+				Schedule:   "第1週導論",  // valid content
 			},
 			courseTitle:  "測試課程",
 			wantEmpty:    false,
@@ -269,11 +219,9 @@ func TestFields_ContentForIndexing(t *testing.T) {
 		{
 			name: "mixed whitespace and content",
 			fields: Fields{
-				ObjectivesCN: "   有效的教學目標   ", // has content with leading/trailing whitespace
-				ObjectivesEN: "",              // empty - should be skipped
-				OutlineCN:    "",              // empty - should be skipped
-				OutlineEN:    "",              // empty - should be skipped
-				Schedule:     "\t",            // whitespace only - should be skipped
+				Objectives: "   有效的教學目標   ", // has content with leading/trailing whitespace
+				Outline:    "",              // empty - should be skipped
+				Schedule:   "\t",            // whitespace only - should be skipped
 			},
 			courseTitle:  "測試課程",
 			wantEmpty:    false,
@@ -312,8 +260,8 @@ func TestFields_ContentForIndexing_FullContent(t *testing.T) {
 	longSchedule := scheduleBuilder.String()
 
 	fields := Fields{
-		ObjectivesCN: "目標",
-		Schedule:     longSchedule,
+		Objectives: "目標",
+		Schedule:   longSchedule,
 	}
 
 	content := fields.ContentForIndexing("測試課程")
@@ -340,10 +288,8 @@ func TestFields_ContentForIndexing_FullContent(t *testing.T) {
 func TestFields_ContentForIndexing_SingleDocument(t *testing.T) {
 	// Test that all content is combined into a single document
 	fields := Fields{
-		ObjectivesCN: "培養程式設計能力",
-		ObjectivesEN: "Develop programming skills",
-		OutlineCN:    "變數、迴圈、函式",
-		OutlineEN:    "Variables, loops, functions",
+		Objectives: "培養程式設計能力",
+		Outline:    "變數、迴圈、函式",
 	}
 
 	content := fields.ContentForIndexing("測試課程")
@@ -357,9 +303,7 @@ func TestFields_ContentForIndexing_SingleDocument(t *testing.T) {
 	expectedParts := []string{
 		"【測試課程】",
 		"教學目標：培養程式設計能力",
-		"Course Objectives: Develop programming skills",
 		"內容綱要：變數、迴圈、函式",
-		"Course Outline: Variables, loops, functions",
 	}
 
 	for _, part := range expectedParts {

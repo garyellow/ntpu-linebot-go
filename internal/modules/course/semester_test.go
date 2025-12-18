@@ -11,20 +11,93 @@ import (
 func TestGetSemestersToSearchLive(t *testing.T) {
 	years, terms := getSemestersToSearch()
 
-	// Now returns 4 semesters
-	if len(years) != 4 {
-		t.Errorf("Expected 4 years, got %d", len(years))
+	// Now returns 2 semesters (default for user queries)
+	if len(years) != 2 {
+		t.Errorf("Expected 2 years, got %d", len(years))
 	}
-	if len(terms) != 4 {
-		t.Errorf("Expected 4 terms, got %d", len(terms))
+	if len(terms) != 2 {
+		t.Errorf("Expected 2 terms, got %d", len(terms))
 	}
 
 	// Log current results for manual verification
 	now := time.Now()
 	t.Logf("Current date: %s (ROC year %d, month %d)",
 		now.Format("2006-01-02"), now.Year()-1911, now.Month())
-	t.Logf("Search semesters: %d-%d, %d-%d, %d-%d, %d-%d",
+	t.Logf("Search semesters (2 recent): %d-%d, %d-%d",
+		years[0], terms[0], years[1], terms[1])
+}
+
+// TestGetExtendedSemesters tests extended search (4 semesters)
+func TestGetExtendedSemesters(t *testing.T) {
+	years, terms := getExtendedSemesters()
+
+	// Extended search returns 4 semesters
+	if len(years) != 4 {
+		t.Errorf("Expected 4 years for extended search, got %d", len(years))
+	}
+	if len(terms) != 4 {
+		t.Errorf("Expected 4 terms for extended search, got %d", len(terms))
+	}
+
+	t.Logf("Extended search semesters (4): %d-%d, %d-%d, %d-%d, %d-%d",
 		years[0], terms[0], years[1], terms[1], years[2], terms[2], years[3], terms[3])
+}
+
+// TestRecentSemestersForDate tests the 2-semester retrieval
+func TestRecentSemestersForDate(t *testing.T) {
+	tests := []struct {
+		name     string
+		year     int
+		month    int
+		expected []struct {
+			year int
+			term int
+		}
+	}{
+		{
+			name:  "March - returns 2 recent semesters",
+			year:  2025,
+			month: 3,
+			expected: []struct{ year, term int }{
+				{113, 2}, {113, 1},
+			},
+		},
+		{
+			name:  "September - returns 2 recent semesters",
+			year:  2025,
+			month: 9,
+			expected: []struct{ year, term int }{
+				{114, 1}, {113, 2},
+			},
+		},
+		{
+			name:  "January - returns 2 recent semesters",
+			year:  2025,
+			month: 1,
+			expected: []struct{ year, term int }{
+				{113, 1}, {112, 2},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			testDate := time.Date(tt.year, time.Month(tt.month), 15, 0, 0, 0, 0, time.Local)
+			years, terms := getRecentSemestersForDate(testDate)
+
+			if len(years) != 2 || len(terms) != 2 {
+				t.Errorf("Expected 2 semesters, got %d years and %d terms", len(years), len(terms))
+				return
+			}
+
+			for i := 0; i < 2; i++ {
+				if years[i] != tt.expected[i].year || terms[i] != tt.expected[i].term {
+					t.Errorf("Semester %d: expected %d-%d, got %d-%d",
+						i+1, tt.expected[i].year, tt.expected[i].term, years[i], terms[i])
+				}
+			}
+		})
+	}
 }
 
 // TestSemesterDetectionLogic tests the semester detection logic for course queries

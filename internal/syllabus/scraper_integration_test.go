@@ -27,7 +27,7 @@ func TestScrapeSyllabus_RealPage(t *testing.T) {
 	// Test with a known course URL (演算法, 114-1)
 	course := &storage.Course{
 		UID:       "1141U3556",
-		DetailURL: "https://sea.cc.ntpu.edu.tw/pls/dev_stud/course_query.queryGuide?g_serial=U3556&g_year=114&g_term=1",
+		DetailURL: "https://sea.cc.ntpu.edu.tw/pls/dev_stud/course_query.queryguide?g_serial=U3556&g_year=114&g_term=1&show_info=all",
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -39,31 +39,27 @@ func TestScrapeSyllabus_RealPage(t *testing.T) {
 	}
 
 	t.Logf("=== Scraped Syllabus Fields ===")
-	t.Logf("ObjectivesCN (%d chars): %s", len(fields.ObjectivesCN), truncateForLog(fields.ObjectivesCN, 200))
-	t.Logf("ObjectivesEN (%d chars): %s", len(fields.ObjectivesEN), truncateForLog(fields.ObjectivesEN, 200))
-	t.Logf("OutlineCN (%d chars): %s", len(fields.OutlineCN), truncateForLog(fields.OutlineCN, 200))
-	t.Logf("OutlineEN (%d chars): %s", len(fields.OutlineEN), truncateForLog(fields.OutlineEN, 200))
+	t.Logf("Objectives (%d chars): %s", len(fields.Objectives), truncateForLog(fields.Objectives, 200))
+	t.Logf("Outline (%d chars): %s", len(fields.Outline), truncateForLog(fields.Outline, 200))
 	t.Logf("Schedule (%d chars): %s", len(fields.Schedule), truncateForLog(fields.Schedule, 200))
 
-	// Validate that we got content for at least CN or EN objectives
-	if fields.ObjectivesCN == "" && fields.ObjectivesEN == "" {
-		t.Error("Expected non-empty Objectives (教學目標 or Course Objectives)")
+	// Validate that we got content for objectives
+	if fields.Objectives == "" {
+		t.Error("Expected non-empty Objectives (教學目標)")
 	} else {
 		// Verify it contains expected content for 演算法 course
-		combinedObjectives := fields.ObjectivesCN + " " + fields.ObjectivesEN
-		if !containsAny(combinedObjectives, []string{"演算法", "程式", "複雜度", "algorithm"}) {
-			t.Errorf("Objectives doesn't seem to contain expected content: CN=%s EN=%s", truncateForLog(fields.ObjectivesCN, 100), truncateForLog(fields.ObjectivesEN, 100))
+		if !containsAny(fields.Objectives, []string{"演算法", "程式", "複雜度", "algorithm"}) {
+			t.Errorf("Objectives doesn't seem to contain expected content: %s", truncateForLog(fields.Objectives, 100))
 		}
 	}
 
 	// Validate outline
-	if fields.OutlineCN == "" && fields.OutlineEN == "" {
-		t.Error("Expected non-empty Outline (內容綱要 or Course Outline)")
+	if fields.Outline == "" {
+		t.Error("Expected non-empty Outline (內容綱要)")
 	} else {
 		// Verify it contains expected content
-		combinedOutline := fields.OutlineCN + " " + fields.OutlineEN
-		if !containsAny(combinedOutline, []string{"Algorithm", "Dynamic", "Sorting", "Greedy", "NP"}) {
-			t.Errorf("Outline doesn't seem to contain expected content: CN=%s EN=%s", truncateForLog(fields.OutlineCN, 100), truncateForLog(fields.OutlineEN, 100))
+		if !containsAny(fields.Outline, []string{"Algorithm", "Dynamic", "Sorting", "Greedy", "NP"}) {
+			t.Errorf("Outline doesn't seem to contain expected content: %s", truncateForLog(fields.Outline, 100))
 		}
 	}
 
@@ -78,13 +74,6 @@ func TestScrapeSyllabus_RealPage(t *testing.T) {
 		t.Error("ContentForIndexing() returned empty for non-empty fields")
 	}
 	t.Logf("Generated content length: %d characters", len(content))
-
-	// Verify the CN and EN sections are distinct (not duplicated)
-	if fields.ObjectivesCN != "" && fields.ObjectivesEN != "" {
-		if fields.ObjectivesCN == fields.ObjectivesEN {
-			t.Error("ObjectivesCN and ObjectivesEN are identical - possible parsing issue")
-		}
-	}
 }
 
 // TestScrapeSyllabus_DistinctSections verifies that each section is parsed independently
@@ -103,7 +92,7 @@ func TestScrapeSyllabus_DistinctSections(t *testing.T) {
 	// Test with the algorithms course
 	course := &storage.Course{
 		UID:       "1141U3556",
-		DetailURL: "https://sea.cc.ntpu.edu.tw/pls/dev_stud/course_query.queryGuide?g_serial=U3556&g_year=114&g_term=1",
+		DetailURL: "https://sea.cc.ntpu.edu.tw/pls/dev_stud/course_query.queryguide?g_serial=U3556&g_year=114&g_term=1&show_info=all",
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -116,11 +105,9 @@ func TestScrapeSyllabus_DistinctSections(t *testing.T) {
 
 	// Create a map to check for duplicates
 	sections := map[string]string{
-		"ObjectivesCN": fields.ObjectivesCN,
-		"ObjectivesEN": fields.ObjectivesEN,
-		"OutlineCN":    fields.OutlineCN,
-		"OutlineEN":    fields.OutlineEN,
-		"Schedule":     fields.Schedule,
+		"Objectives": fields.Objectives,
+		"Outline":    fields.Outline,
+		"Schedule":   fields.Schedule,
 	}
 
 	// Check that non-empty sections are distinct
@@ -145,10 +132,8 @@ func TestScrapeSyllabus_DistinctSections(t *testing.T) {
 	}
 
 	t.Logf("Distinct sections verified:")
-	t.Logf("  - ObjectivesCN: %d chars", len(fields.ObjectivesCN))
-	t.Logf("  - ObjectivesEN: %d chars", len(fields.ObjectivesEN))
-	t.Logf("  - OutlineCN: %d chars", len(fields.OutlineCN))
-	t.Logf("  - OutlineEN: %d chars", len(fields.OutlineEN))
+	t.Logf("  - Objectives: %d chars", len(fields.Objectives))
+	t.Logf("  - Outline: %d chars", len(fields.Outline))
 	t.Logf("  - Schedule: %d chars", len(fields.Schedule))
 }
 
