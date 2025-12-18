@@ -133,6 +133,16 @@ groups:
           summary: "LLM fallback rate exceeds 10%"
           description: "Primary LLM provider is failing frequently, triggering {{ $value | humanizePercentage }} fallback rate."
 
+      # High fallback latency (slow failover)
+      - alert: LLMFallbackLatencyHigh
+        expr: histogram_quantile(0.95, sum by (le, from_provider, to_provider, operation) (rate(ntpu_llm_fallback_latency_seconds_bucket[5m]))) > 5
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "LLM fallback P95 latency exceeds 5 seconds for {{ $labels.from_provider }} → {{ $labels.to_provider }} ({{ $labels.operation }})"
+          description: "P95 fallback latency for {{ $labels.from_provider }} → {{ $labels.to_provider }} ({{ $labels.operation }}) is {{ $value | printf \"%.1f\" }}s, indicating slow failover on this path."
+
   # ============================================
   # Search Alerts (BM25 Index)
   # ============================================
@@ -216,13 +226,13 @@ groups:
     rules:
       # High memory usage (approaching container limit)
       - alert: HighMemoryUsage
-        expr: go_memstats_alloc_bytes{job="ntpu-linebot"} > 400 * 1024 * 1024
+        expr: go_memstats_alloc_bytes{job="ntpu-linebot"} > 600 * 1024 * 1024
         for: 10m
         labels:
           severity: warning
         annotations:
-          summary: "Memory usage exceeds 400MB"
-          description: "Current memory: {{ $value | humanize1024 }}B (limit: 512MB)."
+          summary: "Memory usage exceeds 600MB"
+          description: "Current memory: {{ $value | humanize1024 }}B (limit: 768MB)."
 
       # High goroutine count (potential leak)
       - alert: HighGoroutineCount
