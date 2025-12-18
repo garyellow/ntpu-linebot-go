@@ -516,7 +516,7 @@ services:
     ports:
       - "10000:10000"
     volumes:
-      - ./data:/data
+      - data:/data
     environment:
       - LINE_CHANNEL_ACCESS_TOKEN=${TOKEN}
       - LINE_CHANNEL_SECRET=${SECRET}
@@ -536,6 +536,9 @@ services:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin123
+
+volumes:
+  data:
 ```
 
 ### Kubernetes（未來擴展）
