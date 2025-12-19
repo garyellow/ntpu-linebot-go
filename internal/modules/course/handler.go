@@ -262,15 +262,15 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			var helpText string
 			if h.bm25Index != nil && h.bm25Index.IsEnabled() {
 				helpText = "🔮 智慧搜尋說明\n\n" +
-					"請描述您想找的課程內容\n" +
+					"請描述您想找的課程內容：\n" +
 					"• 找課 想學資料分析\n" +
 					"• 找課 Python 機器學習\n" +
 					"• 找課 商業管理相關\n\n" +
-					"💡 根據課程大綱內容匹配\n" +
+					"💡 根據課程大綱內容智慧匹配\n" +
 					"🔍 若知道課名，建議用「課程 名稱」"
 			} else {
 				helpText = "⚠️ 智慧搜尋目前未啟用\n\n" +
-					"請使用精確查詢：\n" +
+					"請使用精確搜尋：\n" +
 					"• 課程 微積分\n" +
 					"• 課程 王小明"
 			}
@@ -294,12 +294,12 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		if searchTerm == "" {
 			sender := lineutil.GetSender(senderName, h.stickerManager)
 			helpText := "📅 更多學期搜尋說明\n\n" +
-				"🔍 搜尋範圍：近 4 個學期\n" +
-				"（比一般搜尋的 2 個學期更廣）\n\n" +
+				"🔍 搜尋範圍：近 4 學期\n" +
+				"（一般搜尋僅搜尋近 2 學期）\n\n" +
 				"用法範例：\n" +
 				"• 更多學期 微積分\n" +
 				"• 更多學期 王小明\n\n" +
-				"📆 需要指定年份的課程？\n" +
+				"📆 需要指定年份？\n" +
 				"使用：「課程 110 微積分」"
 			msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
 			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -336,10 +336,10 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 					"• 找課 Python 入門\n\n" +
 					"📅 更多學期（近 4 學期）\n" +
 					"• 更多學期 微積分\n\n" +
-					"📆 指定年份（任意年份）\n" +
+					"📆 指定年份\n" +
 					"• 課程 110 微積分\n\n" +
 					"💡 直接輸入課號（如 U0001）\n" +
-					"   或完整課號（如 1131U0001）"
+					"   或完整編號（如 1131U0001）"
 				quickReplyItems = []lineutil.QuickReplyItem{
 					lineutil.QuickReplySmartSearchAction(),
 					lineutil.QuickReplyHelpAction(),
@@ -352,10 +352,10 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 					"• 課程 線代 王\n\n" +
 					"📅 更多學期（近 4 學期）\n" +
 					"• 更多學期 微積分\n\n" +
-					"📆 指定年份（任意年份）\n" +
+					"📆 指定年份\n" +
 					"• 課程 110 微積分\n\n" +
 					"💡 直接輸入課號（如 U0001）\n" +
-					"   或完整課號（如 1131U0001）"
+					"   或完整編號（如 1131U0001）"
 				quickReplyItems = []lineutil.QuickReplyItem{
 					lineutil.QuickReplyHelpAction(),
 				}
@@ -448,7 +448,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 		log.Warnf("Course UID %s not found after scraping", uid)
 		h.metrics.RecordScraperRequest(ModuleName, "not_found", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 建議\n• 確認課程編號拼寫是否正確\n• 該課程是否在近期開設", uid),
+			fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 建議\n• 確認課程編號是否正確\n• 該課程是否有開設", uid),
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -533,7 +533,7 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 
 	// Build helpful message
 	msg := lineutil.NewTextMessageWithConsistentSender(
-		fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 建議\n• 確認課程編號拼寫是否正確（如 U0001）\n• 該課程是否在近期開設\n• 或使用「課程 課名」查詢", courseNo),
+		fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 建議\n• 確認課程編號是否正確（如 U0001）\n• 該課程是否有開設\n• 或使用「課程 課名」搜尋", courseNo),
 		sender,
 	)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -787,14 +787,14 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 	var helpText string
 	if extended {
 		helpText = fmt.Sprintf(
-			"🔍 查無相關課程\n\n查詢內容：%s\n📅 搜尋範圍：%s\n\n💡 建議嘗試：\n• 縮短關鍵字（如「線性」→「線」）\n• 只輸入教師姓氏\n• 指定年份：「課程 110 %s」",
+			"🔍 查無相關課程\n\n搜尋內容：%s\n📅 搜尋範圍：%s\n\n💡 建議嘗試\n• 縮短關鍵字（如「線性」→「線」）\n• 只輸入教師姓氏\n• 指定年份：「課程 110 %s」",
 			searchTerm,
 			semesterType,
 			searchTerm,
 		)
 	} else {
 		helpText = fmt.Sprintf(
-			"🔍 查無「%s」的相關課程\n\n📅 已搜尋範圍：近 2 個學期\n\n💡 建議嘗試：\n• 「📅 更多學期」查 4 個學期\n• 縮短關鍵字（如「線性」→「線」）\n• 指定年份：「課程 110 %s」",
+			"🔍 查無「%s」的相關課程\n\n📅 已搜尋範圍：近 2 學期\n\n💡 建議嘗試\n• 「📅 更多學期」搜尋近 4 學期\n• 縮短關鍵字（如「線性」→「線」）\n• 指定年份：「課程 110 %s」",
 			searchTerm,
 			searchTerm,
 		)
@@ -840,7 +840,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	currentYear := time.Now().Year() - 1911
 	if year < config.CourseSystemLaunchYear || year > currentYear {
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("❌ 無效的學年度：%d\n\n📅 可查詢範圍：%d-%d 學年度\n（民國 %d-%d 年 = 西元 %d-%d 年）\n\n範例：\n• 課程 110 微積分\n• 課 108 線性代數", year, config.CourseSystemLaunchYear, currentYear, config.CourseSystemLaunchYear, currentYear, config.CourseSystemLaunchYear+1911, currentYear+1911),
+			fmt.Sprintf("❌ 無效的學年度：%d\n\n📅 可搜尋範圍：%d-%d 學年度\n（民國 %d-%d 年 = 西元 %d-%d 年）\n\n範例：\n• 課程 110 微積分\n• 課 108 線性代數", year, config.CourseSystemLaunchYear, currentYear, config.CourseSystemLaunchYear, currentYear, config.CourseSystemLaunchYear+1911, currentYear+1911),
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyCourseNav(h.bm25Index != nil && h.bm25Index.IsEnabled()))
@@ -893,11 +893,11 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 			Warn("Failed to scrape historical courses")
 		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("🔍 查無 %d 學年度包含「%s」的課程\n\n請確認\n• 學年度和課程名稱是否正確\n• 該課程是否在該學年度開設", year, keyword),
+			fmt.Sprintf("🔍 查無 %d 學年度「%s」的課程\n\n請確認\n• 學年度和課程名稱是否正確\n• 該課程是否有開設", year, keyword),
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("📚 查詢近期課程", "課程 "+keyword)},
+			{Action: lineutil.NewMessageAction("📚 搜尋近期課程", "課程 "+keyword)},
 			lineutil.QuickReplyHelpAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
@@ -924,11 +924,11 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	// No results found
 	h.metrics.RecordScraperRequest(ModuleName, "not_found", time.Since(startTime).Seconds())
 	msg := lineutil.NewTextMessageWithConsistentSender(
-		fmt.Sprintf("🔍 查無 %d 學年度包含「%s」的課程\n\n請確認\n• 學年度和課程名稱是否正確\n• 該課程是否在該學年度開設", year, keyword),
+		fmt.Sprintf("🔍 查無 %d 學年度「%s」的課程\n\n請確認\n• 學年度和課程名稱是否正確\n• 該課程是否有開設", year, keyword),
 		sender,
 	)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		{Action: lineutil.NewMessageAction("📚 查詢近期課程", "課程 "+keyword)},
+		{Action: lineutil.NewMessageAction("📚 搜尋近期課程", "課程 "+keyword)},
 		lineutil.QuickReplyHelpAction(),
 	})
 	return []messaging_api.MessageInterface{msg}
@@ -1391,7 +1391,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 		h.metrics.RecordSearch(searchType, "error", time.Since(startTime).Seconds(), 0)
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			"⚠️ 智慧搜尋暫時無法使用\n\n請稍後再試，或使用精確搜尋\n• 課程 微積分", sender)
+			"⚠️ 智慧搜尋暫時無法使用\n\n請稍後再試，或使用精確搜尋：\n• 課程 微積分", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyCourseAction(),
 			lineutil.QuickReplyHelpAction(),
@@ -1404,7 +1404,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 		h.metrics.RecordSearch(searchType, "no_results", time.Since(startTime).Seconds(), 0)
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			"🔍 找不到相關課程\n\n嘗試不同的描述方式\n或使用精確搜尋\n• 課程 名稱", sender)
+			"🔍 查無相關課程\n\n💡 建議嘗試\n• 換個描述方式\n• 使用精確搜尋：課程 名稱", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyCourseAction(),
 			lineutil.QuickReplySmartSearchAction(),
@@ -1443,7 +1443,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []rag.SearchResult) []messaging_api.MessageInterface {
 	if len(courses) == 0 {
 		sender := lineutil.GetSender(senderName, h.stickerManager)
-		msg := lineutil.NewTextMessageWithConsistentSender("🔍 找不到相關課程\n\n請嘗試其他描述\n或使用精確搜尋\n• 課程 名稱", sender)
+		msg := lineutil.NewTextMessageWithConsistentSender("🔍 查無相關課程\n\n💡 建議嘗試\n• 換個描述方式\n• 使用精確搜尋：課程 名稱", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyCourseAction(),
 			lineutil.QuickReplySmartSearchAction(),
