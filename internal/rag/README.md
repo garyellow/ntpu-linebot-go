@@ -9,6 +9,7 @@ Retrieval-Augmented Generation (RAG) 模組，提供課程智慧搜尋功能。
 - **BM25Index**: BM25 關鍵字搜尋索引 (中文分詞優化)
 - **Query Expansion**: LLM 擴展查詢詞彙（同義詞、縮寫、翻譯）
 - **Relative Confidence**: 基於相對 BM25 分數的信心度 (score / maxScore)
+- **Newest Semester Filter**: 智慧搜尋僅返回最新學期課程（data-driven）
 
 ## 架構
 
@@ -20,6 +21,7 @@ Search Flow:
   │ BM25 Search (expanded keywords)  │
   │ - 中文 Unigram 分詞              │
   │ - IDF 加權                       │
+  │ - 僅最新學期過濾                 │
   │ - 相對信心分數 (score/maxScore) │
   └──────────────────────────────────┘
       ↓
@@ -36,8 +38,9 @@ Search Flow:
 - **中文分詞**：CJK 字元使用 Unigram（單字元），非 CJK 保持完整詞彙
 - **大小寫不敏感**：所有 token 轉為小寫
 - **線程安全**：使用 `sync.RWMutex` 保護索引操作
+- **學期過濾**：SearchCourses() 自動過濾至最新學期（data-driven）
 
-## 為什麼不用 Embedding？
+## 為什麼不用 Embedding?
 
 
 | 考量 | BM25 + Query Expansion | Embedding (Vector) |
