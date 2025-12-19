@@ -266,8 +266,9 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 					"• 找課 想學資料分析\n" +
 					"• 找課 Python 機器學習\n" +
 					"• 找課 商業管理相關\n\n" +
-					"💡 根據課程大綱內容智慧匹配\n" +
-					"🔍 若知道課名，建議用「課程 名稱」"
+					"💡 提示\n" +
+					"• 根據課程大綱內容智慧匹配\n" +
+					"• 若知道課名，建議用「課程 名稱」"
 			} else {
 				helpText = "⚠️ 智慧搜尋目前未啟用\n\n" +
 					"請使用精確搜尋：\n" +
@@ -1491,7 +1492,7 @@ func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []
 	// Provide tips when results are few to help users refine their queries
 	headerText := fmt.Sprintf("🔮 智慧搜尋：找到 %d 門課程", len(courses))
 	if len(courses) <= 3 {
-		headerText += "\n💡 使用更具體的關鍵字可獲得更多結果"
+		headerText += "\n\n💡 提示：使用更具體的關鍵字可獲得更多結果"
 	}
 	headerMsg := lineutil.NewTextMessageWithConsistentSender(headerText, sender)
 	messages = append([]messaging_api.MessageInterface{headerMsg}, messages...)

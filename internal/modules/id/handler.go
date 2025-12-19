@@ -229,7 +229,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		if searchTerm == "" {
 			// If no search term provided, give helpful message
 			sender := lineutil.GetSender(senderName, h.stickerManager)
-			msg := lineutil.NewTextMessageWithConsistentSender("🎓 請在關鍵字後輸入查詢內容\n\n例如：\n• 學號 小明\n• 學號 412345678\n\n💡 也可直接輸入 8-9 位學號", sender)
+			msg := lineutil.NewTextMessageWithConsistentSender("🎓 請在關鍵字後輸入查詢內容\n\n例如：\n• 學號 小明\n• 學號 412345678\n\n💡 提示：也可直接輸入 8-9 位學號", sender)
 			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 				lineutil.QuickReplyYearAction(),
 				lineutil.QuickReplyHelpAction(),
@@ -351,7 +351,7 @@ func (h *Handler) handleAllDepartmentCodes() []messaging_api.MessageInterface {
 	builder.WriteString("\n  資工系 → 85")
 	builder.WriteString("\n  通訊系 → 86")
 
-	builder.WriteString("\n\n💡 使用方式：學年 112 後選擇科系")
+	builder.WriteString("\n\n💡 使用方式\n輸入「學年 112」後選擇科系即可查詢")
 
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	msg := lineutil.NewTextMessageWithConsistentSender(builder.String(), sender)
