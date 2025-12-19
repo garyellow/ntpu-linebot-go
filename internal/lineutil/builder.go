@@ -426,39 +426,47 @@ func FormatSemesterShort(year, term int) string {
 
 // SemesterBadgeInfo contains display information for a semester badge.
 type SemesterBadgeInfo struct {
-	Text  string // Badge text (e.g., "🆕 本學期", "📅 上學期")
+	Text  string // Badge text (e.g., "🆕 最新學期", "📅 上個學期")
 	Color string // Badge background color
 }
 
-// GetSemesterBadge returns badge info based on the semester's position relative to current date.
-// This helps users quickly identify which semester a course belongs to.
+// GetSemesterBadge returns badge info based on the semester's position in the data.
+// This uses data-driven logic: the newest semester in the result set is "最新學期",
+// not based on calendar time.
 //
-// Badge types:
-//   - "🆕 本學期" (Green) - Current semester (index 0)
-//   - "📅 上學期" (Blue) - Previous semester (index 1)
-//   - "📦 過去" (Gray) - Older semesters (index 2+)
+// Badge types (based on position in dataSemesters):
+//   - "🆕 最新學期" (Green) - First semester in data (index 0, newest available data)
+//   - "📅 上個學期" (Blue) - Second semester in data (index 1)
+//   - "📦 過去學期" (Gray) - Third semester and older (index 2+)
 //
 // Parameters:
 //   - year, term: The semester to get badge for
-//   - recentYears, recentTerms: Recent semesters from getSemestersToSearch() for comparison
+//   - dataSemesters: Unique semesters extracted from actual course data, sorted newest first.
+//     This should be derived from the search results, not calendar-based calculation.
 //
 // Returns: SemesterBadgeInfo with text and color
-func GetSemesterBadge(year, term int, recentYears, recentTerms []int) SemesterBadgeInfo {
-	// Find the position of this semester in the recent list
-	for i := range recentYears {
-		if recentYears[i] == year && recentTerms[i] == term {
+func GetSemesterBadge(year, term int, dataSemesters []SemesterPair) SemesterBadgeInfo {
+	// Find the position of this semester in the data-derived list
+	for i, sem := range dataSemesters {
+		if sem.Year == year && sem.Term == term {
 			switch i {
 			case 0:
-				return SemesterBadgeInfo{Text: "🆕 本學期", Color: ColorPrimary}
+				return SemesterBadgeInfo{Text: "🆕 最新學期", Color: ColorPrimary}
 			case 1:
-				return SemesterBadgeInfo{Text: "📅 上學期", Color: ColorButtonExternal}
+				return SemesterBadgeInfo{Text: "📅 上個學期", Color: ColorButtonExternal}
 			default:
-				return SemesterBadgeInfo{Text: "📦 過去", Color: ColorButtonSecondary}
+				return SemesterBadgeInfo{Text: "📦 過去學期", Color: ColorButtonSecondary}
 			}
 		}
 	}
-	// Not in recent list - treat as historical
-	return SemesterBadgeInfo{Text: "📦 過去", Color: ColorButtonSecondary}
+	// Not in data list - treat as historical (shouldn't happen normally)
+	return SemesterBadgeInfo{Text: "📦 過去學期", Color: ColorButtonSecondary}
+}
+
+// SemesterPair represents a year-term pair for semester comparison.
+type SemesterPair struct {
+	Year int // ROC year (e.g., 113)
+	Term int // 1 (Fall/上學期) or 2 (Spring/下學期)
 }
 
 // FormatTeachers formats teacher names with optional truncation.

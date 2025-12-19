@@ -726,6 +726,82 @@ func TestDispatchIntent_SmartNoBM25Index(t *testing.T) {
 	}
 }
 
+// TestExtractUniqueSemesters tests the data-driven semester extraction logic
+func TestExtractUniqueSemesters(t *testing.T) {
+	tests := []struct {
+		name     string
+		courses  []storage.Course
+		expected []struct {
+			year int
+			term int
+		}
+	}{
+		{
+			name: "Multiple courses, multiple semesters (sorted)",
+			courses: []storage.Course{
+				{UID: "1132U0001", Year: 113, Term: 2},
+				{UID: "1132U0002", Year: 113, Term: 2},
+				{UID: "1131U0001", Year: 113, Term: 1},
+				{UID: "1122U0001", Year: 112, Term: 2},
+			},
+			expected: []struct{ year, term int }{
+				{113, 2}, // Index 0: 最新學期
+				{113, 1}, // Index 1: 上個學期
+				{112, 2}, // Index 2: 過去學期
+			},
+		},
+		{
+			name: "Single semester",
+			courses: []storage.Course{
+				{UID: "1132U0001", Year: 113, Term: 2},
+				{UID: "1132U0002", Year: 113, Term: 2},
+			},
+			expected: []struct{ year, term int }{
+				{113, 2},
+			},
+		},
+		{
+			name:     "Empty course list",
+			courses:  []storage.Course{},
+			expected: []struct{ year, term int }{},
+		},
+		{
+			name: "Four semesters (extended search)",
+			courses: []storage.Course{
+				{UID: "1132U0001", Year: 113, Term: 2},
+				{UID: "1131U0001", Year: 113, Term: 1},
+				{UID: "1122U0001", Year: 112, Term: 2},
+				{UID: "1121U0001", Year: 112, Term: 1},
+			},
+			expected: []struct{ year, term int }{
+				{113, 2}, // Index 0: 最新學期
+				{113, 1}, // Index 1: 上個學期
+				{112, 2}, // Index 2: 過去學期
+				{112, 1}, // Index 3: 過去學期
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractUniqueSemesters(tt.courses)
+
+			if len(result) != len(tt.expected) {
+				t.Errorf("extractUniqueSemesters() returned %d semesters, expected %d",
+					len(result), len(tt.expected))
+				return
+			}
+
+			for i := range tt.expected {
+				if result[i].Year != tt.expected[i].year || result[i].Term != tt.expected[i].term {
+					t.Errorf("extractUniqueSemesters()[%d] = {%d, %d}, expected {%d, %d}",
+						i, result[i].Year, result[i].Term, tt.expected[i].year, tt.expected[i].term)
+				}
+			}
+		})
+	}
+}
+
 // Helper functions for testing
 
 func containsString(s, substr string) bool {

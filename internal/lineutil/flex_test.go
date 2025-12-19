@@ -257,6 +257,24 @@ func TestNewCompactHeroBox(t *testing.T) {
 	}
 }
 
+// TestNewCourseHeroWithBadge tests course hero with badge
+func TestNewCourseHeroWithBadge(t *testing.T) {
+	hero := NewCourseHeroWithBadge("微積分 (1131U0001)", "🆕 最新學期", ColorPrimary)
+
+	// Check background color (should use ColorHeroBg = LINE Green)
+	if hero.BackgroundColor != ColorHeroBg {
+		t.Errorf("Expected backgroundColor '%s', got %v", ColorHeroBg, hero.BackgroundColor)
+	}
+	// Check compact padding (same as NewCompactHeroBox)
+	if hero.PaddingAll != SpacingL {
+		t.Errorf("Expected paddingAll '%s', got %v", SpacingL, hero.PaddingAll)
+	}
+	// Check contents (title + badge row)
+	if len(hero.Contents) != 2 {
+		t.Errorf("Expected 2 contents (title + badge), got %d", len(hero.Contents))
+	}
+}
+
 // TestNewHeaderBadge tests header badge creation
 func TestNewHeaderBadge(t *testing.T) {
 	badge := NewHeaderBadge("📚", "測試標籤")

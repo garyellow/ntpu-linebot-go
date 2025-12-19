@@ -715,3 +715,260 @@ func TestBM25Index_MaxSearchResultsConstant(t *testing.T) {
 
 	t.Logf("MaxSearchResults = %d", MaxSearchResults)
 }
+
+// TestGetNewestSemester tests the semester comparison logic
+func TestGetNewestSemester(t *testing.T) {
+	tests := []struct {
+		name        string
+		results     []BM25Result
+		wantYear    int
+		wantTerm    int
+		expectPanic bool
+	}{
+		{
+			name: "Multiple years - 114 is newest",
+			results: []BM25Result{
+				{UID: "1141U0001", Year: 114, Term: 1, Score: 10.0},
+				{UID: "1132U0001", Year: 113, Term: 2, Score: 9.0},
+				{UID: "1131U0001", Year: 113, Term: 1, Score: 8.0},
+				{UID: "1122U0001", Year: 112, Term: 2, Score: 7.0},
+			},
+			wantYear: 114,
+			wantTerm: 1,
+		},
+		{
+			name: "Same year - term 2 is newer than term 1",
+			results: []BM25Result{
+				{UID: "1131U0001", Year: 113, Term: 1, Score: 10.0},
+				{UID: "1132U0001", Year: 113, Term: 2, Score: 9.0},
+			},
+			wantYear: 113,
+			wantTerm: 2,
+		},
+		{
+			name: "All same semester",
+			results: []BM25Result{
+				{UID: "1131U0001", Year: 113, Term: 1, Score: 10.0},
+				{UID: "1131U0002", Year: 113, Term: 1, Score: 9.0},
+				{UID: "1131U0003", Year: 113, Term: 1, Score: 8.0},
+			},
+			wantYear: 113,
+			wantTerm: 1,
+		},
+		{
+			name: "Single result",
+			results: []BM25Result{
+				{UID: "1132U0001", Year: 113, Term: 2, Score: 10.0},
+			},
+			wantYear: 113,
+			wantTerm: 2,
+		},
+		{
+			name: "Mixed order - finds newest correctly",
+			results: []BM25Result{
+				{UID: "1122U0001", Year: 112, Term: 2, Score: 10.0},
+				{UID: "1141U0001", Year: 114, Term: 1, Score: 5.0}, // Newest (lower score but newest semester)
+				{UID: "1131U0001", Year: 113, Term: 1, Score: 9.0},
+				{UID: "1132U0001", Year: 113, Term: 2, Score: 8.0},
+			},
+			wantYear: 114,
+			wantTerm: 1,
+		},
+		{
+			name:     "Empty results",
+			results:  []BM25Result{},
+			wantYear: 0,
+			wantTerm: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotYear, gotTerm := getNewestSemester(tt.results)
+			if gotYear != tt.wantYear || gotTerm != tt.wantTerm {
+				t.Errorf("getNewestSemester() = (%d, %d), want (%d, %d)",
+					gotYear, gotTerm, tt.wantYear, tt.wantTerm)
+			}
+		})
+	}
+}
+
+// TestBM25Index_SearchCoursesMultiSemester tests SearchCourses with multi-semester data
+// to verify the newest semester filtering logic.
+func TestBM25Index_SearchCoursesMultiSemester(t *testing.T) {
+	log := logger.New("debug")
+	idx := NewBM25Index(log)
+
+	// Create syllabi from multiple semesters with overlapping content
+	// "雲端" keyword appears in all three semesters
+	syllabi := []*storage.Syllabus{
+		// 114-1 (Newest semester)
+		{
+			UID:        "1141U0001",
+			Title:      "進階雲端運算 Advanced Cloud Computing",
+			Teachers:   []string{"王教授"},
+			Year:       114,
+			Term:       1,
+			Objectives: "深入學習雲端運算技術，包含容器化、微服務\nAdvanced cloud computing with containers",
+			Outline:    "Docker, Kubernetes, 雲端架構設計\nCloud architecture design",
+		},
+		{
+			UID:        "1141U0002",
+			Title:      "雲端安全 Cloud Security",
+			Teachers:   []string{"李教授"},
+			Year:       114,
+			Term:       1,
+			Objectives: "雲端環境的資訊安全\nCloud security fundamentals",
+			Outline:    "雲端安全威脅、防護措施\nCloud security threats and defenses",
+		},
+		// 113-2 (Second newest)
+		{
+			UID:        "1132U0001",
+			Title:      "雲端運算 Cloud Computing",
+			Teachers:   []string{"陳教授"},
+			Year:       113,
+			Term:       2,
+			Objectives: "雲端運算基礎概念，AWS EC2, S3\nIntro to cloud with AWS",
+			Outline:    "雲端服務模型、AWS 平台\nCloud service models, AWS platform",
+		},
+		{
+			UID:        "1132U0002",
+			Title:      "分散式雲端系統",
+			Teachers:   []string{"張教授"},
+			Year:       113,
+			Term:       2,
+			Objectives: "分散式系統與雲端架構\nDistributed cloud systems",
+		},
+		// 113-1 (Older semester)
+		{
+			UID:        "1131U0001",
+			Title:      "雲端概論 Introduction to Cloud",
+			Teachers:   []string{"林教授"},
+			Year:       113,
+			Term:       1,
+			Objectives: "雲端運算入門課程\nCloud computing introduction",
+			Outline:    "雲端基礎知識\nCloud fundamentals",
+		},
+		// 112-2 (Oldest semester)
+		{
+			UID:        "1122U0001",
+			Title:      "雲端技術",
+			Teachers:   []string{"黃教授"},
+			Year:       112,
+			Term:       2,
+			Objectives: "雲端技術應用\nCloud technology applications",
+		},
+	}
+
+	if err := idx.Initialize(syllabi); err != nil {
+		t.Fatalf("Initialize() error = %v", err)
+	}
+
+	// Search for "雲端" which appears in all semesters
+	results, err := idx.SearchCourses(context.Background(), "雲端", 20)
+	if err != nil {
+		t.Fatalf("SearchCourses() error = %v", err)
+	}
+
+	if len(results) == 0 {
+		t.Fatal("SearchCourses should return results for '雲端'")
+	}
+
+	t.Logf("Found %d results after newest semester filtering", len(results))
+
+	// Verify: ALL results should be from newest semester only (114-1)
+	expectedYear, expectedTerm := 114, 1
+	for i, r := range results {
+		if r.Year != expectedYear || r.Term != expectedTerm {
+			t.Errorf("Result %d: UID=%s has semester %d-%d, want %d-%d (newest semester only)",
+				i, r.UID, r.Year, r.Term, expectedYear, expectedTerm)
+		}
+		t.Logf("  [%d] %s (%d-%d): confidence=%.2f", i+1, r.Title, r.Year, r.Term, r.Confidence)
+	}
+
+	// Verify: First result should have confidence = 1.0
+	if results[0].Confidence != 1.0 {
+		t.Errorf("First result confidence = %v, want 1.0", results[0].Confidence)
+	}
+
+	// Verify: All confidence scores should be between 0 and 1
+	for i, r := range results {
+		if r.Confidence < 0 || r.Confidence > 1 {
+			t.Errorf("Result %d confidence = %v, want between 0 and 1", i, r.Confidence)
+		}
+	}
+
+	// Verify: Results should only include courses from 114-1
+	// (Should NOT include 1132U0001, 1131U0001, 1122U0001 even though they match "雲端")
+	for _, r := range results {
+		if r.UID == "1132U0001" || r.UID == "1131U0001" || r.UID == "1122U0001" {
+			t.Errorf("Result should not include UID %s from older semester", r.UID)
+		}
+	}
+}
+
+// TestBM25Index_SearchCoursesNoResultsAfterFilter tests edge case where
+// only one semester has matching results, verifying that the newest semester
+// is determined from search results (not all syllabi in the index).
+func TestBM25Index_SearchCoursesNoResultsAfterFilter(t *testing.T) {
+	log := logger.New("debug")
+	idx := NewBM25Index(log)
+
+	// Create syllabi: 114-1 (newest), 113-2, 113-1 (oldest)
+	// Only 113-1 matches "COBOL"
+	syllabi := []*storage.Syllabus{
+		// 114-1 (Newest semester in index)
+		{
+			UID:        "1141U0001",
+			Title:      "Python 程式設計",
+			Teachers:   []string{"王教授"},
+			Year:       114,
+			Term:       1,
+			Objectives: "學習 Python 程式語言\nLearn Python programming",
+		},
+		// 113-2 (Middle semester)
+		{
+			UID:        "1132U0001",
+			Title:      "Java 程式設計",
+			Teachers:   []string{"李教授"},
+			Year:       113,
+			Term:       2,
+			Objectives: "學習 Java 程式語言\nLearn Java programming",
+		},
+		// 113-1 (Older) - Only this matches "COBOL"
+		{
+			UID:        "1131U0001",
+			Title:      "COBOL 程式設計",
+			Teachers:   []string{"陳教授"},
+			Year:       113,
+			Term:       1,
+			Objectives: "學習 COBOL 程式語言\nLearn COBOL programming",
+		},
+	}
+
+	if err := idx.Initialize(syllabi); err != nil {
+		t.Fatalf("Initialize() error = %v", err)
+	}
+
+	// Search for "COBOL" - only matches 113-1
+	// Since 113-1 is the only semester in search results, it becomes the "newest" for this query
+	// This is correct behavior: filtering is based on newest in SEARCH RESULTS, not in index
+	results, err := idx.SearchCourses(context.Background(), "COBOL", 10)
+	if err != nil {
+		t.Fatalf("SearchCourses() error = %v", err)
+	}
+
+	// Should return the 113-1 result (it's the newest/only semester in search results)
+	if len(results) != 1 {
+		t.Errorf("SearchCourses should return 1 result (newest in search results), got %d results", len(results))
+	}
+
+	if len(results) > 0 {
+		if results[0].Year != 113 || results[0].Term != 1 {
+			t.Errorf("Result semester = %d-%d, want 113-1", results[0].Year, results[0].Term)
+		}
+		if results[0].Confidence != 1.0 {
+			t.Errorf("Result confidence = %.2f, want 1.0 (only result)", results[0].Confidence)
+		}
+	}
+}

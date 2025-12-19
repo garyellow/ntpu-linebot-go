@@ -262,15 +262,16 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			var helpText string
 			if h.bm25Index != nil && h.bm25Index.IsEnabled() {
 				helpText = "🔮 智慧搜尋說明\n\n" +
-					"請描述您想找的課程內容\n" +
+					"請描述您想找的課程內容：\n" +
 					"• 找課 想學資料分析\n" +
 					"• 找課 Python 機器學習\n" +
 					"• 找課 商業管理相關\n\n" +
-					"💡 根據課程大綱內容匹配\n" +
-					"🔍 若知道課名，建議用「課程 名稱」"
+					"💡 提示\n" +
+					"• 根據課程大綱內容智慧匹配\n" +
+					"• 若知道課名，建議用「課程 名稱」"
 			} else {
 				helpText = "⚠️ 智慧搜尋目前未啟用\n\n" +
-					"請使用精確查詢：\n" +
+					"請使用精確搜尋：\n" +
 					"• 課程 微積分\n" +
 					"• 課程 王小明"
 			}
@@ -294,12 +295,12 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		if searchTerm == "" {
 			sender := lineutil.GetSender(senderName, h.stickerManager)
 			helpText := "📅 更多學期搜尋說明\n\n" +
-				"🔍 搜尋範圍：近 4 個學期\n" +
-				"（比一般搜尋的 2 個學期更廣）\n\n" +
+				"🔍 搜尋範圍：近 4 學期\n" +
+				"（一般搜尋僅搜尋近 2 學期）\n\n" +
 				"用法範例：\n" +
 				"• 更多學期 微積分\n" +
 				"• 更多學期 王小明\n\n" +
-				"📆 需要指定年份的課程？\n" +
+				"📆 需要指定年份？\n" +
 				"使用：「課程 110 微積分」"
 			msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
 			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -336,10 +337,10 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 					"• 找課 Python 入門\n\n" +
 					"📅 更多學期（近 4 學期）\n" +
 					"• 更多學期 微積分\n\n" +
-					"📆 指定年份（任意年份）\n" +
+					"📆 指定年份\n" +
 					"• 課程 110 微積分\n\n" +
 					"💡 直接輸入課號（如 U0001）\n" +
-					"   或完整課號（如 1131U0001）"
+					"   或完整編號（如 1131U0001）"
 				quickReplyItems = []lineutil.QuickReplyItem{
 					lineutil.QuickReplySmartSearchAction(),
 					lineutil.QuickReplyHelpAction(),
@@ -352,10 +353,10 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 					"• 課程 線代 王\n\n" +
 					"📅 更多學期（近 4 學期）\n" +
 					"• 更多學期 微積分\n\n" +
-					"📆 指定年份（任意年份）\n" +
+					"📆 指定年份\n" +
 					"• 課程 110 微積分\n\n" +
 					"💡 直接輸入課號（如 U0001）\n" +
-					"   或完整課號（如 1131U0001）"
+					"   或完整編號（如 1131U0001）"
 				quickReplyItems = []lineutil.QuickReplyItem{
 					lineutil.QuickReplyHelpAction(),
 				}
@@ -448,7 +449,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 		log.Warnf("Course UID %s not found after scraping", uid)
 		h.metrics.RecordScraperRequest(ModuleName, "not_found", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 建議\n• 確認課程編號拼寫是否正確\n• 該課程是否在近期開設", uid),
+			fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 建議\n• 確認課程編號是否正確\n• 該課程是否有開設", uid),
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -533,7 +534,7 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 
 	// Build helpful message
 	msg := lineutil.NewTextMessageWithConsistentSender(
-		fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 建議\n• 確認課程編號拼寫是否正確（如 U0001）\n• 該課程是否在近期開設\n• 或使用「課程 課名」查詢", courseNo),
+		fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 建議\n• 確認課程編號是否正確（如 U0001）\n• 該課程是否有開設\n• 或使用「課程 課名」搜尋", courseNo),
 		sender,
 	)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -545,6 +546,7 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 
 // handleUnifiedCourseSearch handles unified course search queries with fuzzy matching.
 // It searches both course titles and teacher names simultaneously.
+// Search range: Recent 2-4 semesters with cache-first strategy.
 //
 // Search Strategy (2-tier parallel search + scraping fallback):
 //
@@ -570,6 +572,7 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 
 // handleExtendedCourseSearch handles extended course search (4 semesters instead of default 2).
 // This is triggered by "課程歷史" or "更多學期" keywords, typically from Quick Reply.
+// Search range: 4 semesters (broader historical search).
 // Search flow: SQL LIKE → Fuzzy match → Scraping (4 semesters) → No BM25 fallback
 // Note: Intentionally skips BM25 fallback as extended search focuses on historical data
 func (h *Handler) handleExtendedCourseSearch(ctx context.Context, searchTerm string) []messaging_api.MessageInterface {
@@ -787,14 +790,14 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 	var helpText string
 	if extended {
 		helpText = fmt.Sprintf(
-			"🔍 查無相關課程\n\n查詢內容：%s\n📅 搜尋範圍：%s\n\n💡 建議嘗試：\n• 縮短關鍵字（如「線性」→「線」）\n• 只輸入教師姓氏\n• 指定年份：「課程 110 %s」",
+			"🔍 查無相關課程\n\n搜尋內容：%s\n📅 搜尋範圍：%s\n\n💡 建議嘗試\n• 縮短關鍵字（如「線性」→「線」）\n• 只輸入教師姓氏\n• 指定年份：「課程 110 %s」",
 			searchTerm,
 			semesterType,
 			searchTerm,
 		)
 	} else {
 		helpText = fmt.Sprintf(
-			"🔍 查無「%s」的相關課程\n\n📅 已搜尋範圍：近 2 個學期\n\n💡 建議嘗試：\n• 「📅 更多學期」查 4 個學期\n• 縮短關鍵字（如「線性」→「線」）\n• 指定年份：「課程 110 %s」",
+			"🔍 查無「%s」的相關課程\n\n📅 已搜尋範圍：近 2 學期\n\n💡 建議嘗試\n• 「📅 更多學期」搜尋近 4 學期\n• 縮短關鍵字（如「線性」→「線」）\n• 指定年份：「課程 110 %s」",
 			searchTerm,
 			searchTerm,
 		)
@@ -840,7 +843,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	currentYear := time.Now().Year() - 1911
 	if year < config.CourseSystemLaunchYear || year > currentYear {
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("❌ 無效的學年度：%d\n\n📅 可查詢範圍：%d-%d 學年度\n（民國 %d-%d 年 = 西元 %d-%d 年）\n\n範例：\n• 課程 110 微積分\n• 課 108 線性代數", year, config.CourseSystemLaunchYear, currentYear, config.CourseSystemLaunchYear, currentYear, config.CourseSystemLaunchYear+1911, currentYear+1911),
+			fmt.Sprintf("❌ 無效的學年度：%d\n\n📅 可搜尋範圍：%d-%d 學年度\n（民國 %d-%d 年 = 西元 %d-%d 年）\n\n範例：\n• 課程 110 微積分\n• 課 108 線性代數", year, config.CourseSystemLaunchYear, currentYear, config.CourseSystemLaunchYear, currentYear, config.CourseSystemLaunchYear+1911, currentYear+1911),
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyCourseNav(h.bm25Index != nil && h.bm25Index.IsEnabled()))
@@ -893,11 +896,11 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 			Warn("Failed to scrape historical courses")
 		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("🔍 查無 %d 學年度包含「%s」的課程\n\n請確認\n• 學年度和課程名稱是否正確\n• 該課程是否在該學年度開設", year, keyword),
+			fmt.Sprintf("🔍 查無 %d 學年度「%s」的課程\n\n請確認\n• 學年度和課程名稱是否正確\n• 該課程是否有開設", year, keyword),
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("📚 查詢近期課程", "課程 "+keyword)},
+			{Action: lineutil.NewMessageAction("📚 搜尋近期課程", "課程 "+keyword)},
 			lineutil.QuickReplyHelpAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
@@ -924,11 +927,11 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	// No results found
 	h.metrics.RecordScraperRequest(ModuleName, "not_found", time.Since(startTime).Seconds())
 	msg := lineutil.NewTextMessageWithConsistentSender(
-		fmt.Sprintf("🔍 查無 %d 學年度包含「%s」的課程\n\n請確認\n• 學年度和課程名稱是否正確\n• 該課程是否在該學年度開設", year, keyword),
+		fmt.Sprintf("🔍 查無 %d 學年度「%s」的課程\n\n請確認\n• 學年度和課程名稱是否正確\n• 該課程是否有開設", year, keyword),
 		sender,
 	)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		{Action: lineutil.NewMessageAction("📚 查詢近期課程", "課程 "+keyword)},
+		{Action: lineutil.NewMessageAction("📚 搜尋近期課程", "課程 "+keyword)},
 		lineutil.QuickReplyHelpAction(),
 	})
 	return []messaging_api.MessageInterface{msg}
@@ -1085,9 +1088,35 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 	return []messaging_api.MessageInterface{msg}
 }
 
+// extractUniqueSemesters extracts unique semesters from a sorted course list.
+// The input courses should be pre-sorted by semester (newest first).
+// Returns a slice of SemesterPair in the same order (newest first).
+//
+// This is used for data-driven badge calculation:
+// - Index 0: 最新學期 (newest semester with data)
+// - Index 1: 上個學期 (second newest)
+// - Index 2+: 過去學期 (older semesters)
+func extractUniqueSemesters(courses []storage.Course) []lineutil.SemesterPair {
+	seen := make(map[string]bool)
+	var semesters []lineutil.SemesterPair
+
+	for _, c := range courses {
+		key := fmt.Sprintf("%d-%d", c.Year, c.Term)
+		if !seen[key] {
+			seen[key] = true
+			semesters = append(semesters, lineutil.SemesterPair{
+				Year: c.Year,
+				Term: c.Term,
+			})
+		}
+	}
+
+	return semesters
+}
+
 // formatCourseListResponse formats a list of courses as LINE messages with semester badges.
 // Courses are sorted by semester (newest first) and each bubble shows a badge indicating
-// whether it's from the current semester, previous semester, or historical.
+// whether it's from the newest semester in data, previous semester, or older.
 func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging_api.MessageInterface {
 	return h.formatCourseListResponseWithOptions(courses, "", false)
 }
@@ -1113,8 +1142,12 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 		return b.Term - a.Term // Term: 2 (下學期) before 1 (上學期)
 	})
 
-	// Get recent semesters for badge calculation
-	recentYears, recentTerms := getSemestersToSearch()
+	// Extract unique semesters from sorted courses (data-driven, not calendar-based)
+	// This ensures badge is based on actual data availability:
+	// - Index 0: 最新學期 (newest semester with data)
+	// - Index 1: 上個學期 (second newest)
+	// - Index 2+: 過去學期 (older semesters)
+	dataSemesters := extractUniqueSemesters(courses)
 
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	var messages []messaging_api.MessageInterface
@@ -1129,26 +1162,21 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 	// Create bubbles for carousel (LINE API limit: max 10 bubbles per Flex Carousel)
 	bubbles := make([]messaging_api.FlexBubble, 0, len(courses))
 	for _, course := range courses {
-		// Get semester badge info
-		badge := lineutil.GetSemesterBadge(course.Year, course.Term, recentYears, recentTerms)
+		// Get semester badge info based on data position
+		badge := lineutil.GetSemesterBadge(course.Year, course.Term, dataSemesters)
 
-		// Hero: Course title with course code + semester badge
+		// Hero: Course title with badge at bottom
 		heroTitle := lineutil.FormatCourseTitleWithUID(course.Title, course.UID)
-		hero := lineutil.NewCompactHeroBox(heroTitle)
+		hero := lineutil.NewCourseHeroWithBadge(heroTitle, badge.Text, badge.Color)
 
 		// Build body contents with improved layout
-		// 第一列：學期徽章 + 學期資訊
-		semesterShort := lineutil.FormatSemesterShort(course.Year, course.Term)
+		// 第一列：學期資訊（完整格式）
+		semesterText := lineutil.FormatSemester(course.Year, course.Term)
 		contents := []messaging_api.FlexComponentInterface{
 			lineutil.NewFlexBox("horizontal",
-				// Badge with background color
-				lineutil.NewFlexBox("horizontal",
-					lineutil.NewFlexText(badge.Text).WithSize("xxs").WithColor(lineutil.ColorHeroText).WithWeight("bold").FlexText,
-				).WithBackgroundColor(badge.Color).WithPaddingAll("4px").WithCornerRadius("4px").FlexBox,
-				// Semester text
-				lineutil.NewFlexText(semesterShort).WithSize("xs").WithColor(lineutil.ColorSubtext).WithMargin("sm").FlexText,
+				lineutil.NewFlexText("📅 開課學期：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
+				lineutil.NewFlexText(semesterText).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).FlexText,
 			).WithMargin("sm").WithSpacing("sm").FlexBox,
-			lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 		}
 
 		// 第二列：授課教師
@@ -1261,8 +1289,9 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 	return messages
 }
 
-// handleSmartSearch performs smart search using BM25 + Query Expansion
-// This is triggered by "找課" keywords and searches course syllabi content
+// handleSmartSearch performs smart search using BM25 + Query Expansion.
+// This is triggered by "找課" keywords and searches course syllabi content.
+// Search range: Newest semester only (ensures current/most recent course offerings).
 //
 // Timeout hierarchy (nested within 60s webhook processing timeout):
 //   - SmartSearchTimeout: 30s total (detached context from HTTP request)
@@ -1282,13 +1311,14 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 		log.Info("Smart search not enabled")
 		h.metrics.RecordSearch("disabled", "skipped", time.Since(startTime).Seconds(), 0)
 		sender := lineutil.GetSender(senderName, h.stickerManager)
-		msg := lineutil.NewTextMessageWithConsistentSender(
-			"⚠️ 智慧搜尋目前未啟用\n\n請使用精確搜尋\n• 課程 微積分\n• 課程 王小明", sender)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyCourseAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
-		return []messaging_api.MessageInterface{msg}
+		return []messaging_api.MessageInterface{
+			lineutil.ErrorMessageWithQuickReply(
+				"智慧搜尋目前未啟用\n\n建議使用精確搜尋\n• 課程 微積分\n• 課程 王小明",
+				sender,
+				"課程 "+query,
+				lineutil.QuickReplyCourseNav(false)...,
+			),
+		}
 	}
 
 	searchType := "bm25"
@@ -1360,13 +1390,14 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 		log.WithError(err).Warn("Smart search failed")
 		h.metrics.RecordSearch(searchType, "error", time.Since(startTime).Seconds(), 0)
 		sender := lineutil.GetSender(senderName, h.stickerManager)
-		msg := lineutil.NewTextMessageWithConsistentSender(
-			"⚠️ 智慧搜尋暫時無法使用\n\n請稍後再試，或使用精確搜尋\n• 課程 微積分", sender)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyCourseAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
-		return []messaging_api.MessageInterface{msg}
+		return []messaging_api.MessageInterface{
+			lineutil.ErrorMessageWithQuickReply(
+				"智慧搜尋暫時無法使用\n\n建議稍後再試，或使用精確搜尋",
+				sender,
+				"找課 "+query,
+				lineutil.QuickReplyCourseNav(h.IsBM25SearchEnabled())...,
+			),
+		}
 	}
 
 	if len(results) == 0 {
@@ -1374,7 +1405,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 		h.metrics.RecordSearch(searchType, "no_results", time.Since(startTime).Seconds(), 0)
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			"🔍 找不到相關課程\n\n嘗試不同的描述方式\n或使用精確搜尋\n• 課程 名稱", sender)
+			"🔍 查無相關課程\n\n💡 建議嘗試\n• 換個描述方式\n• 使用精確搜尋：課程 名稱", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyCourseAction(),
 			lineutil.QuickReplySmartSearchAction(),
@@ -1413,7 +1444,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []rag.SearchResult) []messaging_api.MessageInterface {
 	if len(courses) == 0 {
 		sender := lineutil.GetSender(senderName, h.stickerManager)
-		msg := lineutil.NewTextMessageWithConsistentSender("🔍 找不到相關課程\n\n請嘗試其他描述\n或使用精確搜尋\n• 課程 名稱", sender)
+		msg := lineutil.NewTextMessageWithConsistentSender("🔍 查無相關課程\n\n💡 建議嘗試\n• 換個描述方式\n• 使用精確搜尋：課程 名稱", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyCourseAction(),
 			lineutil.QuickReplySmartSearchAction(),
@@ -1461,7 +1492,7 @@ func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []
 	// Provide tips when results are few to help users refine their queries
 	headerText := fmt.Sprintf("🔮 智慧搜尋：找到 %d 門課程", len(courses))
 	if len(courses) <= 3 {
-		headerText += "\n💡 使用更具體的關鍵字可獲得更多結果"
+		headerText += "\n\n💡 提示：使用更具體的關鍵字可獲得更多結果"
 	}
 	headerMsg := lineutil.NewTextMessageWithConsistentSender(headerText, sender)
 	messages = append([]messaging_api.MessageInterface{headerMsg}, messages...)
@@ -1476,34 +1507,27 @@ func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []
 	return messages
 }
 
-// buildSmartCourseBubble creates a Flex Message bubble for a course with relevance badge
+// buildSmartCourseBubble creates a Flex Message bubble for a course with relevance badge.
+// Uses unified Hero+badge layout matching formatCourseListResponseWithOptions().
 func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float32) *lineutil.FlexBubble {
 	// Relevance badge based on confidence (user-friendly labels)
 	relevanceBadge, relevanceColor := getRelevanceBadge(confidence)
 
-	// Hero: Course title with course code
+	// Hero: Course title with relevance badge at bottom
 	heroTitle := lineutil.FormatCourseTitleWithUID(course.Title, course.UID)
-	hero := lineutil.NewCompactHeroBox(heroTitle)
+	hero := lineutil.NewCourseHeroWithBadge(heroTitle, relevanceBadge, relevanceColor)
 
 	// Build body contents with improved layout (matching regular course carousel)
-	// 第一列：相關度 badge
-	contents := []messaging_api.FlexComponentInterface{
-		lineutil.NewFlexBox("horizontal",
-			lineutil.NewFlexText(relevanceBadge).WithSize("xs").WithColor(relevanceColor).WithFlex(0).FlexText,
-		).WithMargin("none").FlexBox,
-		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
-	}
-
-	// 第二列：學期資訊
+	// 第一列：學期資訊（完整格式）
 	semesterText := lineutil.FormatSemester(course.Year, course.Term)
-	contents = append(contents,
+	contents := []messaging_api.FlexComponentInterface{
 		lineutil.NewFlexBox("horizontal",
 			lineutil.NewFlexText("📅 開課學期：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
 			lineutil.NewFlexText(semesterText).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).FlexText,
 		).WithMargin("sm").WithSpacing("sm").FlexBox,
-	)
+	}
 
-	// 第三列：授課教師
+	// 第二列：授課教師
 	if len(course.Teachers) > 0 {
 		carouselTeachers := lineutil.FormatTeachers(course.Teachers, 5)
 		contents = append(contents,
@@ -1545,7 +1569,9 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 	return bubble
 }
 
-// getRelevanceBadge returns a user-friendly relevance label based on relative BM25 score.
+// getRelevanceBadge returns a user-friendly relevance label and background color based on relative BM25 score.
+//
+// Returns: (badgeText, badgeBackgroundColor)
 //
 // Design rationale:
 //   - Uses relative score (score / maxScore) from BM25 search

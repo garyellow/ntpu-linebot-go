@@ -178,7 +178,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		if searchTerm == "" {
 			// If no search term provided, give helpful message
 			sender := lineutil.GetSender(senderName, h.stickerManager)
-			msg := lineutil.NewTextMessageWithConsistentSender("📞 請輸入查詢內容\n\n例如：\n• 聯絡 資工系\n• 電話 圖書館\n• 分機 學務處\n\n💡 也可直接輸入「緊急」查看緊急聯絡電話", sender)
+			msg := lineutil.NewTextMessageWithConsistentSender("📞 請輸入查詢內容\n\n例如：\n• 聯絡 資工系\n• 電話 圖書館\n• 分機 學務處\n\n💡 提示：輸入「緊急」可查看緊急聯絡電話", sender)
 			msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyContactNav())
 			return []messaging_api.MessageInterface{msg}
 		}

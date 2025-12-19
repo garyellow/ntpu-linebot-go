@@ -322,6 +322,43 @@ func NewCompactHeroBox(title string) *FlexBox {
 	return box
 }
 
+// NewCourseHeroWithBadge creates a Hero box for course carousel with badge.
+// Layout: Course title (3 lines max) with small badge box at bottom.
+// Badge uses colored background with white text for visual consistency.
+//
+// Parameters:
+//   - title: Course title with UID (e.g., "微積分 (1131U0001)")
+//   - badgeText: Badge label (e.g., "🆕 最新學期" or "🎯 最佳匹配")
+//   - badgeColor: Badge background color (e.g., ColorPrimary, ColorSuccess)
+//
+// Design: Compact padding (16px) to fit carousel, badge aligned to start.
+func NewCourseHeroWithBadge(title, badgeText, badgeColor string) *FlexBox {
+	box := NewFlexBox("vertical",
+		// Course title
+		NewFlexText(title).
+			WithWeight("bold").
+			WithSize("md").
+			WithColor(ColorHeroText).
+			WithWrap(true).
+			WithMaxLines(3).
+			WithLineSpacing(LineSpacingNormal).FlexText,
+		// Badge box at bottom
+		NewFlexBox("horizontal",
+			NewFlexBox("horizontal",
+				NewFlexText(badgeText).
+					WithSize("xxs").
+					WithColor(ColorHeroText).
+					WithWeight("bold").FlexText,
+			).WithBackgroundColor(badgeColor).
+				WithPaddingAll("4px").
+				WithCornerRadius("4px").FlexBox,
+		).WithMargin("sm").FlexBox,
+	)
+	box.BackgroundColor = ColorHeroBg
+	box.PaddingAll = SpacingL
+	return box
+}
+
 // NewHeaderBadge creates a consistent header badge for Flex Messages
 // Format: [emoji] [label] with LINE green color
 func NewHeaderBadge(emoji, label string) *FlexBox {
