@@ -1085,9 +1085,35 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 	return []messaging_api.MessageInterface{msg}
 }
 
+// extractUniqueSemesters extracts unique semesters from a sorted course list.
+// The input courses should be pre-sorted by semester (newest first).
+// Returns a slice of SemesterPair in the same order (newest first).
+//
+// This is used for data-driven badge calculation:
+// - Index 0: 最新學期 (newest semester with data)
+// - Index 1: 上個學期 (second newest)
+// - Index 2+: 過去學期 (older semesters)
+func extractUniqueSemesters(courses []storage.Course) []lineutil.SemesterPair {
+	seen := make(map[string]bool)
+	var semesters []lineutil.SemesterPair
+
+	for _, c := range courses {
+		key := fmt.Sprintf("%d-%d", c.Year, c.Term)
+		if !seen[key] {
+			seen[key] = true
+			semesters = append(semesters, lineutil.SemesterPair{
+				Year: c.Year,
+				Term: c.Term,
+			})
+		}
+	}
+
+	return semesters
+}
+
 // formatCourseListResponse formats a list of courses as LINE messages with semester badges.
 // Courses are sorted by semester (newest first) and each bubble shows a badge indicating
-// whether it's from the current semester, previous semester, or historical.
+// whether it's from the newest semester in data, previous semester, or older.
 func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging_api.MessageInterface {
 	return h.formatCourseListResponseWithOptions(courses, "", false)
 }
@@ -1113,8 +1139,12 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 		return b.Term - a.Term // Term: 2 (下學期) before 1 (上學期)
 	})
 
-	// Get recent semesters for badge calculation
-	recentYears, recentTerms := getSemestersToSearch()
+	// Extract unique semesters from sorted courses (data-driven, not calendar-based)
+	// This ensures badge is based on actual data availability:
+	// - Index 0: 最新學期 (newest semester with data)
+	// - Index 1: 上個學期 (second newest)
+	// - Index 2+: 過去學期 (older semesters)
+	dataSemesters := extractUniqueSemesters(courses)
 
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	var messages []messaging_api.MessageInterface
@@ -1129,8 +1159,8 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 	// Create bubbles for carousel (LINE API limit: max 10 bubbles per Flex Carousel)
 	bubbles := make([]messaging_api.FlexBubble, 0, len(courses))
 	for _, course := range courses {
-		// Get semester badge info
-		badge := lineutil.GetSemesterBadge(course.Year, course.Term, recentYears, recentTerms)
+		// Get semester badge info based on data position
+		badge := lineutil.GetSemesterBadge(course.Year, course.Term, dataSemesters)
 
 		// Hero: Course title with course code + semester badge
 		heroTitle := lineutil.FormatCourseTitleWithUID(course.Title, course.UID)
