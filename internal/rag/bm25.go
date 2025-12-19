@@ -251,9 +251,24 @@ func (idx *BM25Index) Search(query string, topN int) ([]BM25Result, error) {
 	return results, nil
 }
 
-// SearchCourses performs BM25 search and returns SearchResult with confidence scores.
-// This is the primary search interface for course retrieval.
-// Confidence is calculated as relative score (score / maxScore).
+// getNewestSemester returns the newest semester from BM25 results (data-driven).
+// Compares year first (higher is newer), then term (2 > 1).
+func getNewestSemester(results []BM25Result) (int, int) {
+	if len(results) == 0 {
+		return 0, 0
+	}
+	newestYear, newestTerm := results[0].Year, results[0].Term
+	for _, r := range results[1:] {
+		if r.Year > newestYear || (r.Year == newestYear && r.Term > newestTerm) {
+			newestYear, newestTerm = r.Year, r.Term
+		}
+	}
+	return newestYear, newestTerm
+}
+
+// SearchCourses performs BM25 search and returns results from newest semester only.
+// This ensures smart search always shows current/most recent course offerings.
+// Confidence is calculated as relative score within filtered results.
 func (idx *BM25Index) SearchCourses(_ context.Context, query string, topN int) ([]SearchResult, error) {
 	bm25Results, err := idx.Search(query, topN)
 	if err != nil {
@@ -264,11 +279,23 @@ func (idx *BM25Index) SearchCourses(_ context.Context, query string, topN int) (
 		return nil, nil
 	}
 
-	// Get max score for relative confidence calculation
-	maxScore := bm25Results[0].Score
+	// Filter to newest semester (data-driven)
+	newestYear, newestTerm := getNewestSemester(bm25Results)
+	var filteredResults []BM25Result
+	for _, r := range bm25Results {
+		if r.Year == newestYear && r.Term == newestTerm {
+			filteredResults = append(filteredResults, r)
+		}
+	}
 
-	results := make([]SearchResult, len(bm25Results))
-	for i, r := range bm25Results {
+	if len(filteredResults) == 0 {
+		return nil, nil
+	}
+
+	// Recalculate confidence from filtered results
+	maxScore := filteredResults[0].Score
+	results := make([]SearchResult, len(filteredResults))
+	for i, r := range filteredResults {
 		results[i] = SearchResult{
 			UID:        r.UID,
 			Title:      r.Title,

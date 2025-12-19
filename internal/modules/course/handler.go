@@ -545,6 +545,7 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 
 // handleUnifiedCourseSearch handles unified course search queries with fuzzy matching.
 // It searches both course titles and teacher names simultaneously.
+// Search range: Recent 2-4 semesters with cache-first strategy.
 //
 // Search Strategy (2-tier parallel search + scraping fallback):
 //
@@ -570,6 +571,7 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 
 // handleExtendedCourseSearch handles extended course search (4 semesters instead of default 2).
 // This is triggered by "課程歷史" or "更多學期" keywords, typically from Quick Reply.
+// Search range: 4 semesters (broader historical search).
 // Search flow: SQL LIKE → Fuzzy match → Scraping (4 semesters) → No BM25 fallback
 // Note: Intentionally skips BM25 fallback as extended search focuses on historical data
 func (h *Handler) handleExtendedCourseSearch(ctx context.Context, searchTerm string) []messaging_api.MessageInterface {
@@ -1162,23 +1164,18 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 		// Get semester badge info based on data position
 		badge := lineutil.GetSemesterBadge(course.Year, course.Term, dataSemesters)
 
-		// Hero: Course title with course code + semester badge
+		// Hero: Course title with badge at bottom
 		heroTitle := lineutil.FormatCourseTitleWithUID(course.Title, course.UID)
-		hero := lineutil.NewCompactHeroBox(heroTitle)
+		hero := lineutil.NewCourseHeroWithBadge(heroTitle, badge.Text, badge.Color)
 
 		// Build body contents with improved layout
-		// 第一列：學期徽章 + 學期資訊
-		semesterShort := lineutil.FormatSemesterShort(course.Year, course.Term)
+		// 第一列：學期資訊（完整格式）
+		semesterText := lineutil.FormatSemester(course.Year, course.Term)
 		contents := []messaging_api.FlexComponentInterface{
 			lineutil.NewFlexBox("horizontal",
-				// Badge with background color
-				lineutil.NewFlexBox("horizontal",
-					lineutil.NewFlexText(badge.Text).WithSize("xxs").WithColor(lineutil.ColorHeroText).WithWeight("bold").FlexText,
-				).WithBackgroundColor(badge.Color).WithPaddingAll("4px").WithCornerRadius("4px").FlexBox,
-				// Semester text
-				lineutil.NewFlexText(semesterShort).WithSize("xs").WithColor(lineutil.ColorSubtext).WithMargin("sm").FlexText,
+				lineutil.NewFlexText("📅 開課學期：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
+				lineutil.NewFlexText(semesterText).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).FlexText,
 			).WithMargin("sm").WithSpacing("sm").FlexBox,
-			lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 		}
 
 		// 第二列：授課教師
@@ -1291,8 +1288,9 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 	return messages
 }
 
-// handleSmartSearch performs smart search using BM25 + Query Expansion
-// This is triggered by "找課" keywords and searches course syllabi content
+// handleSmartSearch performs smart search using BM25 + Query Expansion.
+// This is triggered by "找課" keywords and searches course syllabi content.
+// Search range: Newest semester only (ensures current/most recent course offerings).
 //
 // Timeout hierarchy (nested within 60s webhook processing timeout):
 //   - SmartSearchTimeout: 30s total (detached context from HTTP request)
@@ -1506,34 +1504,27 @@ func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []
 	return messages
 }
 
-// buildSmartCourseBubble creates a Flex Message bubble for a course with relevance badge
+// buildSmartCourseBubble creates a Flex Message bubble for a course with relevance badge.
+// Uses unified Hero+badge layout matching formatCourseListResponseWithOptions().
 func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float32) *lineutil.FlexBubble {
 	// Relevance badge based on confidence (user-friendly labels)
 	relevanceBadge, relevanceColor := getRelevanceBadge(confidence)
 
-	// Hero: Course title with course code
+	// Hero: Course title with relevance badge at bottom
 	heroTitle := lineutil.FormatCourseTitleWithUID(course.Title, course.UID)
-	hero := lineutil.NewCompactHeroBox(heroTitle)
+	hero := lineutil.NewCourseHeroWithBadge(heroTitle, relevanceBadge, relevanceColor)
 
 	// Build body contents with improved layout (matching regular course carousel)
-	// 第一列：相關度 badge
-	contents := []messaging_api.FlexComponentInterface{
-		lineutil.NewFlexBox("horizontal",
-			lineutil.NewFlexText(relevanceBadge).WithSize("xs").WithColor(relevanceColor).WithFlex(0).FlexText,
-		).WithMargin("none").FlexBox,
-		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
-	}
-
-	// 第二列：學期資訊
+	// 第一列：學期資訊（完整格式）
 	semesterText := lineutil.FormatSemester(course.Year, course.Term)
-	contents = append(contents,
+	contents := []messaging_api.FlexComponentInterface{
 		lineutil.NewFlexBox("horizontal",
 			lineutil.NewFlexText("📅 開課學期：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
 			lineutil.NewFlexText(semesterText).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).FlexText,
 		).WithMargin("sm").WithSpacing("sm").FlexBox,
-	)
+	}
 
-	// 第三列：授課教師
+	// 第二列：授課教師
 	if len(course.Teachers) > 0 {
 		carouselTeachers := lineutil.FormatTeachers(course.Teachers, 5)
 		contents = append(contents,
@@ -1575,7 +1566,9 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 	return bubble
 }
 
-// getRelevanceBadge returns a user-friendly relevance label based on relative BM25 score.
+// getRelevanceBadge returns a user-friendly relevance label and background color based on relative BM25 score.
+//
+// Returns: (badgeText, badgeBackgroundColor)
 //
 // Design rationale:
 //   - Uses relative score (score / maxScore) from BM25 search
