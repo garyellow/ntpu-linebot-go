@@ -292,8 +292,19 @@ func (idx *BM25Index) SearchCourses(_ context.Context, query string, topN int) (
 		return nil, nil
 	}
 
-	// Recalculate confidence from filtered results
+	// Find max score within filtered results for confidence calculation
+	// For negative scores: "max" means closest to zero (least negative)
+	// For positive scores: "max" means highest value
 	maxScore := filteredResults[0].Score
+	for _, r := range filteredResults[1:] {
+		// For positive scores: higher is better
+		// For negative scores: less negative (closer to 0) is better
+		if (maxScore >= 0 && r.Score > maxScore) || (maxScore < 0 && r.Score > maxScore) {
+			maxScore = r.Score
+		}
+	}
+
+	// Calculate relative confidence within filtered results
 	results := make([]SearchResult, len(filteredResults))
 	for i, r := range filteredResults {
 		results[i] = SearchResult{
@@ -335,18 +346,41 @@ func (idx *BM25Index) SearchCourses(_ context.Context, query string, topN int) (
 //   - >= 0.8: "最佳匹配" (Best Match) - Normal distribution core
 //   - >= 0.6: "高度相關" (Highly Relevant) - Mixed region
 //   - < 0.6: "部分相關" (Partially Relevant) - Exponential tail
+//
+// Note: BM25 can return negative scores when terms appear in all documents (IDF edge case).
+// For negative scores, we calculate relative confidence using absolute values,
+// where the "least negative" (closest to 0) score gets confidence 1.0.
 func computeRelativeConfidence(score, maxScore float64) float32 {
-	if maxScore <= 0 {
+	// Handle zero or invalid maxScore
+	if maxScore == 0 {
 		return 0
 	}
-	confidence := score / maxScore
-	if confidence > 1.0 {
-		confidence = 1.0
+
+	// Both positive: normal case (higher score = higher confidence)
+	if maxScore > 0 && score > 0 {
+		confidence := score / maxScore
+		if confidence > 1.0 {
+			confidence = 1.0
+		}
+		return float32(confidence)
 	}
-	if confidence < 0 {
-		confidence = 0
+
+	// Both negative: inverse case (less negative = higher confidence)
+	// e.g., score=-7.68, maxScore=-7.68 → confidence=1.0
+	//       score=-8.21, maxScore=-7.68 → confidence=7.68/8.21=0.93
+	if maxScore < 0 && score < 0 {
+		confidence := maxScore / score // Note: inverted division for negative scores
+		if confidence > 1.0 {
+			confidence = 1.0
+		}
+		if confidence < 0 {
+			confidence = 0
+		}
+		return float32(confidence)
 	}
-	return float32(confidence)
+
+	// Mixed signs (unusual): treat as 0 confidence
+	return 0
 }
 
 // AddSyllabus adds a single syllabus to the index.
