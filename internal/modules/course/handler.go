@@ -1310,13 +1310,14 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 		log.Info("Smart search not enabled")
 		h.metrics.RecordSearch("disabled", "skipped", time.Since(startTime).Seconds(), 0)
 		sender := lineutil.GetSender(senderName, h.stickerManager)
-		msg := lineutil.NewTextMessageWithConsistentSender(
-			"⚠️ 智慧搜尋目前未啟用\n\n請使用精確搜尋\n• 課程 微積分\n• 課程 王小明", sender)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyCourseAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
-		return []messaging_api.MessageInterface{msg}
+		return []messaging_api.MessageInterface{
+			lineutil.ErrorMessageWithQuickReply(
+				"智慧搜尋目前未啟用\n\n建議使用精確搜尋\n• 課程 微積分\n• 課程 王小明",
+				sender,
+				"課程 "+query,
+				lineutil.QuickReplyCourseNav(false)...,
+			),
+		}
 	}
 
 	searchType := "bm25"
@@ -1388,13 +1389,14 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 		log.WithError(err).Warn("Smart search failed")
 		h.metrics.RecordSearch(searchType, "error", time.Since(startTime).Seconds(), 0)
 		sender := lineutil.GetSender(senderName, h.stickerManager)
-		msg := lineutil.NewTextMessageWithConsistentSender(
-			"⚠️ 智慧搜尋暫時無法使用\n\n請稍後再試，或使用精確搜尋：\n• 課程 微積分", sender)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyCourseAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
-		return []messaging_api.MessageInterface{msg}
+		return []messaging_api.MessageInterface{
+			lineutil.ErrorMessageWithQuickReply(
+				"智慧搜尋暫時無法使用\n\n建議稍後再試，或使用精確搜尋",
+				sender,
+				"找課 "+query,
+				lineutil.QuickReplyCourseNav(h.IsBM25SearchEnabled())...,
+			),
+		}
 	}
 
 	if len(results) == 0 {

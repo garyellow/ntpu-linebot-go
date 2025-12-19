@@ -284,11 +284,7 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 					"❌ 無效的系代碼格式\n\n系代碼應為 1-3 位數字",
 					sender,
 				)
-				msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-					lineutil.QuickReplyYearAction(),
-					lineutil.QuickReplyDeptCodeAction(),
-					lineutil.QuickReplyHelpAction(),
-				})
+				msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyStudentNav())
 				return []messaging_api.MessageInterface{msg}
 			}
 
@@ -299,11 +295,7 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 					"❌ 無效的系代碼格式\n\n系代碼應為 1-3 位數字",
 					sender,
 				)
-				msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-					lineutil.QuickReplyYearAction(),
-					lineutil.QuickReplyDeptCodeAction(),
-					lineutil.QuickReplyHelpAction(),
-				})
+				msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyStudentNav())
 				return []messaging_api.MessageInterface{msg}
 			}
 
@@ -419,9 +411,7 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 			fmt.Sprintf("🔍「%s」→ %s\n\n系代碼是：%s", deptName, matches[0].name, matches[0].code),
 			sender,
 		)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyDeptCodeAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyStudentNav())
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -432,11 +422,9 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 		for _, m := range matches {
 			builder.WriteString(fmt.Sprintf("• %s → %s\n", m.name, m.code))
 		}
-		builder.WriteString("\n💡 請輸入更完整的系名以縮小範圍")
+		builder.WriteString("\n💡 輸入更完整的系名以縮小範圍")
 		msg := lineutil.NewTextMessageWithConsistentSender(builder.String(), sender)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyDeptCodeAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyStudentNav())
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -1123,10 +1111,6 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 
 	// Note: sender was already created at the start of handleDepartmentSelection, reuse it
 	msg := lineutil.NewTextMessageWithConsistentSender(builder.String(), sender)
-	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		lineutil.QuickReplyYearAction(),
-		lineutil.QuickReplyDeptCodeAction(),
-		lineutil.QuickReplyHelpAction(),
-	})
+	msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyStudentNav())
 	return []messaging_api.MessageInterface{msg}
 }
