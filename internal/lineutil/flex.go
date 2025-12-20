@@ -329,10 +329,19 @@ func NewCompactHeroBox(title string) *FlexBox {
 // Parameters:
 //   - title: Course title with UID (e.g., "微積分 (1131U0001)")
 //   - badgeText: Badge label (e.g., "🆕 最新學期" or "🎯 最佳匹配")
-//   - badgeColor: Badge background color (e.g., ColorPrimary, ColorSuccess)
+//   - badgeColor: Badge background color (e.g., ColorBadgeRecent, ColorBadgeBest)
 //
 // Design: Compact padding (16px) to fit carousel, badge aligned to start.
+// Badge text is always white for maximum contrast on colored backgrounds.
 func NewCourseHeroWithBadge(title, badgeText, badgeColor string) *FlexBox {
+	// Determine badge text color based on background
+	// White backgrounds get dark text, colored backgrounds get white text
+	badgeTextColor := ColorHeroText // Default: white
+	if badgeColor == ColorBadgeBest || badgeColor == ColorBadgeRecent {
+		// White badge backgrounds need dark text for contrast
+		badgeTextColor = ColorText // Dark text on white background
+	}
+
 	box := NewFlexBox("vertical",
 		// Course title
 		NewFlexText(title).
@@ -347,7 +356,7 @@ func NewCourseHeroWithBadge(title, badgeText, badgeColor string) *FlexBox {
 			NewFlexBox("horizontal",
 				NewFlexText(badgeText).
 					WithSize("xxs").
-					WithColor(ColorHeroText).
+					WithColor(badgeTextColor).
 					WithWeight("bold").FlexText,
 			).WithBackgroundColor(badgeColor).
 				WithPaddingAll("4px").

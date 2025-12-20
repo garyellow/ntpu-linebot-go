@@ -1590,10 +1590,13 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 //   - Confidence < 0.6: "部分相關" (Partially Relevant) - Exponential tail
 func getRelevanceBadge(confidence float32) (string, string) {
 	if confidence >= 0.8 {
-		return "🎯 最佳匹配", lineutil.ColorPrimary // LINE Green - best matches
+		// White badge for best matches - highest visibility on green Hero
+		return "🎯 最佳匹配", lineutil.ColorBadgeBest
 	}
 	if confidence >= 0.6 {
-		return "✨ 高度相關", lineutil.ColorLabel // Dark gray - highly relevant
+		// Red badge for highly relevant - attention-grabbing
+		return "✨ 高度相關", lineutil.ColorBadgeHigh
 	}
-	return "📋 部分相關", lineutil.ColorSubtext // Light gray - partially relevant
+	// Amber badge for partial relevance - moderate visibility
+	return "📋 部分相關", lineutil.ColorBadgeMedium
 }

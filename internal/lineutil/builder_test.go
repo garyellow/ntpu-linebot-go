@@ -949,7 +949,7 @@ func TestGetSemesterBadge(t *testing.T) {
 			term:          2,
 			dataSemesters: dataSemesters,
 			wantText:      "🆕 最新學期",
-			wantColor:     ColorPrimary,
+			wantColor:     ColorBadgeRecent,
 		},
 		{
 			name:          "Second semester in data (上個學期)",
@@ -957,7 +957,7 @@ func TestGetSemesterBadge(t *testing.T) {
 			term:          1,
 			dataSemesters: dataSemesters,
 			wantText:      "📅 上個學期",
-			wantColor:     ColorButtonExternal,
+			wantColor:     ColorBadgePrevious,
 		},
 		{
 			name:          "Third semester in data (過去學期)",
@@ -965,7 +965,7 @@ func TestGetSemesterBadge(t *testing.T) {
 			term:          2,
 			dataSemesters: dataSemesters,
 			wantText:      "📦 過去學期",
-			wantColor:     ColorButtonSecondary,
+			wantColor:     ColorBadgeHistorical,
 		},
 		{
 			name:          "Fourth semester in data (過去學期)",
@@ -973,7 +973,7 @@ func TestGetSemesterBadge(t *testing.T) {
 			term:          1,
 			dataSemesters: dataSemesters,
 			wantText:      "📦 過去學期",
-			wantColor:     ColorButtonSecondary,
+			wantColor:     ColorBadgeHistorical,
 		},
 		{
 			name:          "Semester not in data list (過去學期)",
@@ -981,7 +981,7 @@ func TestGetSemesterBadge(t *testing.T) {
 			term:          2,
 			dataSemesters: dataSemesters,
 			wantText:      "📦 過去學期",
-			wantColor:     ColorButtonSecondary,
+			wantColor:     ColorBadgeHistorical,
 		},
 		{
 			name:          "Single semester data (最新學期)",
@@ -989,7 +989,7 @@ func TestGetSemesterBadge(t *testing.T) {
 			term:          1,
 			dataSemesters: []SemesterPair{{Year: 114, Term: 1}},
 			wantText:      "🆕 最新學期",
-			wantColor:     ColorPrimary,
+			wantColor:     ColorBadgeRecent,
 		},
 		{
 			name:          "Empty data list (過去學期)",
@@ -997,7 +997,7 @@ func TestGetSemesterBadge(t *testing.T) {
 			term:          2,
 			dataSemesters: []SemesterPair{},
 			wantText:      "📦 過去學期",
-			wantColor:     ColorButtonSecondary,
+			wantColor:     ColorBadgeHistorical,
 		},
 	}
 

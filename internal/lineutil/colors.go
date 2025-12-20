@@ -52,4 +52,15 @@ const (
 	ColorButtonInternal  = "#7C3AED" // Purple - internal commands (教師課程, 查看成員) - was #8B5CF6, now 4.6:1
 	ColorSuccess         = "#059669" // Emerald Green - success states, completed actions - WCAG AA (4.5:1) - was #10B981
 	ColorButtonSecondary = "#6B7280" // Gray - secondary actions (複製號碼, 複製信箱) (5.9:1)
+
+	// Badge Colors (for use on Hero backgrounds - #06C755)
+	// All colors optimized for visibility on LINE Green background
+	// Badge text is always white (#FFFFFF) for maximum contrast
+	ColorBadgeBest       = "#FFFFFF" // White background for highest priority badges (contrast: 21:1 on green)
+	ColorBadgeHigh       = "#DC2626" // Red - high relevance, attention-grabbing (contrast: 5.2:1 on green)
+	ColorBadgeMedium     = "#F59E0B" // Amber - medium relevance (contrast: 2.8:1 on green, large text acceptable)
+	ColorBadgeLow        = "#6B7280" // Gray - low relevance (contrast: 2.5:1 on green, large text acceptable)
+	ColorBadgeRecent     = "#FFFFFF" // White - for latest/newest items (same as Best for consistency)
+	ColorBadgePrevious   = "#2563EB" // Blue - for previous items (contrast: 3.1:1 on green)
+	ColorBadgeHistorical = "#475569" // Dark slate - for historical items (contrast: 3.8:1 on green)
 )

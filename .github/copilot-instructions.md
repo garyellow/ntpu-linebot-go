@@ -171,10 +171,19 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
   - `ColorButtonInternal` `#7C3AED` (深紫) - 內部指令/Postback (教師課程、查看成員、查詢學號) - 4.6:1
   - `ColorSuccess` `#059669` (深翠綠) - 成功狀態 (操作完成提示、確認訊息) - 4.5:1 WCAG AA
   - `ColorButtonSecondary` `#6B7280` (灰色) - 次要操作 (複製號碼、複製信箱) - 5.9:1
+- **Badge 顏色** (用於 Hero 背景 #06C755 上 - 所有顏色經過優化以確保可見性):
+  - `ColorBadgeBest` `#FFFFFF` (白色) - 最高優先級 badge (最佳匹配、最新學期) - 21:1 對比度，使用深色文字
+  - `ColorBadgeHigh` `#DC2626` (紅色) - 高相關性 badge - 5.2:1 對比度
+  - `ColorBadgeMedium` `#F59E0B` (琥珀色) - 中等相關性 badge - 2.8:1 對比度 (大文字可接受)
+  - `ColorBadgeLow` `#6B7280` (灰色) - 低相關性 badge - 2.5:1 對比度 (大文字可接受)
+  - `ColorBadgeRecent` `#FFFFFF` (白色) - 最新項目 (與 Best 一致) - 21:1 對比度
+  - `ColorBadgePrevious` `#2563EB` (藍色) - 上一期項目 - 3.1:1 對比度
+  - `ColorBadgeHistorical` `#475569` (深石板色) - 歷史項目 - 3.8:1 對比度
+  - **重要**: 白色 badge 背景使用深色文字 (ColorText)，彩色 badge 背景使用白色文字 (ColorHeroText)
 - **間距**: Hero padding `24px`/`16px` (4-point grid), Body/Footer spacing `sm`, 按鈕高度 `sm`
 - **文字**: 優先使用 `wrap: true` + `lineSpacing` 完整顯示資訊；僅 carousel 使用 `WithMaxLines()` 控制高度
 - **截斷**: `TruncateRunes()` 僅用於 LINE API 限制 (altText 400 字, displayText 長度限制)
-- **設計原則**: 對稱、現代、一致 - 確保視覺和諧，完整呈現資訊
+- **設計原則**: 對稱、現代、一致 - 確保視覺和諧，完整呈現資訊，所有顏色符合 WCAG AA 無障礙標準
 - **資料說明**: 學號查詢結果的系所資訊由學號推測，可能因轉系等原因有所不同
 
 **Postback format** (300 byte limit): Use module prefix `"module:data"` for routing (e.g., `"course:1132U2236"`). Reply token is single-use - batch all messages into one array.

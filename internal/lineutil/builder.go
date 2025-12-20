@@ -451,16 +451,19 @@ func GetSemesterBadge(year, term int, dataSemesters []SemesterPair) SemesterBadg
 		if sem.Year == year && sem.Term == term {
 			switch i {
 			case 0:
-				return SemesterBadgeInfo{Text: "🆕 最新學期", Color: ColorPrimary}
+				// White badge for highest visibility on green Hero background
+				return SemesterBadgeInfo{Text: "🆕 最新學期", Color: ColorBadgeRecent}
 			case 1:
-				return SemesterBadgeInfo{Text: "📅 上個學期", Color: ColorButtonExternal}
+				// Blue badge for clear distinction from latest
+				return SemesterBadgeInfo{Text: "📅 上個學期", Color: ColorBadgePrevious}
 			default:
-				return SemesterBadgeInfo{Text: "📦 過去學期", Color: ColorButtonSecondary}
+				// Dark slate for historical data
+				return SemesterBadgeInfo{Text: "📦 過去學期", Color: ColorBadgeHistorical}
 			}
 		}
 	}
 	// Not in data list - treat as historical (shouldn't happen normally)
-	return SemesterBadgeInfo{Text: "📦 過去學期", Color: ColorButtonSecondary}
+	return SemesterBadgeInfo{Text: "📦 過去學期", Color: ColorBadgeHistorical}
 }
 
 // SemesterPair represents a year-term pair for semester comparison.
