@@ -334,7 +334,7 @@ func NewCompactHeroBox(title string) *FlexBox {
 //
 // Parameters:
 //   - emoji: Leading icon (e.g., "🎓", "📚", "📞")
-//   - label: Category label (e.g., "学生信息", "课程信息", "联络信息")
+//   - label: Category label (e.g., "學生資訊", "課程資訊", "聯絡資訊")
 //
 // Returns: FlexBox suitable for Flex Bubble header section
 func NewDetailPageLabel(emoji, label string) *FlexBox {
@@ -342,6 +342,23 @@ func NewDetailPageLabel(emoji, label string) *FlexBox {
 		NewFlexBox("baseline",
 			NewFlexText(emoji).WithSize("lg").FlexText,
 			NewFlexText(label).WithWeight("bold").WithColor(ColorPrimary).WithSize("sm").WithMargin("sm").FlexText,
+		).FlexBox,
+	)
+}
+
+// NewEmergencyHeader creates a standardized header for emergency contacts.
+// Uses ColorDanger (Red) for emphasis.
+//
+// Parameters:
+//   - emoji: Leading icon (e.g., "🚨")
+//   - label: Header label (e.g., "緊急聯絡電話")
+//
+// Returns: FlexBox suitable for Flex Bubble header section
+func NewEmergencyHeader(emoji, label string) *FlexBox {
+	return NewFlexBox("vertical",
+		NewFlexBox("baseline",
+			NewFlexText(emoji).WithSize("lg").FlexText,
+			NewFlexText(label).WithWeight("bold").WithColor(ColorDanger).WithSize("sm").WithMargin("sm").FlexText,
 		).FlexBox,
 	)
 }

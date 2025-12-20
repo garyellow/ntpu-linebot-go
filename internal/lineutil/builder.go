@@ -211,6 +211,11 @@ func NewQuickReply(items []QuickReplyItem) *messaging_api.QuickReply {
 // The altText is displayed in push notifications and chat lists.
 // The text is the confirmation question, yesAction and noAction are the button actions.
 func NewConfirmTemplate(altText, text string, yesAction, noAction Action) messaging_api.MessageInterface {
+	// Validate altText length (LINE API limit: max 400 characters)
+	if len([]rune(altText)) > 400 {
+		altText = TruncateRunes(altText, 400)
+	}
+
 	return &messaging_api.TemplateMessage{
 		AltText: altText,
 		Template: &messaging_api.ConfirmTemplate{
@@ -269,6 +274,11 @@ func NewClipboardAction(label, clipboardText string) Action {
 // NewFlexMessage creates a flex message with the given alt text and flex container.
 // Flex messages allow for rich, customizable layouts.
 func NewFlexMessage(altText string, contents messaging_api.FlexContainerInterface) *messaging_api.FlexMessage {
+	// Validate altText length (LINE API limit: max 400 characters)
+	if len([]rune(altText)) > 400 {
+		altText = TruncateRunes(altText, 400)
+	}
+
 	return &messaging_api.FlexMessage{
 		AltText:  altText,
 		Contents: contents,

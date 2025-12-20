@@ -57,9 +57,11 @@ const (
 	ColorHeaderHistorical = "#475569" // 📦 过去学期 - dark slate bg, white text - 5.8:1
 
 	// Relevance Headers (相关性标示 - 智慧搜寻)
-	ColorHeaderBest   = "#FFFFFF" // 🎯 最佳匹配 - white bg, dark text - 21:1
-	ColorHeaderHigh   = "#DC2626" // ✨ 高度相关 - red bg, white text - 5.2:1
-	ColorHeaderMedium = "#F59E0B" // 📋 部分相关 - amber bg, white text - 4.5:1
+	ColorHeaderBest = "#FFFFFF" // 🎯 最佳匹配 - white bg, dark text - 21:1
+	// NOTE: Avoid red for relevance to keep red reserved for danger/error/urgent semantics.
+	ColorHeaderHigh = ColorButtonInternal // ✨ 高度相關 - purple bg, white text (≥4.5:1)
+	// NOTE: Use a darker amber to keep white text WCAG AA compliant.
+	ColorHeaderMedium = ColorWarning // 📋 部分相关 - amber bg, white text (≥4.5:1)
 
 	// Contact Type Headers (联络类型 - 联络人轮播)
 	ColorHeaderOrg        = "#2563EB" // 🏢 组织单位 - blue bg, white text - 4.8:1

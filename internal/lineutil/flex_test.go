@@ -271,6 +271,20 @@ func TestNewDetailPageLabel(t *testing.T) {
 	}
 }
 
+// TestNewEmergencyHeader tests emergency header creation
+func TestNewEmergencyHeader(t *testing.T) {
+	header := NewEmergencyHeader("🚨", "緊急聯絡")
+
+	// Check layout
+	if header.Layout != "vertical" {
+		t.Errorf("Expected layout 'vertical', got %v", header.Layout)
+	}
+	// Check contents
+	if len(header.Contents) != 1 {
+		t.Errorf("Expected 1 content (baseline box), got %d", len(header.Contents))
+	}
+}
+
 // TestNewColoredHeader tests colored header creation for carousel cards
 func TestNewColoredHeader(t *testing.T) {
 	tests := []struct {
@@ -303,7 +317,7 @@ func TestNewColoredHeader(t *testing.T) {
 			wantTextColor: ColorText, // 白色背景用深色文字
 		},
 		{
-			name: "高度相關 (紅色背景)",
+			name: "高度相關 (紫色背景)",
 			info: ColoredHeaderInfo{
 				Title: "演算法 (1131U0004)",
 				Color: ColorHeaderHigh,
@@ -330,6 +344,18 @@ func TestNewColoredHeader(t *testing.T) {
 			if header.PaddingAll != SpacingL {
 				t.Errorf("Expected padding '%s', got '%s'", SpacingL, header.PaddingAll)
 			}
+
+			// Check text color (contrast rule: white bg -> dark text, colored bg -> white text)
+			if len(header.Contents) != 1 {
+				t.Fatalf("Expected 1 content (title text), got %d", len(header.Contents))
+			}
+			text, ok := header.Contents[0].(*messaging_api.FlexText)
+			if !ok {
+				t.Fatalf("Expected *messaging_api.FlexText, got %T", header.Contents[0])
+			}
+			if text.Color != tt.wantTextColor {
+				t.Errorf("Expected text color '%s', got '%s'", tt.wantTextColor, text.Color)
+			}
 		})
 	}
 }
@@ -337,8 +363,9 @@ func TestNewColoredHeader(t *testing.T) {
 // TestNewBodyLabel tests body label creation for carousel cards
 func TestNewBodyLabel(t *testing.T) {
 	tests := []struct {
-		name string
-		info BodyLabelInfo
+		name          string
+		info          BodyLabelInfo
+		wantTextColor string
 	}{
 		{
 			name: "最新學期標籤",
@@ -347,6 +374,7 @@ func TestNewBodyLabel(t *testing.T) {
 				Label: "最新學期",
 				Color: ColorHeaderRecent,
 			},
+			wantTextColor: ColorPrimary,
 		},
 		{
 			name: "最佳匹配標籤",
@@ -355,6 +383,7 @@ func TestNewBodyLabel(t *testing.T) {
 				Label: "最佳匹配",
 				Color: ColorHeaderBest,
 			},
+			wantTextColor: ColorPrimary,
 		},
 		{
 			name: "高度相關標籤",
@@ -363,6 +392,16 @@ func TestNewBodyLabel(t *testing.T) {
 				Label: "高度相關",
 				Color: ColorHeaderHigh,
 			},
+			wantTextColor: ColorHeaderHigh,
+		},
+		{
+			name: "部分相關標籤",
+			info: BodyLabelInfo{
+				Emoji: "📋",
+				Label: "部分相關",
+				Color: ColorHeaderMedium,
+			},
+			wantTextColor: ColorHeaderMedium,
 		},
 	}
 
@@ -378,6 +417,18 @@ func TestNewBodyLabel(t *testing.T) {
 			// Check margin
 			if label.Margin != "sm" {
 				t.Errorf("Expected margin 'sm', got '%s'", label.Margin)
+			}
+
+			// Check the label text color choice
+			if len(label.Contents) != 2 {
+				t.Fatalf("Expected 2 contents (emoji + label), got %d", len(label.Contents))
+			}
+			text, ok := label.Contents[1].(*messaging_api.FlexText)
+			if !ok {
+				t.Fatalf("Expected *messaging_api.FlexText for label text, got %T", label.Contents[1])
+			}
+			if text.Color != tt.wantTextColor {
+				t.Errorf("Expected label text color '%s', got '%s'", tt.wantTextColor, text.Color)
 			}
 		})
 	}

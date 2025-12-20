@@ -258,12 +258,7 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 	}
 
 	// Header - using standardized component (with emergency red color variant)
-	header := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexBox("baseline",
-			lineutil.NewFlexText("🚨").WithSize("lg").FlexText,
-			lineutil.NewFlexText("緊急聯絡電話").WithWeight("bold").WithColor(lineutil.ColorDanger).WithSize("sm").WithMargin("sm").FlexText,
-		).FlexBox,
-	)
+	header := lineutil.NewEmergencyHeader("🚨", "緊急聯絡電話")
 
 	// Sanxia Campus Box
 	sanxiaBox := lineutil.NewFlexBox("vertical",

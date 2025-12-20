@@ -173,7 +173,7 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
   - `ColorButtonSecondary` `#6B7280` (灰色) - 次要操作 (複製號碼、複製信箱) - 5.9:1
 - **Header/Label 顏色** (Colored Header 和 Body Label - 所有顏色符合 WCAG AA):
   - 學期標示: `ColorHeaderRecent` 白色 (最新學期), `ColorHeaderPrevious` 藍色 (上個學期), `ColorHeaderHistorical` 深灰 (過去學期)
-  - 相關性標示: `ColorHeaderBest` 白色 (最佳匹配), `ColorHeaderHigh` 紅色 (高度相關), `ColorHeaderMedium` 琥珀色 (部分相關)
+  - 相關性標示: `ColorHeaderBest` 白色 (最佳匹配), `ColorHeaderHigh` 紫色 (高度相關), `ColorHeaderMedium` 琥珀色 (部分相關)
   - 聯絡類型: `ColorHeaderOrg` 藍色 (組織單位), `ColorHeaderIndividual` 綠色 (個人聯絡)
   - 詳情頁模組: `ColorHeaderCourse` 琥珀色, `ColorHeaderContact` 藍色, `ColorHeaderStudent` 綠色
   - **文字顏色**: 白色背景用深色文字 (ColorText)，彩色背景用白色文字 (ColorHeroText)
