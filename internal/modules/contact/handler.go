@@ -669,8 +669,8 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 			// If c.Type is "individual" with no title, subText remains empty
 			// NewHeroBox will handle empty subtitle gracefully
 
-			// Header: Contact badge (using standardized component)
-			header := lineutil.NewHeaderBadge("📞", "聯絡資訊")
+			// Header: Contact label (using standardized component)
+			header := lineutil.NewDetailPageLabel("📞", "聯絡資訊")
 
 			// Hero: Name with colored background (using standardized component)
 			hero := lineutil.NewHeroBox(displayName, subText)

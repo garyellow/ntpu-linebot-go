@@ -424,46 +424,56 @@ func FormatSemesterShort(year, term int) string {
 	return fmt.Sprintf("%d-%d", year, term)
 }
 
-// SemesterBadgeInfo contains display information for a semester badge.
-type SemesterBadgeInfo struct {
-	Text  string // Badge text (e.g., "🆕 最新學期", "📅 上個學期")
-	Color string // Badge background color
-}
-
-// GetSemesterBadge returns badge info based on the semester's position in the data.
+// GetSemesterLabel returns label info based on the semester's position in the data.
 // This uses data-driven logic: the newest semester in the result set is "最新學期",
 // not based on calendar time.
 //
-// Badge types (based on position in dataSemesters):
-//   - "🆕 最新學期" (Green) - First semester in data (index 0, newest available data)
+// Label types (based on position in dataSemesters):
+//   - "🆕 最新學期" (White) - First semester in data (index 0, newest available data)
 //   - "📅 上個學期" (Blue) - Second semester in data (index 1)
 //   - "📦 過去學期" (Gray) - Third semester and older (index 2+)
 //
 // Parameters:
-//   - year, term: The semester to get badge for
+//   - year, term: The semester to get label for
 //   - dataSemesters: Unique semesters extracted from actual course data, sorted newest first.
 //     This should be derived from the search results, not calendar-based calculation.
 //
-// Returns: SemesterBadgeInfo with text and color
-func GetSemesterBadge(year, term int, dataSemesters []SemesterPair) SemesterBadgeInfo {
+// Returns: BodyLabelInfo with emoji, label, and color
+func GetSemesterLabel(year, term int, dataSemesters []SemesterPair) BodyLabelInfo {
 	// Find the position of this semester in the data-derived list
 	for i, sem := range dataSemesters {
 		if sem.Year == year && sem.Term == term {
 			switch i {
 			case 0:
-				// White badge for highest visibility on green Hero background
-				return SemesterBadgeInfo{Text: "🆕 最新學期", Color: ColorBadgeRecent}
+				// White label for highest visibility
+				return BodyLabelInfo{
+					Emoji: "🆕",
+					Label: "最新學期",
+					Color: ColorHeaderRecent,
+				}
 			case 1:
-				// Blue badge for clear distinction from latest
-				return SemesterBadgeInfo{Text: "📅 上個學期", Color: ColorBadgePrevious}
+				// Blue label for clear distinction from latest
+				return BodyLabelInfo{
+					Emoji: "📅",
+					Label: "上個學期",
+					Color: ColorHeaderPrevious,
+				}
 			default:
-				// Dark slate for historical data
-				return SemesterBadgeInfo{Text: "📦 過去學期", Color: ColorBadgeHistorical}
+				// Dark slate label for historical data
+				return BodyLabelInfo{
+					Emoji: "📦",
+					Label: "過去學期",
+					Color: ColorHeaderHistorical,
+				}
 			}
 		}
 	}
 	// Not in data list - treat as historical (shouldn't happen normally)
-	return SemesterBadgeInfo{Text: "📦 過去學期", Color: ColorBadgeHistorical}
+	return BodyLabelInfo{
+		Emoji: "📦",
+		Label: "過去學期",
+		Color: ColorHeaderHistorical,
+	}
 }
 
 // SemesterPair represents a year-term pair for semester comparison.

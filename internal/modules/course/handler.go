@@ -939,8 +939,8 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 
 // formatCourseResponse formats a single course as a LINE message
 func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.MessageInterface {
-	// Header: Course badge (using standardized component)
-	header := lineutil.NewHeaderBadge("📚", "課程資訊")
+	// Header: Course label (using standardized component)
+	header := lineutil.NewDetailPageLabel("📚", "課程資訊")
 
 	// Hero: Course title with course code in format `{課程名稱} ({課程代碼})`
 	heroTitle := lineutil.FormatCourseTitleWithUID(course.Title, course.UID)
@@ -1092,7 +1092,7 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 // The input courses should be pre-sorted by semester (newest first).
 // Returns a slice of SemesterPair in the same order (newest first).
 //
-// This is used for data-driven badge calculation:
+// This is used for data-driven label calculation:
 // - Index 0: 最新學期 (newest semester with data)
 // - Index 1: 上個學期 (second newest)
 // - Index 2+: 過去學期 (older semesters)
@@ -1114,8 +1114,8 @@ func extractUniqueSemesters(courses []storage.Course) []lineutil.SemesterPair {
 	return semesters
 }
 
-// formatCourseListResponse formats a list of courses as LINE messages with semester badges.
-// Courses are sorted by semester (newest first) and each bubble shows a badge indicating
+// formatCourseListResponse formats a list of courses as LINE messages with semester labels.
+// Courses are sorted by semester (newest first) and each bubble shows a label indicating
 // whether it's from the newest semester in data, previous semester, or older.
 func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging_api.MessageInterface {
 	return h.formatCourseListResponseWithOptions(courses, "", false)
@@ -1143,7 +1143,7 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 	})
 
 	// Extract unique semesters from sorted courses (data-driven, not calendar-based)
-	// This ensures badge is based on actual data availability:
+	// This ensures label is based on actual data availability:
 	// - Index 0: 最新學期 (newest semester with data)
 	// - Index 1: 上個學期 (second newest)
 	// - Index 2+: 過去學期 (older semesters)
@@ -1162,22 +1162,29 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 	// Create bubbles for carousel (LINE API limit: max 10 bubbles per Flex Carousel)
 	bubbles := make([]messaging_api.FlexBubble, 0, len(courses))
 	for _, course := range courses {
-		// Get semester badge info based on data position
-		badge := lineutil.GetSemesterBadge(course.Year, course.Term, dataSemesters)
+		// Get semester label info based on data position
+		labelInfo := lineutil.GetSemesterLabel(course.Year, course.Term, dataSemesters)
 
-		// Hero: Course title with badge at bottom
+		// Colored header with course title
 		heroTitle := lineutil.FormatCourseTitleWithUID(course.Title, course.UID)
-		hero := lineutil.NewCourseHeroWithBadge(heroTitle, badge.Text, badge.Color)
+		header := lineutil.NewColoredHeader(lineutil.ColoredHeaderInfo{
+			Title: heroTitle,
+			Color: labelInfo.Color,
+		})
 
-		// Build body contents with improved layout
-		// 第一列：學期資訊（完整格式）
-		semesterText := lineutil.FormatSemester(course.Year, course.Term)
+		// Build body contents - first row is semester label
 		contents := []messaging_api.FlexComponentInterface{
+			lineutil.NewBodyLabel(labelInfo).FlexBox,
+		}
+
+		// 學期資訊（完整格式）
+		semesterText := lineutil.FormatSemester(course.Year, course.Term)
+		contents = append(contents,
 			lineutil.NewFlexBox("horizontal",
 				lineutil.NewFlexText("📅 開課學期：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
 				lineutil.NewFlexText(semesterText).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).FlexText,
 			).WithMargin("sm").WithSpacing("sm").FlexBox,
-		}
+		)
 
 		// 第二列：授課教師
 		if len(course.Teachers) > 0 {
@@ -1213,8 +1220,8 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 		).WithSpacing("sm")
 
 		bubble := lineutil.NewFlexBubble(
-			nil,
-			hero.FlexBox,
+			header,
+			nil, // No hero - title is in colored header
 			lineutil.NewFlexBox("vertical", contents...).WithSpacing("sm"),
 			footer,
 		)
@@ -1436,11 +1443,11 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 	// Record successful smart search metrics
 	h.metrics.RecordSearch(searchType, "success", time.Since(startTime).Seconds(), len(results))
 
-	// Format response with confidence badges
+	// Format response with confidence labels
 	return h.formatSmartSearchResponse(courses, results)
 }
 
-// formatSmartSearchResponse formats smart search results with confidence badges
+// formatSmartSearchResponse formats smart search results with confidence labels
 func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []rag.SearchResult) []messaging_api.MessageInterface {
 	if len(courses) == 0 {
 		sender := lineutil.GetSender(senderName, h.stickerManager)
@@ -1461,7 +1468,7 @@ func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []
 		confidenceMap[r.UID] = r.Confidence
 	}
 
-	// Build bubbles with relevance badges based on confidence
+	// Build bubbles with relevance labels based on confidence
 	bubbles := make([]messaging_api.FlexBubble, 0, len(courses))
 	for _, course := range courses {
 		confidence := confidenceMap[course.UID]
@@ -1507,27 +1514,34 @@ func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []
 	return messages
 }
 
-// buildSmartCourseBubble creates a Flex Message bubble for a course with relevance badge.
-// Uses unified Hero+badge layout matching formatCourseListResponseWithOptions().
+// buildSmartCourseBubble creates a Flex Message bubble for a course with relevance label.
+// Uses colored header layout for visual hierarchy.
 func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float32) *lineutil.FlexBubble {
-	// Relevance badge based on confidence (user-friendly labels)
-	relevanceBadge, relevanceColor := getRelevanceBadge(confidence)
+	// Relevance label based on confidence (user-friendly labels)
+	labelInfo := getRelevanceLabel(confidence)
 
-	// Hero: Course title with relevance badge at bottom
+	// Colored header with course title
 	heroTitle := lineutil.FormatCourseTitleWithUID(course.Title, course.UID)
-	hero := lineutil.NewCourseHeroWithBadge(heroTitle, relevanceBadge, relevanceColor)
+	header := lineutil.NewColoredHeader(lineutil.ColoredHeaderInfo{
+		Title: heroTitle,
+		Color: labelInfo.Color,
+	})
 
-	// Build body contents with improved layout (matching regular course carousel)
-	// 第一列：學期資訊（完整格式）
-	semesterText := lineutil.FormatSemester(course.Year, course.Term)
+	// Build body contents - first row is relevance label
 	contents := []messaging_api.FlexComponentInterface{
+		lineutil.NewBodyLabel(labelInfo).FlexBox,
+	}
+
+	// 學期資訊（完整格式）
+	semesterText := lineutil.FormatSemester(course.Year, course.Term)
+	contents = append(contents,
 		lineutil.NewFlexBox("horizontal",
 			lineutil.NewFlexText("📅 開課學期：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
 			lineutil.NewFlexText(semesterText).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).FlexText,
 		).WithMargin("sm").WithSpacing("sm").FlexBox,
-	}
+	)
 
-	// 第二列：授課教師
+	// 授課教師
 	if len(course.Teachers) > 0 {
 		carouselTeachers := lineutil.FormatTeachers(course.Teachers, 5)
 		contents = append(contents,
@@ -1539,7 +1553,7 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 		)
 	}
 
-	// 第四列：上課時間
+	// 上課時間
 	if len(course.Times) > 0 {
 		formattedTimes := lineutil.FormatCourseTimes(course.Times)
 		carouselTimes := lineutil.FormatTimes(formattedTimes, 4)
@@ -1561,17 +1575,17 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 	).WithSpacing("sm")
 
 	bubble := lineutil.NewFlexBubble(
-		nil,
-		hero.FlexBox,
+		header,
+		nil, // No hero - title is in colored header
 		lineutil.NewFlexBox("vertical", contents...).WithSpacing("sm"),
 		footer,
 	)
 	return bubble
 }
 
-// getRelevanceBadge returns a user-friendly relevance label and background color based on relative BM25 score.
+// getRelevanceLabel returns a user-friendly relevance label info based on relative BM25 score.
 //
-// Returns: (badgeText, badgeBackgroundColor)
+// Returns: BodyLabelInfo with emoji, label, and color
 //
 // Design rationale:
 //   - Uses relative score (score / maxScore) from BM25 search
@@ -1588,15 +1602,27 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 //   - Confidence >= 0.8: "最佳匹配" (Best Match) - Normal distribution core
 //   - Confidence >= 0.6: "高度相關" (Highly Relevant) - Mixed region
 //   - Confidence < 0.6: "部分相關" (Partially Relevant) - Exponential tail
-func getRelevanceBadge(confidence float32) (string, string) {
+func getRelevanceLabel(confidence float32) lineutil.BodyLabelInfo {
 	if confidence >= 0.8 {
-		// White badge for best matches - highest visibility on green Hero
-		return "🎯 最佳匹配", lineutil.ColorBadgeBest
+		// White label for best matches - highest visibility
+		return lineutil.BodyLabelInfo{
+			Emoji: "🎯",
+			Label: "最佳匹配",
+			Color: lineutil.ColorHeaderBest,
+		}
 	}
 	if confidence >= 0.6 {
-		// Red badge for highly relevant - attention-grabbing
-		return "✨ 高度相關", lineutil.ColorBadgeHigh
+		// Red label for highly relevant - attention-grabbing
+		return lineutil.BodyLabelInfo{
+			Emoji: "✨",
+			Label: "高度相關",
+			Color: lineutil.ColorHeaderHigh,
+		}
 	}
-	// Amber badge for partial relevance - moderate visibility
-	return "📋 部分相關", lineutil.ColorBadgeMedium
+	// Amber label for partial relevance - moderate visibility
+	return lineutil.BodyLabelInfo{
+		Emoji: "📋",
+		Label: "部分相關",
+		Color: lineutil.ColorHeaderMedium,
+	}
 }

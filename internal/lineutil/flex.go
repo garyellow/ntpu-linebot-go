@@ -322,61 +322,115 @@ func NewCompactHeroBox(title string) *FlexBox {
 	return box
 }
 
-// NewCourseHeroWithBadge creates a Hero box for course carousel with badge.
-// Layout: Course title (3 lines max) with small badge box at bottom.
-// Badge uses colored background with white text for visual consistency.
+// NewDetailPageLabel creates a consistent page label for detail page headers.
+// Used only for detail pages (student/course/contact) to show the page type.
+//
+// Format: [emoji] [label] with LINE green color
+// Layout:
+//
+//	┌─────────────────┐
+//	│ 🎓 学生信息     │  <- Detail page label
+//	└─────────────────┘
 //
 // Parameters:
-//   - title: Course title with UID (e.g., "微積分 (1131U0001)")
-//   - badgeText: Badge label (e.g., "🆕 最新學期" or "🎯 最佳匹配")
-//   - badgeColor: Badge background color (e.g., ColorBadgeRecent, ColorBadgeBest)
+//   - emoji: Leading icon (e.g., "🎓", "📚", "📞")
+//   - label: Category label (e.g., "学生信息", "课程信息", "联络信息")
 //
-// Design: Compact padding (16px) to fit carousel, badge aligned to start.
-// Badge text is always white for maximum contrast on colored backgrounds.
-func NewCourseHeroWithBadge(title, badgeText, badgeColor string) *FlexBox {
-	// Determine badge text color based on background
-	// White backgrounds get dark text, colored backgrounds get white text
-	badgeTextColor := ColorHeroText // Default: white
-	if badgeColor == ColorBadgeBest || badgeColor == ColorBadgeRecent {
-		// White badge backgrounds need dark text for contrast
-		badgeTextColor = ColorText // Dark text on white background
-	}
-
-	box := NewFlexBox("vertical",
-		// Course title
-		NewFlexText(title).
-			WithWeight("bold").
-			WithSize("md").
-			WithColor(ColorHeroText).
-			WithWrap(true).
-			WithMaxLines(3).
-			WithLineSpacing(LineSpacingNormal).FlexText,
-		// Badge box at bottom
-		NewFlexBox("horizontal",
-			NewFlexBox("horizontal",
-				NewFlexText(badgeText).
-					WithSize("xxs").
-					WithColor(badgeTextColor).
-					WithWeight("bold").FlexText,
-			).WithBackgroundColor(badgeColor).
-				WithPaddingAll("4px").
-				WithCornerRadius("4px").FlexBox,
-		).WithMargin("sm").FlexBox,
-	)
-	box.BackgroundColor = ColorHeroBg
-	box.PaddingAll = SpacingL
-	return box
-}
-
-// NewHeaderBadge creates a consistent header badge for Flex Messages
-// Format: [emoji] [label] with LINE green color
-func NewHeaderBadge(emoji, label string) *FlexBox {
+// Returns: FlexBox suitable for Flex Bubble header section
+func NewDetailPageLabel(emoji, label string) *FlexBox {
 	return NewFlexBox("vertical",
 		NewFlexBox("baseline",
 			NewFlexText(emoji).WithSize("lg").FlexText,
 			NewFlexText(label).WithWeight("bold").WithColor(ColorPrimary).WithSize("sm").WithMargin("sm").FlexText,
 		).FlexBox,
 	)
+}
+
+// ColoredHeaderInfo contains display information for a colored header.
+// Used for carousel cards to show course title with colored background.
+type ColoredHeaderInfo struct {
+	Title string // Course title (e.g., "微積分 (1131U0001)")
+	Color string // Header background color (from ColorHeader* constants)
+}
+
+// NewColoredHeader creates a colored header for carousel cards.
+// The header displays the course title with a colored background.
+//
+// Layout:
+//
+//	┌──────────────────────────┐
+//	│   微積分 (1131U0001)     │  <- Colored header (Title)
+//	├──────────────────────────┤
+//	│ 🆕 最新學期              │  <- Body first row (Label)
+//	│ 📅 開課學期：113-1       │
+//	│ ...                      │
+//	└──────────────────────────┘
+//
+// Parameters:
+//   - info: ColoredHeaderInfo with title and background color
+//
+// Returns: FlexBox suitable for Flex Bubble header section
+//
+// Design rationale:
+//   - Colored header provides visual hierarchy with course title
+//   - Text color automatically adapts: white on colored bg, dark on white bg
+//   - WCAG AA compliant: All header colors have ≥4.5:1 contrast
+func NewColoredHeader(info ColoredHeaderInfo) *FlexBox {
+	// Determine text color based on background
+	// White/light backgrounds need dark text, colored backgrounds need white text
+	textColor := ColorHeroText // Default: white
+	if info.Color == ColorHeaderRecent || info.Color == ColorHeaderBest {
+		textColor = ColorText // Dark text on white background
+	}
+
+	return NewFlexBox("vertical",
+		NewFlexText(info.Title).
+			WithWeight("bold").
+			WithSize("md").
+			WithColor(textColor).
+			WithWrap(true).
+			WithMaxLines(2).
+			WithLineSpacing(LineSpacingNormal).FlexText,
+	).WithBackgroundColor(info.Color).WithPaddingAll(SpacingL)
+}
+
+// BodyLabelInfo contains display information for a body label.
+// Used for carousel cards to show semester/relevance indicator in body first row.
+type BodyLabelInfo struct {
+	Emoji string // Label emoji (e.g., "🆕", "🎯", "🏢")
+	Label string // Label text (e.g., "最新學期", "最佳匹配")
+	Color string // Label color reference (from ColorHeader* constants, used for text color)
+}
+
+// NewBodyLabel creates a label for carousel card body first row.
+// This shows semester/relevance indicator with bold colored text (no background).
+//
+// Layout (within body):
+//
+//	┌──────────────────────────┐
+//	│ 🆕 最新學期              │  <- Body label (bold colored text)
+//	│ 📅 開課學期：113-1       │
+//	│ ...                      │
+//	└──────────────────────────┘
+//
+// Parameters:
+//   - info: BodyLabelInfo with emoji, label, and color reference
+//
+// Returns: FlexBox suitable for body first row
+func NewBodyLabel(info BodyLabelInfo) *FlexBox {
+	// Determine text color for white body background
+	// White headers need visible emphasis color, colored headers use their color for text
+	textColor := info.Color
+	if info.Color == ColorHeaderRecent || info.Color == ColorHeaderBest {
+		// White header colors → use primary green for emphasis (visible on white body)
+		textColor = ColorPrimary
+	}
+
+	// Create simple bold text row (no background)
+	return NewFlexBox("horizontal",
+		NewFlexText(info.Emoji).WithSize("xs").FlexText,
+		NewFlexText(info.Label).WithWeight("bold").WithSize("xs").WithColor(textColor).WithMargin("xs").FlexText,
+	).WithMargin("sm")
 }
 
 // InfoRowStyle defines the visual style for an info row

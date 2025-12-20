@@ -257,35 +257,129 @@ func TestNewCompactHeroBox(t *testing.T) {
 	}
 }
 
-// TestNewCourseHeroWithBadge tests course hero with badge
-func TestNewCourseHeroWithBadge(t *testing.T) {
-	hero := NewCourseHeroWithBadge("微積分 (1131U0001)", "🆕 最新學期", ColorPrimary)
+// TestNewDetailPageLabel tests detail page label creation
+func TestNewDetailPageLabel(t *testing.T) {
+	label := NewDetailPageLabel("📚", "測試標籤")
 
-	// Check background color (should use ColorHeroBg = LINE Green)
-	if hero.BackgroundColor != ColorHeroBg {
-		t.Errorf("Expected backgroundColor '%s', got %v", ColorHeroBg, hero.BackgroundColor)
+	// Check layout
+	if label.Layout != "vertical" {
+		t.Errorf("Expected layout 'vertical', got %v", label.Layout)
 	}
-	// Check compact padding (same as NewCompactHeroBox)
-	if hero.PaddingAll != SpacingL {
-		t.Errorf("Expected paddingAll '%s', got %v", SpacingL, hero.PaddingAll)
-	}
-	// Check contents (title + badge row)
-	if len(hero.Contents) != 2 {
-		t.Errorf("Expected 2 contents (title + badge), got %d", len(hero.Contents))
+	// Check contents
+	if len(label.Contents) != 1 {
+		t.Errorf("Expected 1 content (baseline box), got %d", len(label.Contents))
 	}
 }
 
-// TestNewHeaderBadge tests header badge creation
-func TestNewHeaderBadge(t *testing.T) {
-	badge := NewHeaderBadge("📚", "測試標籤")
-
-	// Check layout
-	if badge.Layout != "vertical" {
-		t.Errorf("Expected layout 'vertical', got %v", badge.Layout)
+// TestNewColoredHeader tests colored header creation for carousel cards
+func TestNewColoredHeader(t *testing.T) {
+	tests := []struct {
+		name          string
+		info          ColoredHeaderInfo
+		wantTextColor string
+	}{
+		{
+			name: "白色背景標題",
+			info: ColoredHeaderInfo{
+				Title: "微積分 (1131U0001)",
+				Color: ColorHeaderRecent,
+			},
+			wantTextColor: ColorText, // 白色背景用深色文字
+		},
+		{
+			name: "藍色背景標題",
+			info: ColoredHeaderInfo{
+				Title: "程式設計 (1132U0002)",
+				Color: ColorHeaderPrevious,
+			},
+			wantTextColor: ColorHeroText, // 彩色背景用白色文字
+		},
+		{
+			name: "最佳匹配 (白色背景)",
+			info: ColoredHeaderInfo{
+				Title: "資料結構 (1131U0003)",
+				Color: ColorHeaderBest,
+			},
+			wantTextColor: ColorText, // 白色背景用深色文字
+		},
+		{
+			name: "高度相關 (紅色背景)",
+			info: ColoredHeaderInfo{
+				Title: "演算法 (1131U0004)",
+				Color: ColorHeaderHigh,
+			},
+			wantTextColor: ColorHeroText, // 彩色背景用白色文字
+		},
 	}
-	// Check contents
-	if len(badge.Contents) != 1 {
-		t.Errorf("Expected 1 content (baseline box), got %d", len(badge.Contents))
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			header := NewColoredHeader(tt.info)
+
+			// Check layout
+			if header.Layout != "vertical" {
+				t.Errorf("Expected vertical layout, got %v", header.Layout)
+			}
+
+			// Check background color
+			if header.BackgroundColor != tt.info.Color {
+				t.Errorf("Expected bg color '%s', got '%s'", tt.info.Color, header.BackgroundColor)
+			}
+
+			// Check padding (SpacingL = 16px)
+			if header.PaddingAll != SpacingL {
+				t.Errorf("Expected padding '%s', got '%s'", SpacingL, header.PaddingAll)
+			}
+		})
+	}
+}
+
+// TestNewBodyLabel tests body label creation for carousel cards
+func TestNewBodyLabel(t *testing.T) {
+	tests := []struct {
+		name string
+		info BodyLabelInfo
+	}{
+		{
+			name: "最新學期標籤",
+			info: BodyLabelInfo{
+				Emoji: "🆕",
+				Label: "最新學期",
+				Color: ColorHeaderRecent,
+			},
+		},
+		{
+			name: "最佳匹配標籤",
+			info: BodyLabelInfo{
+				Emoji: "🎯",
+				Label: "最佳匹配",
+				Color: ColorHeaderBest,
+			},
+		},
+		{
+			name: "高度相關標籤",
+			info: BodyLabelInfo{
+				Emoji: "✨",
+				Label: "高度相關",
+				Color: ColorHeaderHigh,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			label := NewBodyLabel(tt.info)
+
+			// Check layout (horizontal wrapper)
+			if label.Layout != "horizontal" {
+				t.Errorf("Expected horizontal layout, got %v", label.Layout)
+			}
+
+			// Check margin
+			if label.Margin != "sm" {
+				t.Errorf("Expected margin 'sm', got '%s'", label.Margin)
+			}
+		})
 	}
 }
 
