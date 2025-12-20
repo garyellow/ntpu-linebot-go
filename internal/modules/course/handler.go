@@ -1612,7 +1612,7 @@ func getRelevanceLabel(confidence float32) lineutil.BodyLabelInfo {
 		}
 	}
 	if confidence >= 0.6 {
-		// Red label for highly relevant - attention-grabbing
+		// Purple label for highly relevant - attention-grabbing
 		return lineutil.BodyLabelInfo{
 			Emoji: "✨",
 			Label: "高度相關",
