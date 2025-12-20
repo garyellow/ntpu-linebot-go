@@ -23,10 +23,11 @@ const (
 // WCAG AA requires 4.5:1 contrast ratio for normal text, 3:1 for large text
 //
 // 4-Tier Semantic Color Architecture:
-//   Tier 1: Core Semantic Colors (状态本质)
-//   Tier 2: Action Button Colors (操作类型)
-//   Tier 3: Header Colors (Colored Header 标签)
-//   Tier 4: Text & Component Colors (文字/元件)
+//
+//	Tier 1: Core Semantic Colors (状态本质)
+//	Tier 2: Action Button Colors (操作类型)
+//	Tier 3: Header Colors (Colored Header 标签)
+//	Tier 4: Text & Component Colors (文字/元件)
 const (
 	// ============================================================
 	// Tier 1: Core Semantic Colors (状态本质)
