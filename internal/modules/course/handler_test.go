@@ -490,21 +490,21 @@ func TestHandleSmartSearch_EmptyQuery(t *testing.T) {
 	}
 }
 
-func TestGetRelevanceBadge(t *testing.T) {
-	// Tests for 3-tier relevance badge based on relative BM25 score
+func TestGetRelevanceLabel(t *testing.T) {
+	// Tests for 3-tier relevance label based on relative BM25 score
 	// Based on Normal-Exponential mixture model (Arampatzis et al., 2009)
 	// Confidence >= 0.8: 最佳匹配 (Normal core), >= 0.6: 高度相關 (Mixed), < 0.6: 部分相關 (Exponential tail)
 	// Confidence = score / maxScore (relative to top result)
 	tests := []struct {
 		name           string
 		confidence     float32
-		wantBadge      string
+		wantLabel      string
 		wantColorCheck func(color string) bool
 	}{
 		{
 			name:       "best match (confidence 1.0, top result)",
 			confidence: 1.0,
-			wantBadge:  "🎯 最佳匹配",
+			wantLabel:  "最佳匹配",
 			wantColorCheck: func(c string) bool {
 				return c != "" // Should have color
 			},
@@ -512,7 +512,7 @@ func TestGetRelevanceBadge(t *testing.T) {
 		{
 			name:       "best match (confidence 0.85)",
 			confidence: 0.85,
-			wantBadge:  "🎯 最佳匹配",
+			wantLabel:  "最佳匹配",
 			wantColorCheck: func(c string) bool {
 				return c != ""
 			},
@@ -520,7 +520,7 @@ func TestGetRelevanceBadge(t *testing.T) {
 		{
 			name:       "best match (confidence exactly 0.8)",
 			confidence: 0.80,
-			wantBadge:  "🎯 最佳匹配",
+			wantLabel:  "最佳匹配",
 			wantColorCheck: func(c string) bool {
 				return c != ""
 			},
@@ -528,7 +528,7 @@ func TestGetRelevanceBadge(t *testing.T) {
 		{
 			name:       "highly relevant (confidence 0.75)",
 			confidence: 0.75,
-			wantBadge:  "✨ 高度相關",
+			wantLabel:  "高度相關",
 			wantColorCheck: func(c string) bool {
 				return c != ""
 			},
@@ -536,7 +536,7 @@ func TestGetRelevanceBadge(t *testing.T) {
 		{
 			name:       "highly relevant (confidence exactly 0.6)",
 			confidence: 0.60,
-			wantBadge:  "✨ 高度相關",
+			wantLabel:  "高度相關",
 			wantColorCheck: func(c string) bool {
 				return c != ""
 			},
@@ -544,7 +544,7 @@ func TestGetRelevanceBadge(t *testing.T) {
 		{
 			name:       "partially relevant (confidence 0.55)",
 			confidence: 0.55,
-			wantBadge:  "📋 部分相關",
+			wantLabel:  "部分相關",
 			wantColorCheck: func(c string) bool {
 				return c != ""
 			},
@@ -552,7 +552,7 @@ func TestGetRelevanceBadge(t *testing.T) {
 		{
 			name:       "partially relevant (confidence 0.35)",
 			confidence: 0.35,
-			wantBadge:  "📋 部分相關",
+			wantLabel:  "部分相關",
 			wantColorCheck: func(c string) bool {
 				return c != ""
 			},
@@ -560,7 +560,7 @@ func TestGetRelevanceBadge(t *testing.T) {
 		{
 			name:       "edge case: confidence just below 0.8",
 			confidence: 0.799,
-			wantBadge:  "✨ 高度相關",
+			wantLabel:  "高度相關",
 			wantColorCheck: func(c string) bool {
 				return c != ""
 			},
@@ -568,7 +568,7 @@ func TestGetRelevanceBadge(t *testing.T) {
 		{
 			name:       "edge case: confidence just below 0.6",
 			confidence: 0.599,
-			wantBadge:  "📋 部分相關",
+			wantLabel:  "部分相關",
 			wantColorCheck: func(c string) bool {
 				return c != ""
 			},
@@ -577,12 +577,12 @@ func TestGetRelevanceBadge(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			badge, color := getRelevanceBadge(tt.confidence)
-			if badge != tt.wantBadge {
-				t.Errorf("getRelevanceBadge(%.3f) badge = %q, want %q", tt.confidence, badge, tt.wantBadge)
+			label := getRelevanceLabel(tt.confidence)
+			if label.Label != tt.wantLabel {
+				t.Errorf("getRelevanceLabel(%.3f) label = %q, want %q", tt.confidence, label.Label, tt.wantLabel)
 			}
-			if !tt.wantColorCheck(color) {
-				t.Errorf("getRelevanceBadge(%.3f) color = %q, check failed", tt.confidence, color)
+			if !tt.wantColorCheck(label.Color) {
+				t.Errorf("getRelevanceLabel(%.3f) color = %q, check failed", tt.confidence, label.Color)
 			}
 		})
 	}

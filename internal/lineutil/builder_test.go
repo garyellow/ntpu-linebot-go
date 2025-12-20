@@ -924,8 +924,8 @@ func TestFormatSemester(t *testing.T) {
 	}
 }
 
-// TestGetSemesterBadge tests the data-driven semester badge logic
-func TestGetSemesterBadge(t *testing.T) {
+// TestGetSemesterLabel tests the data-driven semester label logic
+func TestGetSemesterLabel(t *testing.T) {
 	// Test data: 4 semesters sorted newest first
 	// This simulates actual course data with 113-2, 113-1, 112-2, 112-1
 	dataSemesters := []SemesterPair{
@@ -940,7 +940,8 @@ func TestGetSemesterBadge(t *testing.T) {
 		year          int
 		term          int
 		dataSemesters []SemesterPair
-		wantText      string
+		wantEmoji     string
+		wantLabel     string
 		wantColor     string
 	}{
 		{
@@ -948,67 +949,77 @@ func TestGetSemesterBadge(t *testing.T) {
 			year:          113,
 			term:          2,
 			dataSemesters: dataSemesters,
-			wantText:      "🆕 最新學期",
-			wantColor:     ColorPrimary,
+			wantEmoji:     "🆕",
+			wantLabel:     "最新學期",
+			wantColor:     ColorHeaderRecent,
 		},
 		{
 			name:          "Second semester in data (上個學期)",
 			year:          113,
 			term:          1,
 			dataSemesters: dataSemesters,
-			wantText:      "📅 上個學期",
-			wantColor:     ColorButtonExternal,
+			wantEmoji:     "📅",
+			wantLabel:     "上個學期",
+			wantColor:     ColorHeaderPrevious,
 		},
 		{
 			name:          "Third semester in data (過去學期)",
 			year:          112,
 			term:          2,
 			dataSemesters: dataSemesters,
-			wantText:      "📦 過去學期",
-			wantColor:     ColorButtonSecondary,
+			wantEmoji:     "📦",
+			wantLabel:     "過去學期",
+			wantColor:     ColorHeaderHistorical,
 		},
 		{
 			name:          "Fourth semester in data (過去學期)",
 			year:          112,
 			term:          1,
 			dataSemesters: dataSemesters,
-			wantText:      "📦 過去學期",
-			wantColor:     ColorButtonSecondary,
+			wantEmoji:     "📦",
+			wantLabel:     "過去學期",
+			wantColor:     ColorHeaderHistorical,
 		},
 		{
 			name:          "Semester not in data list (過去學期)",
 			year:          111,
 			term:          2,
 			dataSemesters: dataSemesters,
-			wantText:      "📦 過去學期",
-			wantColor:     ColorButtonSecondary,
+			wantEmoji:     "📦",
+			wantLabel:     "過去學期",
+			wantColor:     ColorHeaderHistorical,
 		},
 		{
 			name:          "Single semester data (最新學期)",
 			year:          114,
 			term:          1,
 			dataSemesters: []SemesterPair{{Year: 114, Term: 1}},
-			wantText:      "🆕 最新學期",
-			wantColor:     ColorPrimary,
+			wantEmoji:     "🆕",
+			wantLabel:     "最新學期",
+			wantColor:     ColorHeaderRecent,
 		},
 		{
 			name:          "Empty data list (過去學期)",
 			year:          113,
 			term:          2,
 			dataSemesters: []SemesterPair{},
-			wantText:      "📦 過去學期",
-			wantColor:     ColorButtonSecondary,
+			wantEmoji:     "📦",
+			wantLabel:     "過去學期",
+			wantColor:     ColorHeaderHistorical,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			badge := GetSemesterBadge(tt.year, tt.term, tt.dataSemesters)
-			if badge.Text != tt.wantText {
-				t.Errorf("GetSemesterBadge().Text = %q, want %q", badge.Text, tt.wantText)
+			label := GetSemesterLabel(tt.year, tt.term, tt.dataSemesters)
+			if label.Emoji != tt.wantEmoji {
+				t.Errorf("GetSemesterLabel().Emoji = %q, want %q", label.Emoji, tt.wantEmoji)
 			}
-			if badge.Color != tt.wantColor {
-				t.Errorf("GetSemesterBadge().Color = %q, want %q", badge.Color, tt.wantColor)
+			if label.Label != tt.wantLabel {
+				t.Errorf("GetSemesterLabel().Label = %q, want %q", label.Label, tt.wantLabel)
+			}
+			if label.Color != tt.wantColor {
+				t.Errorf("GetSemesterLabel().Color = %q, want %q", label.Color, tt.wantColor)
 			}
 		})
 	}

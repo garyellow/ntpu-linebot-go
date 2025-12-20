@@ -258,12 +258,7 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 	}
 
 	// Header - using standardized component (with emergency red color variant)
-	header := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexBox("baseline",
-			lineutil.NewFlexText("🚨").WithSize("lg").FlexText,
-			lineutil.NewFlexText("緊急聯絡電話").WithWeight("bold").WithColor(lineutil.ColorDanger).WithSize("sm").WithMargin("sm").FlexText,
-		).FlexBox,
-	)
+	header := lineutil.NewEmergencyHeader("🚨", "緊急聯絡電話")
 
 	// Sanxia Campus Box
 	sanxiaBox := lineutil.NewFlexBox("vertical",
@@ -669,8 +664,8 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 			// If c.Type is "individual" with no title, subText remains empty
 			// NewHeroBox will handle empty subtitle gracefully
 
-			// Header: Contact badge (using standardized component)
-			header := lineutil.NewHeaderBadge("📞", "聯絡資訊")
+			// Header: Contact label (using standardized component)
+			header := lineutil.NewDetailPageLabel("📞", "聯絡資訊")
 
 			// Hero: Name with colored background (using standardized component)
 			hero := lineutil.NewHeroBox(displayName, subText)

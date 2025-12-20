@@ -732,8 +732,8 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_api.MessageInterface {
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
-	// Header: Student badge (using standardized component)
-	header := lineutil.NewHeaderBadge("🎓", "學生資訊")
+	// Header: Student label (using standardized component)
+	header := lineutil.NewDetailPageLabel("🎓", "學生資訊")
 
 	// Hero: Name with NTPU green background (using standardized component)
 	hero := lineutil.NewHeroBox(student.Name, "國立臺北大學")
