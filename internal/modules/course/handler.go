@@ -956,9 +956,10 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 		Color: lineutil.ColorHeaderCourse,
 	}).FlexBox)
 
-	// 學期 info - first row
+	// 學期 info - first row (no separator between label and first row)
 	semesterText := lineutil.FormatSemester(course.Year, course.Term)
-	body.AddInfoRow("📅", "開課學期", semesterText, lineutil.DefaultInfoRowStyle())
+	firstInfoRow := lineutil.NewInfoRow("📅", "開課學期", semesterText, lineutil.DefaultInfoRowStyle())
+	body.AddComponent(firstInfoRow.FlexBox)
 
 	// 教師 info
 	if len(course.Teachers) > 0 {
@@ -1185,9 +1186,10 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 		// First row is semester label
 		body.AddComponent(lineutil.NewBodyLabel(labelInfo).FlexBox)
 
-		// 學期資訊（完整格式）
+		// 學期資訊 - first info row (no separator so it flows directly after the label)
 		semesterText := lineutil.FormatSemester(course.Year, course.Term)
-		body.AddInfoRow("📅", "開課學期", semesterText, lineutil.DefaultInfoRowStyle())
+		firstInfoRow := lineutil.NewInfoRow("📅", "開課學期", semesterText, lineutil.DefaultInfoRowStyle())
+		body.AddComponent(firstInfoRow.FlexBox)
 
 		// 第二列：授課教師
 		if len(course.Teachers) > 0 {
@@ -1527,9 +1529,10 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 	// First row is relevance label
 	body.AddComponent(lineutil.NewBodyLabel(labelInfo).FlexBox)
 
-	// 學期資訊（完整格式）
+	// 學期資訊 - first info row (no separator so it flows directly after the label)
 	semesterText := lineutil.FormatSemester(course.Year, course.Term)
-	body.AddInfoRow("📅", "開課學期", semesterText, lineutil.DefaultInfoRowStyle())
+	firstInfoRow := lineutil.NewInfoRow("📅", "開課學期", semesterText, lineutil.DefaultInfoRowStyle())
+	body.AddComponent(firstInfoRow.FlexBox)
 
 	// 授課教師
 	if len(course.Teachers) > 0 {

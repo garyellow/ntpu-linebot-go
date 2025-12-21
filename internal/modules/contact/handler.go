@@ -683,9 +683,10 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 			// Add type label as first row
 			body.AddComponent(lineutil.NewBodyLabel(bodyLabel).FlexBox)
 
-			// Add Title if available (previously in Hero subtitle)
+			// Add Title if available (previously in Hero subtitle) - no separator after label
 			if c.Title != "" && c.Type != "organization" {
-				body.AddInfoRow("🔖", "職稱", c.Title, lineutil.DefaultInfoRowStyle())
+				titleRow := lineutil.NewInfoRow("🔖", "職稱", c.Title, lineutil.DefaultInfoRowStyle())
+				body.AddComponent(titleRow.FlexBox)
 			}
 
 			// Organization / Superior - first row (no separator)

@@ -747,7 +747,9 @@ func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_ap
 		Label: "國立臺北大學",
 	}).FlexBox)
 
-	body.AddInfoRow("🆔", "學號", student.ID, lineutil.BoldInfoRowStyle())
+	// 學號 info - first row (no separator so it flows directly after the label)
+	firstInfoRow := lineutil.NewInfoRow("🆔", "學號", student.ID, lineutil.BoldInfoRowStyle())
+	body.AddComponent(firstInfoRow.FlexBox)
 	body.AddInfoRow("🏫", "系所", student.Department, lineutil.BoldInfoRowStyle())
 	body.AddInfoRow("📅", "入學學年", fmt.Sprintf("%d 學年度", student.Year), lineutil.BoldInfoRowStyle())
 
