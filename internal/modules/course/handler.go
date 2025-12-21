@@ -1212,7 +1212,7 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 		footer := lineutil.NewFlexBox("vertical",
 			lineutil.NewFlexButton(
 				lineutil.NewPostbackActionWithDisplayText("📝 查看詳細", displayText, "course:"+course.UID),
-			).WithStyle("primary").WithColor(lineutil.ColorButtonPrimary).WithHeight("sm").FlexButton,
+			).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm").FlexButton,
 		).WithSpacing("sm")
 
 		bubble := lineutil.NewFlexBubble(
@@ -1408,7 +1408,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 		h.metrics.RecordSearch(searchType, "no_results", time.Since(startTime).Seconds(), 0)
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			"🔍 查無相關課程\n\n💡 建議嘗試\n• 換個描述方式\n• 使用精確搜尋：課程 名稱", sender)
+			"🔍 未找到相關課程\n\n💡 建議嘗試\n• 換個描述方式或關鍵字\n• 使用精確搜尋：「課程 課名」", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyCourseAction(),
 			lineutil.QuickReplySmartSearchAction(),
@@ -1447,7 +1447,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []rag.SearchResult) []messaging_api.MessageInterface {
 	if len(courses) == 0 {
 		sender := lineutil.GetSender(senderName, h.stickerManager)
-		msg := lineutil.NewTextMessageWithConsistentSender("🔍 查無相關課程\n\n💡 建議嘗試\n• 換個描述方式\n• 使用精確搜尋：課程 名稱", sender)
+		msg := lineutil.NewTextMessageWithConsistentSender("🔍 未找到相關課程\n\n💡 建議嘗試\n• 換個描述方式或關鍵字\n• 使用精確搜尋：「課程 課名」", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyCourseAction(),
 			lineutil.QuickReplySmartSearchAction(),
@@ -1491,11 +1491,15 @@ func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []
 		messages = append(messages, msg)
 	}
 
-	// Add header message with search guidance
-	// Provide tips when results are few to help users refine their queries
-	headerText := fmt.Sprintf("🔮 智慧搜尋：找到 %d 門課程", len(courses))
+	// Add header message with contextual guidance
+	// Provide helpful tips based on result count to improve search experience
+	var headerText string
 	if len(courses) <= 3 {
-		headerText += "\n\n💡 提示：使用更具體的關鍵字可獲得更多結果"
+		headerText = "🔮 智慧搜尋\n\n💡 提示：嘗試更具體的描述或不同的關鍵字"
+	} else if len(courses) >= 8 {
+		headerText = "🔮 智慧搜尋\n\n✨ 找到多門相關課程，請查看相關性標籤"
+	} else {
+		headerText = "🔮 智慧搜尋結果"
 	}
 	headerMsg := lineutil.NewTextMessageWithConsistentSender(headerText, sender)
 	messages = append([]messaging_api.MessageInterface{headerMsg}, messages...)
@@ -1552,7 +1556,7 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 	footer := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText("📝 查看詳細", displayText, "course:"+course.UID),
-		).WithStyle("primary").WithColor(lineutil.ColorButtonPrimary).WithHeight("sm").FlexButton,
+		).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm").FlexButton,
 	).WithSpacing("sm")
 
 	bubble := lineutil.NewFlexBubble(
@@ -1569,14 +1573,13 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 // Returns: BodyLabelInfo with:
 //   - Emoji: Visual relevance indicator ("🎯" best, "✨" high, "📋" medium)
 //   - Label: User-friendly text ("最佳匹配", "高度相關", "部分相關")
-//   - Color: Header background color (ColorHeaderBest/High/Medium) - for NewColoredHeader() only
-//
-// Note: NewBodyLabel() ignores Color and always uses LINE green for consistent visual emphasis.
+//   - Color: Used for both header background and body label text for visual coordination
 //
 // Design rationale:
 //   - Uses relative score (score / maxScore) from BM25 search
 //   - Simple 3-tier system: Clear differentiation without cognitive overload
 //   - Relative scoring: Comparable within the same query results
+//   - Color coordination: Same color used for header background and body label text
 //
 // Academic foundation (Arampatzis et al., 2009):
 //   - BM25 follows Normal-Exponential mixture distribution
@@ -1590,7 +1593,7 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 //   - Confidence < 0.6: "部分相關" (Partially Relevant) - Exponential tail
 func getRelevanceLabel(confidence float32) lineutil.BodyLabelInfo {
 	if confidence >= 0.8 {
-		// White label for best matches - highest visibility
+		// LINE green - highest priority and visibility
 		return lineutil.BodyLabelInfo{
 			Emoji: "🎯",
 			Label: "最佳匹配",
@@ -1598,14 +1601,14 @@ func getRelevanceLabel(confidence float32) lineutil.BodyLabelInfo {
 		}
 	}
 	if confidence >= 0.6 {
-		// Purple label for highly relevant - attention-grabbing
+		// Purple - attention-grabbing for high relevance
 		return lineutil.BodyLabelInfo{
 			Emoji: "✨",
 			Label: "高度相關",
 			Color: lineutil.ColorHeaderHigh,
 		}
 	}
-	// Amber label for partial relevance - moderate visibility
+	// Amber - moderate visibility for partial relevance
 	return lineutil.BodyLabelInfo{
 		Emoji: "📋",
 		Label: "部分相關",

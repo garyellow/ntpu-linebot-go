@@ -168,42 +168,44 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
   - `ColorDanger` `#E02D41` (深紅) - 緊急操作 (校安電話) - 4.5:1
   - `ColorWarning` `#D97706` (琥珀色) - 警告訊息 (配額達上限、限流提示) - 4.5:1
   - `ColorButtonExternal` `#2563EB` (深藍) - 外部連結 (課程大綱、Dcard、選課大全、網站) - 4.8:1
-  - `ColorButtonInternal` `#7C3AED` (深紫) - 內部指令/Postback (教師課程、查看成員、查詢學號) - 4.6:1
+  - `ColorButtonInternal` `#7C3AED` (深紫) - 內部指令/Postback (查看詳細、教師課程、查看成員、查詢學號) - 4.6:1
   - `ColorSuccess` `#059669` (深翠綠) - 成功狀態 (操作完成提示、確認訊息) - 4.5:1 WCAG AA
   - `ColorButtonSecondary` `#6B7280` (灰色) - 次要操作 (複製號碼、複製信箱) - 5.9:1
 - **Header 顏色** (Colored Header 背景色 - 所有顏色符合 WCAG AA):
-  - 學期標示: `ColorHeaderRecent` 白色 (最新學期), `ColorHeaderPrevious` 藍色 (上個學期), `ColorHeaderHistorical` 深灰 (過去學期)
-  - 相關性標示: `ColorHeaderBest` 白色 (最佳匹配), `ColorHeaderHigh` 紫色 (高度相關), `ColorHeaderMedium` 琥珀色 (部分相關)
+  - 學期標示: `ColorHeaderRecent` LINE 綠色 (最新學期), `ColorHeaderPrevious` 藍色 (上個學期), `ColorHeaderHistorical` 深灰 (過去學期)
+  - 相關性標示: `ColorHeaderBest` LINE 綠色 (最佳匹配), `ColorHeaderHigh` 紫色 (高度相關), `ColorHeaderMedium` 琥珀色 (部分相關)
   - 聯絡類型: `ColorHeaderOrg` 藍色 (組織單位), `ColorHeaderIndividual` 綠色 (個人聯絡)
-  - 詳情頁模組: `ColorHeaderCourse` 琥珀色, `ColorHeaderContact` 藍色, `ColorHeaderStudent` 綠色
-  - **Header 文字顏色**: 白色背景用深色文字 (ColorText)，彩色背景用白色文字 (ColorHeroText)
+  - 詳情頁模組: `ColorHeaderCourse` 琥珀色, `ColorHeaderContact` 藍色, `ColorHeaderStudent` 綠色, `ColorHeaderEmergency` 紅色 (緊急聯絡)
+  - **Header 文字顏色**: 所有 header 都使用白色文字 (ColorHeroText) 以確保 WCAG AA 對比度
 - **Body Label 設計原則**:
-  - **統一使用 LINE 綠色** (`ColorPrimary`): 所有輪播卡片的 body label 都使用 LINE 綠色，確保視覺一致性和品牌辨識度
-  - **視覺層次**: Header 背景色用於區分類別 (學期/相關性/類型)，Body Label 用綠色強調重點標記
-  - **簡化邏輯**: 移除複雜的顏色繼承，body label 永遠是綠色，更易於維護和理解
+  - **顏色協調**: Body label 文字顏色與 header 背景色一致，建立清晰的視覺關聯
+  - **視覺層次**: Header 背景色 → Body label 文字色 (相同顏色)，創造連貫的視覺線索
+  - **語義清晰**: 顏色強化語義含義 (綠=最新/最佳, 藍=上個學期/次要, 紫=高相關, 琥珀=部分相關等)
+  - **設計一致**: 所有輪播卡片 (課程/聯絡人) 都遵循此模式，確保用戶體驗一致
 - **間距**: Hero padding `24px`/`16px` (4-point grid), Body/Footer spacing `sm`, 按鈕高度 `sm`
-- **文字**: 優先使用 `wrap: true` + `lineSpacing` 完整顯示資訊；僅 carousel 使用 `WithMaxLines()` 控制高度
+- **文字**: 輪播卡片預設不換行 (緊湊顯示)；詳情頁可使用 `wrap: true` + `lineSpacing` 完整顯示資訊
 - **截斷**: `TruncateRunes()` 僅用於 LINE API 限制 (altText 400 字, displayText 長度限制)
 - **設計原則**: 對稱、現代、一致 - 確保視覺和諧，完整呈現資訊，所有顏色符合 WCAG AA 無障礙標準
 - **資料說明**: 學號查詢結果的系所資訊由學號推測，可能因轉系等原因有所不同
 
 **輪播卡片設計模式**:
 - 課程輪播 (Course): Colored Header (標題) → Body (標籤 + 資訊) → Footer
-  - Header 使用 `NewColoredHeader()` 創建帶背景色的標題 (白色/藍色/灰色等)
-  - Body 第一列使用 `NewBodyLabel()` 顯示學期/相關性標籤 (統一 LINE 綠色文字)
-  - 學期標籤: `🆕 最新學期` (綠色), `📅 上個學期` (綠色), `📦 過去學期` (綠色)
-  - 相關性標籤: `🎯 最佳匹配` (綠色), `✨ 高度相關` (綠色), `📋 部分相關` (綠色) - 智慧搜尋
-  - **視覺效果**: Header 背景色顯示類別，Body Label 綠色文字強調標記，層次分明
+  - Header 使用 `NewColoredHeader()` 創建帶背景色的標題 (LINE 綠色/藍色/深灰)
+  - Body 第一列使用 `NewBodyLabel()` 顯示學期/相關性標籤 (文字顏色與 header 背景色一致)
+  - 學期標籤: `🆕 最新學期` (綠色), `📅 上個學期` (藍色), `📦 過去學期` (深灰)
+  - 相關性標籤: `🎯 最佳匹配` (綠色), `✨ 高度相關` (紫色), `📋 部分相關` (琥珀色) - 智慧搜尋
+  - **視覺效果**: Header 背景色與 Body Label 文字色協調，創造清晰的視覺關聯與層次
 - 聯絡人輪播 (Contact): Colored Header (姓名) → Body (標籤 + 資訊) → Footer
   - Header 使用 `NewColoredHeader()` 創建帶背景色的標題 (藍色/綠色)
-  - Body 第一列使用 `NewBodyLabel()` 顯示類型標籤 (統一 LINE 綠色文字)
-  - 類型標籤: `🏢 組織單位`, `👤 個人聯絡`（Header 背景色分別為藍/綠）
-  - **視覺效果**: 與課程輪播一致，Header 背景色顯示類型，Body Label 強調標記
+  - Body 第一列使用 `NewBodyLabel()` 顯示類型標籤 (文字顏色與 header 背景色一致)
+  - 類型標籤: `🏢 組織單位` (藍色), `👤 個人聯絡` (綠色)
+  - **視覺效果**: 與課程輪播一致，Header 背景色與 Body Label 文字色協調
 - 詳情頁 (所有模組): Colored Header (名稱) → Body (標籤 + 資訊) → Footer
-  - **統一設計**: 所有模組 (Course/Contact/ID) 都使用 `NewColoredHeader()` 呈現主要資訊
-  - Course: 琥珀色 Header (課程名稱), Body 第一列顯示「📚 課程資訊」標籤
-  - Contact: 藍色/綠色 Header (聯絡人姓名), Body 第一列顯示類型標籤（`🏢 組織單位` 或 `👤 個人聯絡`，與輪播一致）
-  - ID: 綠色 Header (學生姓名), Body 第一列顯示「🎓 國立臺北大學」標籤
+  - **統一設計**: 所有模組 (Course/Contact/ID/Emergency) 都使用 `NewColoredHeader()` 呈現主要資訊
+  - Course: 琥珀色 Header (課程名稱), Body 第一列顯示「📚 課程資訊」標籤 (琥珀色文字)
+  - Contact: 藍色/綠色 Header (聯絡人姓名), Body 第一列顯示類型標籤（`🏢 組織單位` 或 `👤 個人聯絡`，文字色與 header 一致）
+  - ID: 綠色 Header (學生姓名), Body 第一列顯示「🎓 國立臺北大學」標籤 (綠色文字)
+  - Emergency: 紅色 Header (🚨 緊急聯絡電話), Body 第一列顯示「☎️ 校園緊急聯絡」標籤 (紅色文字)
   - **移除 Hero**: 不再使用 `NewDetailPageLabel()` + `NewHeroBox()` 的舊設計，改為統一的 Colored Header 模式
   - **節省空間**: 資訊更緊湊，視覺一致性更好
 

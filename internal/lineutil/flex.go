@@ -289,23 +289,6 @@ func TruncateRunes(text string, maxRunes int) string {
 	return string(runes[:maxRunes-3]) + "..."
 }
 
-// NewEmergencyHeader creates a standardized header for emergency contacts.
-// Uses ColorDanger (Red) for emphasis.
-//
-// Parameters:
-//   - emoji: Leading icon (e.g., "🚨")
-//   - label: Header label (e.g., "緊急聯絡電話")
-//
-// Returns: FlexBox suitable for Flex Bubble header section
-func NewEmergencyHeader(emoji, label string) *FlexBox {
-	return NewFlexBox("vertical",
-		NewFlexBox("baseline",
-			NewFlexText(emoji).WithSize("lg").FlexText,
-			NewFlexText(label).WithWeight("bold").WithColor(ColorDanger).WithSize("sm").WithMargin("sm").FlexText,
-		).FlexBox,
-	)
-}
-
 // ColoredHeaderInfo contains display information for a colored header.
 // Used for carousel cards to show course title with colored background.
 type ColoredHeaderInfo struct {
@@ -333,15 +316,12 @@ type ColoredHeaderInfo struct {
 //
 // Design rationale:
 //   - Colored header provides visual hierarchy with course title
-//   - Text color automatically adapts: white on colored bg, dark on white bg
-//   - WCAG AA compliant: All header colors have ≥4.5:1 contrast
+//   - All headers use white text on colored backgrounds for consistent styling
+//   - WCAG AA compliant: All header colors have ≥4.5:1 contrast with white text
 func NewColoredHeader(info ColoredHeaderInfo) *FlexBox {
-	// Determine text color based on background
-	// White/light backgrounds need dark text, colored backgrounds need white text
-	textColor := ColorHeroText // Default: white
-	if info.Color == ColorHeaderRecent || info.Color == ColorHeaderBest {
-		textColor = ColorText // Dark text on white background
-	}
+	// All colored backgrounds use white text for WCAG AA compliance
+	// This ensures consistent appearance across all header types
+	textColor := ColorHeroText // White text for all colored backgrounds
 
 	return NewFlexBox("vertical",
 		NewFlexText(info.Title).
@@ -356,46 +336,47 @@ func NewColoredHeader(info ColoredHeaderInfo) *FlexBox {
 
 // BodyLabelInfo contains display information for a body label.
 // Used for carousel cards to show semester/relevance indicator in body first row.
-// Body labels always use LINE green (ColorPrimary) for consistent visual emphasis.
+// Body labels use the same color as header background for visual coordination.
 //
 // Design Pattern:
-//   - Body labels (via NewBodyLabel): Always render with LINE green text
-//   - Header backgrounds (via NewColoredHeader): Use the Color field
+//   - Header backgrounds (via NewColoredHeader): Use the Color field as background
+//   - Body labels (via NewBodyLabel): Use the Color field as text color
+//   - This creates visual consistency: header background color = body label text color
 //
 // This struct serves as a unified data container for both components,
-// ensuring they work together cohesively (same label, coordinated colors).
+// ensuring they work together cohesively with coordinated colors.
 type BodyLabelInfo struct {
 	Emoji string // Label emoji (e.g., "🆕", "🎯", "🏢")
 	Label string // Label text (e.g., "最新學期", "最佳匹配")
-	Color string // Header background color (ColorHeader*). For NewColoredHeader() use ONLY. NewBodyLabel() always uses ColorPrimary.
+	Color string // Color for both header background (via NewColoredHeader) and body label text (via NewBodyLabel)
 }
 
 // NewBodyLabel creates a label for carousel card body first row.
-// This shows semester/relevance indicator with bold LINE green text (no background).
+// This shows semester/relevance indicator with bold colored text (no background).
 //
 // Layout (within body):
 //
 //	┌──────────────────────────┐
-//	│ 🆕 最新學期              │  <- Body label (bold green text)
+//	│ 🆕 最新學期              │  <- Body label (bold colored text)
 //	│ 📅 開課學期：113-1       │
 //	│ ...                      │
 //	└──────────────────────────┘
 //
 // Design rationale:
-//   - Consistent visual emphasis: All body labels use LINE green for immediate recognition
-//   - Clear hierarchy: Header background colors distinguish categories, body labels highlight key info
-//   - Brand alignment: LINE green reinforces brand identity and draws attention to important markers
+//   - Color coordination: Body label uses same color as header background for visual consistency
+//   - Clear hierarchy: Matching colors create a cohesive visual thread from header to body
+//   - Semantic clarity: Color reinforces the semantic meaning (green=recent, blue=previous, etc.)
 //
 // Parameters:
-//   - info: BodyLabelInfo with emoji and label text (Color is ignored; header should use it if needed)
+//   - info: BodyLabelInfo with emoji, label text, and color (from header background)
 //
 // Returns: FlexBox suitable for body first row
 func NewBodyLabel(info BodyLabelInfo) *FlexBox {
-	// Always use PRIMARY green for body labels - creates consistent visual emphasis
-	// across all carousel types (semester labels, relevance labels, contact type labels)
+	// Use the same color as header background for visual coordination
+	// This creates a clear visual thread: header background color → body label text color
 	return NewFlexBox("horizontal",
 		NewFlexText(info.Emoji).WithSize("xs").FlexText,
-		NewFlexText(info.Label).WithWeight("bold").WithSize("xs").WithColor(ColorPrimary).WithMargin("xs").FlexText,
+		NewFlexText(info.Label).WithWeight("bold").WithSize("xs").WithColor(info.Color).WithMargin("xs").FlexText,
 	).WithMargin("sm")
 }
 
@@ -403,17 +384,19 @@ func NewBodyLabel(info BodyLabelInfo) *FlexBox {
 type InfoRowStyle struct {
 	ValueSize   string // Value text size: "xs", "sm", "md" (default: "sm")
 	ValueWeight string // Value text weight: "regular", "bold" (default: "regular")
-	ValueColor  string // Value text color (default: "#333333")
+	ValueColor  string // Value text color (default: ColorText)
 	Wrap        bool   // Whether to wrap long text (default: true)
 }
 
 // DefaultInfoRowStyle returns the standard info row style
+// Note: Wrap is false by default for carousel cards (compact display)
+// Use WithWrap(true) if you need text wrapping for detail pages
 func DefaultInfoRowStyle() InfoRowStyle {
 	return InfoRowStyle{
 		ValueSize:   "sm",
 		ValueWeight: "regular",
 		ValueColor:  ColorText,
-		Wrap:        true,
+		Wrap:        false,
 	}
 }
 

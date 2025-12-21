@@ -745,6 +745,7 @@ func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_ap
 	body.AddComponent(lineutil.NewBodyLabel(lineutil.BodyLabelInfo{
 		Emoji: "🎓",
 		Label: "國立臺北大學",
+		Color: lineutil.ColorHeaderStudent, // Green color matching header
 	}).FlexBox)
 
 	// 學號 info - first row (no separator so it flows directly after the label)
