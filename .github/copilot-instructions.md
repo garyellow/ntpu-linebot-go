@@ -66,10 +66,11 @@ LINE Webhook → Gin Handler
 5. Pass nil for optional dependencies (e.g., `bm25Index`, `queryExpander`, `llmRateLimiter`)
 
 **Course Module**:
-- **Precise search** (`課程`): SQL LIKE + fuzzy search
+- **Precise search** (`課程`): SQL LIKE + fuzzy search (2 recent semesters: 1st-2nd)
+- **Extended search** (`更多學期`): SQL LIKE + fuzzy search (2 historical semesters: 3rd-4th)
 - **Smart search** (`找課`): BM25 + Query Expansion (requires LLM API key)
 - **Confidence scoring**: Relative BM25 score (0-1, first result always 1.0)
-- **Fallback**: Precise → Smart search (if BM25Index enabled)
+- **No cross-mode fallback**: Each search mode is independent and explicit
 
 **Contact Module**:
 - Emergency phones, multilingual keywords, Flex Message cards

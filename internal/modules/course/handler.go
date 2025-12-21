@@ -295,7 +295,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		if searchTerm == "" {
 			sender := lineutil.GetSender(senderName, h.stickerManager)
 			helpText := "📅 更多學期搜尋說明\n\n" +
-				"🔍 搜尋範圍：近 4 學期\n" +
+				"🔍 搜尋範圍：過去 2 學期\n" +
 				"（一般搜尋僅搜尋近 2 學期）\n\n" +
 				"用法範例：\n" +
 				"• 更多學期 微積分\n" +
@@ -335,7 +335,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 					"🔮 智慧搜尋（近 2 學期）\n" +
 					"• 找課 想學資料分析\n" +
 					"• 找課 Python 入門\n\n" +
-					"📅 更多學期（近 4 學期）\n" +
+					"📅 更多學期（過去 2 學期）\n" +
 					"• 更多學期 微積分\n\n" +
 					"📆 指定年份\n" +
 					"• 課程 110 微積分\n\n" +
@@ -351,7 +351,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 					"• 課程 微積分\n" +
 					"• 課程 王小明\n" +
 					"• 課程 線代 王\n\n" +
-					"📅 更多學期（近 4 學期）\n" +
+					"📅 更多學期（過去 2 學期）\n" +
 					"• 更多學期 微積分\n\n" +
 					"📆 指定年份\n" +
 					"• 課程 110 微積分\n\n" +
@@ -546,7 +546,7 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 
 // handleUnifiedCourseSearch handles unified course search queries with fuzzy matching.
 // It searches both course titles and teacher names simultaneously.
-// Search range: Recent 2-4 semesters with cache-first strategy.
+// Search range: Recent 2 semesters with cache-first strategy.
 //
 // Search Strategy (2-tier parallel search + scraping fallback):
 //
@@ -555,8 +555,8 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 //     Example: "王" matches courses where any teacher name contains "王"
 //
 //  2. Fuzzy character-set matching (ALWAYS runs in parallel with SQL LIKE):
-//     Loads cached courses and checks if all runes in searchTerm exist in title OR teachers.
-//     This catches abbreviations that SQL LIKE misses because characters are scattered.
+//     Loads cached courses for the target semesters and checks if all runes in searchTerm
+//     exist in title OR teachers. This catches abbreviations that SQL LIKE misses.
 //     Example: "線代" matches "線性代數" (all chars exist in title but not consecutive)
 //     Example: "王明" matches teacher "王小明" (all chars exist)
 //
@@ -567,38 +567,37 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 // Multi-word search: "微積分 王" will find courses where title contains "微積分王"
 // OR where all characters exist in title+teachers combined.
 func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm string) []messaging_api.MessageInterface {
-	return h.searchCoursesWithOptions(ctx, searchTerm, false, true)
+	return h.searchCoursesWithOptions(ctx, searchTerm, false)
 }
 
-// handleExtendedCourseSearch handles extended course search (4 semesters instead of default 2).
+// handleExtendedCourseSearch handles extended course search (3rd and 4th semesters).
 // This is triggered by "課程歷史" or "更多學期" keywords, typically from Quick Reply.
-// Search range: 4 semesters (broader historical search).
-// Search flow: SQL LIKE → Fuzzy match → Scraping (4 semesters) → No BM25 fallback
-// Note: Intentionally skips BM25 fallback as extended search focuses on historical data
+// Search range: 2 additional historical semesters (excludes the 2 most recent).
+// Search flow: SQL LIKE → Fuzzy match (2 historical semesters) → Scraping (2 historical semesters)
 func (h *Handler) handleExtendedCourseSearch(ctx context.Context, searchTerm string) []messaging_api.MessageInterface {
-	return h.searchCoursesWithOptions(ctx, searchTerm, true, false)
+	return h.searchCoursesWithOptions(ctx, searchTerm, true)
 }
 
 // searchCoursesWithOptions is the core search implementation used by both unified and extended search.
 // It consolidates the common search logic to avoid code duplication.
 //
 // Parameters:
-//   - extended: If true, searches 4 semesters instead of 2
-//   - enableBM25Fallback: If true, uses BM25 smart search when no keyword results found
+//   - extended: If true, searches 2 historical semesters (3rd-4th); if false, searches 2 recent semesters (1st-2nd)
 //
 // Search flow:
 //  1. SQL LIKE search (title + teacher) in cache
-//  2. Fuzzy character-set matching (parallel with SQL LIKE)
+//  2. Fuzzy character-set matching (respects extended flag for semester range)
 //  3. Web scraping from NTPU website (if cache miss)
-//  4. BM25 smart search (optional fallback for unified search only)
-func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm string, extended bool, enableBM25Fallback bool) []messaging_api.MessageInterface {
+//
+// Note: Smart search (BM25) is completely separate and triggered by "找課" keyword only.
+func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm string, extended bool) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(ModuleName)
 	startTime := time.Now()
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	semesterType := "近期"
 	if extended {
-		semesterType = "近 4 個學期"
+		semesterType = "過去 2 學期"
 	}
 	log.Infof("Handling course search (%s semesters): %s", semesterType, searchTerm)
 
@@ -635,9 +634,26 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 	// Step 2: ALWAYS try fuzzy character-set matching to find additional results
 	// This catches cases like "線代" -> "線性代數" that SQL LIKE misses
 	// SQL LIKE only finds consecutive substrings, but fuzzy matching finds scattered characters
-	allCourses, err := h.db.GetCoursesByRecentSemesters(ctx)
-	if err == nil && len(allCourses) > 0 {
-		for _, c := range allCourses {
+	// Get courses based on search range (2 or 4 semesters)
+	var searchYears, searchTerms []int
+	if extended {
+		searchYears, searchTerms = getExtendedSemesters()
+	} else {
+		searchYears, searchTerms = getSemestersToSearch()
+	}
+
+	// Get all courses for the specified semesters from cache
+	for i := range searchYears {
+		year := searchYears[i]
+		term := searchTerms[i]
+		semesterCourses, err := h.db.GetCoursesByYearTerm(ctx, year, term)
+		if err != nil {
+			log.WithError(err).Warnf("Failed to get courses for year %d term %d", year, term)
+			continue
+		}
+
+		// Fuzzy match against all courses in this semester
+		for _, c := range semesterCourses {
 			// Check if searchTerm matches title OR any teacher using fuzzy matching
 			titleMatch := bot.ContainsAllRunes(c.Title, searchTerm)
 			teacherMatch := false
@@ -666,14 +682,6 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 	cacheMissMsg := fmt.Sprintf("Cache miss for search term: %s, scraping from %s...", searchTerm, semesterType)
 	log.Info(cacheMissMsg)
 	h.metrics.RecordCacheMiss(ModuleName)
-
-	// Get semesters to search based on extended flag
-	var searchYears, searchTerms []int
-	if extended {
-		searchYears, searchTerms = getExtendedSemesters()
-	} else {
-		searchYears, searchTerms = getSemestersToSearch()
-	}
 
 	// Search courses from multiple semesters
 	foundCourses := make([]*storage.Course, 0)
@@ -756,34 +764,7 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 		return h.formatCourseListResponseWithOptions(courses, searchTerm, extended)
 	}
 
-	// Step 4: No keyword results - try BM25 smart search as last resort (if enabled)
-	if enableBM25Fallback && h.bm25Index != nil && h.bm25Index.IsEnabled() {
-		log.Infof("No keyword results for %s, trying BM25 search...", searchTerm)
-
-		// Use detached context for smart search operations.
-		// PreserveTracing() creates independent context to prevent parent cancellation
-		// from aborting LLM API calls (Gemini Query Expansion may take several seconds).
-		searchCtx, cancel := context.WithTimeout(ctxutil.PreserveTracing(ctx), config.SmartSearchTimeout)
-		defer cancel()
-		smartResults, err := h.bm25Index.SearchCourses(searchCtx, searchTerm, 5)
-
-		if err == nil && len(smartResults) > 0 {
-			// Convert smart search results to courses
-			var smartCourses []storage.Course
-			for _, result := range smartResults {
-				if course, err := h.db.GetCourseByUID(ctx, result.UID); err == nil && course != nil {
-					smartCourses = append(smartCourses, *course)
-				}
-			}
-
-			if len(smartCourses) > 0 {
-				h.metrics.RecordScraperRequest(ModuleName, "smart_fallback", time.Since(startTime).Seconds())
-				return h.formatSmartSearchResponse(smartCourses, smartResults)
-			}
-		}
-	}
-
-	// No results found even after scraping and smart search
+	// No results found even after scraping
 	h.metrics.RecordScraperRequest(ModuleName, "not_found", time.Since(startTime).Seconds())
 
 	// Build help message with suggestions (different for extended vs regular search)
@@ -797,7 +778,7 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 		)
 	} else {
 		helpText = fmt.Sprintf(
-			"🔍 查無「%s」的相關課程\n\n📅 已搜尋範圍：近 2 學期\n\n💡 建議嘗試\n• 「📅 更多學期」搜尋近 4 學期\n• 縮短關鍵字（如「線性」→「線」）\n• 指定年份：「課程 110 %s」",
+			"🔍 查無「%s」的相關課程\n\n📅 已搜尋範圍：近 2 學期\n\n💡 建議嘗試\n• 「📅 更多學期」搜尋過去 2 學期\n• 縮短關鍵字（如「線性」→「線」）\n• 指定年份：「課程 110 %s」",
 			searchTerm,
 			searchTerm,
 		)
@@ -1491,20 +1472,7 @@ func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []
 		messages = append(messages, msg)
 	}
 
-	// Add header message with contextual guidance
-	// Provide helpful tips based on result count to improve search experience
-	var headerText string
-	if len(courses) <= 3 {
-		headerText = "🔮 智慧搜尋\n\n💡 提示：嘗試更具體的描述或不同的關鍵字"
-	} else if len(courses) >= 8 {
-		headerText = "🔮 智慧搜尋\n\n✨ 找到多門相關課程，請查看相關性標籤"
-	} else {
-		headerText = "🔮 智慧搜尋結果"
-	}
-	headerMsg := lineutil.NewTextMessageWithConsistentSender(headerText, sender)
-	messages = append([]messaging_api.MessageInterface{headerMsg}, messages...)
-
-	// Add Quick Reply
+	// Add Quick Reply directly to messages (no header message needed)
 	lineutil.AddQuickReplyToMessages(messages,
 		lineutil.QuickReplySmartSearchAction(),
 		lineutil.QuickReplyCourseAction(),

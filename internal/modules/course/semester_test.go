@@ -27,20 +27,20 @@ func TestGetSemestersToSearchLive(t *testing.T) {
 		years[0], terms[0], years[1], terms[1])
 }
 
-// TestGetExtendedSemesters tests extended search (4 semesters)
+// TestGetExtendedSemesters tests extended search (2 historical semesters, 3rd and 4th)
 func TestGetExtendedSemesters(t *testing.T) {
 	years, terms := getExtendedSemesters()
 
-	// Extended search returns 4 semesters
-	if len(years) != 4 {
-		t.Errorf("Expected 4 years for extended search, got %d", len(years))
+	// Extended search returns 2 historical semesters (3rd and 4th)
+	if len(years) != 2 {
+		t.Errorf("Expected 2 years for extended search, got %d", len(years))
 	}
-	if len(terms) != 4 {
-		t.Errorf("Expected 4 terms for extended search, got %d", len(terms))
+	if len(terms) != 2 {
+		t.Errorf("Expected 2 terms for extended search, got %d", len(terms))
 	}
 
-	t.Logf("Extended search semesters (4): %d-%d, %d-%d, %d-%d, %d-%d",
-		years[0], terms[0], years[1], terms[1], years[2], terms[2], years[3], terms[3])
+	t.Logf("Extended search semesters (2 historical): %d-%d, %d-%d",
+		years[0], terms[0], years[1], terms[1])
 }
 
 // TestRecentSemestersForDate tests the 2-semester retrieval
