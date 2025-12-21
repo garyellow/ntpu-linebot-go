@@ -289,63 +289,6 @@ func TruncateRunes(text string, maxRunes int) string {
 	return string(runes[:maxRunes-3]) + "..."
 }
 
-// NewHeroBox creates a standardized Hero box with LINE green background
-// Provides consistent styling across all modules:
-// - Background: ColorHeroBg (LINE Green #06C755)
-// - Padding: 24px all, 20px bottom (4-point grid aligned, visual balance)
-// - Title: Bold, XL size, white color, full wrap for complete display
-// - Subtitle: XS size, white color, md margin top (omitted if empty)
-func NewHeroBox(title, subtitle string) *FlexBox {
-	contents := []messaging_api.FlexComponentInterface{
-		NewFlexText(title).WithWeight("bold").WithSize("xl").WithColor(ColorHeroText).WithWrap(true).WithLineSpacing(LineSpacingLarge).FlexText,
-	}
-	// Only add subtitle if not empty (LINE API rejects empty text)
-	if subtitle != "" {
-		contents = append(contents, NewFlexText(subtitle).WithSize("xs").WithColor(ColorHeroText).WithMargin("md").WithWrap(true).FlexText)
-	}
-	box := NewFlexBox("vertical", contents...)
-	box.BackgroundColor = ColorHeroBg
-	box.PaddingAll = SpacingXXL
-	box.PaddingBottom = SpacingXL
-	return box
-}
-
-// NewCompactHeroBox creates a compact Hero box for carousel/list views
-// Uses smaller padding (16px, 4-point grid aligned) to fit more content
-// Max 3 lines for carousel to balance visibility
-func NewCompactHeroBox(title string) *FlexBox {
-	box := NewFlexBox("vertical",
-		NewFlexText(title).WithWeight("bold").WithSize("md").WithColor(ColorHeroText).WithWrap(true).WithMaxLines(3).WithLineSpacing(LineSpacingNormal).FlexText,
-	)
-	box.BackgroundColor = ColorHeroBg
-	box.PaddingAll = SpacingL
-	return box
-}
-
-// NewDetailPageLabel creates a consistent page label for detail page headers.
-// Used only for detail pages (student/course/contact) to show the page type.
-//
-// Format: [emoji] [label] with LINE green color
-// Layout:
-//
-//	┌─────────────────┐
-//	│ 🎓 学生信息     │  <- Detail page label
-//	└─────────────────┘
-//
-// Parameters:
-//   - emoji: Leading icon (e.g., "🎓", "📚", "📞")
-//   - label: Category label (e.g., "學生資訊", "課程資訊", "聯絡資訊")
-//
-// Returns: FlexBox suitable for Flex Bubble header section
-func NewDetailPageLabel(emoji, label string) *FlexBox {
-	return NewFlexBox("vertical",
-		NewFlexBox("baseline",
-			NewFlexText(emoji).WithSize("lg").FlexText,
-			NewFlexText(label).WithWeight("bold").WithColor(ColorPrimary).WithSize("sm").WithMargin("sm").FlexText,
-		).FlexBox,
-	)
-}
-
 // NewEmergencyHeader creates a standardized header for emergency contacts.
 // Uses ColorDanger (Red) for emphasis.
 //
@@ -413,40 +356,46 @@ func NewColoredHeader(info ColoredHeaderInfo) *FlexBox {
 
 // BodyLabelInfo contains display information for a body label.
 // Used for carousel cards to show semester/relevance indicator in body first row.
+// Body labels always use LINE green (ColorPrimary) for consistent visual emphasis.
+//
+// Design Pattern:
+//   - Body labels (via NewBodyLabel): Always render with LINE green text
+//   - Header backgrounds (via NewColoredHeader): Use the Color field
+//
+// This struct serves as a unified data container for both components,
+// ensuring they work together cohesively (same label, coordinated colors).
 type BodyLabelInfo struct {
 	Emoji string // Label emoji (e.g., "🆕", "🎯", "🏢")
 	Label string // Label text (e.g., "最新學期", "最佳匹配")
-	Color string // Label color reference (from ColorHeader* constants, used for text color)
+	Color string // Header background color (ColorHeader*). For NewColoredHeader() use ONLY. NewBodyLabel() always uses ColorPrimary.
 }
 
 // NewBodyLabel creates a label for carousel card body first row.
-// This shows semester/relevance indicator with bold colored text (no background).
+// This shows semester/relevance indicator with bold LINE green text (no background).
 //
 // Layout (within body):
 //
 //	┌──────────────────────────┐
-//	│ 🆕 最新學期              │  <- Body label (bold colored text)
+//	│ 🆕 最新學期              │  <- Body label (bold green text)
 //	│ 📅 開課學期：113-1       │
 //	│ ...                      │
 //	└──────────────────────────┘
 //
+// Design rationale:
+//   - Consistent visual emphasis: All body labels use LINE green for immediate recognition
+//   - Clear hierarchy: Header background colors distinguish categories, body labels highlight key info
+//   - Brand alignment: LINE green reinforces brand identity and draws attention to important markers
+//
 // Parameters:
-//   - info: BodyLabelInfo with emoji, label, and color reference
+//   - info: BodyLabelInfo with emoji and label text (Color is ignored; header should use it if needed)
 //
 // Returns: FlexBox suitable for body first row
 func NewBodyLabel(info BodyLabelInfo) *FlexBox {
-	// Determine text color for white body background
-	// White headers need visible emphasis color, colored headers use their color for text
-	textColor := info.Color
-	if info.Color == ColorHeaderRecent || info.Color == ColorHeaderBest {
-		// White header colors → use primary green for emphasis (visible on white body)
-		textColor = ColorPrimary
-	}
-
-	// Create simple bold text row (no background)
+	// Always use PRIMARY green for body labels - creates consistent visual emphasis
+	// across all carousel types (semester labels, relevance labels, contact type labels)
 	return NewFlexBox("horizontal",
 		NewFlexText(info.Emoji).WithSize("xs").FlexText,
-		NewFlexText(info.Label).WithWeight("bold").WithSize("xs").WithColor(textColor).WithMargin("xs").FlexText,
+		NewFlexText(info.Label).WithWeight("bold").WithSize("xs").WithColor(ColorPrimary).WithMargin("xs").FlexText,
 	).WithMargin("sm")
 }
 

@@ -24,13 +24,13 @@ const (
 //
 // 4-Tier Semantic Color Architecture:
 //
-//	Tier 1: Core Semantic Colors (状态本质)
-//	Tier 2: Action Button Colors (操作类型)
-//	Tier 3: Header Colors (Colored Header 标签)
+//	Tier 1: Core Semantic Colors (狀態本質)
+//	Tier 2: Action Button Colors (操作類型)
+//	Tier 3: Header Colors (Colored Header 標籤)
 //	Tier 4: Text & Component Colors (文字/元件)
 const (
 	// ============================================================
-	// Tier 1: Core Semantic Colors (状态本质)
+	// Tier 1: Core Semantic Colors (狀態本質)
 	// ============================================================
 	ColorPrimary = "#06C755" // LINE Green - brand, primary actions
 	ColorDanger  = "#E02D41" // Errors, destructive, urgent (4.5:1)
@@ -38,13 +38,13 @@ const (
 	ColorSuccess = "#059669" // Success, completed, positive (4.5:1)
 
 	// ============================================================
-	// Tier 2: Action Button Colors (操作类型)
+	// Tier 2: Action Button Colors (操作類型)
 	// ============================================================
 	// All button colors meet WCAG AA (≥4.5:1 with white text)
 	ColorButtonPrimary   = ColorPrimary // #06C755 - main actions (call, email, copy) - 4.9:1
-	ColorButtonExternal  = "#2563EB"    // Blue - external links (课程大纲, Dcard, 网站) - 4.8:1
-	ColorButtonInternal  = "#7C3AED"    // Purple - internal commands (教师课程, 查看成员) - 4.6:1
-	ColorButtonSecondary = "#6B7280"    // Gray - secondary actions (复制号码, 复制信箱) - 5.9:1
+	ColorButtonExternal  = "#2563EB"    // Blue - external links (課程大綱, Dcard, 網站) - 4.8:1
+	ColorButtonInternal  = "#7C3AED"    // Purple - internal commands (教師課程, 查看成員) - 4.6:1
+	ColorButtonSecondary = "#6B7280"    // Gray - secondary actions (複製號碼, 複製信箱) - 5.9:1
 
 	// ============================================================
 	// Tier 3: Header Colors (Colored Header 背景色)
@@ -52,26 +52,26 @@ const (
 	// Used for carousel card colored headers (emoji + label + colored bg)
 	// All colors meet WCAG AA (≥4.5:1 with white text)
 
-	// Semester Headers (学期标示 - 课程轮播)
-	ColorHeaderRecent     = "#FFFFFF" // 🆕 最新学期 - white bg, dark text - 21:1
-	ColorHeaderPrevious   = "#2563EB" // 📅 上个学期 - blue bg, white text - 4.8:1
-	ColorHeaderHistorical = "#475569" // 📦 过去学期 - dark slate bg, white text - 5.8:1
+	// Semester Headers (學期標示 - 課程輪播)
+	ColorHeaderRecent     = "#FFFFFF" // 🆕 最新學期 - white bg, dark text - 21:1
+	ColorHeaderPrevious   = "#2563EB" // 📅 上個學期 - blue bg, white text - 4.8:1
+	ColorHeaderHistorical = "#475569" // 📦 過去學期 - dark slate bg, white text - 5.8:1
 
-	// Relevance Headers (相关性标示 - 智慧搜寻)
+	// Relevance Headers (相關性標示 - 智慧搜尋)
 	ColorHeaderBest = "#FFFFFF" // 🎯 最佳匹配 - white bg, dark text - 21:1
 	// NOTE: Avoid red for relevance to keep red reserved for danger/error/urgent semantics.
 	ColorHeaderHigh = ColorButtonInternal // ✨ 高度相關 - purple bg, white text (≥4.5:1)
 	// NOTE: Use a darker amber to keep white text WCAG AA compliant.
-	ColorHeaderMedium = ColorWarning // 📋 部分相关 - amber bg, white text (≥4.5:1)
+	ColorHeaderMedium = ColorWarning // 📋 部分相關 - amber bg, white text (≥4.5:1)
 
-	// Contact Type Headers (联络类型 - 联络人轮播)
-	ColorHeaderOrg        = "#2563EB" // 🏢 组织单位 - blue bg, white text - 4.8:1
-	ColorHeaderIndividual = "#059669" // 👤 个人联络 - green bg, white text - 4.5:1
+	// Contact Type Headers (聯絡類型 - 聯絡人輪播)
+	ColorHeaderOrg        = "#2563EB" // 🏢 組織單位 - blue bg, white text - 4.8:1
+	ColorHeaderIndividual = "#059669" // 👤 個人聯絡 - green bg, white text - 4.5:1
 
-	// Detail Page Headers (详情页模组色)
-	ColorHeaderCourse  = "#D97706" // 📚 课程详情 - amber bg, white text - 4.5:1
-	ColorHeaderContact = "#2563EB" // 📞 联络详情 - blue bg, white text - 4.8:1
-	ColorHeaderStudent = "#059669" // 🎓 学生详情 - green bg, white text - 4.5:1
+	// Detail Page Headers (詳情頁模組色)
+	ColorHeaderCourse  = "#D97706" // 📚 課程詳情 - amber bg, white text - 4.5:1
+	ColorHeaderContact = "#2563EB" // 📞 聯絡詳情 - blue bg, white text - 4.8:1
+	ColorHeaderStudent = "#059669" // 🎓 學生詳情 - green bg, white text - 4.5:1
 
 	// ============================================================
 	// Tier 4: Text & Component Colors

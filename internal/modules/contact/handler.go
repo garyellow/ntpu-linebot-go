@@ -654,24 +654,40 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 			// Otherwise show "ChineseName EnglishName"
 			displayName := lineutil.FormatDisplayName(c.Name, c.NameEn)
 
-			// Determine subtitle - show friendly text, fallback to empty if no meaningful info
-			var subText string
+			// Determine header/body label based on type
+			var bodyLabel lineutil.BodyLabelInfo
+
 			if c.Type == "organization" {
-				subText = "單位"
-			} else if c.Title != "" {
-				subText = c.Title
+				bodyLabel = lineutil.BodyLabelInfo{
+					Emoji: "🏢",
+					Label: "組織單位",
+					Color: lineutil.ColorHeaderOrg,
+				}
+			} else {
+				bodyLabel = lineutil.BodyLabelInfo{
+					Emoji: "👤",
+					Label: "個人聯絡",
+					Color: lineutil.ColorHeaderIndividual,
+				}
 			}
-			// If c.Type is "individual" with no title, subText remains empty
-			// NewHeroBox will handle empty subtitle gracefully
 
-			// Header: Contact label (using standardized component)
-			header := lineutil.NewDetailPageLabel("📞", "聯絡資訊")
-
-			// Hero: Name with colored background (using standardized component)
-			hero := lineutil.NewHeroBox(displayName, subText)
+			// Header: Colored header with name (Consistent with Course module)
+			header := lineutil.NewColoredHeader(lineutil.ColoredHeaderInfo{
+				Title: displayName,
+				Color: bodyLabel.Color,
+			})
 
 			// Body: Details using BodyContentBuilder for cleaner code
 			body := lineutil.NewBodyContentBuilder()
+
+			// Add type label as first row
+			body.AddComponent(lineutil.NewBodyLabel(bodyLabel).FlexBox)
+
+			// Add Title if available (previously in Hero subtitle) - no separator after label
+			if c.Title != "" && c.Type != "organization" {
+				titleRow := lineutil.NewInfoRow("🔖", "職稱", c.Title, lineutil.DefaultInfoRowStyle())
+				body.AddComponent(titleRow.FlexBox)
+			}
 
 			// Organization / Superior - first row (no separator)
 			if c.Type == "organization" && c.Superior != "" {
@@ -757,7 +773,7 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 			// Assemble Bubble
 			bubble := lineutil.NewFlexBubble(
 				header,
-				hero.FlexBox,
+				nil,          // Hero (replaced by Colored Header)
 				body.Build(), // Body
 				nil,          // Footer (handled below)
 			)
