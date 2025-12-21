@@ -277,7 +277,7 @@ func (p *Processor) buildWelcomeFlexMessage(nluEnabled bool, sender *messaging_a
 	footer := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexButton(lineutil.NewMessageAction("📖 查看使用說明", "使用說明")).
 			WithStyle("primary").
-			WithColor(lineutil.ColorButtonPrimary).
+			WithColor(lineutil.ColorButtonInternal).
 			WithHeight("sm").FlexButton,
 		lineutil.NewFlexButton(lineutil.NewURIAction("❓ 回報 Bug", "https://github.com/garyellow/ntpu-linebot-go/issues")).
 			WithStyle("secondary").
@@ -545,7 +545,7 @@ func (p *Processor) getHelpMessage() []messaging_api.MessageInterface {
 	footer := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexButton(lineutil.NewMessageAction("📖 查看完整說明", "使用說明")).
 			WithStyle("primary").
-			WithColor(lineutil.ColorButtonPrimary).
+			WithColor(lineutil.ColorButtonInternal).
 			WithHeight("sm").FlexButton,
 	).WithSpacing("none")
 
@@ -704,7 +704,7 @@ func (p *Processor) buildKeywordModeFlexMessage(nluEnabled bool, sender *messagi
 			WithColor(lineutil.ColorHeroText).
 			WithMargin("sm").FlexText,
 	).
-		WithBackgroundColor(lineutil.ColorButtonPrimary).
+		WithBackgroundColor(lineutil.ColorSuccess).
 		WithPaddingAll("xl").
 		WithPaddingBottom("lg")
 

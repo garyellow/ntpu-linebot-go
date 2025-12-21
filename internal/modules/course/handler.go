@@ -1188,12 +1188,13 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 		}
 
 		// Footer with "View Detail" button - displayText shows course title
+		// Button color syncs with header for visual harmony
 		displayText := fmt.Sprintf("查詢「%s」課程資訊", lineutil.TruncateRunes(course.Title, 30))
 		// Use course: prefix for proper postback routing
 		footer := lineutil.NewFlexBox("vertical",
 			lineutil.NewFlexButton(
 				lineutil.NewPostbackActionWithDisplayText("📝 查看詳細", displayText, "course:"+course.UID),
-			).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm").FlexButton,
+			).WithStyle("primary").WithColor(labelInfo.Color).WithHeight("sm").FlexButton,
 		).WithSpacing("sm")
 
 		bubble := lineutil.NewFlexBubble(
@@ -1520,11 +1521,12 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 	}
 
 	// Footer with "View Detail" button
+	// Button color syncs with header for visual harmony
 	displayText := fmt.Sprintf("查詢「%s」課程資訊", lineutil.TruncateRunes(course.Title, 30))
 	footer := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText("📝 查看詳細", displayText, "course:"+course.UID),
-		).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm").FlexButton,
+		).WithStyle("primary").WithColor(labelInfo.Color).WithHeight("sm").FlexButton,
 	).WithSpacing("sm")
 
 	bubble := lineutil.NewFlexBubble(
