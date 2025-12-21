@@ -199,8 +199,13 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
   - Body 第一列使用 `NewBodyLabel()` 顯示類型標籤 (統一 LINE 綠色文字)
   - 類型標籤: `🏢 組織單位`, `👤 個人聯絡`（Header 背景色分別為藍/綠）
   - **視覺效果**: 與課程輪播一致，Header 背景色顯示類型，Body Label 強調標記
-- 詳情頁 (所有模組): Header + Hero + Body (BodyContentBuilder) + Footer
-  - 使用 `NewDetailPageLabel()` + `NewHeroBox()` 的標準組合
+- 詳情頁 (所有模組): Colored Header (名稱) → Body (標籤 + 資訊) → Footer
+  - **統一設計**: 所有模組 (Course/Contact/ID) 都使用 `NewColoredHeader()` 呈現主要資訊
+  - Course: 琥珀色 Header (課程名稱), Body 第一列顯示「📚 課程資訊」標籤
+  - Contact: 藍色/綠色 Header (聯絡人姓名), Body 第一列顯示「📞 聯絡資訊」標籤
+  - ID: 綠色 Header (學生姓名), Body 第一列顯示「🎓 國立臺北大學」標籤
+  - **移除 Hero**: 不再使用 `NewDetailPageLabel()` + `NewHeroBox()` 的舊設計，改為統一的 Colored Header 模式
+  - **節省空間**: 資訊更緊湊，視覺一致性更好
 
 **Postback format** (300 byte limit): Use module prefix `"module:data"` for routing (e.g., `"course:1132U2236"`). Reply token is single-use - batch all messages into one array.
 

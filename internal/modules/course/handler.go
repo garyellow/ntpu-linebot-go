@@ -938,16 +938,23 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 }
 
 // formatCourseResponse formats a single course as a LINE message
+// Uses colored header + body label for consistent detail page layout (no hero block)
 func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.MessageInterface {
-	// Header: Course label (using standardized component)
-	header := lineutil.NewDetailPageLabel("📚", "課程資訊")
-
-	// Hero: Course title with course code in format `{課程名稱} ({課程代碼})`
-	heroTitle := lineutil.FormatCourseTitleWithUID(course.Title, course.UID)
-	hero := lineutil.NewHeroBox(heroTitle, "")
+	// Header: Course title with colored background (detail page style)
+	header := lineutil.NewColoredHeader(lineutil.ColoredHeaderInfo{
+		Title: lineutil.FormatCourseTitleWithUID(course.Title, course.UID),
+		Color: lineutil.ColorHeaderCourse,
+	})
 
 	// Build body contents using BodyContentBuilder for cleaner code
 	body := lineutil.NewBodyContentBuilder()
+
+	// Body label for detail page context (consistent with design guide)
+	body.AddComponent(lineutil.NewBodyLabel(lineutil.BodyLabelInfo{
+		Emoji: "📚",
+		Label: "課程資訊",
+		Color: lineutil.ColorHeaderCourse,
+	}).FlexBox)
 
 	// 學期 info - first row
 	semesterText := lineutil.FormatSemester(course.Year, course.Term)
@@ -1059,7 +1066,7 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 
 	bubble := lineutil.NewFlexBubble(
 		header,
-		hero.FlexBox,
+		nil, // No hero - colored header already contains title
 		body.Build(),
 		footer,
 	)
@@ -1556,7 +1563,12 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 
 // getRelevanceLabel returns a user-friendly relevance label info based on relative BM25 score.
 //
-// Returns: BodyLabelInfo with emoji/label and header background color (ColorHeader*).
+// Returns: BodyLabelInfo with:
+//   - Emoji: Visual relevance indicator ("🎯" best, "✨" high, "📋" medium)
+//   - Label: User-friendly text ("最佳匹配", "高度相關", "部分相關")
+//   - Color: Header background color (ColorHeaderBest/High/Medium) - for NewColoredHeader() only
+//
+// Note: NewBodyLabel() ignores Color and always uses LINE green for consistent visual emphasis.
 //
 // Design rationale:
 //   - Uses relative score (score / maxScore) from BM25 search

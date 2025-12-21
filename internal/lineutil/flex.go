@@ -402,10 +402,17 @@ func NewColoredHeader(info ColoredHeaderInfo) *FlexBox {
 // BodyLabelInfo contains display information for a body label.
 // Used for carousel cards to show semester/relevance indicator in body first row.
 // Body labels always use LINE green (ColorPrimary) for consistent visual emphasis.
+//
+// Design Pattern:
+//   - Body labels (via NewBodyLabel): Always render with LINE green text
+//   - Header backgrounds (via NewColoredHeader): Use the Color field
+//
+// This struct serves as a unified data container for both components,
+// ensuring they work together cohesively (same label, coordinated colors).
 type BodyLabelInfo struct {
 	Emoji string // Label emoji (e.g., "🆕", "🎯", "🏢")
 	Label string // Label text (e.g., "最新學期", "最佳匹配")
-	Color string // Header background color reference (from ColorHeader* constants). NewBodyLabel() does not use it.
+	Color string // Header background color (ColorHeader*). For NewColoredHeader() use ONLY. NewBodyLabel() always uses ColorPrimary.
 }
 
 // NewBodyLabel creates a label for carousel card body first row.

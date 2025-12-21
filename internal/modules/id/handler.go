@@ -728,18 +728,25 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 }
 
 // formatStudentResponse formats a student record as a LINE message
-// Uses Flex Message for modern, card-based UI
+// Uses Flex Message for modern, card-based UI with colored header (consistent with Course/Contact modules)
 func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_api.MessageInterface {
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
-	// Header: Student label (using standardized component)
-	header := lineutil.NewDetailPageLabel("🎓", "學生資訊")
-
-	// Hero: Name with NTPU green background (using standardized component)
-	hero := lineutil.NewHeroBox(student.Name, "國立臺北大學")
+	// Header: Student name with colored background (using standardized colored header component)
+	header := lineutil.NewColoredHeader(lineutil.ColoredHeaderInfo{
+		Title: student.Name,
+		Color: lineutil.ColorHeaderStudent, // Green color for student module
+	})
 
 	// Body: Student details using BodyContentBuilder for cleaner code
 	body := lineutil.NewBodyContentBuilder()
+
+	// First row: NTPU label (consistent with course/contact modules)
+	body.AddComponent(lineutil.NewBodyLabel(lineutil.BodyLabelInfo{
+		Emoji: "🎓",
+		Label: "國立臺北大學",
+	}).FlexBox)
+
 	body.AddInfoRow("🆔", "學號", student.ID, lineutil.BoldInfoRowStyle())
 	body.AddInfoRow("🏫", "系所", student.Department, lineutil.BoldInfoRowStyle())
 	body.AddInfoRow("📅", "入學學年", fmt.Sprintf("%d 學年度", student.Year), lineutil.BoldInfoRowStyle())
@@ -766,7 +773,7 @@ func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_ap
 
 	bubble := lineutil.NewFlexBubble(
 		header,
-		hero.FlexBox,
+		nil, // No hero - title is in colored header
 		body.Build(),
 		footer,
 	)
