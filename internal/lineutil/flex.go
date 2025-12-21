@@ -289,51 +289,6 @@ func TruncateRunes(text string, maxRunes int) string {
 	return string(runes[:maxRunes-3]) + "..."
 }
 
-// NewHeroBox creates a standardized Hero box with LINE green background
-// Provides consistent styling across all modules:
-// - Background: ColorHeroBg (LINE Green #06C755)
-// - Padding: 24px all, 20px bottom (4-point grid aligned, visual balance)
-// - Title: Bold, XL size, white color, full wrap for complete display
-// - Subtitle: XS size, white color, md margin top (omitted if empty)
-func NewHeroBox(title, subtitle string) *FlexBox {
-	contents := []messaging_api.FlexComponentInterface{
-		NewFlexText(title).WithWeight("bold").WithSize("xl").WithColor(ColorHeroText).WithWrap(true).WithLineSpacing(LineSpacingLarge).FlexText,
-	}
-	// Only add subtitle if not empty (LINE API rejects empty text)
-	if subtitle != "" {
-		contents = append(contents, NewFlexText(subtitle).WithSize("xs").WithColor(ColorHeroText).WithMargin("md").WithWrap(true).FlexText)
-	}
-	box := NewFlexBox("vertical", contents...)
-	box.BackgroundColor = ColorHeroBg
-	box.PaddingAll = SpacingXXL
-	box.PaddingBottom = SpacingXL
-	return box
-}
-
-// NewDetailPageLabel creates a consistent page label for detail page headers.
-// Used only for detail pages (student/course/contact) to show the page type.
-//
-// Format: [emoji] [label] with LINE green color
-// Layout:
-//
-//	┌─────────────────┐
-//	│ 🎓 学生信息     │  <- Detail page label
-//	└─────────────────┘
-//
-// Parameters:
-//   - emoji: Leading icon (e.g., "🎓", "📚", "📞")
-//   - label: Category label (e.g., "學生資訊", "課程資訊", "聯絡資訊")
-//
-// Returns: FlexBox suitable for Flex Bubble header section
-func NewDetailPageLabel(emoji, label string) *FlexBox {
-	return NewFlexBox("vertical",
-		NewFlexBox("baseline",
-			NewFlexText(emoji).WithSize("lg").FlexText,
-			NewFlexText(label).WithWeight("bold").WithColor(ColorPrimary).WithSize("sm").WithMargin("sm").FlexText,
-		).FlexBox,
-	)
-}
-
 // NewEmergencyHeader creates a standardized header for emergency contacts.
 // Uses ColorDanger (Red) for emphasis.
 //

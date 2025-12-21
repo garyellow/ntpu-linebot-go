@@ -203,56 +203,6 @@ func TestFlexBoxChaining(t *testing.T) {
 	}
 }
 
-// TestNewHeroBox tests standardized hero box creation
-func TestNewHeroBox(t *testing.T) {
-	t.Run("with subtitle", func(t *testing.T) {
-		hero := NewHeroBox("測試標題", "副標題")
-
-		// Check background color (should use ColorHeroBg = ColorLineGreen = #06C755)
-		if hero.BackgroundColor != ColorHeroBg {
-			t.Errorf("Expected backgroundColor '%s', got %v", ColorHeroBg, hero.BackgroundColor)
-		}
-		// Check padding (4-point grid: 24px all, 20px bottom)
-		if hero.PaddingAll != SpacingXXL {
-			t.Errorf("Expected paddingAll '%s', got %v", SpacingXXL, hero.PaddingAll)
-		}
-		if hero.PaddingBottom != SpacingXL {
-			t.Errorf("Expected paddingBottom '%s', got %v", SpacingXL, hero.PaddingBottom)
-		}
-		// Check contents
-		if len(hero.Contents) != 2 {
-			t.Errorf("Expected 2 contents (title + subtitle), got %d", len(hero.Contents))
-		}
-	})
-
-	t.Run("empty subtitle omitted", func(t *testing.T) {
-		hero := NewHeroBox("測試標題", "")
-
-		// Check contents - should only have title
-		if len(hero.Contents) != 1 {
-			t.Errorf("Expected 1 content (title only), got %d", len(hero.Contents))
-		}
-		// Check background color still applied
-		if hero.BackgroundColor != ColorHeroBg {
-			t.Errorf("Expected backgroundColor '%s', got %v", ColorHeroBg, hero.BackgroundColor)
-		}
-	})
-}
-
-// TestNewDetailPageLabel tests detail page label creation
-func TestNewDetailPageLabel(t *testing.T) {
-	label := NewDetailPageLabel("📚", "測試標籤")
-
-	// Check layout
-	if label.Layout != "vertical" {
-		t.Errorf("Expected layout 'vertical', got %v", label.Layout)
-	}
-	// Check contents
-	if len(label.Contents) != 1 {
-		t.Errorf("Expected 1 content (baseline box), got %d", len(label.Contents))
-	}
-}
-
 // TestNewEmergencyHeader tests emergency header creation
 func TestNewEmergencyHeader(t *testing.T) {
 	header := NewEmergencyHeader("🚨", "緊急聯絡")
