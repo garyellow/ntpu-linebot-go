@@ -257,12 +257,22 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 		).FlexBox
 	}
 
-	// Header - using standardized component (with emergency red color variant)
-	header := lineutil.NewEmergencyHeader("🚨", "緊急聯絡電話")
+	// Header - using standardized ColoredHeader for consistency with other modules
+	header := lineutil.NewColoredHeader(lineutil.ColoredHeaderInfo{
+		Title: "🚨 緊急聯絡電話",
+		Color: lineutil.ColorHeaderEmergency,
+	})
+
+	// Body Label - consistent with other modules (course, contact, id)
+	bodyLabel := lineutil.NewBodyLabel(lineutil.BodyLabelInfo{
+		Emoji: "☎️",
+		Label: "校園緊急聯絡",
+		Color: lineutil.ColorHeaderEmergency,
+	})
 
 	// Sanxia Campus Box
 	sanxiaBox := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexText("📍 三峽校區").WithWeight("bold").WithSize("md").WithColor(lineutil.ColorPrimary).WithMargin("lg").FlexText,
+		lineutil.NewFlexText("📍 三峽校區").WithWeight("bold").WithSize("md").WithColor(lineutil.ColorText).WithMargin("lg").FlexText,
 		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 		createRow("📞", "總機", sanxiaNormalPhone, ""),
 		createRow("🏢", "24H緊急行政電話", sanxia24HPhone, ""),
@@ -274,7 +284,7 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 
 	// Taipei Campus Box
 	taipeiBox := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexText("📍 臺北校區").WithWeight("bold").WithSize("md").WithColor(lineutil.ColorPrimary).WithMargin("lg").FlexText,
+		lineutil.NewFlexText("📍 臺北校區").WithWeight("bold").WithSize("md").WithColor(lineutil.ColorText).WithMargin("lg").FlexText,
 		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 		createRow("📞", "總機", taipeiNormalPhone, ""),
 		createRow("🚨", "24H急難救助專線", taipeiEmergencyPhone, lineutil.ColorDanger),
@@ -302,6 +312,7 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 		header,
 		nil,
 		lineutil.NewFlexBox("vertical",
+			bodyLabel.FlexBox, // Body label as first row
 			sanxiaBox,
 			taipeiBox,
 			externalBox,

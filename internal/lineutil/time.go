@@ -62,7 +62,7 @@ func FormatCacheTime(cachedAt int64) string {
 }
 
 // NewCacheTimeHint creates a Flex Text component for displaying cache time in Flex Messages.
-// Style: xxs size, gray color (#AAAAAA), right-aligned, with lg top margin.
+// Style: xxs size, gray color (ColorGray400), right-aligned, with lg top margin.
 // Designed to be unobtrusive while providing useful information.
 //
 // Returns nil if cachedAt is 0 (no cache time available).

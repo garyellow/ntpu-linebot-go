@@ -203,20 +203,6 @@ func TestFlexBoxChaining(t *testing.T) {
 	}
 }
 
-// TestNewEmergencyHeader tests emergency header creation
-func TestNewEmergencyHeader(t *testing.T) {
-	header := NewEmergencyHeader("🚨", "緊急聯絡")
-
-	// Check layout
-	if header.Layout != "vertical" {
-		t.Errorf("Expected layout 'vertical', got %v", header.Layout)
-	}
-	// Check contents
-	if len(header.Contents) != 1 {
-		t.Errorf("Expected 1 content (baseline box), got %d", len(header.Contents))
-	}
-}
-
 // TestNewColoredHeader tests colored header creation for carousel cards
 func TestNewColoredHeader(t *testing.T) {
 	tests := []struct {
@@ -225,12 +211,12 @@ func TestNewColoredHeader(t *testing.T) {
 		wantTextColor string
 	}{
 		{
-			name: "白色背景標題",
+			name: "最新學期 (LINE 綠色背景)",
 			info: ColoredHeaderInfo{
 				Title: "微積分 (1131U0001)",
 				Color: ColorHeaderRecent,
 			},
-			wantTextColor: ColorText, // 白色背景用深色文字
+			wantTextColor: ColorHeroText, // LINE 綠色背景用白色文字
 		},
 		{
 			name: "藍色背景標題",
@@ -241,12 +227,12 @@ func TestNewColoredHeader(t *testing.T) {
 			wantTextColor: ColorHeroText, // 彩色背景用白色文字
 		},
 		{
-			name: "最佳匹配 (白色背景)",
+			name: "最佳匹配 (LINE 綠色背景)",
 			info: ColoredHeaderInfo{
 				Title: "資料結構 (1131U0003)",
 				Color: ColorHeaderBest,
 			},
-			wantTextColor: ColorText, // 白色背景用深色文字
+			wantTextColor: ColorHeroText, // LINE 綠色背景用白色文字
 		},
 		{
 			name: "高度相關 (紫色背景)",
@@ -277,7 +263,7 @@ func TestNewColoredHeader(t *testing.T) {
 				t.Errorf("Expected padding '%s', got '%s'", SpacingL, header.PaddingAll)
 			}
 
-			// Check text color (contrast rule: white bg -> dark text, colored bg -> white text)
+			// Check text color (all headers use white text on colored backgrounds)
 			if len(header.Contents) != 1 {
 				t.Fatalf("Expected 1 content (title text), got %d", len(header.Contents))
 			}
@@ -306,7 +292,7 @@ func TestNewBodyLabel(t *testing.T) {
 				Label: "最新學期",
 				Color: ColorHeaderRecent,
 			},
-			wantTextColor: ColorPrimary, // All body labels now use PRIMARY green
+			wantTextColor: ColorHeaderRecent, // Body label uses same color as header
 		},
 		{
 			name: "最佳匹配標籤",
@@ -315,7 +301,7 @@ func TestNewBodyLabel(t *testing.T) {
 				Label: "最佳匹配",
 				Color: ColorHeaderBest,
 			},
-			wantTextColor: ColorPrimary, // All body labels now use PRIMARY green
+			wantTextColor: ColorHeaderBest, // Body label uses same color as header
 		},
 		{
 			name: "高度相關標籤",
@@ -324,7 +310,7 @@ func TestNewBodyLabel(t *testing.T) {
 				Label: "高度相關",
 				Color: ColorHeaderHigh,
 			},
-			wantTextColor: ColorPrimary, // All body labels now use PRIMARY green
+			wantTextColor: ColorHeaderHigh, // Body label uses same color as header
 		},
 		{
 			name: "部分相關標籤",
@@ -333,7 +319,7 @@ func TestNewBodyLabel(t *testing.T) {
 				Label: "部分相關",
 				Color: ColorHeaderMedium,
 			},
-			wantTextColor: ColorPrimary, // All body labels now use PRIMARY green
+			wantTextColor: ColorHeaderMedium, // Body label uses same color as header
 		},
 	}
 
@@ -487,8 +473,8 @@ func TestInfoRowStyles(t *testing.T) {
 		if style.ValueColor != ColorText {
 			t.Errorf("Expected ValueColor '%s', got %s", ColorText, style.ValueColor)
 		}
-		if !style.Wrap {
-			t.Error("Expected Wrap to be true")
+		if style.Wrap {
+			t.Error("Expected Wrap to be false for carousel cards")
 		}
 	})
 
@@ -505,7 +491,7 @@ func TestInfoRowStyles(t *testing.T) {
 			t.Errorf("Expected ValueColor '%s', got %s", ColorText, style.ValueColor)
 		}
 		if style.Wrap {
-			t.Error("Expected Wrap to be false")
+			t.Error("Expected Wrap to be false for carousel cards")
 		}
 	})
 }
