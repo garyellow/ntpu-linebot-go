@@ -32,11 +32,22 @@ func getSemestersToSearch() ([]int, []int) {
 	return getRecentSemestersForDate(time.Now())
 }
 
-// getExtendedSemesters returns 4 semesters for extended search.
-// Use this when user explicitly wants to see more historical courses.
+// getExtendedSemesters returns 2 additional semesters (3rd and 4th) for extended search.
+// This excludes the first 2 semesters since those are already shown in regular search.
+// Use this when user explicitly wants to see more historical courses beyond recent ones.
 // Note: For warmup, use SemesterDetector.DetectWarmupSemesters() for intelligent detection.
 func getExtendedSemesters() ([]int, []int) {
-	return getSemestersForDate(time.Now())
+	years, terms := getSemestersForDate(time.Now())
+	// Skip first 2 semesters (already in regular search), return 3rd and 4th
+	if len(years) >= 4 {
+		return years[2:4], terms[2:4]
+	}
+	// Fallback: if less than 4 semesters available, return what's beyond the first 2
+	if len(years) > 2 {
+		return years[2:], terms[2:]
+	}
+	// Edge case: no additional semesters available
+	return []int{}, []int{}
 }
 
 // getRecentSemestersForDate returns 2 recent semesters based on a specific date.

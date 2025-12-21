@@ -303,8 +303,8 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 
 	// Footer: Quick Action Buttons
 	footer := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexButton(lineutil.NewURIAction("🚨 撥打三峽校安", "tel:"+sanxiaEmergencyPhone)).WithStyle("primary").WithColor(lineutil.ColorDanger).WithHeight("sm").FlexButton,
-		lineutil.NewFlexButton(lineutil.NewURIAction("🚨 撥打臺北校安", "tel:"+taipeiEmergencyPhone)).WithStyle("primary").WithColor(lineutil.ColorDanger).WithHeight("sm").FlexButton,
+		lineutil.NewFlexButton(lineutil.NewURIAction("🚨 撥打三峽校安", "tel:"+sanxiaEmergencyPhone)).WithStyle("primary").WithColor(lineutil.ColorButtonDanger).WithHeight("sm").FlexButton,
+		lineutil.NewFlexButton(lineutil.NewURIAction("🚨 撥打臺北校安", "tel:"+taipeiEmergencyPhone)).WithStyle("primary").WithColor(lineutil.ColorButtonDanger).WithHeight("sm").FlexButton,
 		lineutil.NewFlexButton(lineutil.NewURIAction("ℹ️ 查看更多", "https://new.ntpu.edu.tw/safety")).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm").FlexButton,
 	).WithSpacing("sm")
 
@@ -744,14 +744,14 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 					telURI = lineutil.BuildTelURI(c.Phone, "")
 				}
 				row1Buttons = append(row1Buttons,
-					lineutil.NewFlexButton(lineutil.NewURIAction("📞 撥打電話", telURI)).WithStyle("primary").WithColor(lineutil.ColorButtonPrimary).WithHeight("sm"))
+					lineutil.NewFlexButton(lineutil.NewURIAction("📞 撥打電話", telURI)).WithStyle("primary").WithColor(lineutil.ColorButtonAction).WithHeight("sm"))
 				row1Buttons = append(row1Buttons,
 					lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製號碼", c.Phone)).WithStyle("secondary").WithHeight("sm"))
 			} else if c.Extension != "" {
 				// Only short extension (< 5 digits), can still dial via main + extension
 				telURI := lineutil.BuildTelURI(sanxiaNormalPhone, c.Extension)
 				row1Buttons = append(row1Buttons,
-					lineutil.NewFlexButton(lineutil.NewURIAction("📞 撥打電話", telURI)).WithStyle("primary").WithColor(lineutil.ColorButtonPrimary).WithHeight("sm"))
+					lineutil.NewFlexButton(lineutil.NewURIAction("📞 撥打電話", telURI)).WithStyle("primary").WithColor(lineutil.ColorButtonAction).WithHeight("sm"))
 				row1Buttons = append(row1Buttons,
 					lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製分機", c.Extension)).WithStyle("secondary").WithHeight("sm"))
 			}
@@ -759,7 +759,7 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 			// Row 2: Email actions
 			if c.Email != "" {
 				row2Buttons = append(row2Buttons,
-					lineutil.NewFlexButton(lineutil.NewURIAction("✉️ 寄送郵件", "mailto:"+c.Email)).WithStyle("primary").WithColor(lineutil.ColorButtonPrimary).WithHeight("sm"))
+					lineutil.NewFlexButton(lineutil.NewURIAction("✉️ 寄送郵件", "mailto:"+c.Email)).WithStyle("primary").WithColor(lineutil.ColorButtonAction).WithHeight("sm"))
 				row2Buttons = append(row2Buttons,
 					lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製信箱", c.Email)).WithStyle("secondary").WithHeight("sm"))
 			}
@@ -770,15 +770,16 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 					lineutil.NewFlexButton(lineutil.NewURIAction("🌐 開啟網站", c.Website)).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
 			}
 
-			// Row 4: View Members button for organizations (separate row for better UX) (內部指令使用紫色)
+			// Row 4: View Members button for organizations (separate row for better UX)
 			// Allows querying all members belonging to this organization
+			// Button color syncs with header for visual harmony
 			var row4Buttons []*lineutil.FlexButton
 			if c.Type == "organization" {
 				displayText := fmt.Sprintf("查詢「%s」的成員", lineutil.TruncateRunes(c.Name, 20))
 				row4Buttons = append(row4Buttons,
 					lineutil.NewFlexButton(
 						lineutil.NewPostbackActionWithDisplayText("👥 查看成員", displayText, fmt.Sprintf("contact:members%s%s", bot.PostbackSplitChar, c.Name)),
-					).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm"))
+					).WithStyle("primary").WithColor(bodyLabel.Color).WithHeight("sm"))
 			}
 
 			// Assemble Bubble
