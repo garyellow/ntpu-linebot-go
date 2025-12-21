@@ -65,7 +65,7 @@ const (
 	ColorHeaderHistorical = "#64748B" // 📦 過去學期 - dim slate (歷史、沉澱) - 4.6:1
 
 	// Relevance Headers (相關性標示 - 智慧搜尋)
-	// 綠色/青綠色漸層系統：深綠(優)→青綠(良)→翠綠(可)，直覺表達相關性強度
+	// 綠色/青綠色漸層系統：深青綠(優)→青綠(良)→翠綠(可)，直覺表達相關性強度
 	// Sequential palette 表達順序程度，與學期標示的藍色系明確區分
 	// 所有顏色符合 WCAG AA 標準 (≥4.5:1 with white text)
 	ColorHeaderBest   = "#059669" // 🎯 最佳匹配 - deep teal (最優、深刻) - 4.5:1
