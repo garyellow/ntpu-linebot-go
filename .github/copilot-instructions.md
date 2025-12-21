@@ -171,12 +171,16 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
   - `ColorButtonInternal` `#7C3AED` (深紫) - 內部指令/Postback (教師課程、查看成員、查詢學號) - 4.6:1
   - `ColorSuccess` `#059669` (深翠綠) - 成功狀態 (操作完成提示、確認訊息) - 4.5:1 WCAG AA
   - `ColorButtonSecondary` `#6B7280` (灰色) - 次要操作 (複製號碼、複製信箱) - 5.9:1
-- **Header/Label 顏色** (Colored Header 和 Body Label - 所有顏色符合 WCAG AA):
+- **Header 顏色** (Colored Header 背景色 - 所有顏色符合 WCAG AA):
   - 學期標示: `ColorHeaderRecent` 白色 (最新學期), `ColorHeaderPrevious` 藍色 (上個學期), `ColorHeaderHistorical` 深灰 (過去學期)
   - 相關性標示: `ColorHeaderBest` 白色 (最佳匹配), `ColorHeaderHigh` 紫色 (高度相關), `ColorHeaderMedium` 琥珀色 (部分相關)
   - 聯絡類型: `ColorHeaderOrg` 藍色 (組織單位), `ColorHeaderIndividual` 綠色 (個人聯絡)
   - 詳情頁模組: `ColorHeaderCourse` 琥珀色, `ColorHeaderContact` 藍色, `ColorHeaderStudent` 綠色
-  - **文字顏色**: 白色背景用深色文字 (ColorText)，彩色背景用白色文字 (ColorHeroText)
+  - **Header 文字顏色**: 白色背景用深色文字 (ColorText)，彩色背景用白色文字 (ColorHeroText)
+- **Body Label 設計原則**:
+  - **統一使用 LINE 綠色** (`ColorPrimary`): 所有輪播卡片的 body label 都使用 LINE 綠色，確保視覺一致性和品牌辨識度
+  - **視覺層次**: Header 背景色用於區分類別 (學期/相關性/類型)，Body Label 用綠色強調重點標記
+  - **簡化邏輯**: 移除複雜的顏色繼承，body label 永遠是綠色，更易於維護和理解
 - **間距**: Hero padding `24px`/`16px` (4-point grid), Body/Footer spacing `sm`, 按鈕高度 `sm`
 - **文字**: 優先使用 `wrap: true` + `lineSpacing` 完整顯示資訊；僅 carousel 使用 `WithMaxLines()` 控制高度
 - **截斷**: `TruncateRunes()` 僅用於 LINE API 限制 (altText 400 字, displayText 長度限制)
@@ -185,10 +189,11 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
 
 **輪播卡片設計模式**:
 - 課程輪播 (Course): Colored Header (標題) → Body (標籤 + 資訊) → Footer
-  - Header 使用 `NewColoredHeader()` 創建帶背景色的標題
-  - Body 第一列使用 `NewBodyLabel()` 顯示學期/相關性標籤
-  - 學期標籤: `🆕 最新學期`, `📅 上個學期`, `📦 過去學期`
-  - 相關性標籤: `🎯 最佳匹配`, `✨ 高度相關`, `📋 部分相關` (智慧搜尋)
+  - Header 使用 `NewColoredHeader()` 創建帶背景色的標題 (白色/藍色/灰色等)
+  - Body 第一列使用 `NewBodyLabel()` 顯示學期/相關性標籤 (統一 LINE 綠色文字)
+  - 學期標籤: `🆕 最新學期` (綠色), `📅 上個學期` (綠色), `📦 過去學期` (綠色)
+  - 相關性標籤: `🎯 最佳匹配` (綠色), `✨ 高度相關` (綠色), `📋 部分相關` (綠色) - 智慧搜尋
+  - **視覺效果**: Header 背景色顯示類別，Body Label 綠色文字強調標記，層次分明
 - 聯絡人輪播 (Contact): Header (📞 聯絡資訊) → Hero (姓名) → Body → Footer
   - 使用 `NewDetailPageLabel()` + `NewHeroBox()`，展示完整聯絡資訊
 - 詳情頁 (所有模組): Header + Hero + Body (BodyContentBuilder) + Footer

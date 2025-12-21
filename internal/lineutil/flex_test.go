@@ -374,7 +374,7 @@ func TestNewBodyLabel(t *testing.T) {
 				Label: "最新學期",
 				Color: ColorHeaderRecent,
 			},
-			wantTextColor: ColorPrimary,
+			wantTextColor: ColorPrimary, // All body labels now use PRIMARY green
 		},
 		{
 			name: "最佳匹配標籤",
@@ -383,7 +383,7 @@ func TestNewBodyLabel(t *testing.T) {
 				Label: "最佳匹配",
 				Color: ColorHeaderBest,
 			},
-			wantTextColor: ColorPrimary,
+			wantTextColor: ColorPrimary, // All body labels now use PRIMARY green
 		},
 		{
 			name: "高度相關標籤",
@@ -392,7 +392,7 @@ func TestNewBodyLabel(t *testing.T) {
 				Label: "高度相關",
 				Color: ColorHeaderHigh,
 			},
-			wantTextColor: ColorHeaderHigh,
+			wantTextColor: ColorPrimary, // All body labels now use PRIMARY green
 		},
 		{
 			name: "部分相關標籤",
@@ -401,7 +401,7 @@ func TestNewBodyLabel(t *testing.T) {
 				Label: "部分相關",
 				Color: ColorHeaderMedium,
 			},
-			wantTextColor: ColorHeaderMedium,
+			wantTextColor: ColorPrimary, // All body labels now use PRIMARY green
 		},
 	}
 

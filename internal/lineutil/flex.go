@@ -413,40 +413,39 @@ func NewColoredHeader(info ColoredHeaderInfo) *FlexBox {
 
 // BodyLabelInfo contains display information for a body label.
 // Used for carousel cards to show semester/relevance indicator in body first row.
+// Body labels always use LINE green (ColorPrimary) for consistent visual emphasis.
 type BodyLabelInfo struct {
 	Emoji string // Label emoji (e.g., "🆕", "🎯", "🏢")
 	Label string // Label text (e.g., "最新學期", "最佳匹配")
-	Color string // Label color reference (from ColorHeader* constants, used for text color)
+	Color string // Header background color reference (from ColorHeader* constants, used for header only)
 }
 
 // NewBodyLabel creates a label for carousel card body first row.
-// This shows semester/relevance indicator with bold colored text (no background).
+// This shows semester/relevance indicator with bold LINE green text (no background).
 //
 // Layout (within body):
 //
 //	┌──────────────────────────┐
-//	│ 🆕 最新學期              │  <- Body label (bold colored text)
+//	│ 🆕 最新學期              │  <- Body label (bold green text)
 //	│ 📅 開課學期：113-1       │
 //	│ ...                      │
 //	└──────────────────────────┘
 //
+// Design rationale:
+//   - Consistent visual emphasis: All body labels use LINE green for immediate recognition
+//   - Clear hierarchy: Header background colors distinguish categories, body labels highlight key info
+//   - Brand alignment: LINE green reinforces brand identity and draws attention to important markers
+//
 // Parameters:
-//   - info: BodyLabelInfo with emoji, label, and color reference
+//   - info: BodyLabelInfo with emoji and label text
 //
 // Returns: FlexBox suitable for body first row
 func NewBodyLabel(info BodyLabelInfo) *FlexBox {
-	// Determine text color for white body background
-	// White headers need visible emphasis color, colored headers use their color for text
-	textColor := info.Color
-	if info.Color == ColorHeaderRecent || info.Color == ColorHeaderBest {
-		// White header colors → use primary green for emphasis (visible on white body)
-		textColor = ColorPrimary
-	}
-
-	// Create simple bold text row (no background)
+	// Always use PRIMARY green for body labels - creates consistent visual emphasis
+	// across all carousel types (semester labels, relevance labels, contact type labels)
 	return NewFlexBox("horizontal",
 		NewFlexText(info.Emoji).WithSize("xs").FlexText,
-		NewFlexText(info.Label).WithWeight("bold").WithSize("xs").WithColor(textColor).WithMargin("xs").FlexText,
+		NewFlexText(info.Label).WithWeight("bold").WithSize("xs").WithColor(ColorPrimary).WithMargin("xs").FlexText,
 	).WithMargin("sm")
 }
 
