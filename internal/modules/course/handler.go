@@ -1550,6 +1550,10 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 //   - Simple 3-tier system: Clear differentiation without cognitive overload
 //   - Relative scoring: Comparable within the same query results
 //   - Color coordination: Same color used for header background and body label text
+//   - Sequential green/teal gradient: Deep teal (best) → Teal → Emerald (partial)
+//     All colors meet WCAG AA (≥4.5:1) for accessibility
+//     Aligns with universal "green = good/relevant" intuition
+//     Distinguishes clearly from semester labels (blue gradient system)
 //
 // Academic foundation (Arampatzis et al., 2009):
 //   - BM25 follows Normal-Exponential mixture distribution
@@ -1563,7 +1567,7 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 //   - Confidence < 0.6: "部分相關" (Partially Relevant) - Exponential tail
 func getRelevanceLabel(confidence float32) lineutil.BodyLabelInfo {
 	if confidence >= 0.8 {
-		// LINE green - highest priority and visibility
+		// Deep teal - strongest relevance, deep and distinct
 		return lineutil.BodyLabelInfo{
 			Emoji: "🎯",
 			Label: "最佳匹配",
@@ -1571,14 +1575,14 @@ func getRelevanceLabel(confidence float32) lineutil.BodyLabelInfo {
 		}
 	}
 	if confidence >= 0.6 {
-		// Purple - attention-grabbing for high relevance
+		// Teal - high relevance, stable and trustworthy
 		return lineutil.BodyLabelInfo{
 			Emoji: "✨",
 			Label: "高度相關",
 			Color: lineutil.ColorHeaderHigh,
 		}
 	}
-	// Amber - moderate visibility for partial relevance
+	// Emerald - moderate relevance, softer appearance
 	return lineutil.BodyLabelInfo{
 		Emoji: "📋",
 		Label: "部分相關",
