@@ -310,18 +310,6 @@ func NewHeroBox(title, subtitle string) *FlexBox {
 	return box
 }
 
-// NewCompactHeroBox creates a compact Hero box for carousel/list views
-// Uses smaller padding (16px, 4-point grid aligned) to fit more content
-// Max 3 lines for carousel to balance visibility
-func NewCompactHeroBox(title string) *FlexBox {
-	box := NewFlexBox("vertical",
-		NewFlexText(title).WithWeight("bold").WithSize("md").WithColor(ColorHeroText).WithWrap(true).WithMaxLines(3).WithLineSpacing(LineSpacingNormal).FlexText,
-	)
-	box.BackgroundColor = ColorHeroBg
-	box.PaddingAll = SpacingL
-	return box
-}
-
 // NewDetailPageLabel creates a consistent page label for detail page headers.
 // Used only for detail pages (student/course/contact) to show the page type.
 //

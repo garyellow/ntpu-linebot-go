@@ -239,24 +239,6 @@ func TestNewHeroBox(t *testing.T) {
 	})
 }
 
-// TestNewCompactHeroBox tests compact hero box for carousel
-func TestNewCompactHeroBox(t *testing.T) {
-	hero := NewCompactHeroBox("輪播標題")
-
-	// Check background color (should use ColorHeroBg = ColorLineGreen = #06C755)
-	if hero.BackgroundColor != ColorHeroBg {
-		t.Errorf("Expected backgroundColor '%s', got %v", ColorHeroBg, hero.BackgroundColor)
-	}
-	// Check compact padding (4-point grid: 16px)
-	if hero.PaddingAll != SpacingL {
-		t.Errorf("Expected paddingAll '%s', got %v", SpacingL, hero.PaddingAll)
-	}
-	// Check contents (only title)
-	if len(hero.Contents) != 1 {
-		t.Errorf("Expected 1 content (title only), got %d", len(hero.Contents))
-	}
-}
-
 // TestNewDetailPageLabel tests detail page label creation
 func TestNewDetailPageLabel(t *testing.T) {
 	label := NewDetailPageLabel("📚", "測試標籤")
