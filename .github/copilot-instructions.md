@@ -197,7 +197,7 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
 - 聯絡人輪播 (Contact): Colored Header (姓名) → Body (標籤 + 資訊) → Footer
   - Header 使用 `NewColoredHeader()` 創建帶背景色的標題 (藍色/綠色)
   - Body 第一列使用 `NewBodyLabel()` 顯示類型標籤 (統一 LINE 綠色文字)
-  - 類型標籤: `🏢 組織單位` (藍色背景), `👤 個人聯絡` (綠色背景)
+  - 類型標籤: `🏢 組織單位`, `👤 個人聯絡`（Header 背景色分別為藍/綠）
   - **視覺效果**: 與課程輪播一致，Header 背景色顯示類型，Body Label 強調標記
 - 詳情頁 (所有模組): Header + Hero + Body (BodyContentBuilder) + Footer
   - 使用 `NewDetailPageLabel()` + `NewHeroBox()` 的標準組合

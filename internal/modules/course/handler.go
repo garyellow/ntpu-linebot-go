@@ -1585,7 +1585,7 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 
 // getRelevanceLabel returns a user-friendly relevance label info based on relative BM25 score.
 //
-// Returns: BodyLabelInfo with emoji, label, and color
+// Returns: BodyLabelInfo with emoji/label and header background color (ColorHeader*).
 //
 // Design rationale:
 //   - Uses relative score (score / maxScore) from BM25 search

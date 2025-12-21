@@ -448,7 +448,7 @@ func FormatSemesterShort(year, term int) string {
 //   - dataSemesters: Unique semesters extracted from actual course data, sorted newest first.
 //     This should be derived from the search results, not calendar-based calculation.
 //
-// Returns: BodyLabelInfo with emoji, label, and color
+// Returns: BodyLabelInfo with emoji/label and header background color (ColorHeader*).
 func GetSemesterLabel(year, term int, dataSemesters []SemesterPair) BodyLabelInfo {
 	// Find the position of this semester in the data-derived list
 	for i, sem := range dataSemesters {

@@ -654,19 +654,16 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 			// Otherwise show "ChineseName EnglishName"
 			displayName := lineutil.FormatDisplayName(c.Name, c.NameEn)
 
-			// Determine header color and body label based on type
-			var headerColor string
+			// Determine header/body label based on type
 			var bodyLabel lineutil.BodyLabelInfo
 
 			if c.Type == "organization" {
-				headerColor = lineutil.ColorHeaderOrg
 				bodyLabel = lineutil.BodyLabelInfo{
 					Emoji: "🏢",
 					Label: "組織單位",
 					Color: lineutil.ColorHeaderOrg,
 				}
 			} else {
-				headerColor = lineutil.ColorHeaderIndividual
 				bodyLabel = lineutil.BodyLabelInfo{
 					Emoji: "👤",
 					Label: "個人聯絡",
@@ -677,7 +674,7 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 			// Header: Colored header with name (Consistent with Course module)
 			header := lineutil.NewColoredHeader(lineutil.ColoredHeaderInfo{
 				Title: displayName,
-				Color: headerColor,
+				Color: bodyLabel.Color,
 			})
 
 			// Body: Details using BodyContentBuilder for cleaner code

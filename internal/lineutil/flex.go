@@ -405,7 +405,7 @@ func NewColoredHeader(info ColoredHeaderInfo) *FlexBox {
 type BodyLabelInfo struct {
 	Emoji string // Label emoji (e.g., "🆕", "🎯", "🏢")
 	Label string // Label text (e.g., "最新學期", "最佳匹配")
-	Color string // Header background color reference (from ColorHeader* constants, used for header only)
+	Color string // Header background color reference (from ColorHeader* constants). NewBodyLabel() does not use it.
 }
 
 // NewBodyLabel creates a label for carousel card body first row.
@@ -425,7 +425,7 @@ type BodyLabelInfo struct {
 //   - Brand alignment: LINE green reinforces brand identity and draws attention to important markers
 //
 // Parameters:
-//   - info: BodyLabelInfo with emoji and label text
+//   - info: BodyLabelInfo with emoji and label text (Color is ignored; header should use it if needed)
 //
 // Returns: FlexBox suitable for body first row
 func NewBodyLabel(info BodyLabelInfo) *FlexBox {
