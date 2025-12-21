@@ -1172,44 +1172,31 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 			Color: labelInfo.Color,
 		})
 
-		// Build body contents - first row is semester label
-		contents := []messaging_api.FlexComponentInterface{
-			lineutil.NewBodyLabel(labelInfo).FlexBox,
-		}
+		// Build body contents using BodyContentBuilder for cleaner code
+		body := lineutil.NewBodyContentBuilder()
+
+		// First row is semester label
+		body.AddComponent(lineutil.NewBodyLabel(labelInfo).FlexBox)
 
 		// 學期資訊（完整格式）
 		semesterText := lineutil.FormatSemester(course.Year, course.Term)
-		contents = append(contents,
-			lineutil.NewFlexBox("horizontal",
-				lineutil.NewFlexText("📅 開課學期：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
-				lineutil.NewFlexText(semesterText).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).FlexText,
-			).WithMargin("sm").WithSpacing("sm").FlexBox,
-		)
+		body.AddInfoRow("📅", "開課學期", semesterText, lineutil.DefaultInfoRowStyle())
 
 		// 第二列：授課教師
 		if len(course.Teachers) > 0 {
 			// Display teachers with truncation if too many (max 5, then "等 N 人")
 			carouselTeachers := lineutil.FormatTeachers(course.Teachers, 5)
-			contents = append(contents,
-				lineutil.NewFlexBox("horizontal",
-					lineutil.NewFlexText("👨‍🏫 授課教師：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
-					lineutil.NewFlexText(carouselTeachers).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).WithWrap(true).FlexText,
-				).WithMargin("sm").WithSpacing("sm").FlexBox,
-			)
+			body.AddInfoRow("👨‍🏫", "授課教師", carouselTeachers, lineutil.DefaultInfoRowStyle())
 		}
+
 		// 第三列：上課時間 - 轉換節次為實際時間
 		if len(course.Times) > 0 {
 			// Format times with actual time ranges, then truncate if too many (max 4, then "等 N 節")
 			formattedTimes := lineutil.FormatCourseTimes(course.Times)
 			carouselTimes := lineutil.FormatTimes(formattedTimes, 4)
-			contents = append(contents,
-				lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
-				lineutil.NewFlexBox("horizontal",
-					lineutil.NewFlexText("⏰ 上課時間：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
-					lineutil.NewFlexText(carouselTimes).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).WithWrap(true).FlexText,
-				).WithMargin("sm").WithSpacing("sm").FlexBox,
-			)
+			body.AddInfoRow("⏰", "上課時間", carouselTimes, lineutil.DefaultInfoRowStyle())
 		}
+
 		// Footer with "View Detail" button - displayText shows course title
 		displayText := fmt.Sprintf("查詢「%s」課程資訊", lineutil.TruncateRunes(course.Title, 30))
 		// Use course: prefix for proper postback routing
@@ -1222,7 +1209,7 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 		bubble := lineutil.NewFlexBubble(
 			header,
 			nil, // No hero - title is in colored header
-			lineutil.NewFlexBox("vertical", contents...).WithSpacing("sm"),
+			body.Build(),
 			footer,
 		)
 		bubbles = append(bubbles, *bubble.FlexBubble)
@@ -1527,43 +1514,27 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 		Color: labelInfo.Color,
 	})
 
-	// Build body contents - first row is relevance label
-	contents := []messaging_api.FlexComponentInterface{
-		lineutil.NewBodyLabel(labelInfo).FlexBox,
-	}
+	// Build body contents using BodyContentBuilder
+	body := lineutil.NewBodyContentBuilder()
+
+	// First row is relevance label
+	body.AddComponent(lineutil.NewBodyLabel(labelInfo).FlexBox)
 
 	// 學期資訊（完整格式）
 	semesterText := lineutil.FormatSemester(course.Year, course.Term)
-	contents = append(contents,
-		lineutil.NewFlexBox("horizontal",
-			lineutil.NewFlexText("📅 開課學期：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
-			lineutil.NewFlexText(semesterText).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).FlexText,
-		).WithMargin("sm").WithSpacing("sm").FlexBox,
-	)
+	body.AddInfoRow("📅", "開課學期", semesterText, lineutil.DefaultInfoRowStyle())
 
 	// 授課教師
 	if len(course.Teachers) > 0 {
 		carouselTeachers := lineutil.FormatTeachers(course.Teachers, 5)
-		contents = append(contents,
-			lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
-			lineutil.NewFlexBox("horizontal",
-				lineutil.NewFlexText("👨‍🏫 授課教師：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
-				lineutil.NewFlexText(carouselTeachers).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).WithWrap(true).FlexText,
-			).WithMargin("sm").WithSpacing("sm").FlexBox,
-		)
+		body.AddInfoRow("👨‍🏫", "授課教師", carouselTeachers, lineutil.DefaultInfoRowStyle())
 	}
 
 	// 上課時間
 	if len(course.Times) > 0 {
 		formattedTimes := lineutil.FormatCourseTimes(course.Times)
 		carouselTimes := lineutil.FormatTimes(formattedTimes, 4)
-		contents = append(contents,
-			lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
-			lineutil.NewFlexBox("horizontal",
-				lineutil.NewFlexText("⏰ 上課時間：").WithSize("xs").WithColor(lineutil.ColorLabel).WithFlex(0).FlexText,
-				lineutil.NewFlexText(carouselTimes).WithColor(lineutil.ColorSubtext).WithSize("xs").WithFlex(1).WithWrap(true).FlexText,
-			).WithMargin("sm").WithSpacing("sm").FlexBox,
-		)
+		body.AddInfoRow("⏰", "上課時間", carouselTimes, lineutil.DefaultInfoRowStyle())
 	}
 
 	// Footer with "View Detail" button
@@ -1577,7 +1548,7 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 	bubble := lineutil.NewFlexBubble(
 		header,
 		nil, // No hero - title is in colored header
-		lineutil.NewFlexBox("vertical", contents...).WithSpacing("sm"),
+		body.Build(),
 		footer,
 	)
 	return bubble
