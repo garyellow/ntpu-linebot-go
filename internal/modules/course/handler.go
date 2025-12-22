@@ -29,15 +29,9 @@ import (
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
-// Handler handles course-related queries using a Pattern-Action Table architecture.
+// Handler handles course-related queries using Pattern-Action Table architecture.
 // Both CanHandle() and HandleMessage() share the same matchers list, which structurally
 // guarantees routing consistency and eliminates the possibility of divergence.
-//
-// Architecture benefits:
-//   - Impossible for CanHandle/HandleMessage to be inconsistent
-//   - Priority-ordered pattern matching (constants: PriorityUID through PriorityRegular)
-//   - Type-safe handler functions (PatternHandler signature)
-//   - Simple to extend (append to matchers list)
 //
 // Pattern priority (1=highest): UID → CourseNo → Historical → Smart → Extended → Regular
 type Handler struct {
@@ -50,9 +44,8 @@ type Handler struct {
 	queryExpander  genai.QueryExpander // Interface for multi-provider support
 	llmRateLimiter *ratelimit.LLMRateLimiter
 
-	// matchers is the core of the Pattern-Action Table architecture.
-	// It contains all pattern-handler pairs sorted by priority.
-	// Both CanHandle and HandleMessage iterate through this list.
+	// matchers contains all pattern-handler pairs sorted by priority.
+	// Shared by CanHandle and HandleMessage for consistent routing.
 	matchers []PatternMatcher
 }
 
@@ -61,40 +54,39 @@ func (h *Handler) Name() string {
 	return ModuleName
 }
 
-// Course handler constants.
 const (
-	ModuleName           = "course" // Module identifier for registration
+	ModuleName           = "course"
 	senderName           = "課程小幫手"
-	MaxCoursesPerSearch  = 40 // Maximum courses to return (40 courses = 4 carousels @ 10 bubbles each), leaving 1 slot for warning (LINE API max: 5 messages)
-	MaxTitleDisplayChars = 60 // Maximum characters for course title display before truncation
+	MaxCoursesPerSearch  = 40 // 4 carousels @ 10 bubbles, +1 slot for warning (LINE max: 5 messages)
+	MaxTitleDisplayChars = 60 // Truncation limit for course titles
 )
 
-// Pattern matching priorities (lower = higher priority).
+// Pattern priorities (lower = higher).
 const (
-	PriorityUID        = 1 // Full course UID
-	PriorityCourseNo   = 2 // Course number only
+	PriorityUID        = 1 // Full UID (e.g., 1131U0001)
+	PriorityCourseNo   = 2 // Course number (e.g., U0001)
 	PriorityHistorical = 3 // Historical (課程 110 微積分)
-	PrioritySmart      = 4 // Smart search (找課)
-	PriorityExtended   = 5 // Extended search (更多學期)
+	PrioritySmart      = 4 // Smart (找課)
+	PriorityExtended   = 5 // Extended (更多學期)
 	PriorityRegular    = 6 // Regular (課程/老師)
 )
 
 // PatternHandler processes a matched pattern and returns LINE messages.
 // Parameters: context, original text, regex match groups (matches[0] = full match).
-// Returns nil if unable to process.
+//
+// Contract: When invoked (pattern matched), MUST return at least one message.
+// Return help/error messages instead of nil to preserve CanHandle/HandleMessage consistency.
 type PatternHandler func(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface
 
-// PatternMatcher represents a pattern-action entry in the routing table.
-// Matchers are sorted by priority (lower = higher) during initialization.
+// PatternMatcher represents a pattern-action pair sorted by priority.
 type PatternMatcher struct {
-	pattern  *regexp.Regexp // Pattern to match
-	priority int            // Lower = higher priority
-	handler  PatternHandler // Handler function
-	name     string         // Name for logging
+	pattern  *regexp.Regexp
+	priority int
+	handler  PatternHandler
+	name     string // For logging
 }
 
-// Keyword definitions for pattern matching (used with bot.BuildKeywordRegex).
-// Creates case-insensitive, start-anchored patterns (^keyword).
+// Keyword definitions for bot.BuildKeywordRegex (case-insensitive, ^-anchored).
 var (
 	// validCourseKeywords: unified search (course + teacher), semesters 1-2.
 	validCourseKeywords = []string{
@@ -112,12 +104,12 @@ var (
 		"teacher", "professor", "prof", "dr", "doctor",
 	}
 
-	// validSmartSearchKeywords: semantic search (BM25 + optional LLM expansion), semesters 1-2.
+	// validSmartSearchKeywords: semantic search (BM25 + LLM expansion), semesters 1-2.
 	validSmartSearchKeywords = []string{
 		"找課", "找課程", "搜課",
 	}
 
-	// validExtendedSearchKeywords: extended time range, semesters 3-4 (historical).
+	// validExtendedSearchKeywords: extended time range, semesters 3-4.
 	validExtendedSearchKeywords = []string{
 		"更多學期", "歷史課程",
 	}
@@ -125,12 +117,13 @@ var (
 	courseRegex            = bot.BuildKeywordRegex(validCourseKeywords)
 	smartSearchCourseRegex = bot.BuildKeywordRegex(validSmartSearchKeywords)
 	extendedSearchRegex    = bot.BuildKeywordRegex(validExtendedSearchKeywords)
-	// UID format: {year}{term}{no} = 3-4 digits + [UMNP] + 4 digits (e.g., 1131U0001)
+	// Full UID: {year}{term}{no} = 3-4 digits + [UMNP] + 4 digits (e.g., 1131U0001, 991U0001)
 	uidRegex = regexp.MustCompile(`(?i)\d{3,4}[umnp]\d{4}`)
-	// Course number only: [UMNP] + 4 digits (e.g., U0001)
+	// Course number: [UMNP] + 4 digits (e.g., U0001, M0002)
 	courseNoRegex = regexp.MustCompile(`(?i)^[umnp]\d{4}$`)
-	// Historical pattern: "課程 {year} {keyword}" (ROC year, e.g., 110 = AD 2021)
-	historicalCourseRegex = regexp.MustCompile(`(?i)^(課程?|course|class)\s+(\d{2,3})\s+(.+)$`)
+	// Historical: "課程 {year} {keyword}" where year = ROC (2-3 digits) or Western (4 digits)
+	// Examples: 課程 110 微積分 (ROC), 課程 2021 微積分 (Western)
+	historicalCourseRegex = regexp.MustCompile(`(?i)^(課程?|course|class)\s+(\d{2,4})\s+(.+)$`)
 )
 
 // NewHandler creates a new course handler.
@@ -163,7 +156,9 @@ func NewHandler(
 	return h
 }
 
-// initializeMatchers builds and sorts the Pattern-Action Table by priority.
+// initializeMatchers sets up the Pattern-Action Table.
+// All pattern matching logic is defined here in one place.
+// Matchers are automatically sorted by priority after initialization.
 func (h *Handler) initializeMatchers() {
 	h.matchers = []PatternMatcher{
 		{
@@ -286,35 +281,52 @@ func (h *Handler) CanHandle(text string) bool {
 }
 
 // HandleMessage finds the matching pattern and executes its handler.
-// Returns nil if no pattern matches (fallback to NLU).
+// Returns empty slice if no pattern matches (fallback to NLU).
 func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
 	log.Debugf("Handling course message: %s", text)
 
-	// Find matching pattern using Pattern-Action Table
+	// Find matching pattern
 	matcher := h.findMatcher(text)
 	if matcher == nil {
-		// No pattern matched - return empty to fallback to NLU
 		return []messaging_api.MessageInterface{}
 	}
 
 	// Extract regex match groups
 	matches := matcher.pattern.FindStringSubmatch(text)
-
-	// Log which pattern matched (useful for debugging)
-	if h.logger != nil {
-		log.Debugf("Pattern matched: %s (priority %d)", matcher.name, matcher.priority)
+	// Defensive check: MatchString succeeded but FindStringSubmatch may return empty
+	if len(matches) == 0 {
+		log.Warnf("Pattern %s matched but FindStringSubmatch returned empty", matcher.name)
+		return []messaging_api.MessageInterface{}
 	}
 
-	// Call the associated handler function
-	return matcher.handler(ctx, text, matches)
+	log.Debugf("Pattern matched: %s (priority %d)", matcher.name, matcher.priority)
+
+	// Call handler - must return non-empty per PatternHandler contract
+	result := matcher.handler(ctx, text, matches)
+
+	// Defensive check: handlers should never return nil/empty when pattern matched
+	if len(result) == 0 {
+		log.Errorf("Handler %s violated contract: returned empty for matched pattern", matcher.name)
+		// Return generic error to user
+		sender := lineutil.GetSender(senderName, h.stickerManager)
+		msg := lineutil.NewTextMessageWithConsistentSender(
+			"⚠️ 抱歉，處理您的查詢時發生問題\n\n請稍後再試或輸入「說明」查看使用方式。",
+			sender,
+		)
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNavCompact())
+		return []messaging_api.MessageInterface{msg}
+	}
+
+	return result
 }
 
-// Pattern handler adapters - implement PatternHandler interface.
+// Pattern handler adapters - implement PatternHandler contract.
+// Must return non-empty messages when invoked (pattern matched).
 
-// handleUIDPattern extracts UID from matches and queries course.
+// handleUIDPattern extracts UID and queries course.
 func (h *Handler) handleUIDPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
 	uid := matches[0] // Full UID match
 	return h.handleCourseUIDQuery(ctx, uid)
@@ -325,27 +337,75 @@ func (h *Handler) handleCourseNoPattern(ctx context.Context, text string, matche
 	return h.handleCourseNoQuery(ctx, text)
 }
 
-// handleHistoricalPattern parses year and keyword from historical pattern.
+// handleHistoricalPattern parses year and keyword from historical query.
+// matches: [fullMatch, keywordPrefix, year, searchTerm]
 func (h *Handler) handleHistoricalPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
-	// matches: [full, keyword, year, searchTerm]
+	// Defensive validation (should not happen if regex is correct)
 	if len(matches) < 4 {
-		return nil
+		log := h.logger.WithModule(ModuleName)
+		log.Errorf("Historical pattern matched but got %d groups (expected 4)", len(matches))
+		sender := lineutil.GetSender(senderName, h.stickerManager)
+		msg := lineutil.NewTextMessageWithConsistentSender(
+			"⚠️ 查詢格式有誤\n\n正確格式：課程 110 微積分\n（年份可使用民國年或西元年，如 110、2021）",
+			sender,
+		)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			lineutil.QuickReplyCourseAction(),
+			lineutil.QuickReplyHelpAction(),
+		})
+		return []messaging_api.MessageInterface{msg}
 	}
 
-	yearStr := matches[2]
-	keyword := strings.TrimSpace(matches[3])
+	yearStr := matches[2]                    // Year (ROC or Western)
+	keyword := strings.TrimSpace(matches[3]) // Search keyword
 	year := 0
 
 	if _, err := fmt.Sscanf(yearStr, "%d", &year); err != nil || keyword == "" {
-		return nil
+		// Invalid year format or empty keyword
+		sender := lineutil.GetSender(senderName, h.stickerManager)
+		msg := lineutil.NewTextMessageWithConsistentSender(
+			"⚠️ 查詢格式有誤\n\n正確格式：課程 110 微積分\n（年份可使用民國年或西元年，如 110、2021）",
+			sender,
+		)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			lineutil.QuickReplyCourseAction(),
+			lineutil.QuickReplyHelpAction(),
+		})
+		return []messaging_api.MessageInterface{msg}
+	}
+
+	// Convert Western year to ROC year if needed
+	// ROC year 0 = 1911 AD, so 2021 AD = 110 ROC
+	if year >= 1911 {
+		year = year - 1911
+		log := h.logger.WithModule(ModuleName)
+		log.Debugf("Converted Western year to ROC: %s -> %d", yearStr, year)
+	}
+
+	// Validate year is within reasonable range
+	if year < config.CourseSystemLaunchYear {
+		sender := lineutil.GetSender(senderName, h.stickerManager)
+		msg := lineutil.NewTextMessageWithConsistentSender(
+			fmt.Sprintf("⚠️ 年份過早\n\n課程系統於民國 %d 年才啟用\n請輸入 %d 年（西元 %d 年）之後的課程",
+				config.CourseSystemLaunchYear,
+				config.CourseSystemLaunchYear,
+				config.CourseSystemLaunchYear+1911),
+			sender,
+		)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			lineutil.QuickReplyCourseAction(),
+			lineutil.QuickReplyHelpAction(),
+		})
+		return []messaging_api.MessageInterface{msg}
 	}
 
 	return h.handleHistoricalCourseSearch(ctx, year, keyword)
 }
 
-// handleSmartPattern processes smart search with optional help message.
+// handleSmartPattern processes smart search with help message fallback.
 func (h *Handler) handleSmartPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
-	searchTerm := bot.ExtractSearchTerm(text, matches[0])
+	match := matches[0] // The matched keyword
+	searchTerm := bot.ExtractSearchTerm(text, match)
 
 	if searchTerm == "" {
 		// Return help message
@@ -377,9 +437,10 @@ func (h *Handler) handleSmartPattern(ctx context.Context, text string, matches [
 	return h.handleSmartSearch(ctx, searchTerm)
 }
 
-// handleExtendedPattern processes extended search (semesters 3-4) with optional help.
+// handleExtendedPattern processes extended search queries (e.g., 更多學期 微積分).
 func (h *Handler) handleExtendedPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
-	searchTerm := bot.ExtractSearchTerm(text, matches[0])
+	match := matches[0] // The matched keyword
+	searchTerm := bot.ExtractSearchTerm(text, match)
 
 	if searchTerm == "" {
 		// Return help message
@@ -391,7 +452,7 @@ func (h *Handler) handleExtendedPattern(ctx context.Context, text string, matche
 			"• 更多學期 微積分\n" +
 			"• 更多學期 王小明\n\n" +
 			"📆 需要指定年份？\n" +
-			"使用：「課程 110 微積分」"
+			"使用：「課程 110 微積分」或「課程 2021 微積分」"
 		msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyCourseAction(),
@@ -403,9 +464,10 @@ func (h *Handler) handleExtendedPattern(ctx context.Context, text string, matche
 	return h.handleExtendedCourseSearch(ctx, searchTerm)
 }
 
-// handleRegularPattern processes regular search (semesters 1-2) with optional help.
+// handleRegularPattern processes regular course/teacher queries (e.g., 課程 微積分).
 func (h *Handler) handleRegularPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
-	searchTerm := bot.ExtractSearchTerm(text, matches[0])
+	match := matches[0] // The matched keyword
+	searchTerm := bot.ExtractSearchTerm(text, match)
 
 	if searchTerm == "" {
 		// Return help message with all options
@@ -424,7 +486,8 @@ func (h *Handler) handleRegularPattern(ctx context.Context, text string, matches
 				"📅 更多學期（第 3-4 學期）\n" +
 				"• 更多學期 微積分\n\n" +
 				"📆 指定年份\n" +
-				"• 課程 110 微積分\n\n" +
+				"• 課程 110 微積分（民國年）\n" +
+				"• 課程 2021 微積分（西元年）\n\n" +
 				"💡 直接輸入課號（如 U0001）\n" +
 				"   或完整編號（如 1131U0001）"
 			quickReplyItems = []lineutil.QuickReplyItem{
@@ -440,7 +503,8 @@ func (h *Handler) handleRegularPattern(ctx context.Context, text string, matches
 				"📅 更多學期（第 3-4 學期）\n" +
 				"• 更多學期 微積分\n\n" +
 				"📆 指定年份\n" +
-				"• 課程 110 微積分\n\n" +
+				"• 課程 110 微積分（民國年）\n" +
+				"• 課程 2021 微積分（西元年）\n\n" +
 				"💡 直接輸入課號（如 U0001）\n" +
 				"   或完整編號（如 1131U0001）"
 			quickReplyItems = []lineutil.QuickReplyItem{

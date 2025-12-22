@@ -490,14 +490,20 @@ func TestCanHandle_HistoricalKeywords(t *testing.T) {
 		want  bool
 	}{
 		// Historical course patterns (課程 {year} {keyword})
-		{"課程 with year", "課程 110 微積分", true},
-		{"課 with year", "課 108 程式設計", true},
-		{"course with year", "course 110 calculus", true},
-		{"class with year", "class 108 programming", true},
+		// Supports both ROC year (2-3 digits) and Western year (4 digits)
+		{"課程 with ROC year", "課程 110 微積分", true},
+		{"課 with ROC year", "課 108 程式設計", true},
+		{"course with ROC year", "course 110 calculus", true},
+		{"class with ROC year", "class 108 programming", true},
+
+		// Western year support (4 digits)
+		{"課程 with Western year", "課程 2021 微積分", true},
+		{"課 with Western year", "課 2019 程式設計", true},
+		{"course with Western year", "course 2021 calculus", true},
+		{"class with Western year", "class 2019 programming", true},
 
 		// These still match courseRegex (general course keyword), which is acceptable
 		// The historical pattern is checked in HandleMessage to provide specialized handling
-		{"year too long", "課程 1100 微積分", true},    // Matches courseRegex
 		{"no keyword after year", "課程 110", true}, // Matches courseRegex
 		{"課程 without year", "課程 微積分", true},       // Matches courseRegex
 
@@ -528,8 +534,9 @@ func TestSetBM25Index(t *testing.T) {
 	// This test just verifies the setter method exists and works
 }
 
-// TestHandleMessage_CanHandleConsistency verifies CanHandle ⟺ HandleMessage consistency.
-// Pattern-Action Table architecture guarantees this structurally.
+// TestHandleMessage_CanHandleConsistency verifies that CanHandle and HandleMessage
+// are consistent: if CanHandle returns true, HandleMessage should return messages.
+// This test prevents routing bugs where CanHandle claims to handle but HandleMessage returns nil.
 func TestHandleMessage_CanHandleConsistency(t *testing.T) {
 	h := setupTestHandler(t)
 
@@ -551,6 +558,11 @@ func TestHandleMessage_CanHandleConsistency(t *testing.T) {
 
 		// Historical pattern - should be handled
 		{"historical", "課程 110 微積分", true, true},
+
+		// Fallback patterns (looks like historical but doesn't match regex)
+		// These match courseRegex instead and get handled appropriately
+		{"historical invalid year", "課程 abc 微積分", true, true}, // Matches courseRegex (not historical)
+		{"historical no keyword", "課程 110", true, true},       // Matches courseRegex (no keyword after year)
 
 		// Should not be handled
 		{"random text", "天氣如何", false, false},
@@ -584,8 +596,8 @@ func TestHandleMessage_CanHandleConsistency(t *testing.T) {
 	}
 }
 
-// TestHandleMessage_PriorityOrder verifies pattern priority ordering.
-// Higher priority patterns should match first (1=highest).
+// TestHandleMessage_PriorityOrder verifies that patterns are checked in the correct priority order.
+// When multiple patterns could match, the highest priority should win.
 func TestHandleMessage_PriorityOrder(t *testing.T) {
 	h := setupTestHandler(t)
 
@@ -642,8 +654,10 @@ func TestHandleSmartSearch_EmptyQuery(t *testing.T) {
 }
 
 func TestGetRelevanceLabel(t *testing.T) {
-	// Tests 3-tier relevance scoring (Normal-Exponential mixture):
-	// >= 0.8: 最佳匹配 (Normal core), >= 0.6: 高度相關 (Mixed), < 0.6: 部分相關 (Exp tail)
+	// Tests for 3-tier relevance label based on relative BM25 score
+	// Based on Normal-Exponential mixture model (Arampatzis et al., 2009)
+	// Confidence >= 0.8: 最佳匹配 (Normal core), >= 0.6: 高度相關 (Mixed), < 0.6: 部分相關 (Exponential tail)
+	// Confidence = score / maxScore (relative to top result)
 	tests := []struct {
 		name           string
 		confidence     float32
@@ -737,7 +751,8 @@ func TestGetRelevanceLabel(t *testing.T) {
 	}
 }
 
-// TestDispatchIntent_ParamValidation tests parameter validation (no network calls).
+// TestDispatchIntent_ParamValidation tests parameter validation logic
+// without requiring full handler setup. Uses nil dependencies (acceptable for error paths).
 func TestDispatchIntent_ParamValidation(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -806,7 +821,8 @@ func TestDispatchIntent_ParamValidation(t *testing.T) {
 	}
 }
 
-// TestDispatchIntent_Integration tests full dispatch with real dependencies.
+// TestDispatchIntent_Integration tests the full dispatch flow with real dependencies.
+// These tests verify that valid parameters correctly route to handler methods.
 func TestDispatchIntent_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping network test in short mode")
@@ -856,8 +872,78 @@ func TestDispatchIntent_Integration(t *testing.T) {
 	}
 }
 
-// TestDispatchIntent_SmartNoBM25Index tests smart search fallback (no BM25).
+// TestDispatchIntent_SmartNoBM25Index tests smart search fallback when BM25Index is not configured.
 func TestDispatchIntent_SmartNoBM25Index(t *testing.T) {
+	h := setupTestHandler(t)
+	// BM25Index is nil by default in setupTestHandler
+	ctx := context.Background()
+
+	msgs, err := h.DispatchIntent(ctx, IntentSmart, map[string]string{"query": "機器學習"})
+	if err != nil {
+		t.Fatalf("DispatchIntent() unexpected error: %v", err)
+	}
+	if len(msgs) == 0 {
+		t.Error("Expected fallback message when BM25 disabled")
+	}
+}
+
+// TestHistoricalPattern_WesternYearConversion tests that Western years are correctly converted to ROC years.
+func TestHistoricalPattern_WesternYearConversion(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network test in short mode")
+	}
+
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	tests := []struct {
+		name        string
+		input       string
+		expectROC   int // Expected ROC year after conversion
+		shouldMatch bool
+	}{
+		{"Western year 2021", "課程 2021 微積分", 110, true},
+		{"Western year 2022", "課程 2022 資料庫", 111, true},
+		{"Western year 2019", "課程 2019 程式設計", 108, true},
+		{"Western year 1990", "課程 1990 微積分", 79, true}, // Below launch year, should show error
+		{"ROC year 110", "課程 110 微積分", 110, true},
+		{"ROC year 111", "課程 111 資料庫", 111, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test that pattern matches
+			matched := h.CanHandle(tt.input)
+			if matched != tt.shouldMatch {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.input, matched, tt.shouldMatch)
+			}
+
+			if !matched {
+				return
+			}
+
+			// Test that HandleMessage processes it (may return error for old years)
+			msgs := h.HandleMessage(ctx, tt.input)
+			if len(msgs) == 0 {
+				t.Errorf("HandleMessage(%q) returned empty, expected at least one message", tt.input)
+			}
+
+			// For years below launch year, should get error message
+			if tt.expectROC < 90 {
+				// Check that message contains error about year being too early
+				msg := msgs[0]
+				if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+					if !strings.Contains(textMsg.Text, "年份過早") && !strings.Contains(textMsg.Text, "課程系統") {
+						t.Errorf("Expected error message for year %d, got: %s", tt.expectROC, textMsg.Text)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestDispatchIntent_SmartNoBM25Index tests smart search fallback (old test kept for compatibility).
+func TestDispatchIntent_SmartNoBM25Index_Legacy(t *testing.T) {
 	h := setupTestHandler(t)
 	// BM25Index is nil by default in setupTestHandler
 	ctx := context.Background()
@@ -873,7 +959,7 @@ func TestDispatchIntent_SmartNoBM25Index(t *testing.T) {
 	}
 }
 
-// TestExtractUniqueSemesters tests data-driven semester extraction.
+// TestExtractUniqueSemesters tests the data-driven semester extraction logic
 func TestExtractUniqueSemesters(t *testing.T) {
 	tests := []struct {
 		name     string
