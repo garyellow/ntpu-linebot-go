@@ -314,12 +314,12 @@ func (p *Processor) handleUnmatchedMessage(ctx context.Context, source webhook.S
 		if textMsg.Mention != nil {
 			mentionlessText := removeBotMentions(textMsg.Text, textMsg.Mention)
 			if mentionlessText == "" {
-				return p.getHelpMessage(), nil
+				return p.getHelpMessage(FallbackGeneric), nil
 			}
 			// Apply same sanitization as original text processing
 			sanitizedText = sanitizeText(mentionlessText)
 			if sanitizedText == "" {
-				return p.getHelpMessage(), nil
+				return p.getHelpMessage(FallbackGeneric), nil
 			}
 		}
 	}
@@ -330,8 +330,8 @@ func (p *Processor) handleUnmatchedMessage(ctx context.Context, source webhook.S
 		return p.handleWithNLU(ctx, sanitizedText, source, chatID)
 	}
 
-	// NLU not available - return help message
-	return p.getHelpMessage(), nil
+	// NLU not available - return help message with context
+	return p.getHelpMessage(FallbackNLUDisabled), nil
 }
 
 // handleWithNLU processes the message using NLU intent parsing.
@@ -346,12 +346,12 @@ func (p *Processor) handleWithNLU(ctx context.Context, text string, source webho
 	if err != nil {
 		p.logger.WithError(err).Warn("NLU intent parsing failed")
 		// Metrics are recorded by FallbackIntentParser
-		return p.getHelpMessage(), nil
+		return p.getHelpMessage(FallbackNLUFailed), nil
 	}
 
 	if result == nil {
 		// Metrics are recorded by FallbackIntentParser
-		return p.getHelpMessage(), nil
+		return p.getHelpMessage(FallbackNLUFailed), nil
 	}
 
 	if result.ClarificationText != "" {
@@ -382,20 +382,20 @@ func (p *Processor) dispatchIntent(ctx context.Context, result *genai.ParseResul
 	handler := p.registry.GetHandler(result.Module)
 	if handler == nil {
 		p.logger.WithField("module", result.Module).Warn("Unknown module from NLU")
-		return p.getHelpMessage(), nil
+		return p.getHelpMessage(FallbackUnknownModule), nil
 	}
 
 	if nluHandler, ok := handler.(NLUHandler); ok {
 		msgs, err := nluHandler.DispatchIntent(ctx, result.Intent, result.Params)
 		if err != nil {
 			p.logger.WithError(err).WithField("intent", result.Intent).Warn("Dispatch failed")
-			return p.getHelpMessage(), nil
+			return p.getHelpMessage(FallbackDispatchFailed), nil
 		}
 		return msgs, nil
 	}
 
 	p.logger.WithField("module", result.Module).Warn("Handler does not support NLU")
-	return p.getHelpMessage(), nil
+	return p.getHelpMessage(FallbackDispatchFailed), nil
 }
 
 // checkUserRateLimit checks if the user has exceeded their rate limit.
@@ -478,22 +478,55 @@ func (p *Processor) handleStickerMessage(_ webhook.MessageEvent) []messaging_api
 	return []messaging_api.MessageInterface{imageMsg}
 }
 
-// getHelpMessage returns a simplified help message as Flex Message for better UX
-func (p *Processor) getHelpMessage() []messaging_api.MessageInterface {
+// FallbackContext provides context for why the fallback message is being shown
+type FallbackContext string
+
+const (
+	FallbackUnknownKeyword FallbackContext = "keyword"    // Keyword not matched
+	FallbackNLUDisabled    FallbackContext = "nlu_off"    // NLU not available
+	FallbackNLUFailed      FallbackContext = "nlu_failed" // NLU parsing failed
+	FallbackDispatchFailed FallbackContext = "dispatch"   // Intent dispatch failed
+	FallbackUnknownModule  FallbackContext = "module"     // Unknown module from NLU
+	FallbackGeneric        FallbackContext = ""           // Generic/unspecified
+)
+
+// getHelpMessage returns a contextualized fallback message as Flex Message for better UX
+// context parameter helps provide transparent feedback to users about why their input wasn't understood
+func (p *Processor) getHelpMessage(context FallbackContext) []messaging_api.MessageInterface {
 	sender := lineutil.GetSender("北大小幫手", p.stickerManager)
 	nluEnabled := p.isNLUEnabled()
 
-	// Hero section
-	var heroSubtext string
-	if nluEnabled {
-		heroSubtext = "直接對話或使用關鍵字查詢"
-	} else {
-		heroSubtext = "使用關鍵字快速查詢"
+	// Hero section with contextualized message
+	var heroTitle, heroSubtext string
+	switch context {
+	case FallbackUnknownKeyword:
+		heroTitle = "🤔 找不到相關功能"
+		if nluEnabled {
+			heroSubtext = "目前無法理解此訊息，請試試以下方式"
+		} else {
+			heroSubtext = "請使用關鍵字查詢"
+		}
+	case FallbackNLUDisabled:
+		heroTitle = "📖 請使用關鍵字"
+		heroSubtext = "目前僅支援關鍵字查詢"
+	case FallbackNLUFailed:
+		heroTitle = "😅 無法理解訊息"
+		heroSubtext = "請試著換個方式說明，或使用關鍵字"
+	case FallbackDispatchFailed, FallbackUnknownModule:
+		heroTitle = "⚠️ 處理失敗"
+		heroSubtext = "系統暫時無法處理此請求"
+	default:
+		heroTitle = "🔍 北大查詢小工具"
+		if nluEnabled {
+			heroSubtext = "直接對話或使用關鍵字查詢"
+		} else {
+			heroSubtext = "使用關鍵字快速查詢"
+		}
 	}
 
-	// Hero section - Primary feature introduction
+	// Hero section - Contextualized feedback
 	hero := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexText("🔍 北大查詢小工具").
+		lineutil.NewFlexText(heroTitle).
 			WithSize("md").
 			WithWeight("bold").
 			WithColor(lineutil.ColorHeroText).FlexText,
