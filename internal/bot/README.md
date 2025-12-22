@@ -160,12 +160,11 @@ term := bot.ExtractSearchTerm("課程 微積分", "課程") // → "微積分"
 
 ```go
 const (
-    FallbackUnknownKeyword  // 關鍵字無法匹配
-    FallbackNLUDisabled     // NLU 未啟用（未設定 API Key）
-    FallbackNLUFailed       // NLU 解析失敗
-    FallbackDispatchFailed  // Intent 分發失敗
-    FallbackUnknownModule   // NLU 返回未知模組
-    FallbackGeneric         // 通用 fallback
+    FallbackGeneric        // 通用 fallback（群組聊天中僅有 @Bot 但無內容）
+    FallbackNLUDisabled    // NLU 未啟用（未設定 API Key）
+    FallbackNLUFailed      // NLU 解析失敗
+    FallbackDispatchFailed // Intent 分發失敗
+    FallbackUnknownModule  // NLU 返回未知模組
 )
 ```
 
@@ -183,11 +182,11 @@ const (
 
 | Context | 標題 | 說明 | 情境 |
 |---------|------|------|------|
-| `FallbackUnknownKeyword` | 🤔 找不到相關功能 | 目前無法理解此訊息，請試試以下方式 | 輸入無法被任何關鍵字匹配 |
-| `FallbackNLUDisabled` | 📖 請使用關鍵字 | 目前僅支援關鍵字查詢 | NLU 未啟用（無 API Key） |
+| `FallbackGeneric` | 🔍 北大查詢小工具 | 直接對話或使用關鍵字查詢 | 群組聊天中僅有 @Bot 但無內容 |
+| `FallbackNLUDisabled` | 📖 請使用關鍵字 | 目前僅支援關鍵字查詢 | NLU 未啟用且無關鍵字匹配 |
 | `FallbackNLUFailed` | 😅 無法理解訊息 | 請試著換個方式說明，或使用關鍵字 | NLU 解析失敗 |
 | `FallbackDispatchFailed` | ⚠️ 處理失敗 | 系統暫時無法處理此請求 | Intent 分發失敗 |
-| `FallbackGeneric` | 🔍 北大查詢小工具 | 直接對話或使用關鍵字查詢 | 通用 fallback |
+| `FallbackUnknownModule` | ⚠️ 處理失敗 | 系統暫時無法處理此請求 | NLU 返回未知模組 |
 
 **設計理念**：
 - **透明度**：明確告知使用者為何無法處理（不是簡單的「我不懂」）

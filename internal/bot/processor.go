@@ -481,13 +481,13 @@ func (p *Processor) handleStickerMessage(_ webhook.MessageEvent) []messaging_api
 // FallbackContext provides context for why the fallback message is being shown
 type FallbackContext string
 
+// Fallback context types for error message classification
 const (
-	FallbackUnknownKeyword FallbackContext = "keyword"    // Keyword not matched
-	FallbackNLUDisabled    FallbackContext = "nlu_off"    // NLU not available
+	FallbackGeneric        FallbackContext = ""           // Generic/unspecified (group chat with only @Bot mention)
+	FallbackNLUDisabled    FallbackContext = "nlu_off"    // NLU not available and no keyword match
 	FallbackNLUFailed      FallbackContext = "nlu_failed" // NLU parsing failed
 	FallbackDispatchFailed FallbackContext = "dispatch"   // Intent dispatch failed
 	FallbackUnknownModule  FallbackContext = "module"     // Unknown module from NLU
-	FallbackGeneric        FallbackContext = ""           // Generic/unspecified
 )
 
 // getHelpMessage returns a contextualized fallback message as Flex Message for better UX
@@ -499,13 +499,6 @@ func (p *Processor) getHelpMessage(context FallbackContext) []messaging_api.Mess
 	// Hero section with contextualized message
 	var heroTitle, heroSubtext string
 	switch context {
-	case FallbackUnknownKeyword:
-		heroTitle = "🤔 找不到相關功能"
-		if nluEnabled {
-			heroSubtext = "目前無法理解此訊息，請試試以下方式"
-		} else {
-			heroSubtext = "請使用關鍵字查詢"
-		}
 	case FallbackNLUDisabled:
 		heroTitle = "📖 請使用關鍵字"
 		heroSubtext = "目前僅支援關鍵字查詢"
@@ -515,6 +508,8 @@ func (p *Processor) getHelpMessage(context FallbackContext) []messaging_api.Mess
 	case FallbackDispatchFailed, FallbackUnknownModule:
 		heroTitle = "⚠️ 處理失敗"
 		heroSubtext = "系統暫時無法處理此請求"
+	case FallbackGeneric:
+		fallthrough
 	default:
 		heroTitle = "🔍 北大查詢小工具"
 		if nluEnabled {
