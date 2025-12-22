@@ -395,7 +395,7 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 		code string
 	}
 	for fullName, code := range ntpu.FullDepartmentCodes {
-		if bot.ContainsAllRunes(fullName, deptName) {
+		if stringutil.ContainsAllRunes(fullName, deptName) {
 			matches = append(matches, struct {
 				name string
 				code string
@@ -688,7 +688,7 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	if len(messages) > 0 && displayCount > 0 {
 		// Collect CachedAt values from displayed students only
 		cachedAts := make([]int64, displayCount)
-		for i := 0; i < displayCount; i++ {
+		for i := range displayCount {
 			cachedAts[i] = students[i].CachedAt
 		}
 		minCachedAt := lineutil.MinCachedAt(cachedAts...)

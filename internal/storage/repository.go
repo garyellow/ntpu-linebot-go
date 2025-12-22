@@ -132,7 +132,7 @@ func (db *DB) SearchStudentsByName(ctx context.Context, name string) (*StudentSe
 
 	start := time.Now()
 
-	// Get all students from cache (fast since data is in SQLite WAL mode)
+	// Load all students from the cache table (ordered by year and id); performance is monitored via slow-query logging below.
 	query := `SELECT id, name, department, year, cached_at FROM students ORDER BY year DESC, id DESC`
 	rows, err := db.reader.QueryContext(ctx, query)
 	if err != nil {
@@ -145,7 +145,7 @@ func (db *DB) SearchStudentsByName(ctx context.Context, name string) (*StudentSe
 
 	// Filter students using character-set matching (supports non-contiguous chars)
 	// This allows "王明" to match "王小明"
-	var matchedStudents []Student
+	matchedStudents := make([]Student, 0, 400)
 	for rows.Next() {
 		var student Student
 		if err := rows.Scan(&student.ID, &student.Name, &student.Department, &student.Year, &student.CachedAt); err != nil {

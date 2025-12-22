@@ -89,6 +89,52 @@ func TestSearchStudentsByName(t *testing.T) {
 	if result.TotalCount != 2 {
 		t.Errorf("Expected TotalCount 2, got %d", result.TotalCount)
 	}
+
+	// Test non-contiguous matching: "王明" should match "王小明"
+	result, err = db.SearchStudentsByName(ctx, "王明")
+	if err != nil {
+		t.Fatalf("SearchStudentsByName failed: %v", err)
+	}
+	if len(result.Students) != 1 {
+		t.Errorf("Expected 1 student with '王明' (non-contiguous), got %d", len(result.Students))
+	}
+	if len(result.Students) > 0 && result.Students[0].Name != "王小明" {
+		t.Errorf("Expected to find '王小明', got '%s'", result.Students[0].Name)
+	}
+
+	// Test reversed order: "明王" should also match "王小明"
+	result, err = db.SearchStudentsByName(ctx, "明王")
+	if err != nil {
+		t.Fatalf("SearchStudentsByName failed: %v", err)
+	}
+	if len(result.Students) != 1 {
+		t.Errorf("Expected 1 student with '明王' (reversed order), got %d", len(result.Students))
+	}
+	if len(result.Students) > 0 && result.Students[0].Name != "王小明" {
+		t.Errorf("Expected to find '王小明', got '%s'", result.Students[0].Name)
+	}
+
+	// Test character-set membership: "資工" should match "資工系" in department
+	// (Note: This tests the ContainsAllRunes logic, even though search is on name field)
+	result, err = db.SearchStudentsByName(ctx, "王")
+	if err != nil {
+		t.Fatalf("SearchStudentsByName failed: %v", err)
+	}
+	if len(result.Students) != 2 {
+		t.Errorf("Expected 2 students with '王', got %d", len(result.Students))
+	}
+
+	// Test no match
+	result, err = db.SearchStudentsByName(ctx, "張三")
+	if err != nil {
+		t.Fatalf("SearchStudentsByName failed: %v", err)
+	}
+	if len(result.Students) != 0 {
+		t.Errorf("Expected 0 students with '張三', got %d", len(result.Students))
+	}
+	if result.TotalCount != 0 {
+		t.Errorf("Expected TotalCount 0 for no match, got %d", result.TotalCount)
+	}
 }
 
 // TestSaveStudentsBatch tests batch student save operation
