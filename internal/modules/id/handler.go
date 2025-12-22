@@ -776,7 +776,7 @@ func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_ap
 
 	// Add name search scope note (姓名查詢限制說明)
 	body.AddComponent(lineutil.NewFlexText(
-		"📊 姓名查詢僅涵蓋日間部大學部 101-113 學年度。" +
+		"📊 姓名查詢僅涵蓋日間部大學部 101-113 學年度。 " +
 			"碩博士班/在職專班需先透過學號查詢後才能以姓名搜尋。").
 		WithSize("xs").
 		WithColor(lineutil.ColorNote).
