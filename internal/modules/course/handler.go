@@ -29,8 +29,11 @@ import (
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
-// Handler handles course-related queries.
-// It depends on *storage.DB directly for data access.
+// Handler handles course-related queries using Pattern-Action Table architecture.
+// Both CanHandle() and HandleMessage() share the same matchers list, which structurally
+// guarantees routing consistency and eliminates the possibility of divergence.
+//
+// Pattern priority (1=highest): UID → CourseNo → Historical → Smart → Extended → Regular
 type Handler struct {
 	db             *storage.DB
 	scraper        *scraper.Client
@@ -40,6 +43,10 @@ type Handler struct {
 	bm25Index      *rag.BM25Index
 	queryExpander  genai.QueryExpander // Interface for multi-provider support
 	llmRateLimiter *ratelimit.LLMRateLimiter
+
+	// matchers contains all pattern-handler pairs sorted by priority.
+	// Shared by CanHandle and HandleMessage for consistent routing.
+	matchers []PatternMatcher
 }
 
 // Name returns the module name
@@ -47,24 +54,49 @@ func (h *Handler) Name() string {
 	return ModuleName
 }
 
-// Course handler constants.
+// Module constants for course handler.
 const (
 	ModuleName           = "course" // Module identifier for registration
 	senderName           = "課程小幫手"
-	MaxCoursesPerSearch  = 40 // Maximum courses to return (40 courses = 4 carousels @ 10 bubbles each), leaving 1 slot for warning (LINE API max: 5 messages)
-	MaxTitleDisplayChars = 60 // Maximum characters for course title display before truncation
+	MaxCoursesPerSearch  = 40 // 4 carousels @ 10 bubbles, +1 slot for warning (LINE max: 5 messages)
+	MaxTitleDisplayChars = 60 // Truncation limit for course titles
 )
 
-// Valid keywords for course queries
+// Pattern priorities (lower = higher).
+const (
+	PriorityUID        = 1 // Full UID (e.g., 1131U0001)
+	PriorityCourseNo   = 2 // Course number (e.g., U0001)
+	PriorityHistorical = 3 // Historical (課程 110 微積分)
+	PrioritySmart      = 4 // Smart (找課)
+	PriorityExtended   = 5 // Extended (更多學期)
+	PriorityRegular    = 6 // Regular (課程/老師)
+)
+
+// PatternHandler processes a matched pattern and returns LINE messages.
+// Parameters: context, original text, regex match groups (matches[0] = full match).
+//
+// Contract: When invoked (pattern matched), MUST return at least one user-facing message.
+// Even if processing fails or validation errors occur, return error/help messages instead
+// of nil/empty slice to preserve CanHandle/HandleMessage consistency guarantee.
+type PatternHandler func(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface
+
+// PatternMatcher represents a pattern-action pair sorted by priority.
+type PatternMatcher struct {
+	pattern  *regexp.Regexp
+	priority int
+	handler  PatternHandler
+	name     string // For logging
+}
+
+// Keyword definitions for bot.BuildKeywordRegex (case-insensitive, ^-anchored).
 var (
-	// Unified course search keywords (includes both course and teacher keywords)
-	// All keywords trigger the same unified search that matches both title and teacher
+	// validCourseKeywords: unified search (course + teacher), semesters 1-2.
 	validCourseKeywords = []string{
 		// 中文課程關鍵字
 		"課", "課程", "科目",
 		"課名", "課程名", "課程名稱",
 		"科目名", "科目名稱",
-		// 中文教師關鍵字（統一使用課程關鍵字搜尋教師）
+		// 中文教師關鍵字
 		"師", "老師", "教師", "教授",
 		"老師名", "教師名", "教授名",
 		"老師名稱", "教師名稱", "教授名稱",
@@ -74,15 +106,12 @@ var (
 		"teacher", "professor", "prof", "dr", "doctor",
 	}
 
-	// Smart search keywords (direct BM25 smart search)
-	// 找課: directly triggers smart search without keyword fallback
+	// validSmartSearchKeywords: semantic search (BM25 + LLM expansion), semesters 1-2.
 	validSmartSearchKeywords = []string{
 		"找課", "找課程", "搜課",
 	}
 
-	// Extended search keywords (searches 4 semesters instead of 2)
-	// Triggered by "📅 更多學期" Quick Reply
-	// "歷史課程" kept for backward compatibility
+	// validExtendedSearchKeywords: extended time range, semesters 3-4.
 	validExtendedSearchKeywords = []string{
 		"更多學期", "歷史課程",
 	}
@@ -90,25 +119,18 @@ var (
 	courseRegex            = bot.BuildKeywordRegex(validCourseKeywords)
 	smartSearchCourseRegex = bot.BuildKeywordRegex(validSmartSearchKeywords)
 	extendedSearchRegex    = bot.BuildKeywordRegex(validExtendedSearchKeywords)
-	// UID format: {year}{term}{no} where:
-	// - year: 2-3 digits (e.g., 113, 99)
-	// - term: 1 digit (1=上學期, 2=下學期)
-	// - no: course number starting with U/M/N/P (case-insensitive) + 4 digits
-	// Full UID example: 1131U0001 (year=113, term=1, no=U0001) or 991U0001
-	// Regex matches: 3-4 digits (year+term) + U/M/N/P + 4 digits
+	// Full UID: {year}{term}{no} = 3-4 digits + [UMNP] + 4 digits (e.g., 1131U0001, 991U0001)
 	uidRegex = regexp.MustCompile(`(?i)\d{3,4}[umnp]\d{4}`)
-	// Course number only: {no} (e.g., U0001, M0002)
-	// Format: U/M/N/P (education level) + 4 digits
+	// Course number: [UMNP] + 4 digits (e.g., U0001, M0002)
 	courseNoRegex = regexp.MustCompile(`(?i)^[umnp]\d{4}$`)
-	// Historical course query format: "課程 {year} {keyword}" or "課 {year} {keyword}"
-	// e.g., "課程 110 微積分", "課 108 程式設計"
-	// Year is in ROC format (e.g., 110 = AD 2021)
-	// This pattern is checked BEFORE the regular courseRegex to handle historical queries
-	historicalCourseRegex = regexp.MustCompile(`(?i)^(課程?|course|class)\s+(\d{2,3})\s+(.+)$`)
+	// Historical: "課程 {year} {keyword}" where year = ROC (2-3 digits) or Western (4 digits)
+	// Examples: 課程 110 微積分 (ROC), 課程 2021 微積分 (Western)
+	historicalCourseRegex = regexp.MustCompile(`(?i)^(課程?|course|class)\s+(\d{2,4})\s+(.+)$`)
 )
 
-// NewHandler creates a new course handler with required dependencies.
-// Optional dependencies (bm25Index, queryExpander, llmRateLimiter) can be nil.
+// NewHandler creates a new course handler.
+// Optional: bm25Index, queryExpander, llmRateLimiter (pass nil if unused).
+// Initializes and sorts matchers by priority during construction.
 func NewHandler(
 	db *storage.DB,
 	scraper *scraper.Client,
@@ -119,7 +141,7 @@ func NewHandler(
 	queryExpander genai.QueryExpander, // Interface for multi-provider support
 	llmRateLimiter *ratelimit.LLMRateLimiter,
 ) *Handler {
-	return &Handler{
+	h := &Handler{
 		db:             db,
 		scraper:        scraper,
 		metrics:        metrics,
@@ -129,6 +151,60 @@ func NewHandler(
 		queryExpander:  queryExpander,
 		llmRateLimiter: llmRateLimiter,
 	}
+
+	// Initialize Pattern-Action Table
+	h.initializeMatchers()
+
+	return h
+}
+
+// initializeMatchers sets up the Pattern-Action Table.
+// All pattern matching logic is defined here in one place.
+// Matchers are automatically sorted by priority after initialization.
+func (h *Handler) initializeMatchers() {
+	h.matchers = []PatternMatcher{
+		{
+			pattern:  uidRegex,
+			priority: PriorityUID,
+			handler:  h.handleUIDPattern,
+			name:     "UID",
+		},
+		{
+			pattern:  courseNoRegex,
+			priority: PriorityCourseNo,
+			handler:  h.handleCourseNoPattern,
+			name:     "CourseNumber",
+		},
+		{
+			pattern:  historicalCourseRegex,
+			priority: PriorityHistorical,
+			handler:  h.handleHistoricalPattern,
+			name:     "Historical",
+		},
+		{
+			pattern:  smartSearchCourseRegex,
+			priority: PrioritySmart,
+			handler:  h.handleSmartPattern,
+			name:     "Smart",
+		},
+		{
+			pattern:  extendedSearchRegex,
+			priority: PriorityExtended,
+			handler:  h.handleExtendedPattern,
+			name:     "Extended",
+		},
+		{
+			pattern:  courseRegex,
+			priority: PriorityRegular,
+			handler:  h.handleRegularPattern,
+			name:     "Regular",
+		},
+	}
+
+	// Sort by priority (lower number = higher priority)
+	slices.SortFunc(h.matchers, func(a, b PatternMatcher) int {
+		return a.priority - b.priority
+	})
 }
 
 // IsBM25SearchEnabled returns true if BM25 search is enabled.
@@ -148,15 +224,9 @@ const (
 	IntentUID    = "uid"    // Direct course UID lookup
 )
 
-// DispatchIntent handles NLU-parsed intents for the course module.
-// It validates required parameters and calls the appropriate handler method.
-//
-// Supported intents:
-//   - "search": requires "keyword" param, calls handleUnifiedCourseSearch
-//   - "smart": requires "query" param, calls handleSmartSearch
-//   - "uid": requires "uid" param, calls handleCourseUIDQuery
-//
-// Returns error if intent is unknown or required parameters are missing.
+// DispatchIntent handles NLU-parsed intents.
+// Intents: "search" (keyword), "smart" (query), "uid" (uid).
+// Returns error if intent unknown or required params missing.
 func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[string]string) ([]messaging_api.MessageInterface, error) {
 	// Validate parameters first (before logging) to support testing with nil dependencies
 	switch intent {
@@ -195,180 +265,260 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 	}
 }
 
-// CanHandle checks if the message is for the course module
-func (h *Handler) CanHandle(text string) bool {
+// findMatcher returns the first matching pattern or nil.
+// Used by both CanHandle and HandleMessage for consistent routing.
+func (h *Handler) findMatcher(text string) *PatternMatcher {
 	text = strings.TrimSpace(text)
-
-	// Check for course UID pattern (full: 11312U0001)
-	if uidRegex.MatchString(text) {
-		return true
+	for i := range h.matchers {
+		if h.matchers[i].pattern.MatchString(text) {
+			return &h.matchers[i]
+		}
 	}
-
-	// Check for course number only pattern (e.g., U0001, M0002)
-	if courseNoRegex.MatchString(text) {
-		return true
-	}
-
-	// Check for smart search keywords (找課)
-	if smartSearchCourseRegex.MatchString(text) {
-		return true
-	}
-
-	// Check for course keywords (unified: includes both course and teacher keywords)
-	if courseRegex.MatchString(text) {
-		return true
-	}
-
-	return false
+	return nil
 }
 
-// HandleMessage handles text messages for the course module
+// CanHandle returns true if any pattern matches (consistent with HandleMessage).
+func (h *Handler) CanHandle(text string) bool {
+	return h.findMatcher(text) != nil
+}
+
+// HandleMessage finds the matching pattern and executes its handler.
+// Returns empty slice if no pattern matches (fallback to NLU).
 func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
 	log.Debugf("Handling course message: %s", text)
 
-	// Check for full course UID first (highest priority, e.g., 11312U0001)
-	if match := uidRegex.FindString(text); match != "" {
-		return h.handleCourseUIDQuery(ctx, match)
+	// Find matching pattern
+	matcher := h.findMatcher(text)
+	if matcher == nil {
+		return []messaging_api.MessageInterface{}
 	}
 
-	// Check for course number only (e.g., U0001, M0002)
-	// Will search in current and previous semester
-	if courseNoRegex.MatchString(text) {
-		return h.handleCourseNoQuery(ctx, text)
+	// Extract regex match groups
+	matches := matcher.pattern.FindStringSubmatch(text)
+	// Defensive check: MatchString succeeded but FindStringSubmatch may return empty
+	if len(matches) == 0 {
+		log.Warnf("Pattern %s matched but FindStringSubmatch returned empty", matcher.name)
+		return []messaging_api.MessageInterface{}
 	}
 
-	// Check for historical course query pattern BEFORE regular course search
-	// Format: "課程 {year} {keyword}" e.g., "課程 110 微積分"
-	if matches := historicalCourseRegex.FindStringSubmatch(text); len(matches) == 4 {
-		yearStr := matches[2]
-		keyword := strings.TrimSpace(matches[3])
-		year := 0
-		if _, err := fmt.Sscanf(yearStr, "%d", &year); err == nil && keyword != "" {
-			return h.handleHistoricalCourseSearch(ctx, year, keyword)
+	log.Debugf("Pattern matched: %s (priority %d)", matcher.name, matcher.priority)
+
+	// Call handler - must return non-empty per PatternHandler contract
+	result := matcher.handler(ctx, text, matches)
+
+	// Defensive check: handlers should never return nil/empty when pattern matched
+	if len(result) == 0 {
+		log.Errorf("Handler %s violated contract: returned empty for matched pattern", matcher.name)
+		// Return generic error to user
+		sender := lineutil.GetSender(senderName, h.stickerManager)
+		msg := lineutil.NewTextMessageWithConsistentSender(
+			"⚠️ 抱歉，處理您的查詢時發生問題\n\n請稍後再試或輸入「說明」查看使用方式。",
+			sender,
+		)
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNavCompact())
+		return []messaging_api.MessageInterface{msg}
+	}
+
+	return result
+}
+
+// Pattern handler adapters - implement PatternHandler contract.
+// Must return non-empty messages when invoked (pattern matched).
+
+// handleUIDPattern extracts UID and queries course.
+func (h *Handler) handleUIDPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
+	uid := matches[0] // Full UID match
+	return h.handleCourseUIDQuery(ctx, uid)
+}
+
+// handleCourseNoPattern processes course number queries.
+func (h *Handler) handleCourseNoPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
+	return h.handleCourseNoQuery(ctx, text)
+}
+
+// handleHistoricalPattern parses year and keyword from historical query.
+// Regex groups: [0]=fullMatch, [1]=keywordPrefix, [2]=year, [3]=searchTerm
+func (h *Handler) handleHistoricalPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
+	// Defensive validation (should not happen if regex is correct)
+	if len(matches) < 4 {
+		log := h.logger.WithModule(ModuleName)
+		log.Errorf("Historical pattern matched but got %d groups (expected 4)", len(matches))
+		sender := lineutil.GetSender(senderName, h.stickerManager)
+		msg := lineutil.NewTextMessageWithConsistentSender(
+			"⚠️ 查詢格式有誤\n\n正確格式：課程 110 微積分\n（年份可使用民國年或西元年，如 110、2021）",
+			sender,
+		)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			lineutil.QuickReplyCourseAction(),
+			lineutil.QuickReplyHelpAction(),
+		})
+		return []messaging_api.MessageInterface{msg}
+	}
+
+	yearStr := matches[2]                    // Year (ROC or Western)
+	keyword := strings.TrimSpace(matches[3]) // Search keyword
+	year := 0
+
+	if _, err := fmt.Sscanf(yearStr, "%d", &year); err != nil || keyword == "" {
+		// Invalid year format or empty keyword
+		sender := lineutil.GetSender(senderName, h.stickerManager)
+		msg := lineutil.NewTextMessageWithConsistentSender(
+			"⚠️ 查詢格式有誤\n\n正確格式：課程 110 微積分\n（年份可使用民國年或西元年，如 110、2021）",
+			sender,
+		)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			lineutil.QuickReplyCourseAction(),
+			lineutil.QuickReplyHelpAction(),
+		})
+		return []messaging_api.MessageInterface{msg}
+	}
+
+	// Convert Western year to ROC year if needed
+	// ROC year 0 = 1911 AD, so 2021 AD = 110 ROC
+	if year >= 1911 {
+		year = year - 1911
+		log := h.logger.WithModule(ModuleName)
+		log.Debugf("Converted Western year to ROC: %s -> %d", yearStr, year)
+	}
+
+	// Validate year is within reasonable range
+	if year < config.CourseSystemLaunchYear {
+		sender := lineutil.GetSender(senderName, h.stickerManager)
+		msg := lineutil.NewTextMessageWithConsistentSender(
+			fmt.Sprintf("⚠️ 年份過早\n\n課程系統於民國 %d 年才啟用\n請輸入 %d 年（西元 %d 年）之後的課程",
+				config.CourseSystemLaunchYear,
+				config.CourseSystemLaunchYear,
+				config.CourseSystemLaunchYear+1911),
+			sender,
+		)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			lineutil.QuickReplyCourseAction(),
+			lineutil.QuickReplyHelpAction(),
+		})
+		return []messaging_api.MessageInterface{msg}
+	}
+
+	return h.handleHistoricalCourseSearch(ctx, year, keyword)
+}
+
+// handleSmartPattern processes smart search with help message fallback.
+func (h *Handler) handleSmartPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
+	match := matches[0] // The matched keyword
+	searchTerm := bot.ExtractSearchTerm(text, match)
+
+	if searchTerm == "" {
+		// Return help message
+		sender := lineutil.GetSender(senderName, h.stickerManager)
+		var helpText string
+		if h.bm25Index != nil && h.bm25Index.IsEnabled() {
+			helpText = "🔮 智慧搜尋說明\n\n" +
+				"請描述您想找的課程內容：\n" +
+				"• 找課 想學資料分析\n" +
+				"• 找課 Python 機器學習\n" +
+				"• 找課 商業管理相關\n\n" +
+				"💡 提示\n" +
+				"• 根據課程大綱內容智慧匹配\n" +
+				"• 若知道課名，建議用「課程 名稱」"
+		} else {
+			helpText = "⚠️ 智慧搜尋目前未啟用\n\n" +
+				"請使用精確搜尋：\n" +
+				"• 課程 微積分\n" +
+				"• 課程 王小明"
 		}
+		msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			lineutil.QuickReplyCourseAction(),
+			lineutil.QuickReplyHelpAction(),
+		})
+		return []messaging_api.MessageInterface{msg}
 	}
 
-	// Check for smart search keywords (找課) - direct smart search
-	if smartSearchCourseRegex.MatchString(text) {
-		match := smartSearchCourseRegex.FindString(text)
-		searchTerm := bot.ExtractSearchTerm(text, match)
+	return h.handleSmartSearch(ctx, searchTerm)
+}
 
-		if searchTerm == "" {
-			sender := lineutil.GetSender(senderName, h.stickerManager)
-			// Check if smart search is actually enabled
-			var helpText string
-			if h.bm25Index != nil && h.bm25Index.IsEnabled() {
-				helpText = "🔮 智慧搜尋說明\n\n" +
-					"請描述您想找的課程內容：\n" +
-					"• 找課 想學資料分析\n" +
-					"• 找課 Python 機器學習\n" +
-					"• 找課 商業管理相關\n\n" +
-					"💡 提示\n" +
-					"• 根據課程大綱內容智慧匹配\n" +
-					"• 若知道課名，建議用「課程 名稱」"
-			} else {
-				helpText = "⚠️ 智慧搜尋目前未啟用\n\n" +
-					"請使用精確搜尋：\n" +
-					"• 課程 微積分\n" +
-					"• 課程 王小明"
-			}
-			msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
-			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				lineutil.QuickReplyCourseAction(),
+// handleExtendedPattern processes extended search queries (e.g., 更多學期 微積分).
+func (h *Handler) handleExtendedPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
+	match := matches[0] // The matched keyword
+	searchTerm := bot.ExtractSearchTerm(text, match)
+
+	if searchTerm == "" {
+		// Return help message
+		sender := lineutil.GetSender(senderName, h.stickerManager)
+		helpText := "📅 更多學期搜尋說明\n\n" +
+			"🔍 搜尋範圍：額外 2 個歷史學期（第 3-4 學期）\n" +
+			"（精確搜尋僅搜尋近 2 學期＝最新第 1-2 學期）\n\n" +
+			"用法範例：\n" +
+			"• 更多學期 微積分\n" +
+			"• 更多學期 王小明\n\n" +
+			"📆 需要指定年份？\n" +
+			"使用：「課程 110 微積分」或「課程 2021 微積分」"
+		msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			lineutil.QuickReplyCourseAction(),
+			lineutil.QuickReplyHelpAction(),
+		})
+		return []messaging_api.MessageInterface{msg}
+	}
+
+	return h.handleExtendedCourseSearch(ctx, searchTerm)
+}
+
+// handleRegularPattern processes regular course/teacher queries (e.g., 課程 微積分).
+func (h *Handler) handleRegularPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
+	match := matches[0] // The matched keyword
+	searchTerm := bot.ExtractSearchTerm(text, match)
+
+	if searchTerm == "" {
+		// Return help message with all options
+		sender := lineutil.GetSender(senderName, h.stickerManager)
+		var helpText string
+		var quickReplyItems []lineutil.QuickReplyItem
+		if h.bm25Index != nil && h.bm25Index.IsEnabled() {
+			helpText = "📚 課程查詢方式\n\n" +
+				"🔍 精確搜尋（近 2 學期）\n" +
+				"• 課程 微積分\n" +
+				"• 課程 王小明\n" +
+				"• 課程 線代 王\n\n" +
+				"🔮 智慧搜尋（近 2 學期）\n" +
+				"• 找課 想學資料分析\n" +
+				"• 找課 Python 入門\n\n" +
+				"📅 更多學期（第 3-4 學期）\n" +
+				"• 更多學期 微積分\n\n" +
+				"📆 指定年份\n" +
+				"• 課程 110 微積分（民國年）\n" +
+				"• 課程 2021 微積分（西元年）\n\n" +
+				"💡 直接輸入課號（如 U0001）\n" +
+				"   或完整編號（如 1131U0001）"
+			quickReplyItems = []lineutil.QuickReplyItem{
+				lineutil.QuickReplySmartSearchAction(),
 				lineutil.QuickReplyHelpAction(),
-			})
-			return []messaging_api.MessageInterface{msg}
-		}
-
-		return h.handleSmartSearch(ctx, searchTerm)
-	}
-
-	// Check for extended search keywords (更多學期) - searches 4 semesters
-	// This is triggered by "📅 更多學期" Quick Reply
-	if extendedSearchRegex.MatchString(text) {
-		match := extendedSearchRegex.FindString(text)
-		searchTerm := bot.ExtractSearchTerm(text, match)
-
-		if searchTerm == "" {
-			sender := lineutil.GetSender(senderName, h.stickerManager)
-			helpText := "📅 更多學期搜尋說明\n\n" +
-				"🔍 搜尋範圍：額外 2 個歷史學期（第 3-4 學期）\n" +
-				"（一般搜尋僅搜尋近 2 學期＝最新第 1-2 學期）\n\n" +
-				"用法範例：\n" +
-				"• 更多學期 微積分\n" +
-				"• 更多學期 王小明\n\n" +
-				"📆 需要指定年份？\n" +
-				"使用：「課程 110 微積分」"
-			msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
-			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				lineutil.QuickReplyCourseAction(),
-				lineutil.QuickReplyHelpAction(),
-			})
-			return []messaging_api.MessageInterface{msg}
-		}
-
-		return h.handleExtendedCourseSearch(ctx, searchTerm)
-	}
-
-	// Check for course title search - extract term after keyword
-	// Support both "keyword term" and "term keyword" patterns
-	// Unified search: matches both course title and teacher name
-	if courseRegex.MatchString(text) {
-		match := courseRegex.FindString(text)
-		searchTerm := bot.ExtractSearchTerm(text, match)
-
-		if searchTerm == "" {
-			// If no search term provided, give helpful message
-			sender := lineutil.GetSender(senderName, h.stickerManager)
-			var helpText string
-			var quickReplyItems []lineutil.QuickReplyItem
-			if h.bm25Index != nil && h.bm25Index.IsEnabled() {
-				// Smart search enabled - mention it as an option
-				helpText = "📚 課程查詢方式\n\n" +
-					"🔍 精確搜尋（近 2 學期）\n" +
-					"• 課程 微積分\n" +
-					"• 課程 王小明\n" +
-					"• 課程 線代 王\n\n" +
-					"🔮 智慧搜尋（近 2 學期）\n" +
-					"• 找課 想學資料分析\n" +
-					"• 找課 Python 入門\n\n" +
-					"📅 更多學期（第 3-4 學期）\n" +
-					"• 更多學期 微積分\n\n" +
-					"📆 指定年份\n" +
-					"• 課程 110 微積分\n\n" +
-					"💡 直接輸入課號（如 U0001）\n" +
-					"   或完整編號（如 1131U0001）"
-				quickReplyItems = []lineutil.QuickReplyItem{
-					lineutil.QuickReplySmartSearchAction(),
-					lineutil.QuickReplyHelpAction(),
-				}
-			} else {
-				helpText = "📚 課程查詢方式\n\n" +
-					"🔍 精確搜尋（近 2 學期）\n" +
-					"• 課程 微積分\n" +
-					"• 課程 王小明\n" +
-					"• 課程 線代 王\n\n" +
-					"📅 更多學期（第 3-4 學期）\n" +
-					"• 更多學期 微積分\n\n" +
-					"📆 指定年份\n" +
-					"• 課程 110 微積分\n\n" +
-					"💡 直接輸入課號（如 U0001）\n" +
-					"   或完整編號（如 1131U0001）"
-				quickReplyItems = []lineutil.QuickReplyItem{
-					lineutil.QuickReplyHelpAction(),
-				}
 			}
-			msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
-			msg.QuickReply = lineutil.NewQuickReply(quickReplyItems)
-			return []messaging_api.MessageInterface{msg}
+		} else {
+			helpText = "📚 課程查詢方式\n\n" +
+				"🔍 精確搜尋（近 2 學期）\n" +
+				"• 課程 微積分\n" +
+				"• 課程 王小明\n" +
+				"• 課程 線代 王\n\n" +
+				"📅 更多學期（第 3-4 學期）\n" +
+				"• 更多學期 微積分\n\n" +
+				"📆 指定年份\n" +
+				"• 課程 110 微積分（民國年）\n" +
+				"• 課程 2021 微積分（西元年）\n\n" +
+				"💡 直接輸入課號（如 U0001）\n" +
+				"   或完整編號（如 1131U0001）"
+			quickReplyItems = []lineutil.QuickReplyItem{
+				lineutil.QuickReplyHelpAction(),
+			}
 		}
-		return h.handleUnifiedCourseSearch(ctx, searchTerm)
+		msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
+		msg.QuickReply = lineutil.NewQuickReply(quickReplyItems)
+		return []messaging_api.MessageInterface{msg}
 	}
 
-	return []messaging_api.MessageInterface{}
+	return h.handleUnifiedCourseSearch(ctx, searchTerm)
 }
 
 // HandlePostback handles postback events for the course module

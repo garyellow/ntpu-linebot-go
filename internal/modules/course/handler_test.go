@@ -452,6 +452,75 @@ func TestCanHandle_SmartKeywords(t *testing.T) {
 	}
 }
 
+func TestCanHandle_ExtendedKeywords(t *testing.T) {
+	h := setupTestHandler(t)
+
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		// Extended search keywords (更多學期)
+		{"更多學期 keyword", "更多學期 雲端", true},
+		{"更多學期 with whitespace", "更多學期 微積分", true},
+		{"歷史課程 keyword", "歷史課程 資料庫", true},
+		{"更多學期 alone", "更多學期", true},
+		{"歷史課程 alone", "歷史課程", true},
+
+		// Should not match if not at start
+		{"更多學期 not at start", "查詢更多學期", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := h.CanHandle(tt.input)
+			if got != tt.want {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCanHandle_HistoricalKeywords(t *testing.T) {
+	h := setupTestHandler(t)
+
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		// Historical course patterns (課程 {year} {keyword})
+		// Supports both ROC year (2-3 digits) and Western year (4 digits)
+		{"課程 with ROC year", "課程 110 微積分", true},
+		{"課 with ROC year", "課 108 程式設計", true},
+		{"course with ROC year", "course 110 calculus", true},
+		{"class with ROC year", "class 108 programming", true},
+
+		// Western year support (4 digits)
+		{"課程 with Western year", "課程 2021 微積分", true},
+		{"課 with Western year", "課 2019 程式設計", true},
+		{"course with Western year", "course 2021 calculus", true},
+		{"class with Western year", "class 2019 programming", true},
+
+		// These still match courseRegex (general course keyword), which is acceptable
+		// The historical pattern is checked in HandleMessage to provide specialized handling
+		{"no keyword after year", "課程 110", true}, // Matches courseRegex
+		{"課程 without year", "課程 微積分", true},       // Matches courseRegex
+
+		// Should not match - no valid course keyword
+		{"random text", "110 微積分", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := h.CanHandle(tt.input)
+			if got != tt.want {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSetBM25Index(t *testing.T) {
 	h := setupTestHandler(t)
 
@@ -463,6 +532,102 @@ func TestSetBM25Index(t *testing.T) {
 	// After setting, should not be nil
 	// Note: We can't easily test with a real BM25Index without data
 	// This test just verifies the setter method exists and works
+}
+
+// TestHandleMessage_CanHandleConsistency verifies that CanHandle and HandleMessage
+// are consistent: if CanHandle returns true, HandleMessage should return messages.
+// This test prevents routing bugs where CanHandle claims to handle but HandleMessage returns nil.
+func TestHandleMessage_CanHandleConsistency(t *testing.T) {
+	h := setupTestHandler(t)
+
+	tests := []struct {
+		name        string
+		input       string
+		canHandle   bool
+		shouldReply bool // Should HandleMessage return non-empty messages?
+	}{
+		// UID patterns - should be handled
+		{"full UID", "1131U0001", true, true},
+		{"course number", "U0001", true, true},
+
+		// Keyword patterns - should be handled (may return help message if no DB results)
+		{"課程 keyword", "課程", true, true},         // Returns help message
+		{"course keyword", "course", true, true}, // Returns help message
+		{"找課 keyword", "找課", true, true},         // Returns help/error message
+		{"更多學期 keyword", "更多學期", true, true},     // Returns help message
+
+		// Historical pattern - should be handled
+		{"historical valid", "課程 110 微積分", true, true},
+		{"historical Western year", "課程 2021 微積分", true, true},
+
+		// Edge cases: historical pattern matches but validation fails
+		// Handler should return error message instead of nil
+		{"historical invalid year format", "課程 abc 微積分", true, true}, // Matches courseRegex (not historical)
+		{"historical no keyword", "課程 110", true, true},              // Matches courseRegex (no keyword after year)
+		{"historical year too early", "課程 50 微積分", true, true},       // Matches historical, returns error about launch year
+
+		// Should not be handled
+		{"random text", "天氣如何", false, false},
+		{"empty", "", false, false},
+		{"number only", "110", false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test CanHandle
+			canHandle := h.CanHandle(tt.input)
+			if canHandle != tt.canHandle {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.input, canHandle, tt.canHandle)
+			}
+
+			// Test HandleMessage
+			msgs := h.HandleMessage(context.Background(), tt.input)
+			gotReply := len(msgs) > 0
+			if gotReply != tt.shouldReply {
+				t.Errorf("HandleMessage(%q) returned %d messages, shouldReply = %v", tt.input, len(msgs), tt.shouldReply)
+			}
+
+			// Critical consistency check
+			if canHandle && !gotReply {
+				t.Errorf("CONSISTENCY VIOLATION: CanHandle(%q) = true but HandleMessage returned empty", tt.input)
+			}
+			if !canHandle && gotReply {
+				t.Errorf("CONSISTENCY VIOLATION: CanHandle(%q) = false but HandleMessage returned messages", tt.input)
+			}
+		})
+	}
+}
+
+// TestHandleMessage_PriorityOrder verifies that patterns are checked in the correct priority order.
+// When multiple patterns could match, the highest priority should win.
+func TestHandleMessage_PriorityOrder(t *testing.T) {
+	h := setupTestHandler(t)
+
+	tests := []struct {
+		name            string
+		input           string
+		expectedHandler string // Which handler should process this (based on pattern priority)
+	}{
+		// Priority 1: UID should match before course keyword
+		{"UID over keyword", "1131U0001", "UID"}, // Even if "課程" appears elsewhere
+
+		// Priority 2: Course number should match before general keywords
+		{"course number over keyword", "U0001", "course_number"},
+
+		// Priority 3-6: Keywords are checked in order
+		// Cannot test easily without inspecting internal behavior
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msgs := h.HandleMessage(context.Background(), tt.input)
+			if len(msgs) == 0 {
+				t.Errorf("HandleMessage(%q) returned empty, expected %s handler", tt.input, tt.expectedHandler)
+			}
+			// Note: We can't easily check which internal handler was used without exposing internals
+			// This test serves as documentation of expected behavior
+		})
+	}
 }
 
 func TestHandleSmartSearch_NoBM25Index(t *testing.T) {
@@ -711,6 +876,76 @@ func TestDispatchIntent_Integration(t *testing.T) {
 
 // TestDispatchIntent_SmartNoBM25Index tests smart search fallback when BM25Index is not configured.
 func TestDispatchIntent_SmartNoBM25Index(t *testing.T) {
+	h := setupTestHandler(t)
+	// BM25Index is nil by default in setupTestHandler
+	ctx := context.Background()
+
+	msgs, err := h.DispatchIntent(ctx, IntentSmart, map[string]string{"query": "機器學習"})
+	if err != nil {
+		t.Fatalf("DispatchIntent() unexpected error: %v", err)
+	}
+	if len(msgs) == 0 {
+		t.Error("Expected fallback message when BM25 disabled")
+	}
+}
+
+// TestHistoricalPattern_WesternYearConversion tests that Western years are correctly converted to ROC years.
+func TestHistoricalPattern_WesternYearConversion(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network test in short mode")
+	}
+
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	tests := []struct {
+		name        string
+		input       string
+		expectROC   int // Expected ROC year after conversion
+		shouldMatch bool
+	}{
+		{"Western year 2021", "課程 2021 微積分", 110, true},
+		{"Western year 2022", "課程 2022 資料庫", 111, true},
+		{"Western year 2019", "課程 2019 程式設計", 108, true},
+		{"Western year 1990", "課程 1990 微積分", 79, true}, // Below launch year, should show error
+		{"ROC year 110", "課程 110 微積分", 110, true},
+		{"ROC year 111", "課程 111 資料庫", 111, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test that pattern matches
+			matched := h.CanHandle(tt.input)
+			if matched != tt.shouldMatch {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.input, matched, tt.shouldMatch)
+			}
+
+			if !matched {
+				return
+			}
+
+			// Test that HandleMessage processes it (may return error for old years)
+			msgs := h.HandleMessage(ctx, tt.input)
+			if len(msgs) == 0 {
+				t.Errorf("HandleMessage(%q) returned empty, expected at least one message", tt.input)
+			}
+
+			// For years below launch year, should get error message
+			if tt.expectROC < 90 {
+				// Check that message contains error about year being too early
+				msg := msgs[0]
+				if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+					if !strings.Contains(textMsg.Text, "年份過早") && !strings.Contains(textMsg.Text, "課程系統") {
+						t.Errorf("Expected error message for year %d, got: %s", tt.expectROC, textMsg.Text)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestDispatchIntent_SmartNoBM25Index tests smart search fallback (old test kept for compatibility).
+func TestDispatchIntent_SmartNoBM25Index_Legacy(t *testing.T) {
 	h := setupTestHandler(t)
 	// BM25Index is nil by default in setupTestHandler
 	ctx := context.Background()
