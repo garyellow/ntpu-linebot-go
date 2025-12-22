@@ -217,12 +217,12 @@ func (p *Processor) ProcessFollow(event webhook.FollowEvent) ([]messaging_api.Me
 
 // buildWelcomeFlexMessage creates a structured welcome message for new users.
 func (p *Processor) buildWelcomeFlexMessage(nluEnabled bool, sender *messaging_api.Sender) messaging_api.MessageInterface {
-	// Hero section
+	// Hero section with blue theme
 	hero := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexText("泥好~~").WithSize("lg").WithColor(lineutil.ColorHeroText).WithWeight("bold").FlexText,
 		lineutil.NewFlexText("我是北大查詢小工具 🔍").WithSize("md").WithColor(lineutil.ColorHeroText).WithMargin("sm").FlexText,
 	).
-		WithBackgroundColor(lineutil.ColorHeroBg).
+		WithBackgroundColor(lineutil.ColorHeaderPrimary).
 		WithPaddingAll("xl").
 		WithPaddingBottom("lg")
 
@@ -233,7 +233,7 @@ func (p *Processor) buildWelcomeFlexMessage(nluEnabled bool, sender *messaging_a
 		features = append(features,
 			lineutil.NewFlexBox("horizontal",
 				lineutil.NewFlexText("💬").WithSize("sm").WithFlex(0).FlexText,
-				lineutil.NewFlexText("直接用自然語言問我").WithSize("sm").WithColor(lineutil.ColorText).WithMargin("sm").WithWrap(true).FlexText,
+				lineutil.NewFlexText("支援自然語言對話").WithSize("sm").WithColor(lineutil.ColorText).WithMargin("sm").WithWrap(true).FlexText,
 			).WithMargin("xs").FlexBox,
 		)
 	}
@@ -268,18 +268,22 @@ func (p *Processor) buildWelcomeFlexMessage(nluEnabled bool, sender *messaging_a
 		lineutil.NewFlexSeparator().WithMargin("lg").FlexSeparator,
 		lineutil.NewFlexText("📊 資料來源").WithWeight("bold").WithColor(lineutil.ColorText).WithSize("sm").WithMargin("lg").FlexText,
 		lineutil.NewFlexText("課程查詢系統、數位學苑 2.0、校園聯絡簿").WithSize("xs").WithColor(lineutil.ColorSubtext).WithMargin("sm").WithWrap(true).FlexText,
-		lineutil.NewFlexText("⚠️ 學號查詢的系所資訊由學號推測，轉系等情況可能與實際不同").WithSize("xs").WithColor(lineutil.ColorNote).WithMargin("md").WithWrap(true).FlexText,
 	)
 
 	body := lineutil.NewFlexBox("vertical", bodyContents...).WithSpacing("sm")
 
-	// Footer with help button
+	// Footer with help and feedback buttons
 	footer := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexButton(lineutil.NewMessageAction("📖 查看使用說明", "使用說明")).
 			WithStyle("primary").
 			WithColor(lineutil.ColorButtonInternal).
 			WithHeight("sm").FlexButton,
-		lineutil.NewFlexButton(lineutil.NewURIAction("❓ 回報 Bug", "https://github.com/garyellow/ntpu-linebot-go/issues")).
+		lineutil.NewFlexButton(lineutil.NewURIAction("🐛 回報 Bug / ✨ 功能許願", "https://github.com/garyellow/ntpu-linebot-go/issues/new/choose")).
+			WithStyle("primary").
+			WithColor(lineutil.ColorButtonExternal).
+			WithHeight("sm").
+			WithMargin("sm").FlexButton,
+		lineutil.NewFlexButton(lineutil.NewURIAction("👨‍💻 作者聯繫方式", "https://linktr.ee/huang.guan.ying")).
 			WithStyle("secondary").
 			WithHeight("sm").
 			WithMargin("sm").FlexButton,

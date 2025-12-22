@@ -192,7 +192,7 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
 - **文字**: 輪播卡片預設不換行 (緊湊顯示)；詳情頁可使用 `wrap: true` + `lineSpacing` 完整顯示資訊
 - **截斷**: `TruncateRunes()` 僅用於 LINE API 限制 (altText 400 字, displayText 長度限制)
 - **設計原則**: 對稱、現代、一致 - 確保視覺和諧，完整呈現資訊，所有顏色符合 WCAG AA 無障礙標準
-- **資料說明**: 學號查詢結果的系所資訊由學號推測，可能因轉系等原因有所不同
+- **資料說明**: 學號查詢結果的系所資訊由學號推測，若有轉系之類的情況可能與實際不符
 
 - **輪播卡片設計模式**:
 - 課程輪播 (Course): Colored Header (標題) → Body (標籤 + 資訊) → Footer

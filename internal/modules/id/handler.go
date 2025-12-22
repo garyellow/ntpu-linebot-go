@@ -660,26 +660,24 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 
 	// Sort by student ID (newest first)
 	// Database query already limits to 500 students
-	// Track if we hit the limit (likely more results available) - warning added at end
-	truncated := len(students) >= MaxStudentsPerSearch
+	// Display up to 400 students (4 messages × 100 students), reserve 5th message for meta info
 
-	// Format results - split into multiple messages if needed (100 students per message)
-	// Reserve 1 message slot for warning if truncated (LINE API: max 5 messages)
+	// Format student list - up to 4 messages (100 students per message)
+	// 5th message is always reserved for disclaimer and optional warning
 	var messages []messaging_api.MessageInterface
-	maxMessages := 5
-	if truncated {
-		maxMessages = 4 // Reserve 1 slot for warning message at the end
+	const maxListMessages = 4                                       // Max messages for student list
+	const studentsPerMessage = 100                                  // Students per message
+	const maxDisplayStudents = maxListMessages * studentsPerMessage // 400 students max
+
+	displayCount := len(students)
+	if displayCount > maxDisplayStudents {
+		displayCount = maxDisplayStudents
 	}
 
-	for i := 0; i < len(students); i += 100 {
-		// Respect LINE reply limit
-		if len(messages) >= maxMessages {
-			break
-		}
-
-		end := i + 100
-		if end > len(students) {
-			end = len(students)
+	for i := 0; i < displayCount; i += studentsPerMessage {
+		end := i + studentsPerMessage
+		if end > displayCount {
+			end = displayCount
 		}
 
 		var builder strings.Builder
@@ -691,10 +689,11 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 				student.ID, student.Name, student.Year, student.Department))
 		}
 
-		messages = append(messages, lineutil.NewTextMessageWithConsistentSender(builder.String(), sender))
+		listMsg := lineutil.NewTextMessageWithConsistentSender(builder.String(), sender)
+		messages = append(messages, listMsg)
 	}
 
-	// Add cache time footer to the last message (use oldest CachedAt)
+	// Add cache time footer to the last student list message
 	if len(messages) > 0 && len(students) > 0 {
 		// Collect all CachedAt values to find the minimum
 		cachedAts := make([]int64, len(students))
@@ -709,16 +708,27 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 		}
 	}
 
-	// Append warning message at the end if results were truncated
-	if truncated {
-		warningMsg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("⚠️ 搜尋結果達到上限 %d 筆\n\n可能有更多結果未顯示，建議：\n• 輸入更完整的姓名\n• 使用「學年」功能按年度查詢", MaxStudentsPerSearch),
-			sender,
-		)
-		messages = append(messages, warningMsg)
+	// 5th message: Always add disclaimer, with optional warning if results exceed display limit
+	var infoBuilder strings.Builder
+
+	// Add warning if we have more results than displayed
+	if len(students) > maxDisplayStudents {
+		infoBuilder.WriteString("⚠️ 搜尋結果達到顯示上限\n\n")
+		infoBuilder.WriteString(fmt.Sprintf("已顯示前 %d 筆結果（共 %d 筆），建議：\n", maxDisplayStudents, len(students)))
+		infoBuilder.WriteString("• 輸入更完整的姓名\n")
+		infoBuilder.WriteString("• 使用「學年」功能按年度查詢\n\n")
+		infoBuilder.WriteString("────────────────\n\n")
 	}
 
-	// Add Quick Reply to the last message
+	// Always add department inference disclaimer
+	infoBuilder.WriteString("ℹ️ 系所資訊說明\n\n")
+	infoBuilder.WriteString("系所資訊由學號推測，若有轉系之類的情況可能與實際不符。\n\n")
+	infoBuilder.WriteString("📊 資料範圍：94-113 學年度")
+
+	infoMsg := lineutil.NewTextMessageWithConsistentSender(infoBuilder.String(), sender)
+	messages = append(messages, infoMsg)
+
+	// Add Quick Reply to the last message (5th message)
 	lineutil.AddQuickReplyToMessages(messages,
 		lineutil.QuickReplyStudentAction(),
 		lineutil.QuickReplyDeptCodeAction(),
@@ -753,6 +763,13 @@ func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_ap
 	body.AddComponent(firstInfoRow.FlexBox)
 	body.AddInfoRow("🏫", "系所", student.Department, lineutil.BoldInfoRowStyle())
 	body.AddInfoRow("📅", "入學學年", fmt.Sprintf("%d 學年度", student.Year), lineutil.BoldInfoRowStyle())
+
+	// Add department inference note (transparency about data limitations)
+	body.AddComponent(lineutil.NewFlexText("⚠️ 系所資訊由學號推測，若有轉系之類的情況可能與實際不符").
+		WithSize("xs").
+		WithColor(lineutil.ColorNote).
+		WithWrap(true).
+		WithMargin("md").FlexText)
 
 	// Add cache time hint (unobtrusive, right-aligned)
 	if hint := lineutil.NewCacheTimeHint(student.CachedAt); hint != nil {
