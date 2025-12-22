@@ -723,7 +723,10 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	// Always add department inference disclaimer
 	infoBuilder.WriteString("ℹ️ 系所資訊說明\n\n")
 	infoBuilder.WriteString("系所資訊由學號推測，若有轉系之類的情況可能與實際不符。\n\n")
-	infoBuilder.WriteString("📊 資料範圍：94-113 學年度")
+	infoBuilder.WriteString("📊 姓名查詢範圍\n")
+	infoBuilder.WriteString("• 日間部大學部：101-113 學年度\n")
+	infoBuilder.WriteString("• 碩博士班/在職專班：僅限已查詢過的學號\n\n")
+	infoBuilder.WriteString("💡 若找不到學生，可使用「學年」功能按年度查詢")
 
 	infoMsg := lineutil.NewTextMessageWithConsistentSender(infoBuilder.String(), sender)
 	messages = append(messages, infoMsg)
@@ -770,6 +773,15 @@ func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_ap
 		WithColor(lineutil.ColorNote).
 		WithWrap(true).
 		WithMargin("md").FlexText)
+
+	// Add name search scope note (姓名查詢限制說明)
+	body.AddComponent(lineutil.NewFlexText(
+		"📊 姓名查詢僅涵蓋日間部大學部 101-113 學年度。 " +
+			"碩博士班/在職專班需先透過學號查詢後才能以姓名搜尋。").
+		WithSize("xs").
+		WithColor(lineutil.ColorNote).
+		WithWrap(true).
+		WithMargin("sm").FlexText)
 
 	// Add cache time hint (unobtrusive, right-aligned)
 	if hint := lineutil.NewCacheTimeHint(student.CachedAt); hint != nil {
