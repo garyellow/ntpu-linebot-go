@@ -54,8 +54,9 @@ func (h *Handler) Name() string {
 	return ModuleName
 }
 
+// Module constants for course handler.
 const (
-	ModuleName           = "course"
+	ModuleName           = "course" // Module identifier for registration
 	senderName           = "課程小幫手"
 	MaxCoursesPerSearch  = 40 // 4 carousels @ 10 bubbles, +1 slot for warning (LINE max: 5 messages)
 	MaxTitleDisplayChars = 60 // Truncation limit for course titles
