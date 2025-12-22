@@ -19,7 +19,7 @@ func newTestBotConfig() BotConfig {
 		MaxPostbackDataSize:       300,
 		MaxCoursesPerSearch:       40,
 		MaxTitleDisplayChars:      60,
-		MaxStudentsPerSearch:      500,
+		MaxStudentsPerSearch:      400,
 		MaxContactsPerSearch:      100,
 		ValidYearStart:            95,
 		ValidYearEnd:              112,
@@ -64,8 +64,8 @@ func TestNewBotConfig(t *testing.T) {
 		t.Errorf("expected MaxCoursesPerSearch 40, got %d", cfg.MaxCoursesPerSearch)
 	}
 
-	if cfg.MaxStudentsPerSearch != 500 {
-		t.Errorf("expected MaxStudentsPerSearch 500, got %d", cfg.MaxStudentsPerSearch)
+	if cfg.MaxStudentsPerSearch != 400 {
+		t.Errorf("expected MaxStudentsPerSearch 400, got %d", cfg.MaxStudentsPerSearch)
 	}
 
 	// Test year range

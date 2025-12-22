@@ -67,7 +67,7 @@ func setupTestHandler(t *testing.T) *Handler {
 		MaxPostbackDataSize:       300,
 		MaxCoursesPerSearch:       40,
 		MaxTitleDisplayChars:      60,
-		MaxStudentsPerSearch:      500,
+		MaxStudentsPerSearch:      400,
 		MaxContactsPerSearch:      100,
 		ValidYearStart:            95,
 		ValidYearEnd:              112,

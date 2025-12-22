@@ -26,6 +26,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/sliceutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
+	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
@@ -805,10 +806,10 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 		// Fuzzy match against all courses in this semester
 		for _, c := range semesterCourses {
 			// Check if searchTerm matches title OR any teacher using fuzzy matching
-			titleMatch := bot.ContainsAllRunes(c.Title, searchTerm)
+			titleMatch := stringutil.ContainsAllRunes(c.Title, searchTerm)
 			teacherMatch := false
 			for _, teacher := range c.Teachers {
-				if bot.ContainsAllRunes(teacher, searchTerm) {
+				if stringutil.ContainsAllRunes(teacher, searchTerm) {
 					teacherMatch = true
 					break
 				}
@@ -887,10 +888,10 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 				}
 
 				// Check if matches title or teacher
-				titleMatch := bot.ContainsAllRunes(course.Title, searchTerm)
+				titleMatch := stringutil.ContainsAllRunes(course.Title, searchTerm)
 				teacherMatch := false
 				for _, teacher := range course.Teachers {
-					if bot.ContainsAllRunes(teacher, searchTerm) {
+					if stringutil.ContainsAllRunes(teacher, searchTerm) {
 						teacherMatch = true
 						break
 					}
@@ -1000,7 +1001,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 		}
 		// Filter by keyword using fuzzy matching
 		for _, c := range termCourses {
-			if bot.ContainsAllRunes(c.Title, keyword) {
+			if stringutil.ContainsAllRunes(c.Title, keyword) {
 				courses = append(courses, c)
 			}
 		}

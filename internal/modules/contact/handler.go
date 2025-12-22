@@ -19,6 +19,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/sliceutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
+	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
@@ -386,10 +387,10 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 		for _, c := range allContacts {
 			// Fuzzy character-set matching: check if all runes in searchTerm exist in target
 			// Search in: name, title, organization, superior
-			if bot.ContainsAllRunes(c.Name, searchTerm) ||
-				bot.ContainsAllRunes(c.Title, searchTerm) ||
-				bot.ContainsAllRunes(c.Organization, searchTerm) ||
-				bot.ContainsAllRunes(c.Superior, searchTerm) {
+			if stringutil.ContainsAllRunes(c.Name, searchTerm) ||
+				stringutil.ContainsAllRunes(c.Title, searchTerm) ||
+				stringutil.ContainsAllRunes(c.Organization, searchTerm) ||
+				stringutil.ContainsAllRunes(c.Superior, searchTerm) {
 				contacts = append(contacts, c)
 			}
 		}

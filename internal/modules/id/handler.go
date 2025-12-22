@@ -18,7 +18,6 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper/ntpu"
-	"github.com/garyellow/ntpu-linebot-go/internal/sliceutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
@@ -42,9 +41,8 @@ func (h *Handler) Name() string {
 
 // ID handler constants.
 const (
-	ModuleName           = "id" // Module identifier for registration
-	senderName           = "學號小幫手"
-	MaxStudentsPerSearch = 500 // Maximum students to return in name search results
+	ModuleName = "id" // Module identifier for registration
+	senderName = "學號小幫手"
 )
 
 // Valid keywords for student ID queries
@@ -397,7 +395,7 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 		code string
 	}
 	for fullName, code := range ntpu.FullDepartmentCodes {
-		if bot.ContainsAllRunes(fullName, deptName) {
+		if stringutil.ContainsAllRunes(fullName, deptName) {
 			matches = append(matches, struct {
 				name string
 				code string
@@ -609,44 +607,35 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	return h.formatStudentResponse(student)
 }
 
-// handleStudentNameQuery handles student name queries with a 2-tier parallel search strategy:
+// handleStudentNameQuery handles student name queries with application-layer character-set matching.
 //
-// Search Strategy (parallel execution, merged results):
+// Search Strategy:
 //
-//  1. SQL LIKE (fast path): Direct database LIKE query for exact substrings.
-//     Example: "小明" matches "王小明" via SQL LIKE '%小明%'
+//  1. Loads all cached students from SQLite (fast with WAL mode).
+//  2. Filters using stringutil.ContainsAllRunes() for non-contiguous character matching.
+//     Example: "王明" and "明王" both match "王小明" because all characters exist in the name.
+//  3. Returns both the total count of matches and the first 400 results.
 //
-//  2. Fuzzy character-set matching (ALWAYS runs in parallel with SQL LIKE):
-//     Loads all cached students and checks if all runes in searchTerm exist in name.
-//     Example: "王明" matches "王小明" because all chars exist in the name
-//
-//     Results from both strategies are merged and deduplicated by student ID.
+// This approach supports flexible matching that SQL LIKE cannot provide, such as:
+// - Non-contiguous characters: "王明" → "王小明"
+// - Reversed order: "明王" → "王小明"
+// - Character-set membership: "資工" → "資訊工程"
 func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(ModuleName)
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
-	// Step 1: Try SQL LIKE search first (fast path for exact substrings)
-	students, err := h.db.SearchStudentsByName(ctx, name)
+	// Search using character-set matching (application layer)
+	// Supports non-contiguous character matching: "王明" matches "王小明"
+	// Returns total count and limited results (up to 400)
+	result, err := h.db.SearchStudentsByName(ctx, name)
 	if err != nil {
 		log.WithError(err).Error("Failed to search students by name")
 		return []messaging_api.MessageInterface{
 			lineutil.ErrorMessageWithQuickReply("搜尋姓名時發生問題", sender, "學號 "+name),
 		}
 	}
-
-	// Step 2: ALWAYS try fuzzy character-set matching to find additional results
-	// This catches cases like "王明" -> "王小明" that SQL LIKE misses
-	allStudents, err := h.db.GetAllStudents(ctx)
-	if err == nil && len(allStudents) > 0 {
-		for _, s := range allStudents {
-			if bot.ContainsAllRunes(s.Name, name) {
-				students = append(students, s)
-			}
-		}
-	}
-
-	// Deduplicate results by student ID (SQL LIKE and fuzzy may find overlapping results)
-	students = sliceutil.Deduplicate(students, func(s storage.Student) string { return s.ID })
+	students := result.Students
+	totalCount := result.TotalCount
 
 	if len(students) == 0 {
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf(config.IDNotFoundWithCutoffHint, name), sender)
@@ -658,9 +647,11 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	// Sort by student ID (newest first)
-	// Database query already limits to 500 students
-	// Display up to 400 students (4 messages × 100 students), reserve 5th message for meta info
+	// Character-set matching strategy (application layer):
+	// 1. Search all students using ContainsAllRunes (supports "王明" → "王小明")
+	// 2. Get accurate total count of all matches
+	// 3. Return first 400 students (sorted by year DESC, id DESC)
+	// 4. Display all returned students (4 messages × 100 students), reserve 5th message for meta info
 
 	// Format student list - up to 4 messages (100 students per message)
 	// 5th message is always reserved for disclaimer and optional warning
@@ -681,7 +672,7 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 		}
 
 		var builder strings.Builder
-		builder.WriteString(fmt.Sprintf("📋 搜尋結果（第 %d-%d 筆，共 %d 筆）\n\n", i+1, end, len(students)))
+		builder.WriteString(fmt.Sprintf("📋 搜尋結果（第 %d-%d 筆，共 %d 筆）\n\n", i+1, end, totalCount))
 
 		for j := i; j < end; j++ {
 			student := students[j]
@@ -694,11 +685,11 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	}
 
 	// Add cache time footer to the last student list message
-	if len(messages) > 0 && len(students) > 0 {
-		// Collect all CachedAt values to find the minimum
-		cachedAts := make([]int64, len(students))
-		for i, s := range students {
-			cachedAts[i] = s.CachedAt
+	if len(messages) > 0 && displayCount > 0 {
+		// Collect CachedAt values from displayed students only
+		cachedAts := make([]int64, displayCount)
+		for i := range displayCount {
+			cachedAts[i] = students[i].CachedAt
 		}
 		minCachedAt := lineutil.MinCachedAt(cachedAts...)
 		if minCachedAt > 0 {
@@ -712,9 +703,9 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	var infoBuilder strings.Builder
 
 	// Add warning if we have more results than displayed
-	if len(students) > maxDisplayStudents {
+	if totalCount > maxDisplayStudents {
 		infoBuilder.WriteString("⚠️ 搜尋結果達到顯示上限\n\n")
-		infoBuilder.WriteString(fmt.Sprintf("已顯示前 %d 筆結果（共 %d 筆），建議：\n", maxDisplayStudents, len(students)))
+		infoBuilder.WriteString(fmt.Sprintf("已顯示前 %d 筆結果（共找到 %d 筆），建議：\n", maxDisplayStudents, totalCount))
 		infoBuilder.WriteString("• 輸入更完整的姓名\n")
 		infoBuilder.WriteString("• 使用「學年」功能按年度查詢\n\n")
 		infoBuilder.WriteString("────────────────\n\n")

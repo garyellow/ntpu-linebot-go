@@ -77,6 +77,13 @@ LINE Webhook → Gin Handler
 - **2-tier parallel search**: SQL LIKE + fuzzy `ContainsAllRunes()`, merged and deduplicated
 - **Sorting**: Organizations by hierarchy, individuals by match count
 
+**ID Module**:
+- **Character-set matching**: Application-layer search with `stringutil.ContainsAllRunes()`
+- Supports non-contiguous character matching: "王明" and "明王" both match "王小明"
+- Returns `StudentSearchResult{Students: []Student, TotalCount: int}` structure
+- Displays "found X total, showing first 400" when results exceed limit
+- No SQL LIKE - pure application-layer filtering for maximum flexibility
+
 **All modules**:
 - Prefer text wrapping; use `TruncateRunes()` only for LINE API limits
 - Consistent Sender pattern, cache-first strategy

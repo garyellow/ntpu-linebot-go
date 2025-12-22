@@ -10,6 +10,7 @@ import (
 	"time"
 
 	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
+	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
 )
 
 // SaveStudent inserts or updates a student record
@@ -122,32 +123,50 @@ func (db *DB) GetStudentByID(ctx context.Context, id string) (*Student, error) {
 }
 
 // SearchStudentsByName searches students by partial name match.
+// Returns both the total count and limited results (up to 400 students).
 // Student data never expires; it is updated only when the cache is rebuilt (typically on startup).
-func (db *DB) SearchStudentsByName(ctx context.Context, name string) ([]Student, error) {
+func (db *DB) SearchStudentsByName(ctx context.Context, name string) (*StudentSearchResult, error) {
 	if len(name) > 100 {
 		return nil, errors.New("search term too long")
 	}
 
-	sanitized := sanitizeSearchTerm(name)
-	query := `SELECT id, name, department, year, cached_at FROM students WHERE name LIKE ? ESCAPE '\' ORDER BY year DESC, id DESC LIMIT 500`
-
 	start := time.Now()
-	rows, err := db.reader.QueryContext(ctx, query, "%"+sanitized+"%")
+
+	// Load all students from the cache table (ordered by year and id); performance is monitored via slow-query logging below.
+	query := `SELECT id, name, department, year, cached_at FROM students ORDER BY year DESC, id DESC`
+	rows, err := db.reader.QueryContext(ctx, query)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to search students",
+		slog.ErrorContext(ctx, "failed to get students",
 			"search_term", name,
 			"error", err)
 		return nil, fmt.Errorf("query students: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var students []Student
+	// Filter students using character-set matching (supports non-contiguous chars)
+	// This allows "王明" to match "王小明"
+	matchedStudents := make([]Student, 0, 400)
 	for rows.Next() {
 		var student Student
 		if err := rows.Scan(&student.ID, &student.Name, &student.Department, &student.Year, &student.CachedAt); err != nil {
 			return nil, fmt.Errorf("scan student: %w", err)
 		}
-		students = append(students, student)
+
+		// Check if student name contains all characters from search term
+		if stringutil.ContainsAllRunes(student.Name, name) {
+			matchedStudents = append(matchedStudents, student)
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	totalCount := len(matchedStudents)
+
+	// Limit results to first 400 students
+	if len(matchedStudents) > 400 {
+		matchedStudents = matchedStudents[:400]
 	}
 
 	// Warn on slow queries
@@ -156,10 +175,14 @@ func (db *DB) SearchStudentsByName(ctx context.Context, name string) ([]Student,
 			"operation", "SearchStudentsByName",
 			"duration_ms", duration.Milliseconds(),
 			"search_term", name,
-			"result_count", len(students))
+			"total_count", totalCount,
+			"result_count", len(matchedStudents))
 	}
 
-	return students, rows.Err()
+	return &StudentSearchResult{
+		Students:   matchedStudents,
+		TotalCount: totalCount,
+	}, nil
 }
 
 // GetStudentsByDepartment retrieves students by year and department.

@@ -78,7 +78,7 @@ type BotConfig struct {
 	// Business Limits
 	MaxCoursesPerSearch  int // Maximum courses per search (default: 40)
 	MaxTitleDisplayChars int // Maximum title display characters (default: 60)
-	MaxStudentsPerSearch int // Maximum students per search (default: 500)
+	MaxStudentsPerSearch int // Maximum students per search (default: 400)
 	MaxContactsPerSearch int // Maximum contacts per search (default: 100)
 	ValidYearStart       int // Valid year range start (default: 95)
 	ValidYearEnd         int // Valid year range end (default: 112)
@@ -154,7 +154,7 @@ func Load() (*Config, error) {
 			MaxPostbackDataSize:       LINEMaxPostbackDataLength,
 			MaxCoursesPerSearch:       40,
 			MaxTitleDisplayChars:      60,
-			MaxStudentsPerSearch:      500,
+			MaxStudentsPerSearch:      400,
 			MaxContactsPerSearch:      100,
 			ValidYearStart:            95,
 			ValidYearEnd:              112,
