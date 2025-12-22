@@ -452,6 +452,35 @@ func TestCanHandle_SmartKeywords(t *testing.T) {
 	}
 }
 
+func TestCanHandle_ExtendedKeywords(t *testing.T) {
+	h := setupTestHandler(t)
+
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		// Extended search keywords (更多學期)
+		{"更多學期 keyword", "更多學期 雲端", true},
+		{"更多學期 with whitespace", "更多學期 微積分", true},
+		{"歷史課程 keyword", "歷史課程 資料庫", true},
+		{"更多學期 alone", "更多學期", true},
+		{"歷史課程 alone", "歷史課程", true},
+
+		// Should not match if not at start
+		{"更多學期 not at start", "查詢更多學期", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := h.CanHandle(tt.input)
+			if got != tt.want {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSetBM25Index(t *testing.T) {
 	h := setupTestHandler(t)
 

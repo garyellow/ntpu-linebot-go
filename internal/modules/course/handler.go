@@ -209,6 +209,11 @@ func (h *Handler) CanHandle(text string) bool {
 		return true
 	}
 
+	// Check for extended search keywords (更多學期)
+	if extendedSearchRegex.MatchString(text) {
+		return true
+	}
+
 	// Check for smart search keywords (找課)
 	if smartSearchCourseRegex.MatchString(text) {
 		return true
