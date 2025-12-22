@@ -176,7 +176,7 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
   - **設計理念**:
     - 學期: 藍色系**明度漸變** (明亮→標準→暗淡) 直覺表達時間的新→舊
     - 相關性: **青綠色系漸層** (深青綠→青綠→翠綠) 表達相關性強度，與學期藍色系明確區分
-    - 使用說明: 藍紫色系**階層漸變** (主要→次要→建議→資訊) 建立清晰的視覺層次
+    - 使用說明: 藍紫色系**階層漸變** (主要→建議→資訊) 建立清晰的視覺層次
   - 學期標示: `ColorHeaderRecent` 明亮藍色 (最新學期), `ColorHeaderPrevious` 青色 (上個學期), `ColorHeaderHistorical` 暗灰 (過去學期)
   - 相關性標示: `ColorHeaderBest` 深青綠 (最佳匹配), `ColorHeaderHigh` 青綠 (高度相關), `ColorHeaderMedium` 翠綠 (部分相關) - 智慧搜尋
   - 聯絡類型: `ColorHeaderOrg` 明亮藍色 (組織單位), `ColorHeaderIndividual` 青色 (個人聯絡)
