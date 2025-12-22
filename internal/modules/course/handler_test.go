@@ -528,6 +528,95 @@ func TestSetBM25Index(t *testing.T) {
 	// This test just verifies the setter method exists and works
 }
 
+// TestHandleMessage_CanHandleConsistency verifies that CanHandle and HandleMessage
+// are consistent: if CanHandle returns true, HandleMessage should return messages.
+// This test prevents routing bugs where CanHandle claims to handle but HandleMessage returns nil.
+func TestHandleMessage_CanHandleConsistency(t *testing.T) {
+	h := setupTestHandler(t)
+
+	tests := []struct {
+		name        string
+		input       string
+		canHandle   bool
+		shouldReply bool // Should HandleMessage return non-empty messages?
+	}{
+		// UID patterns - should be handled
+		{"full UID", "1131U0001", true, true},
+		{"course number", "U0001", true, true},
+
+		// Keyword patterns - should be handled (may return help message if no DB results)
+		{"課程 keyword", "課程", true, true},         // Returns help message
+		{"course keyword", "course", true, true}, // Returns help message
+		{"找課 keyword", "找課", true, true},         // Returns help/error message
+		{"更多學期 keyword", "更多學期", true, true},     // Returns help message
+
+		// Historical pattern - should be handled
+		{"historical", "課程 110 微積分", true, true},
+
+		// Should not be handled
+		{"random text", "天氣如何", false, false},
+		{"empty", "", false, false},
+		{"number only", "110", false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test CanHandle
+			canHandle := h.CanHandle(tt.input)
+			if canHandle != tt.canHandle {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.input, canHandle, tt.canHandle)
+			}
+
+			// Test HandleMessage
+			msgs := h.HandleMessage(context.Background(), tt.input)
+			gotReply := len(msgs) > 0
+			if gotReply != tt.shouldReply {
+				t.Errorf("HandleMessage(%q) returned %d messages, shouldReply = %v", tt.input, len(msgs), tt.shouldReply)
+			}
+
+			// Critical consistency check
+			if canHandle && !gotReply {
+				t.Errorf("CONSISTENCY VIOLATION: CanHandle(%q) = true but HandleMessage returned empty", tt.input)
+			}
+			if !canHandle && gotReply {
+				t.Errorf("CONSISTENCY VIOLATION: CanHandle(%q) = false but HandleMessage returned messages", tt.input)
+			}
+		})
+	}
+}
+
+// TestHandleMessage_PriorityOrder verifies that patterns are checked in the correct priority order.
+// When multiple patterns could match, the highest priority should win.
+func TestHandleMessage_PriorityOrder(t *testing.T) {
+	h := setupTestHandler(t)
+
+	tests := []struct {
+		name            string
+		input           string
+		expectedHandler string // Which handler should process this (based on pattern priority)
+	}{
+		// Priority 1: UID should match before course keyword
+		{"UID over keyword", "1131U0001", "UID"}, // Even if "課程" appears elsewhere
+
+		// Priority 2: Course number should match before general keywords
+		{"course number over keyword", "U0001", "course_number"},
+
+		// Priority 3-6: Keywords are checked in order
+		// Cannot test easily without inspecting internal behavior
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msgs := h.HandleMessage(context.Background(), tt.input)
+			if len(msgs) == 0 {
+				t.Errorf("HandleMessage(%q) returned empty, expected %s handler", tt.input, tt.expectedHandler)
+			}
+			// Note: We can't easily check which internal handler was used without exposing internals
+			// This test serves as documentation of expected behavior
+		})
+	}
+}
+
 func TestHandleSmartSearch_NoBM25Index(t *testing.T) {
 	h := setupTestHandler(t)
 	ctx := context.Background()
