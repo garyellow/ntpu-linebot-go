@@ -528,9 +528,8 @@ func TestSetBM25Index(t *testing.T) {
 	// This test just verifies the setter method exists and works
 }
 
-// TestHandleMessage_CanHandleConsistency verifies that CanHandle and HandleMessage
-// are consistent: if CanHandle returns true, HandleMessage should return messages.
-// This test prevents routing bugs where CanHandle claims to handle but HandleMessage returns nil.
+// TestHandleMessage_CanHandleConsistency verifies CanHandle ⟺ HandleMessage consistency.
+// Pattern-Action Table architecture guarantees this structurally.
 func TestHandleMessage_CanHandleConsistency(t *testing.T) {
 	h := setupTestHandler(t)
 
@@ -585,8 +584,8 @@ func TestHandleMessage_CanHandleConsistency(t *testing.T) {
 	}
 }
 
-// TestHandleMessage_PriorityOrder verifies that patterns are checked in the correct priority order.
-// When multiple patterns could match, the highest priority should win.
+// TestHandleMessage_PriorityOrder verifies pattern priority ordering.
+// Higher priority patterns should match first (1=highest).
 func TestHandleMessage_PriorityOrder(t *testing.T) {
 	h := setupTestHandler(t)
 
@@ -643,10 +642,8 @@ func TestHandleSmartSearch_EmptyQuery(t *testing.T) {
 }
 
 func TestGetRelevanceLabel(t *testing.T) {
-	// Tests for 3-tier relevance label based on relative BM25 score
-	// Based on Normal-Exponential mixture model (Arampatzis et al., 2009)
-	// Confidence >= 0.8: 最佳匹配 (Normal core), >= 0.6: 高度相關 (Mixed), < 0.6: 部分相關 (Exponential tail)
-	// Confidence = score / maxScore (relative to top result)
+	// Tests 3-tier relevance scoring (Normal-Exponential mixture):
+	// >= 0.8: 最佳匹配 (Normal core), >= 0.6: 高度相關 (Mixed), < 0.6: 部分相關 (Exp tail)
 	tests := []struct {
 		name           string
 		confidence     float32
@@ -740,8 +737,7 @@ func TestGetRelevanceLabel(t *testing.T) {
 	}
 }
 
-// TestDispatchIntent_ParamValidation tests parameter validation logic
-// without requiring full handler setup. Uses nil dependencies (acceptable for error paths).
+// TestDispatchIntent_ParamValidation tests parameter validation (no network calls).
 func TestDispatchIntent_ParamValidation(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -810,8 +806,7 @@ func TestDispatchIntent_ParamValidation(t *testing.T) {
 	}
 }
 
-// TestDispatchIntent_Integration tests the full dispatch flow with real dependencies.
-// These tests verify that valid parameters correctly route to handler methods.
+// TestDispatchIntent_Integration tests full dispatch with real dependencies.
 func TestDispatchIntent_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping network test in short mode")
@@ -861,7 +856,7 @@ func TestDispatchIntent_Integration(t *testing.T) {
 	}
 }
 
-// TestDispatchIntent_SmartNoBM25Index tests smart search fallback when BM25Index is not configured.
+// TestDispatchIntent_SmartNoBM25Index tests smart search fallback (no BM25).
 func TestDispatchIntent_SmartNoBM25Index(t *testing.T) {
 	h := setupTestHandler(t)
 	// BM25Index is nil by default in setupTestHandler
@@ -878,7 +873,7 @@ func TestDispatchIntent_SmartNoBM25Index(t *testing.T) {
 	}
 }
 
-// TestExtractUniqueSemesters tests the data-driven semester extraction logic
+// TestExtractUniqueSemesters tests data-driven semester extraction.
 func TestExtractUniqueSemesters(t *testing.T) {
 	tests := []struct {
 		name     string

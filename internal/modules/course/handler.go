@@ -29,28 +29,17 @@ import (
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
-// Handler handles course-related queries.
-// It depends on *storage.DB directly for data access.
+// Handler handles course-related queries using a Pattern-Action Table architecture.
+// Both CanHandle() and HandleMessage() share the same matchers list, which structurally
+// guarantees routing consistency and eliminates the possibility of divergence.
 //
-// Pattern-Action Table Architecture:
-// This handler uses a Pattern-Action Table approach where all pattern matching logic
-// is centralized in a single matchers list. Both CanHandle() and HandleMessage()
-// use the SAME matchers list, which structurally guarantees routing consistency.
+// Architecture benefits:
+//   - Impossible for CanHandle/HandleMessage to be inconsistent
+//   - Priority-ordered pattern matching (constants: PriorityUID through PriorityRegular)
+//   - Type-safe handler functions (PatternHandler signature)
+//   - Simple to extend (append to matchers list)
 //
-// Benefits of this architecture:
-//   - Zero risk of CanHandle/HandleMessage inconsistency (they share the same patterns)
-//   - Easy to add new patterns (just append to matchers list)
-//   - Clear priority ordering (matchers are sorted by priority)
-//   - Type-safe handlers (PatternHandler signature enforced at compile time)
-//   - Testable in isolation (each matcher can be tested independently)
-//
-// Pattern Priority Order (see priority constants):
-//  1. Full course UID (e.g., 1131U0001) - exact match
-//  2. Course number only (e.g., U0001) - partial UID
-//  3. Historical pattern (課程 110 微積分) - year-specific
-//  4. Smart search (找課 ...) - semantic BM25 search
-//  5. Extended search (更多學期 ...) - semesters 3-4
-//  6. Regular keywords (課程/老師 ...) - semesters 1-2
+// Pattern priority (1=highest): UID → CourseNo → Historical → Smart → Extended → Regular
 type Handler struct {
 	db             *storage.DB
 	scraper        *scraper.Client
@@ -80,39 +69,34 @@ const (
 	MaxTitleDisplayChars = 60 // Maximum characters for course title display before truncation
 )
 
-// Pattern matching priorities (lower number = higher priority).
-// These constants ensure consistent priority ordering across the codebase.
+// Pattern matching priorities (lower = higher priority).
 const (
-	PriorityUID        = 1 // Full course UID (e.g., 1131U0001)
-	PriorityCourseNo   = 2 // Course number only (e.g., U0001)
-	PriorityHistorical = 3 // Historical pattern (課程 110 微積分)
-	PrioritySmart      = 4 // Smart search (找課 ...)
-	PriorityExtended   = 5 // Extended search (更多學期 ...)
-	PriorityRegular    = 6 // Regular keywords (課程/老師 ...)
+	PriorityUID        = 1 // Full course UID
+	PriorityCourseNo   = 2 // Course number only
+	PriorityHistorical = 3 // Historical (課程 110 微積分)
+	PrioritySmart      = 4 // Smart search (找課)
+	PriorityExtended   = 5 // Extended search (更多學期)
+	PriorityRegular    = 6 // Regular (課程/老師)
 )
 
-// PatternHandler is a function that processes a matched pattern.
-// It receives the context, original text, and regex match groups.
-// Returns LINE messages to send, or nil if unable to process.
+// PatternHandler processes a matched pattern and returns LINE messages.
+// Parameters: context, original text, regex match groups (matches[0] = full match).
+// Returns nil if unable to process.
 type PatternHandler func(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface
 
-// PatternMatcher represents a pattern-action pair for message routing.
-// The handler uses a list of PatternMatchers sorted by priority to determine
-// which pattern matches and how to process it.
+// PatternMatcher represents a pattern-action entry in the routing table.
+// Matchers are sorted by priority (lower = higher) during initialization.
 type PatternMatcher struct {
-	pattern  *regexp.Regexp // Regex pattern to match against user input
-	priority int            // Lower number = higher priority (1 is highest)
-	handler  PatternHandler // Function to call when pattern matches
-	name     string         // Human-readable name for debugging/logging
+	pattern  *regexp.Regexp // Pattern to match
+	priority int            // Lower = higher priority
+	handler  PatternHandler // Handler function
+	name     string         // Name for logging
 }
 
-// Keyword definitions for pattern matching.
-// These keywords are used with bot.BuildKeywordRegex to create case-insensitive,
-// start-anchored regex patterns (^ anchor) that match at the beginning of text.
+// Keyword definitions for pattern matching (used with bot.BuildKeywordRegex).
+// Creates case-insensitive, start-anchored patterns (^keyword).
 var (
-	// validCourseKeywords defines unified search keywords (course + teacher).
-	// Searches semesters 1-2 using SQL LIKE + fuzzy matching.
-	// Triggers handleUnifiedCourseSearch.
+	// validCourseKeywords: unified search (course + teacher), semesters 1-2.
 	validCourseKeywords = []string{
 		// 中文課程關鍵字
 		"課", "課程", "科目",
@@ -128,17 +112,12 @@ var (
 		"teacher", "professor", "prof", "dr", "doctor",
 	}
 
-	// validSmartSearchKeywords defines semantic search keywords.
-	// Uses BM25 + optional LLM query expansion for content-based matching.
-	// Searches semesters 1-2. Triggers handleSmartSearch.
+	// validSmartSearchKeywords: semantic search (BM25 + optional LLM expansion), semesters 1-2.
 	validSmartSearchKeywords = []string{
 		"找課", "找課程", "搜課",
 	}
 
-	// validExtendedSearchKeywords defines extended time range search.
-	// Searches semesters 3-4 (historical courses) using SQL LIKE + fuzzy matching.
-	// Typically triggered by "📅 更多學期" Quick Reply button.
-	// Triggers handleExtendedCourseSearch.
+	// validExtendedSearchKeywords: extended time range, semesters 3-4 (historical).
 	validExtendedSearchKeywords = []string{
 		"更多學期", "歷史課程",
 	}
@@ -146,28 +125,17 @@ var (
 	courseRegex            = bot.BuildKeywordRegex(validCourseKeywords)
 	smartSearchCourseRegex = bot.BuildKeywordRegex(validSmartSearchKeywords)
 	extendedSearchRegex    = bot.BuildKeywordRegex(validExtendedSearchKeywords)
-	// UID format: {year}{term}{no} where:
-	// - year: 2-3 digits (e.g., 113, 99)
-	// - term: 1 digit (1=上學期, 2=下學期)
-	// - no: course number starting with U/M/N/P (case-insensitive) + 4 digits
-	// Full UID example: 1131U0001 (year=113, term=1, no=U0001) or 991U0001
-	// Regex matches: 3-4 digits (year+term) + U/M/N/P + 4 digits
+	// UID format: {year}{term}{no} = 3-4 digits + [UMNP] + 4 digits (e.g., 1131U0001)
 	uidRegex = regexp.MustCompile(`(?i)\d{3,4}[umnp]\d{4}`)
-	// Course number only: {no} (e.g., U0001, M0002)
-	// Format: U/M/N/P (education level) + 4 digits
+	// Course number only: [UMNP] + 4 digits (e.g., U0001)
 	courseNoRegex = regexp.MustCompile(`(?i)^[umnp]\d{4}$`)
-	// Historical course query format: "課程 {year} {keyword}" or "課 {year} {keyword}"
-	// e.g., "課程 110 微積分", "課 108 程式設計"
-	// Year is in ROC format (e.g., 110 = AD 2021)
-	// Triggers handleHistoricalCourseSearch with specific year.
+	// Historical pattern: "課程 {year} {keyword}" (ROC year, e.g., 110 = AD 2021)
 	historicalCourseRegex = regexp.MustCompile(`(?i)^(課程?|course|class)\s+(\d{2,3})\s+(.+)$`)
 )
 
-// NewHandler creates a new course handler with required dependencies.
-// Optional dependencies (bm25Index, queryExpander, llmRateLimiter) can be nil.
-//
-// The handler initializes its Pattern-Action Table (matchers list) during construction.
-// Matchers are automatically sorted by priority to ensure consistent routing.
+// NewHandler creates a new course handler.
+// Optional: bm25Index, queryExpander, llmRateLimiter (pass nil if unused).
+// Initializes and sorts matchers by priority during construction.
 func NewHandler(
 	db *storage.DB,
 	scraper *scraper.Client,
@@ -195,9 +163,7 @@ func NewHandler(
 	return h
 }
 
-// initializeMatchers sets up the Pattern-Action Table.
-// All pattern matching logic is defined here in one place.
-// Matchers are automatically sorted by priority after initialization.
+// initializeMatchers builds and sorts the Pattern-Action Table by priority.
 func (h *Handler) initializeMatchers() {
 	h.matchers = []PatternMatcher{
 		{
@@ -261,15 +227,9 @@ const (
 	IntentUID    = "uid"    // Direct course UID lookup
 )
 
-// DispatchIntent handles NLU-parsed intents for the course module.
-// It validates required parameters and calls the appropriate handler method.
-//
-// Supported intents:
-//   - "search": requires "keyword" param, calls handleUnifiedCourseSearch
-//   - "smart": requires "query" param, calls handleSmartSearch
-//   - "uid": requires "uid" param, calls handleCourseUIDQuery
-//
-// Returns error if intent is unknown or required parameters are missing.
+// DispatchIntent handles NLU-parsed intents.
+// Intents: "search" (keyword), "smart" (query), "uid" (uid).
+// Returns error if intent unknown or required params missing.
 func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[string]string) ([]messaging_api.MessageInterface, error) {
 	// Validate parameters first (before logging) to support testing with nil dependencies
 	switch intent {
@@ -308,9 +268,8 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 	}
 }
 
-// findMatcher returns the first matcher that matches the given text.
-// Returns nil if no matcher matches.
-// This is the core routing function used by both CanHandle and HandleMessage.
+// findMatcher returns the first matching pattern or nil.
+// Used by both CanHandle and HandleMessage for consistent routing.
 func (h *Handler) findMatcher(text string) *PatternMatcher {
 	text = strings.TrimSpace(text)
 	for i := range h.matchers {
@@ -321,28 +280,13 @@ func (h *Handler) findMatcher(text string) *PatternMatcher {
 	return nil
 }
 
-// CanHandle checks if the message is for the course module.
-// It uses the Pattern-Action Table (matchers) to determine if any pattern matches.
-// This method is guaranteed to be consistent with HandleMessage because they share
-// the same matchers list and use the same findMatcher function.
+// CanHandle returns true if any pattern matches (consistent with HandleMessage).
 func (h *Handler) CanHandle(text string) bool {
 	return h.findMatcher(text) != nil
 }
 
-// HandleMessage handles text messages for the course module.
-// It uses the Pattern-Action Table (matchers) to find and execute the appropriate handler.
-//
-// Processing flow:
-//  1. Find the first matching pattern using findMatcher (sorted by priority)
-//  2. Extract regex match groups from the pattern
-//  3. Call the associated handler function with matches
-//  4. Return messages from handler (or nil if no match)
-//
-// This architecture guarantees consistency with CanHandle because both methods
-// use the same matchers list and findMatcher function.
-//
-// Pattern priorities (see priority constants for details):
-//  1. Full course UID - 2. Course number only - 3. Historical - 4. Smart - 5. Extended - 6. Regular
+// HandleMessage finds the matching pattern and executes its handler.
+// Returns nil if no pattern matches (fallback to NLU).
 func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
@@ -368,23 +312,20 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	return matcher.handler(ctx, text, matches)
 }
 
-// Pattern handler functions - these implement the PatternHandler interface.
-// Each function processes a specific pattern type and returns LINE messages.
+// Pattern handler adapters - implement PatternHandler interface.
 
-// handleUIDPattern processes full course UID (e.g., 1131U0001).
+// handleUIDPattern extracts UID from matches and queries course.
 func (h *Handler) handleUIDPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
-	// matches[0] is the full match
-	uid := matches[0]
+	uid := matches[0] // Full UID match
 	return h.handleCourseUIDQuery(ctx, uid)
 }
 
-// handleCourseNoPattern processes course number only (e.g., U0001).
+// handleCourseNoPattern processes course number queries.
 func (h *Handler) handleCourseNoPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
-	// Use the trimmed text directly
 	return h.handleCourseNoQuery(ctx, text)
 }
 
-// handleHistoricalPattern processes historical course queries (e.g., 課程 110 微積分).
+// handleHistoricalPattern parses year and keyword from historical pattern.
 func (h *Handler) handleHistoricalPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
 	// matches: [full, keyword, year, searchTerm]
 	if len(matches) < 4 {
@@ -402,10 +343,9 @@ func (h *Handler) handleHistoricalPattern(ctx context.Context, text string, matc
 	return h.handleHistoricalCourseSearch(ctx, year, keyword)
 }
 
-// handleSmartPattern processes smart search queries (e.g., 找課 機器學習).
+// handleSmartPattern processes smart search with optional help message.
 func (h *Handler) handleSmartPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
-	match := matches[0] // The matched keyword
-	searchTerm := bot.ExtractSearchTerm(text, match)
+	searchTerm := bot.ExtractSearchTerm(text, matches[0])
 
 	if searchTerm == "" {
 		// Return help message
@@ -437,10 +377,9 @@ func (h *Handler) handleSmartPattern(ctx context.Context, text string, matches [
 	return h.handleSmartSearch(ctx, searchTerm)
 }
 
-// handleExtendedPattern processes extended search queries (e.g., 更多學期 微積分).
+// handleExtendedPattern processes extended search (semesters 3-4) with optional help.
 func (h *Handler) handleExtendedPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
-	match := matches[0] // The matched keyword
-	searchTerm := bot.ExtractSearchTerm(text, match)
+	searchTerm := bot.ExtractSearchTerm(text, matches[0])
 
 	if searchTerm == "" {
 		// Return help message
@@ -464,10 +403,9 @@ func (h *Handler) handleExtendedPattern(ctx context.Context, text string, matche
 	return h.handleExtendedCourseSearch(ctx, searchTerm)
 }
 
-// handleRegularPattern processes regular course/teacher queries (e.g., 課程 微積分).
+// handleRegularPattern processes regular search (semesters 1-2) with optional help.
 func (h *Handler) handleRegularPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
-	match := matches[0] // The matched keyword
-	searchTerm := bot.ExtractSearchTerm(text, match)
+	searchTerm := bot.ExtractSearchTerm(text, matches[0])
 
 	if searchTerm == "" {
 		// Return help message with all options
