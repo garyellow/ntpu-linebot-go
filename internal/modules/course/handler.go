@@ -74,8 +74,9 @@ const (
 // PatternHandler processes a matched pattern and returns LINE messages.
 // Parameters: context, original text, regex match groups (matches[0] = full match).
 //
-// Contract: When invoked (pattern matched), MUST return at least one message.
-// Return help/error messages instead of nil to preserve CanHandle/HandleMessage consistency.
+// Contract: When invoked (pattern matched), MUST return at least one user-facing message.
+// Even if processing fails or validation errors occur, return error/help messages instead
+// of nil/empty slice to preserve CanHandle/HandleMessage consistency guarantee.
 type PatternHandler func(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface
 
 // PatternMatcher represents a pattern-action pair sorted by priority.
@@ -338,7 +339,7 @@ func (h *Handler) handleCourseNoPattern(ctx context.Context, text string, matche
 }
 
 // handleHistoricalPattern parses year and keyword from historical query.
-// matches: [fullMatch, keywordPrefix, year, searchTerm]
+// Regex groups: [0]=fullMatch, [1]=keywordPrefix, [2]=year, [3]=searchTerm
 func (h *Handler) handleHistoricalPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
 	// Defensive validation (should not happen if regex is correct)
 	if len(matches) < 4 {

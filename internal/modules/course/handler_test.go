@@ -557,12 +557,14 @@ func TestHandleMessage_CanHandleConsistency(t *testing.T) {
 		{"更多學期 keyword", "更多學期", true, true},     // Returns help message
 
 		// Historical pattern - should be handled
-		{"historical", "課程 110 微積分", true, true},
+		{"historical valid", "課程 110 微積分", true, true},
+		{"historical Western year", "課程 2021 微積分", true, true},
 
-		// Fallback patterns (looks like historical but doesn't match regex)
-		// These match courseRegex instead and get handled appropriately
-		{"historical invalid year", "課程 abc 微積分", true, true}, // Matches courseRegex (not historical)
-		{"historical no keyword", "課程 110", true, true},       // Matches courseRegex (no keyword after year)
+		// Edge cases: historical pattern matches but validation fails
+		// Handler should return error message instead of nil
+		{"historical invalid year format", "課程 abc 微積分", true, true}, // Matches courseRegex (not historical)
+		{"historical no keyword", "課程 110", true, true},              // Matches courseRegex (no keyword after year)
+		{"historical year too early", "課程 50 微積分", true, true},       // Matches historical, returns error about launch year
 
 		// Should not be handled
 		{"random text", "天氣如何", false, false},
