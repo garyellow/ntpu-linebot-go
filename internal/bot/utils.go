@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
 )
 
 // PostbackSplitChar is the delimiter used to separate fields in postback data.
@@ -64,35 +66,8 @@ func ExtractSearchTerm(text, keyword string) string {
 // ContainsAllRunes checks if s contains all runes from chars (case-insensitive for ASCII).
 // Counts character occurrences: "aa" requires at least 2 'a's in s.
 // Example: ContainsAllRunes("資訊工程學系", "資工系") returns true.
+//
+// Deprecated: Use stringutil.ContainsAllRunes instead.
 func ContainsAllRunes(s, chars string) bool {
-	if chars == "" {
-		return true
-	}
-	if s == "" {
-		return false
-	}
-
-	// Convert to lowercase for case-insensitive matching (for ASCII)
-	sLower := strings.ToLower(s)
-	charsLower := strings.ToLower(chars)
-
-	// Build a map counting rune occurrences in s
-	runeCount := make(map[rune]int)
-	for _, r := range sLower {
-		runeCount[r]++
-	}
-
-	// Build a map counting required rune occurrences in chars
-	requiredCount := make(map[rune]int)
-	for _, r := range charsLower {
-		requiredCount[r]++
-	}
-
-	// Check if s has at least as many of each rune as required
-	for r, required := range requiredCount {
-		if runeCount[r] < required {
-			return false
-		}
-	}
-	return true
+	return stringutil.ContainsAllRunes(s, chars)
 }

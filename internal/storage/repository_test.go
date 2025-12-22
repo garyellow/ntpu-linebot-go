@@ -79,12 +79,15 @@ func TestSearchStudentsByName(t *testing.T) {
 	}
 
 	// Test partial match (critical for Chinese name search)
-	results, err := db.SearchStudentsByName(ctx, "小明")
+	result, err := db.SearchStudentsByName(ctx, "小明")
 	if err != nil {
 		t.Fatalf("SearchStudentsByName failed: %v", err)
 	}
-	if len(results) != 2 {
-		t.Errorf("Expected 2 students with '小明', got %d", len(results))
+	if len(result.Students) != 2 {
+		t.Errorf("Expected 2 students with '小明', got %d", len(result.Students))
+	}
+	if result.TotalCount != 2 {
+		t.Errorf("Expected TotalCount 2, got %d", result.TotalCount)
 	}
 }
 

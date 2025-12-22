@@ -63,10 +63,11 @@ return handler.HandleMessage(ctx, rawText)
 - **關鍵字**：學號、學生、姓名、科系、系代碼、學年
 - **功能**：
   - 學號查詢（直接輸入 8-9 位數字）
-  - 姓名搜尋（2-tier 並行搜尋，最多 500 筆）
+  - 姓名搜尋（應用層字元匹配，支援非連續搜尋，顯示前 400 筆）
   - 系代碼對照
   - 學年度學生名單（按學院→科系選擇）
-- **搜尋策略**：SQL LIKE (name) + 模糊 ContainsAllRunes (name)
+- **搜尋策略**：ContainsAllRunes (character-set matching) - 支援「王明」匹配「王小明」
+- **結果結構**：`StudentSearchResult{Students, TotalCount}` - 告知真實總數
 - **Postback 前綴**：`id:`
 - **Sender 名稱**：學號小幫手
 

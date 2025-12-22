@@ -9,6 +9,12 @@ type Student struct {
 	CachedAt   int64  `json:"cached_at"`
 }
 
+// StudentSearchResult represents the result of a student search with total count
+type StudentSearchResult struct {
+	Students   []Student // Limited results (up to 400)
+	TotalCount int       // Total number of matches (may exceed 400)
+}
+
 // Contact represents a contact record (individual or organization)
 type Contact struct {
 	UID          string `json:"uid"`
