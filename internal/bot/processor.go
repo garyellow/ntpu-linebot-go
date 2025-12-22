@@ -487,6 +487,7 @@ func (p *Processor) getHelpMessage() []messaging_api.MessageInterface {
 		heroSubtext = "使用關鍵字快速查詢"
 	}
 
+	// Hero section - Primary feature introduction
 	hero := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexText("🔍 北大查詢小工具").
 			WithSize("md").
@@ -497,7 +498,7 @@ func (p *Processor) getHelpMessage() []messaging_api.MessageInterface {
 			WithColor(lineutil.ColorHeroText).
 			WithMargin("sm").FlexText,
 	).
-		WithBackgroundColor(lineutil.ColorHeroBg).
+		WithBackgroundColor(lineutil.ColorHeaderPrimary).
 		WithPaddingAll("lg").
 		WithPaddingBottom("md")
 
@@ -588,7 +589,7 @@ func (p *Processor) getDetailedInstructionMessages() []messaging_api.MessageInte
 
 // buildAIModeFlexMessage creates a Flex Message for AI mode instructions
 func (p *Processor) buildAIModeFlexMessage(sender *messaging_api.Sender) messaging_api.MessageInterface {
-	// Hero section
+	// Hero section - Primary instruction (core feature)
 	hero := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexText("🤖 AI 模式").
 			WithSize("lg").
@@ -599,7 +600,7 @@ func (p *Processor) buildAIModeFlexMessage(sender *messaging_api.Sender) messagi
 			WithColor(lineutil.ColorHeroText).
 			WithMargin("sm").FlexText,
 	).
-		WithBackgroundColor(lineutil.ColorHeroBg).
+		WithBackgroundColor(lineutil.ColorHeaderPrimary).
 		WithPaddingAll("xl").
 		WithPaddingBottom("lg")
 
@@ -693,7 +694,7 @@ func (p *Processor) buildKeywordModeFlexMessage(nluEnabled bool, sender *messagi
 		titleText = "📖 使用說明"
 	}
 
-	// Hero section
+	// Hero section - Primary instruction (core feature)
 	hero := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexText(titleText).
 			WithSize("lg").
@@ -704,7 +705,7 @@ func (p *Processor) buildKeywordModeFlexMessage(nluEnabled bool, sender *messagi
 			WithColor(lineutil.ColorHeroText).
 			WithMargin("sm").FlexText,
 	).
-		WithBackgroundColor(lineutil.ColorSuccess).
+		WithBackgroundColor(lineutil.ColorHeaderPrimary).
 		WithPaddingAll("xl").
 		WithPaddingBottom("lg")
 
@@ -810,14 +811,14 @@ func (p *Processor) buildKeywordModeFlexMessage(nluEnabled bool, sender *messagi
 
 // buildTipsFlexMessage creates a Flex Message for usage tips
 func (p *Processor) buildTipsFlexMessage(nluEnabled bool, sender *messaging_api.Sender) messaging_api.MessageInterface {
-	// Hero section
+	// Hero section - Tips and suggestions
 	hero := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexText("💡 使用提示").
 			WithSize("lg").
 			WithWeight("bold").
 			WithColor(lineutil.ColorHeroText).FlexText,
 	).
-		WithBackgroundColor(lineutil.ColorButtonInternal).
+		WithBackgroundColor(lineutil.ColorHeaderTips).
 		WithPaddingAll("xl").
 		WithPaddingBottom("lg")
 
@@ -936,14 +937,14 @@ func (p *Processor) buildTipsFlexMessage(nluEnabled bool, sender *messaging_api.
 
 // buildDataSourceFlexMessage creates a Flex Message displaying data sources
 func (p *Processor) buildDataSourceFlexMessage(sender *messaging_api.Sender) messaging_api.MessageInterface {
-	// Hero section
+	// Hero section - Informational
 	hero := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexText("📊 資料來源").
 			WithSize("lg").
 			WithWeight("bold").
 			WithColor(lineutil.ColorHeroText),
 	).
-		WithBackgroundColor(lineutil.ColorHeroBg).
+		WithBackgroundColor(lineutil.ColorHeaderInfo).
 		WithPaddingAll("xl").
 		WithPaddingBottom("lg")
 
