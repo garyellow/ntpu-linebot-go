@@ -481,6 +481,40 @@ func TestCanHandle_ExtendedKeywords(t *testing.T) {
 	}
 }
 
+func TestCanHandle_HistoricalKeywords(t *testing.T) {
+	h := setupTestHandler(t)
+
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		// Historical course patterns (課程 {year} {keyword})
+		{"課程 with year", "課程 110 微積分", true},
+		{"課 with year", "課 108 程式設計", true},
+		{"course with year", "course 110 calculus", true},
+		{"class with year", "class 108 programming", true},
+
+		// These still match courseRegex (general course keyword), which is acceptable
+		// The historical pattern is checked in HandleMessage to provide specialized handling
+		{"year too long", "課程 1100 微積分", true},    // Matches courseRegex
+		{"no keyword after year", "課程 110", true}, // Matches courseRegex
+		{"課程 without year", "課程 微積分", true},       // Matches courseRegex
+
+		// Should not match - no valid course keyword
+		{"random text", "110 微積分", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := h.CanHandle(tt.input)
+			if got != tt.want {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSetBM25Index(t *testing.T) {
 	h := setupTestHandler(t)
 

@@ -55,16 +55,19 @@ const (
 	MaxTitleDisplayChars = 60 // Maximum characters for course title display before truncation
 )
 
-// Valid keywords for course queries
+// Keyword definitions for pattern matching.
+// These keywords are used with bot.BuildKeywordRegex to create case-insensitive,
+// start-anchored regex patterns (^ anchor) that match at the beginning of text.
 var (
-	// Unified course search keywords (includes both course and teacher keywords)
-	// All keywords trigger the same unified search that matches both title and teacher
+	// validCourseKeywords defines unified search keywords (course + teacher).
+	// Searches semesters 1-2 using SQL LIKE + fuzzy matching.
+	// Triggers handleUnifiedCourseSearch.
 	validCourseKeywords = []string{
 		// 中文課程關鍵字
 		"課", "課程", "科目",
 		"課名", "課程名", "課程名稱",
 		"科目名", "科目名稱",
-		// 中文教師關鍵字（統一使用課程關鍵字搜尋教師）
+		// 中文教師關鍵字
 		"師", "老師", "教師", "教授",
 		"老師名", "教師名", "教授名",
 		"老師名稱", "教師名稱", "教授名稱",
@@ -74,15 +77,17 @@ var (
 		"teacher", "professor", "prof", "dr", "doctor",
 	}
 
-	// Smart search keywords (direct BM25 smart search)
-	// 找課: directly triggers smart search without keyword fallback
+	// validSmartSearchKeywords defines semantic search keywords.
+	// Uses BM25 + optional LLM query expansion for content-based matching.
+	// Searches semesters 1-2. Triggers handleSmartSearch.
 	validSmartSearchKeywords = []string{
 		"找課", "找課程", "搜課",
 	}
 
-	// Extended search keywords (searches 4 semesters instead of 2)
-	// Triggered by "📅 更多學期" Quick Reply
-	// "歷史課程" kept for backward compatibility
+	// validExtendedSearchKeywords defines extended time range search.
+	// Searches semesters 3-4 (historical courses) using SQL LIKE + fuzzy matching.
+	// Typically triggered by "📅 更多學期" Quick Reply button.
+	// Triggers handleExtendedCourseSearch.
 	validExtendedSearchKeywords = []string{
 		"更多學期", "歷史課程",
 	}
@@ -103,7 +108,7 @@ var (
 	// Historical course query format: "課程 {year} {keyword}" or "課 {year} {keyword}"
 	// e.g., "課程 110 微積分", "課 108 程式設計"
 	// Year is in ROC format (e.g., 110 = AD 2021)
-	// This pattern is checked BEFORE the regular courseRegex to handle historical queries
+	// Triggers handleHistoricalCourseSearch with specific year.
 	historicalCourseRegex = regexp.MustCompile(`(?i)^(課程?|course|class)\s+(\d{2,3})\s+(.+)$`)
 )
 
@@ -195,31 +200,38 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 	}
 }
 
-// CanHandle checks if the message is for the course module
+// CanHandle checks if the message is for the course module.
+// This method determines routing: should match the same patterns as HandleMessage.
+// Check priority matches HandleMessage's processing order to avoid routing mismatches.
 func (h *Handler) CanHandle(text string) bool {
 	text = strings.TrimSpace(text)
 
-	// Check for course UID pattern (full: 11312U0001)
+	// Priority 1: Full course UID (e.g., 1131U0001)
 	if uidRegex.MatchString(text) {
 		return true
 	}
 
-	// Check for course number only pattern (e.g., U0001, M0002)
+	// Priority 2: Course number only (e.g., U0001)
 	if courseNoRegex.MatchString(text) {
 		return true
 	}
 
-	// Check for extended search keywords (更多學期)
-	if extendedSearchRegex.MatchString(text) {
+	// Priority 3: Historical course pattern (課程 110 微積分)
+	if historicalCourseRegex.MatchString(text) {
 		return true
 	}
 
-	// Check for smart search keywords (找課)
+	// Priority 4: Smart search keywords (找課)
 	if smartSearchCourseRegex.MatchString(text) {
 		return true
 	}
 
-	// Check for course keywords (unified: includes both course and teacher keywords)
+	// Priority 5: Extended search keywords (更多學期)
+	if extendedSearchRegex.MatchString(text) {
+		return true
+	}
+
+	// Priority 6: Regular course/teacher keywords (課程, 老師)
 	if courseRegex.MatchString(text) {
 		return true
 	}
@@ -227,26 +239,38 @@ func (h *Handler) CanHandle(text string) bool {
 	return false
 }
 
-// HandleMessage handles text messages for the course module
+// HandleMessage handles text messages for the course module.
+// It processes course queries through a priority-based pattern matching chain.
+//
+// Processing order (highest to lowest priority):
+//  1. Full course UID (e.g., 1131U0001) - direct course lookup
+//  2. Course number only (e.g., U0001) - searches recent 2 semesters
+//  3. Historical pattern (課程 110 微積分) - year-specific search
+//  4. Smart search (找課 ...) - BM25 + query expansion (requires LLM)
+//  5. Extended search (更多學期 ...) - searches semesters 3-4
+//  6. Regular search (課程 ...) - SQL LIKE + fuzzy search in semesters 1-2
+//
+// Returns empty slice if no pattern matches (fallback to NLU intent parser).
 func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
 	log.Debugf("Handling course message: %s", text)
 
-	// Check for full course UID first (highest priority, e.g., 11312U0001)
+	// Priority 1: Full course UID (e.g., 1131U0001)
 	if match := uidRegex.FindString(text); match != "" {
 		return h.handleCourseUIDQuery(ctx, match)
 	}
 
-	// Check for course number only (e.g., U0001, M0002)
-	// Will search in current and previous semester
+	// Priority 2: Course number only (e.g., U0001, M0002)
+	// Searches in current and previous semester
 	if courseNoRegex.MatchString(text) {
 		return h.handleCourseNoQuery(ctx, text)
 	}
 
-	// Check for historical course query pattern BEFORE regular course search
-	// Format: "課程 {year} {keyword}" e.g., "課程 110 微積分"
+	// Priority 3: Historical course pattern (課程 {year} {keyword})
+	// Format: "課程 110 微積分" or "課 108 程式設計"
+	// Year is in ROC format (e.g., 110 = AD 2021)
 	if matches := historicalCourseRegex.FindStringSubmatch(text); len(matches) == 4 {
 		yearStr := matches[2]
 		keyword := strings.TrimSpace(matches[3])
@@ -256,14 +280,13 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		}
 	}
 
-	// Check for smart search keywords (找課) - direct smart search
+	// Priority 4: Smart search keywords (找課) - uses BM25 + optional query expansion
 	if smartSearchCourseRegex.MatchString(text) {
 		match := smartSearchCourseRegex.FindString(text)
 		searchTerm := bot.ExtractSearchTerm(text, match)
 
 		if searchTerm == "" {
 			sender := lineutil.GetSender(senderName, h.stickerManager)
-			// Check if smart search is actually enabled
 			var helpText string
 			if h.bm25Index != nil && h.bm25Index.IsEnabled() {
 				helpText = "🔮 智慧搜尋說明\n\n" +
@@ -291,8 +314,8 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		return h.handleSmartSearch(ctx, searchTerm)
 	}
 
-	// Check for extended search keywords (更多學期) - searches 4 semesters
-	// This is triggered by "📅 更多學期" Quick Reply
+	// Priority 5: Extended search keywords (更多學期) - searches semesters 3-4
+	// Typically triggered by "📅 更多學期" Quick Reply button
 	if extendedSearchRegex.MatchString(text) {
 		match := extendedSearchRegex.FindString(text)
 		searchTerm := bot.ExtractSearchTerm(text, match)
@@ -301,7 +324,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 			sender := lineutil.GetSender(senderName, h.stickerManager)
 			helpText := "📅 更多學期搜尋說明\n\n" +
 				"🔍 搜尋範圍：額外 2 個歷史學期（第 3-4 學期）\n" +
-				"（一般搜尋僅搜尋近 2 學期＝最新第 1-2 學期）\n\n" +
+				"（精確搜尋僅搜尋近 2 學期＝最新第 1-2 學期）\n\n" +
 				"用法範例：\n" +
 				"• 更多學期 微積分\n" +
 				"• 更多學期 王小明\n\n" +
@@ -318,20 +341,18 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		return h.handleExtendedCourseSearch(ctx, searchTerm)
 	}
 
-	// Check for course title search - extract term after keyword
-	// Support both "keyword term" and "term keyword" patterns
-	// Unified search: matches both course title and teacher name
+	// Priority 6: Regular course/teacher keywords - unified search (searches semesters 1-2)
+	// Matches both course title and teacher name using SQL LIKE + fuzzy search
 	if courseRegex.MatchString(text) {
 		match := courseRegex.FindString(text)
 		searchTerm := bot.ExtractSearchTerm(text, match)
 
 		if searchTerm == "" {
-			// If no search term provided, give helpful message
+			// No search term: show help with all available search options
 			sender := lineutil.GetSender(senderName, h.stickerManager)
 			var helpText string
 			var quickReplyItems []lineutil.QuickReplyItem
 			if h.bm25Index != nil && h.bm25Index.IsEnabled() {
-				// Smart search enabled - mention it as an option
 				helpText = "📚 課程查詢方式\n\n" +
 					"🔍 精確搜尋（近 2 學期）\n" +
 					"• 課程 微積分\n" +
