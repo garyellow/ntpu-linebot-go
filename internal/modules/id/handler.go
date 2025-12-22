@@ -735,7 +735,7 @@ func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_ap
 	// Header: Student name with colored background (using standardized colored header component)
 	header := lineutil.NewColoredHeader(lineutil.ColoredHeaderInfo{
 		Title: student.Name,
-		Color: lineutil.ColorHeaderStudent, // Green color for student module
+		Color: lineutil.ColorHeaderStudent, // Purple color for student module
 	})
 
 	// Body: Student details using BodyContentBuilder for cleaner code
@@ -745,7 +745,7 @@ func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_ap
 	body.AddComponent(lineutil.NewBodyLabel(lineutil.BodyLabelInfo{
 		Emoji: "🎓",
 		Label: "國立臺北大學",
-		Color: lineutil.ColorHeaderStudent, // Green color matching header
+		Color: lineutil.ColorHeaderStudent, // Purple color matching header
 	}).FlexBox)
 
 	// 學號 info - first row (no separator so it flows directly after the label)

@@ -160,7 +160,7 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
 
 **Flex Message 設計規範**:
 - **配色** (WCAG AA 符合):
-  - Hero 背景：模組特定色（課程藍、學生紫、聯絡青綠、緊急紅）、成功綠、警告琥珀，標題白色
+  - Hero 背景：模組特定色（課程藍、學生紫、聯絡青綠、緊急紅）、使用說明藍色系漸層、警告琥珀，標題白色
   - 主要文字 `#111111` (ColorText), 標籤 `#666666` (ColorLabel)
   - 次要文字 `#6B6B6B` (ColorSubtext), 備註 `#888888` (ColorNote)
   - 時間戳記 `#B7B7B7` (ColorGray400) - 僅用於不強調資訊
@@ -175,16 +175,18 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
 - **Header 顏色** (Colored Header 背景色 - 所有顏色符合 WCAG AA):
   - **設計理念**:
     - 學期: 藍色系**明度漸變** (明亮→標準→暗淡) 直覺表達時間的新→舊
-    - 相關性: **飽和度與色相漸變** (綠→藍→紫) 建立清晰的品質層次
+    - 相關性: **青綠色系漸層** (深青綠→青綠→翠綠) 表達相關性強度，與學期藍色系明確區分
+    - 使用說明: 藍紫色系**階層漸變** (主要→次要→建議→資訊) 建立清晰的視覺層次
   - 學期標示: `ColorHeaderRecent` 明亮藍色 (最新學期), `ColorHeaderPrevious` 青色 (上個學期), `ColorHeaderHistorical` 暗灰 (過去學期)
-  - 相關性標示: `ColorHeaderBest` 翠綠色 (最佳匹配), `ColorHeaderHigh` 明亮藍色 (高度相關), `ColorHeaderMedium` 紫色 (部分相關)
+  - 相關性標示: `ColorHeaderBest` 深青綠 (最佳匹配), `ColorHeaderHigh` 青綠 (高度相關), `ColorHeaderMedium` 翠綠 (部分相關) - 智慧搜尋
   - 聯絡類型: `ColorHeaderOrg` 明亮藍色 (組織單位), `ColorHeaderIndividual` 青色 (個人聯絡)
   - 詳情頁模組: `ColorHeaderCourse` 明亮藍色, `ColorHeaderContact` 青色, `ColorHeaderStudent` 紫色, `ColorHeaderEmergency` 紅色 (緊急聯絡)
+  - 使用說明頁: `ColorHeaderPrimary` 皇家藍 (主要功能), `ColorHeaderTips` 明亮紫 (提示建議), `ColorHeaderInfo` 天空藍 (資訊展示)
   - **Header 文字顏色**: 所有 header 都使用白色文字 (ColorHeroText) 以確保 WCAG AA 對比度
 - **Body Label 設計原則**:
   - **顏色協調**: Body label 文字顏色與 header 背景色一致，建立清晰的視覺關聯
   - **視覺層次**: Header 背景色 → Body label 文字色 (相同顏色)，創造連貫的視覺線索
-  - **語義清晰**: 顏色強化語義含義 (藍=學術/組織, 青綠=個人/行動, 紫=身份/內部操作, 紅=緊急等)
+  - **語義清晰**: 顏色強化語義含義 (藍=學術/組織, 青綠=相關性/個人, 紫=身份/建議, 紅=緊急等)
   - **設計一致**: 所有輪播卡片 (課程/聯絡人) 都遵循此模式，確保用戶體驗一致
 - **間距**: Hero padding `24px`/`16px` (4-point grid), Body/Footer spacing `sm`, 按鈕高度 `sm`
 - **文字**: 輪播卡片預設不換行 (緊湊顯示)；詳情頁可使用 `wrap: true` + `lineSpacing` 完整顯示資訊
@@ -197,7 +199,7 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
   - Header 使用 `NewColoredHeader()` 創建帶背景色的標題 (藍色/青色/灰色)
   - Body 第一列使用 `NewBodyLabel()` 顯示學期/相關性標籤 (文字顏色與 header 背景色一致)
   - 學期標籤: `🆕 最新學期` (明亮藍色), `📅 上個學期` (青色), `📦 過去學期` (暗灰色)
-  - 相關性標籤: `🎯 最佳匹配` (翠綠色), `✨ 高度相關` (明亮藍色), `📋 部分相關` (紫色) - 智慧搜尋
+  - 相關性標籤: `🎯 最佳匹配` (深青綠色), `✨ 高度相關` (青綠色), `📋 部分相關` (翠綠色) - 智慧搜尋
   - **Footer 按鈕**: 「查看詳細」按鈕顏色與 header 同步 (`labelInfo.Color`)，增強視覺協調性
   - **視覺效果**: Header 背景色 = Body Label 文字色 = Footer 按鈕色，創造完整的視覺線索
 - 聯絡人輪播 (Contact): Colored Header (姓名) → Body (標籤 + 資訊) → Footer

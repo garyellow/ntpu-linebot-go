@@ -32,7 +32,7 @@ const (
 	// ============================================================
 	// Tier 1: Core Semantic Colors (狀態本質)
 	// ============================================================
-	ColorPrimary = "#06C755" // LINE Green - brand identity (not used for module colors)
+	ColorPrimary = "#06C755" // LINE Green - brand identity (reserved for welcome messages)
 	ColorDanger  = "#E02D41" // Errors, destructive, urgent actions (4.5:1)
 	ColorWarning = "#D97706" // Warnings, caution, rate limit notices (4.5:1)
 	ColorSuccess = "#059669" // Success, completed, positive feedback (4.5:1)
@@ -81,6 +81,12 @@ const (
 	ColorHeaderContact   = "#0891B2"   // 📞 聯絡詳情 - cyan (溝通) - 4.7:1
 	ColorHeaderStudent   = "#7C3AED"   // 🎓 學生詳情 - purple (身份) - 4.6:1
 	ColorHeaderEmergency = ColorDanger // 🚨 緊急聯絡 - red (緊急) - 4.5:1
+
+	// Instruction Page Headers (使用說明頁面 - 建立清晰的視覺層次)
+	// 使用藍紫色系階層漸變：主要（皇家藍）→ 建議（明亮紫）→ 資訊（天空藍）
+	ColorHeaderPrimary = "#2563EB" // 主要功能說明 (AI/關鍵字模式) - royal blue (權威、核心) - 4.8:1
+	ColorHeaderTips    = "#8B5CF6" // 使用提示 - bright purple (啟發、建議) - 4.5:1
+	ColorHeaderInfo    = "#0284C7" // 資訊展示 (資料來源) - sky blue (資訊、開放) - 4.7:1
 
 	// ============================================================
 	// Tier 4: Text & Component Colors
