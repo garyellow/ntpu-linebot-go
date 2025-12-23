@@ -1,211 +1,188 @@
-# deployments/
+# Deployments
 
-部署設定與監控堆疊。使用預建映像從 Docker Hub 部署 (推薦生產環境)。
+部署配置與監控堆疊。
 
-## 快速啟動
+## 部署模式
+
+| 模式 | 描述 | 使用場景 |
+|------|------|----------|
+| **[Full Stack](./full/)** | Bot + 監控三件套 | 單機部署，所有服務在同一 Docker 網路 |
+| **[Monitoring Only](./monitoring/)** | 僅監控三件套 | Bot 部署在雲端，監控在本地/其他伺服器 |
+| **Local Go** | 直接執行 Go | 開發測試，不需要監控 |
+
+---
+
+## Mode 1: Full Stack
+
+Bot 和監控三件套（Prometheus、Grafana、Alertmanager）在同一 Docker 網路。
 
 ```bash
-cd deployments
+cd deployments/full
 cp .env.example .env
-# 編輯 .env 填入必要參數
-docker compose pull
+# 編輯 .env 填入 LINE_CHANNEL_ACCESS_TOKEN 和 LINE_CHANNEL_SECRET
 docker compose up -d
 ```
 
-## 服務
+**存取介面**：
+- Grafana: http://localhost:3000 (admin/admin123)
+- Prometheus: http://localhost:9090
+- Alertmanager: http://localhost:9093
+- Bot: http://localhost:10000
 
-- **ntpu-linebot** - 主服務（啟動時會自動在背景預熱快取）
-- **prometheus** - 監控（資料保留 15 天或 2GB）
-- **alertmanager** - 告警
-- **grafana** - 儀表板 (預設帳密：admin/admin123)
+詳細說明請參閱 [full/README.md](./full/README.md)。
 
-> **快取預熱**：主服務啟動後會自動在背景執行快取預熱（約 5-10 分鐘），不影響 webhook 接收請求。
-> **監控存取**：監控服務預設僅限內部網路存取，需透過 access gateway 開放（見下方指令）。
+---
 
-## 環境變數
+## Mode 2: Monitoring Only
 
-必填：
-- `LINE_CHANNEL_ACCESS_TOKEN`
-- `LINE_CHANNEL_SECRET`
+Bot 部署在雲端（如 Cloud Run、Fly.io），監控三件套在本地。
 
-LLM 設定（二選一即可啟用 NLU 和智慧搜尋）：
-- `GEMINI_API_KEY` - Gemini API Key（從 [Google AI Studio](https://aistudio.google.com/apikey) 取得）
-- `GROQ_API_KEY` - Groq API Key（從 [Groq Console](https://console.groq.com/keys) 取得）
-
-LLM 進階設定（可選）：
-- `LLM_PRIMARY_PROVIDER` - 主要 LLM 提供者（預設：gemini，可選：groq）
-- `LLM_FALLBACK_PROVIDER` - 備援 LLM 提供者（預設：groq，可選：gemini）
-- `GEMINI_INTENT_MODEL` - Gemini 意圖分析模型（預設：gemini-2.5-flash）
-- `GROQ_INTENT_MODEL` - Groq 意圖分析模型（預設：meta-llama/llama-4-maverick-17b-128e-instruct）
-- `LLM_RATE_LIMIT_PER_HOUR` - LLM API 速率限制（每位使用者每小時請求數，預設：50）
-
-其他可選：
-- `IMAGE_TAG` - 映像版本（預設：latest）
-- `LOG_LEVEL` - 日誌層級（預設：info）
-- `WEBHOOK_TIMEOUT` - Webhook 處理超時時間（預設：60s，配合 LINE Loading Animation）
-- `USER_RATE_LIMIT_BURST` - 每位使用者的突發容量（預設：6）
-- `USER_RATE_LIMIT_REFILL_PER_SEC` - 令牌回填速率（預設：0.2 tokens/sec，每 5 秒補充 1 個令牌）
-- `GLOBAL_RATE_LIMIT_RPS` - 全域速率限制（預設：100 requests/sec）
-- `GRAFANA_PASSWORD` - Grafana 密碼（預設：admin123）
-
-**每日刷新模組（硬編碼）**：
-- contact, course：每日凌晨 3:00 AM 刷新
-- syllabus：設定 LLM API Key 後自動啟用（智慧搜尋功能）
-- sticker：僅啟動時載入
-- id：不在每日刷新（學生資料為靜態資料，通常僅啟動時建立/更新快取）
-
-## 資料持久化
-- **內容**: SQLite 資料庫檔案 (`cache.db`, `cache.db-wal`, `cache.db-shm`)
-- **權限**: 明確設定 `rw` (讀寫) 模式，因為容器啟用了 `read_only: true` 安全特性
-- **TTL**: 快取資料會在 7 天後自動過期 (TTL)
-- **清理**: 每日凌晨 4:00 自動執行 VACUUM 清理過期資料
-
-### 安全特性
-
-容器採用多層安全措施：
-- ✅ **Distroless base image** - 最小化攻擊面，無 shell 和套件管理器
-- ✅ **Non-root user** - 使用 `nonroot` 用戶 (UID/GID: 65532) 運行
-- ✅ **Read-only filesystem** - 除 `/data` 和 `/tmp` 外整個檔案系統唯讀
-- ✅ **No new privileges** - 禁止權限提升
-- ✅ **Minimal tmpfs** - `/tmp` 限制 64MB 防止資源耗盡
-
-## 指定版本
+### 步驟 1: 在雲端 Bot 設定 Metrics 驗證
 
 ```bash
-# .env 檔案中設定
-IMAGE_TAG=v1.2.3
-
-# 或使用環境變數
-IMAGE_TAG=v1.2.3 docker compose up -d
+# 在雲端 Bot 設定環境變數
+METRICS_USERNAME=prometheus
+METRICS_PASSWORD=your_secure_password
 ```
 
-## 常用指令
-
-### 1. 服務管理
+### 步驟 2: 啟動本地監控
 
 ```bash
-# 啟動所有服務
-task compose:up
-# 或 cd deployments && docker compose up -d
+cd deployments/monitoring
+cp .env.example .env
+# 編輯 .env，設定 BOT_HOST 和 METRICS_PASSWORD
 
-# 查看日誌
-task compose:logs -- ntpu-linebot
-# 或 cd deployments && docker compose logs -f ntpu-linebot
+# 產生 Prometheus 配置
+./setup.sh  # 或 Windows: .\setup.cmd
 
-# 停止所有服務
-task compose:down
-# 或 cd deployments && docker compose down
-
-# 更新至最新版本
-task compose:update
-# 或 Windows: cd deployments && .\update.cmd
-# 或 Linux/Mac: cd deployments && ./update.sh
+# 啟動監控
+docker compose up -d
 ```
 
-### 2. 監控儀表板存取
+詳細說明請參閱 [monitoring/README.md](./monitoring/README.md)。
 
-監控服務預設不對外開放，需透過 access gateway 存取。啟用後會佔用本地 Port (3000, 9090, 9093)。使用以下方式開啟/關閉：
+---
+
+## Mode 3: Local Go Execution
+
+開發或測試時直接執行 Go 程式，不需要 Docker 或監控。
+
+### 使用 Task
 
 ```bash
-# 開啟監控儀表板 (Grafana:3000, Prometheus:9090, AlertManager:9093)
-task access:up
-# 或 Windows: cd deployments && .\access.cmd up
-# 或 Linux/Mac: cd deployments && ./access.sh up
+# 設定環境變數（或建立 .env 檔案）
+cp .env.example .env
+# 編輯 .env
 
-# 關閉監控儀表板
-task access:down
-# 或 Windows: cd deployments && .\access.cmd down
-# 或 Linux/Mac: cd deployments && ./access.sh down
+# 執行
+task dev
 ```
 
-**網路架構說明**：
-- 主服務 (`compose.yaml`) 建立 `ntpu_bot_network` 網路供內部服務通訊
-- Access gateway (`access/compose.yml`) 連接到相同網路以轉發請求到監控服務
-- 確保主服務已啟動，access gateway 才能正常連接
+### 直接執行
+
+```bash
+# 設定必要環境變數
+export LINE_CHANNEL_ACCESS_TOKEN=xxx
+export LINE_CHANNEL_SECRET=xxx
+
+# 執行
+go run ./cmd/server
+```
+
+### 可選: 設定 Metrics 驗證
+
+```bash
+# 如果需要保護 /metrics 端點
+export METRICS_USERNAME=prometheus
+export METRICS_PASSWORD=your_password
+```
+
+---
 
 ## 目錄結構
 
-- **prometheus/** - Prometheus 設定
-  - `prometheus.yml` - 主設定（scrape targets、AlertManager）
-  - `alerts.yml` - 告警規則
-- **alertmanager/** - AlertManager 設定
-  - `alertmanager.yml` - 告警路由和接收器
-- **grafana/** - Grafana 設定
-  - `dashboards/ntpu-linebot.json` - 預設 Dashboard
+```
+deployments/
+├── README.md            # 本文件
+├── full/                # Mode 1: Bot + 監控
+│   ├── compose.yaml
+│   ├── .env.example
+│   └── README.md
+├── monitoring/          # Mode 2: 僅監控
+│   ├── compose.yaml
+│   ├── prometheus/
+│   │   ├── prometheus.yml.template
+│   │   └── .gitignore
+│   ├── setup.sh / setup.cmd
+│   ├── .env.example
+│   └── README.md
+└── shared/              # 共用配置
+    ├── prometheus/
+    │   ├── prometheus-internal.yml
+    │   └── alerts.yml
+    ├── alertmanager/
+    │   └── alertmanager.yml
+    └── grafana/
+        ├── dashboards/
+        │   ├── dashboard.yml
+        │   └── ntpu-linebot.json
+        └── datasources/
+            └── datasource.yml
+```
+
+---
 
 ## 告警規則
 
-| 告警名稱 | 條件 | 持續時間 | 嚴重度 |
-|---------|------|---------|--------|
-| **ServiceDown** | 服務停止回應 | 2 分鐘 | Critical |
-| **WebhookLatencyHigh** | Webhook P95 延遲 >2s | 5 分鐘 | Warning |
-| **WebhookErrorRateHigh** | Webhook 錯誤率 >5% | 5 分鐘 | Warning |
-| **ScraperFailureRateHigh** | 爬蟲失敗率 >30% | 5 分鐘 | Warning |
-| **ScraperLatencyHigh** | 爬蟲 P95 延遲 >30s | 10 分鐘 | Warning |
-| **CacheHitRateLow** | 快取命中率 <50% | 1 小時 | Info |
-| **LLMErrorRateHigh** | LLM 錯誤率 >20% | 5 分鐘 | Warning |
-| **LLMLatencyHigh** | LLM P95 延遲 >5s | 5 分鐘 | Warning |
-| **SearchIndexEmpty** | BM25 索引為空 | 15 分鐘 | Warning |
-| **SearchLatencyHigh** | 搜尋 P95 延遲 >3s | 5 分鐘 | Warning |
-| **RateLimiterDroppingRequests** | 正在丟棄請求 | 5 分鐘 | Info |
-| **WarmupJobSlow** | 預熱任務 P95 >2.5h | 15 分鐘 | Info |
-| **CleanupJobSlow** | 清理任務 P95 >5min | 15 分鐘 | Info |
-| **StickerRefreshJobSlow** | 貼圖刷新 P95 >5min | 15 分鐘 | Info |
-| **HighMemoryUsage** | 記憶體使用 >400MB | 10 分鐘 | Warning |
-| **HighGoroutineCount** | Goroutine 數量 >500 | 10 分鐘 | Warning |
+告警規則配置在 `shared/prometheus/alerts.yml`，包含：
 
-## 配置告警通知
+| 告警名稱 | 條件 | 嚴重度 |
+|---------|------|--------|
+| ServiceDown | 服務停止回應 2 分鐘 | Critical |
+| WebhookLatencyHigh | P95 延遲 > 2s | Warning |
+| WebhookErrorRateHigh | 錯誤率 > 5% | Warning |
+| ScraperFailureRateHigh | 爬蟲失敗率 > 30% | Warning |
+| LLMErrorRateHigh | LLM 錯誤率 > 20% | Warning |
+| CacheHitRateLow | 快取命中率 < 50% | Info |
 
-編輯 `alertmanager/alertmanager.yml`：
+完整告警規則請參閱 [shared/prometheus/alerts.yml](./shared/prometheus/alerts.yml)。
 
-```yaml
-receivers:
-  - name: 'team'
-    webhook_configs:
-      - url: 'https://your-webhook-url'
-```
+---
 
-重啟生效：
+## 常用 Task 指令
+
 ```bash
-task compose:restart -- alertmanager
+# Full Stack
+task compose:up       # 啟動 full stack
+task compose:down     # 停止 full stack
+task compose:logs     # 查看日誌
+
+# Monitoring Only
+task monitoring:setup # 產生 prometheus.yml（首次或更新認證後）
+task monitoring:up    # 啟動監控
+task monitoring:down  # 停止監控
+
+# 開發
+task dev              # 本地執行 (go run)
 ```
 
-## 疑難排解
+---
 
-**完整資料重置**（會清空所有快取和監控資料）：
-```bash
-# 方法 1: 一次刪除所有 volumes（推薦）
-docker compose down -v
-docker compose up -d
+## 安全最佳實踐
 
-# 方法 2: 手動刪除特定 volume
-docker compose down
-docker volume rm deployments_data  # 僅刪除 Bot 資料
-docker compose up -d
-```
+1. **Metrics 驗證**
+   - 外部部署時務必設定 `METRICS_PASSWORD`
+   - 使用強密碼（20+ 字元）
+   - 內部 Docker 網路可不設密碼（向後相容）
 
-**注意**: 正常操作不需要刪除資料。應用程式已自動處理目錄權限和快取更新。
+2. **Grafana**
+   - 更改預設密碼 `admin123`
+   - 生產環境設定 `GF_SECURITY_COOKIE_SECURE=true`
 
-**更新至最新版本**：
-```bash
-# 使用 Task
-task compose:update
+3. **網路**
+   - 僅暴露必要端口
+   - 使用防火牆限制監控端口存取
 
-# 或直接執行腳本
-# Windows: .\update.cmd
-# Linux/Mac: ./update.sh
-
-# 或手動執行
-docker compose up -d --pull always
-```
-
-**本地建置** (開發用途):
-```bash
-# 回到專案根目錄
-cd ..
-docker build -t garyellow/ntpu-linebot-go:local .
-
-# 使用本地映像
-cd deployments
-IMAGE_TAG=local docker compose up -d
-```
+4. **憑證檔案**
+   - 不要將 `monitoring/prometheus/prometheus.yml` 提交到 Git
+   - 使用 `.gitignore` 保護敏感配置

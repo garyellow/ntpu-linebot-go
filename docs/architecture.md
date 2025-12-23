@@ -546,41 +546,85 @@ ntpu_job_duration_seconds{job, module}
 
 ## 部署架構
 
-### docker compose（推薦）
+支援三種部署模式，詳見 [deployments/README.md](../deployments/README.md)。
 
-```yaml
-services:
-  ntpu-linebot:
-    image: garyellow/ntpu-linebot-go:latest
-    ports:
-      - "10000:10000"
-    volumes:
-      - data:/data
-    environment:
-      - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN}
-      - LINE_CHANNEL_SECRET=${LINE_CHANNEL_SECRET}
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - GROQ_API_KEY=${GROQ_API_KEY:-}
-    depends_on:
-      - prometheus
+### Mode 1: Full Stack（Bot + 監控）
 
-  prometheus:
-    image: prom/prometheus:latest
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./prometheus:/etc/prometheus
+Bot 和監控三件套在同一 Docker 網路，適合單機部署。
 
-  grafana:
-    image: grafana/grafana:latest
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
-
-volumes:
-  data:
+```bash
+cd deployments/full
+cp .env.example .env
+docker compose up -d
 ```
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   ntpu_bot_network                       │
+│  ┌─────────────┐  ┌────────────┐  ┌───────────────────┐ │
+│  │ ntpu-linebot│←─│ prometheus │←─│ grafana          │ │
+│  │   :10000    │  │   :9090    │  │   :3000          │ │
+│  └─────────────┘  └────────────┘  └───────────────────┘ │
+│                          ↓                               │
+│                   ┌────────────┐                         │
+│                   │alertmanager│                         │
+│                   │   :9093    │                         │
+│                   └────────────┘                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Mode 2: Monitoring Only（外部 Bot）
+
+Bot 部署在雲端（Cloud Run、Fly.io 等），監控在本地。使用 HTTPS + Basic Auth 拉取 metrics。
+
+```bash
+# 1. 在雲端 Bot 設定
+METRICS_PASSWORD=your_secure_password
+
+# 2. 本地監控
+cd deployments/monitoring
+cp .env.example .env
+./setup.sh  # 產生 prometheus.yml
+docker compose up -d
+```
+
+```
+┌──────────────────────────────────────┐
+│           Cloud (Bot)                │
+│  ┌────────────────────────────────┐  │
+│  │ ntpu-linebot                   │  │
+│  │ /metrics (HTTPS + Basic Auth)  │  │
+│  └────────────────────────────────┘  │
+└──────────────────────────────────────┘
+                   ↑ HTTPS Pull
+┌──────────────────────────────────────┐
+│        Local (Monitoring)            │
+│  ┌──────────┐ ┌─────────┐ ┌───────┐  │
+│  │prometheus│ │ grafana │ │alertmgr│ │
+│  └──────────┘ └─────────┘ └───────┘  │
+└──────────────────────────────────────┘
+```
+
+### Mode 3: Local Go Execution
+
+開發測試用，直接執行 Go 程式，無需 Docker 或監控。
+
+```bash
+task dev
+# 或
+go run ./cmd/server
+```
+
+### Metrics 驗證
+
+`/metrics` 端點支援可選的 Basic Auth 驗證：
+
+| 環境變數 | 預設值 | 說明 |
+|----------|--------|------|
+| `METRICS_USERNAME` | prometheus | 帳號 |
+| `METRICS_PASSWORD` | (空) | 密碼（空=停用驗證）|
+
+內部 Docker 網路不需要驗證（保持 `METRICS_PASSWORD` 為空）。
 
 ### Kubernetes（未來擴展）
 

@@ -49,6 +49,10 @@ services:
       - USER_RATE_LIMIT_REFILL_PER_SEC=${USER_RATE_LIMIT_REFILL_PER_SEC:-0.2}
       - LLM_RATE_LIMIT_PER_HOUR=${LLM_RATE_LIMIT_PER_HOUR:-50}
       - GLOBAL_RATE_LIMIT_RPS=${GLOBAL_RATE_LIMIT_RPS:-100}
+
+      # Metrics Auth (empty password = disabled for internal network)
+      - METRICS_USERNAME=${METRICS_USERNAME:-prometheus}
+      - METRICS_PASSWORD=${METRICS_PASSWORD:-}
     deploy:
       resources:
         limits:
@@ -78,9 +82,11 @@ services:
     image: prom/prometheus:latest
     container_name: ntpu-prometheus
     restart: unless-stopped
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ../shared/prometheus/prometheus-internal.yml:/etc/prometheus/prometheus.yml:ro
+      - ../shared/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -119,8 +125,10 @@ services:
     image: prom/alertmanager:latest
     container_name: ntpu-alertmanager
     restart: unless-stopped
+    ports:
+      - "${ALERTMANAGER_PORT:-9093}:9093"
     volumes:
-      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ../shared/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager-data:/alertmanager
     command:
       - '--config.file=/etc/alertmanager/alertmanager.yml'
@@ -151,10 +159,13 @@ services:
     image: grafana/grafana:latest
     container_name: ntpu-grafana
     restart: unless-stopped
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
     volumes:
-      - ./grafana:/etc/grafana/provisioning:ro
+      - ../shared/grafana:/etc/grafana/provisioning:ro
       - grafana-data:/var/lib/grafana
     environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_ANALYTICS_REPORTING_ENABLED=false

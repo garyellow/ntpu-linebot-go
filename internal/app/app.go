@@ -192,7 +192,9 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	router.GET("/readyz", app.readinessCheck)
 	router.HEAD("/readyz", app.readinessCheck)
 	router.POST("/webhook", webhookHandler.Handle)
-	router.GET("/metrics", gin.WrapH(promhttp.HandlerFor(registry, promhttp.HandlerOpts{})))
+	router.GET("/metrics",
+		metricsAuthMiddleware(cfg.MetricsUsername, cfg.MetricsPassword),
+		gin.WrapH(promhttp.HandlerFor(registry, promhttp.HandlerOpts{})))
 
 	app.server = &http.Server{
 		Addr:              ":" + cfg.Port,

@@ -112,57 +112,70 @@ tasks:
     cmds:
       - go run golang.org/x/vuln/cmd/govulncheck@latest -show verbose ./...
 
-  # Docker Compose
+  # Docker Compose - Full Stack (Bot + Monitoring)
   compose:up:
-    desc: Start all services
-    dir: deployments
+    desc: Start full stack (Bot + Monitoring)
+    dir: deployments/full
     cmds:
       - docker compose up -d
 
   compose:down:
-    desc: Stop all services
-    dir: deployments
+    desc: Stop full stack
+    dir: deployments/full
     cmds:
       - docker compose down
 
   compose:logs:
-    desc: "View service logs (usage: task compose:logs -- SERVICE_NAME)"
-    dir: deployments
+    desc: "View full stack logs (usage: task compose:logs -- SERVICE_NAME)"
+    dir: deployments/full
     cmds:
       - docker compose logs -f {{.CLI_ARGS}}
 
   compose:update:
-    desc: Update and restart all services with latest images
-    dir: deployments
+    desc: Update and restart full stack with latest images
+    dir: deployments/full
     cmds:
-      - cmd: .\update.cmd
-        platforms: [windows]
-      - cmd: ./update.sh
-        platforms: [linux, darwin]
+      - docker compose pull
+      - docker compose up -d
 
   compose:ps:
-    desc: List all services status
-    dir: deployments
+    desc: List full stack services status
+    dir: deployments/full
     cmds:
       - docker compose ps
 
-  # Monitoring Access
-  access:up:
-    desc: Open monitoring dashboard access (Grafana:3000, Prometheus:9090, Alertmanager:9093)
-    dir: deployments
+  compose:restart:
+    desc: "Restart specific service (usage: task compose:restart -- SERVICE_NAME)"
+    dir: deployments/full
     cmds:
-      - cmd: .\access.cmd up
-        platforms: [windows]
-      - cmd: ./access.sh up
-        platforms: [linux, darwin]
+      - docker compose restart {{.CLI_ARGS}}
 
-  access:down:
-    desc: Close monitoring dashboard access
-    dir: deployments
+  # Docker Compose - Monitoring Only (for external Bot)
+  monitoring:up:
+    desc: Start monitoring stack (for external Bot)
+    dir: deployments/monitoring
     cmds:
-      - cmd: .\access.cmd down
+      - docker compose up -d
+
+  monitoring:down:
+    desc: Stop monitoring stack
+    dir: deployments/monitoring
+    cmds:
+      - docker compose down
+
+  monitoring:logs:
+    desc: "View monitoring logs (usage: task monitoring:logs -- SERVICE_NAME)"
+    dir: deployments/monitoring
+    cmds:
+      - docker compose logs -f {{.CLI_ARGS}}
+
+  monitoring:setup:
+    desc: Generate prometheus.yml for external Bot monitoring
+    dir: deployments/monitoring
+    cmds:
+      - cmd: .\setup.cmd
         platforms: [windows]
-      - cmd: ./access.sh down
+      - cmd: ./setup.sh
         platforms: [linux, darwin]
 
   # CI Pipeline

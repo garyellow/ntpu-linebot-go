@@ -170,7 +170,7 @@
 
 ```bash
 git clone https://github.com/garyellow/ntpu-linebot-go.git
-cd ntpu-linebot-go/deployments
+cd ntpu-linebot-go/deployments/full
 
 cp .env.example .env
 # 編輯 .env 填入 LINE_CHANNEL_ACCESS_TOKEN 和 LINE_CHANNEL_SECRET
@@ -219,11 +219,14 @@ task ci               # 完整 CI 流程
 
 ### 監控（可選）
 
-部署自動包含 Prometheus + Grafana + Alertmanager：
+部署包含 Prometheus + Grafana + Alertmanager：
 
 ```bash
-task access:up        # 開啟監控儀表板
-task access:down      # 關閉監控儀表板
+# 查看所有服務狀態
+task compose:ps
+
+# 查看日誌
+task compose:logs
 ```
 
 | 服務 | 網址 | 帳密 |
@@ -231,6 +234,8 @@ task access:down      # 關閉監控儀表板
 | Grafana | `http://localhost:3000` | admin / 請設定 `GRAFANA_PASSWORD` |
 | Prometheus | `http://localhost:9090` | - |
 | Alertmanager | `http://localhost:9093` | - |
+
+> 更多部署模式（如僅監控外部 Bot）請參閱 [deployments/README.md](deployments/README.md)。
 
 ### 疑難排解
 
