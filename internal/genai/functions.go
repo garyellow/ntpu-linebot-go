@@ -133,6 +133,44 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 				Properties: map[string]*genai.Schema{},
 			},
 		},
+
+		// Program module functions
+		{
+			Name:        "program_list",
+			Description: "列出所有學程（學士學分學程、跨領域學程等）。當使用者想查看所有可修讀的學程時使用。不需要任何參數。觸發條件：「學程列表」「所有學程」「有哪些學程」等。",
+			Parameters: &genai.Schema{
+				Type:       genai.TypeObject,
+				Properties: map[string]*genai.Schema{},
+			},
+		},
+		{
+			Name:        "program_search",
+			Description: "搜尋學程（學士學分學程、跨領域學程等）。當使用者想找特定主題的學程時使用。觸發條件：「學程 關鍵字」「智慧財產權學程」「永續發展學程」等。",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"query": {
+						Type:        genai.TypeString,
+						Description: "學程名稱關鍵字，如「智慧財產」「永續」「資訊」「管理」",
+					},
+				},
+				Required: []string{"query"},
+			},
+		},
+		{
+			Name:        "program_courses",
+			Description: "查詢特定學程的所有課程（必修與選修）。當使用者想知道某個學程需要修哪些課時使用。觸發條件：「智慧財產權學程有什麼課」「永續學程課程」等。",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"programName": {
+						Type:        genai.TypeString,
+						Description: "完整的學程名稱，如「智慧財產權學士學分學程」「永續發展管理學士學分學程」",
+					},
+				},
+				Required: []string{"programName"},
+			},
+		},
 	}
 }
 
@@ -149,17 +187,22 @@ var IntentModuleMap = map[string][2]string{
 	"contact_search":    {"contact", "search"},
 	"contact_emergency": {"contact", "emergency"},
 	"help":              {"help", ""},
+	"program_list":      {"program", "list"},
+	"program_search":    {"program", "search"},
+	"program_courses":   {"program", "courses"},
 }
 
 // ParamKeyMap maps function names to their primary parameter key.
 // This is used to extract the parameter value from the function call args.
 var ParamKeyMap = map[string]string{
-	"course_search":  "keyword",
-	"course_smart":   "query",
-	"course_uid":     "uid",
-	"id_search":      "name",
-	"id_student_id":  "student_id",
-	"id_department":  "department",
-	"contact_search": "query",
-	// contact_emergency and help have no parameters
+	"course_search":   "keyword",
+	"course_smart":    "query",
+	"course_uid":      "uid",
+	"id_search":       "name",
+	"id_student_id":   "student_id",
+	"id_department":   "department",
+	"contact_search":  "query",
+	"program_search":  "query",
+	"program_courses": "programName",
+	// contact_emergency, program_list and help have no parameters
 }

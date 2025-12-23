@@ -677,7 +677,7 @@ func (p *Processor) buildAIModeFlexMessage(sender *messaging_api.Sender) messagi
 				WithSize("sm").
 				WithColor(lineutil.ColorSubtext).
 				WithFlex(0).FlexText,
-			lineutil.NewFlexText("「資工系辦公室在哪裡」").
+			lineutil.NewFlexText("「人工智慧學程有什麼課」").
 				WithSize("sm").
 				WithColor(lineutil.ColorText).
 				WithMargin("sm").
@@ -685,6 +685,19 @@ func (p *Processor) buildAIModeFlexMessage(sender *messaging_api.Sender) messagi
 		).WithMargin("sm").FlexBox,
 
 		// Example 4
+		lineutil.NewFlexBox("horizontal",
+			lineutil.NewFlexText("•").
+				WithSize("sm").
+				WithColor(lineutil.ColorSubtext).
+				WithFlex(0).FlexText,
+			lineutil.NewFlexText("「資工系辦公室在哪裡」").
+				WithSize("sm").
+				WithColor(lineutil.ColorText).
+				WithMargin("sm").
+				WithWrap(true).FlexText,
+		).WithMargin("sm").FlexBox,
+
+		// Example 5
 		lineutil.NewFlexBox("horizontal",
 			lineutil.NewFlexText("•").
 				WithSize("sm").
@@ -760,6 +773,25 @@ func (p *Processor) buildKeywordModeFlexMessage(nluEnabled bool, sender *messagi
 			WithMargin("xs").
 			WithWrap(true).FlexText,
 		lineutil.NewFlexText("• 課號：U0001 或 1131U0001").
+			WithSize("xs").
+			WithColor(lineutil.ColorSubtext).
+			WithMargin("xs").
+			WithWrap(true).FlexText,
+
+		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
+
+		// Program search
+		lineutil.NewFlexText("🎯 學程查詢").
+			WithWeight("bold").
+			WithColor(lineutil.ColorText).
+			WithSize("sm").
+			WithMargin("md").FlexText,
+		lineutil.NewFlexText("• 列表：學程 或 所有學程").
+			WithSize("xs").
+			WithColor(lineutil.ColorSubtext).
+			WithMargin("sm").
+			WithWrap(true).FlexText,
+		lineutil.NewFlexText("• 搜尋：學程 人工智慧").
 			WithSize("xs").
 			WithColor(lineutil.ColorSubtext).
 			WithMargin("xs").

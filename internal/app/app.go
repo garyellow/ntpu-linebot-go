@@ -21,6 +21,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/modules/contact"
 	"github.com/garyellow/ntpu-linebot-go/internal/modules/course"
 	"github.com/garyellow/ntpu-linebot-go/internal/modules/id"
+	"github.com/garyellow/ntpu-linebot-go/internal/modules/program"
 	"github.com/garyellow/ntpu-linebot-go/internal/rag"
 	"github.com/garyellow/ntpu-linebot-go/internal/ratelimit"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
@@ -129,11 +130,13 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	idHandler := id.NewHandler(db, scraperClient, m, log, stickerMgr)
 	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerMgr, bm25Index, queryExpander, llmRateLimiter)
 	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerMgr, cfg.Bot.MaxContactsPerSearch)
+	programHandler := program.NewHandler(db, m, log, stickerMgr)
 
 	botRegistry := bot.NewRegistry()
 	botRegistry.Register(contactHandler)
 	botRegistry.Register(courseHandler)
 	botRegistry.Register(idHandler)
+	botRegistry.Register(programHandler)
 
 	processor := bot.NewProcessor(bot.ProcessorConfig{
 		Registry:       botRegistry,
@@ -480,6 +483,12 @@ func (a *Application) runCacheCleanup(ctx context.Context) {
 
 	if deleted, err := a.db.DeleteExpiredCourses(ctx, a.cfg.CacheTTL); err != nil {
 		a.logger.WithError(err).Error("Failed to cleanup expired courses")
+	} else {
+		totalDeleted += deleted
+	}
+
+	if deleted, err := a.db.DeleteExpiredCoursePrograms(ctx); err != nil {
+		a.logger.WithError(err).Error("Failed to cleanup expired course programs")
 	} else {
 		totalDeleted += deleted
 	}

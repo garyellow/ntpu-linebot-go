@@ -34,6 +34,11 @@ func InitSchema(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 
+	// Create course_programs table for course-program relationships (學程)
+	if err := createCourseProgramsTable(ctx, db); err != nil {
+		return err
+	}
+
 	// Create syllabi table for course syllabus smart search (BM25 index)
 	return createSyllabiTable(ctx, db)
 }
@@ -194,6 +199,31 @@ func createSyllabiTable(ctx context.Context, db *sql.DB) error {
 
 	if _, err := db.ExecContext(ctx, query); err != nil {
 		return fmt.Errorf("create syllabi table: %w", err)
+	}
+
+	return nil
+}
+
+// createCourseProgramsTable creates table for course-program relationships (學程).
+// A course can belong to multiple programs with different requirement types (必修/選修).
+// This table enables bidirectional queries: courses by program, programs by course.
+func createCourseProgramsTable(ctx context.Context, db *sql.DB) error {
+	query := `
+	CREATE TABLE IF NOT EXISTS course_programs (
+		course_uid TEXT NOT NULL,
+		program_name TEXT NOT NULL,
+		course_type TEXT NOT NULL,
+		cached_at INTEGER NOT NULL,
+		PRIMARY KEY (course_uid, program_name)
+	);
+	CREATE INDEX IF NOT EXISTS idx_course_programs_program ON course_programs(program_name);
+	CREATE INDEX IF NOT EXISTS idx_course_programs_course ON course_programs(course_uid);
+	CREATE INDEX IF NOT EXISTS idx_course_programs_type ON course_programs(course_type);
+	CREATE INDEX IF NOT EXISTS idx_course_programs_cached_at ON course_programs(cached_at);
+	`
+
+	if _, err := db.ExecContext(ctx, query); err != nil {
+		return fmt.Errorf("create course_programs table: %w", err)
 	}
 
 	return nil

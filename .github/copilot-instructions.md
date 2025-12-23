@@ -1,6 +1,6 @@
 # NTPU LineBot Go - AI Agent Instructions
 
-LINE chatbot for NTPU (National Taipei University) providing student ID lookup, contact directory, and course queries. Built with Go, emphasizing anti-scraping measures, persistent caching, and observability.
+LINE chatbot for NTPU (National Taipei University) providing student ID lookup, contact directory, course queries, and academic program information. Built with Go, emphasizing anti-scraping measures, persistent caching, and observability.
 
 ## 🎯 Architecture Principles
 
@@ -35,7 +35,7 @@ LINE Webhook → Gin Handler
                 ↓ (Loading Animation + rate limiting)
       Bot Module Dispatcher
                 ↓ (keyword matching via CanHandle())
-      Bot Handlers (id/contact/course)
+      Bot Handlers (id/contact/course/program)
                 ↓ (ctxutil.PreserveTracing() with 60s timeout)
       Storage Repository (cache-first)
                 ↓ (TTL check for contacts/courses only)
@@ -84,6 +84,13 @@ LINE Webhook → Gin Handler
 - Displays "found X total, showing first 400" when results exceed limit
 - No SQL LIKE - pure application-layer filtering for maximum flexibility
 
+**Program Module**:
+- **Pattern-Action Table**: List, Search, Courses (priority-sorted matchers)
+- **2-tier search**: SQL LIKE + fuzzy `ContainsAllRunes()` (same as contact module)
+- **Course ordering**: Required (必修) first, elective (選修) after
+- **Course detail integration**: "相關學程" button shows programs containing the course
+- **Data source**: Parsed from course "應修系級" + "必選修別" fields (filters items ending with "學程")
+
 **All modules**:
 - Prefer text wrapping; use `TruncateRunes()` only for LINE API limits
 - Consistent Sender pattern, cache-first strategy
@@ -95,10 +102,11 @@ LINE Webhook → Gin Handler
 - **Cache Strategy by Data Type**:
   - **Students**: Never expires, not refreshed (static data)
   - **Stickers**: Never expires, loaded once on startup
-  - **Contacts/Courses**: 7-day TTL, refreshed daily at 3:00 AM Taiwan time
+  - **Contacts/Courses/Programs**: 7-day TTL, refreshed daily at 3:00 AM Taiwan time
   - **Syllabi**: 7-day TTL, auto-enabled when LLM API key is configured
-- TTL enforced at SQL level for contacts/courses: `WHERE cached_at > ?`
+- TTL enforced at SQL level for contacts/courses/programs: `WHERE cached_at > ?`
 - **Syllabi table**: Stores syllabus content + SHA256 hash for incremental updates
+- **course_programs table**: Junction table for course-program relationships (course_uid, program_name, course_type, cached_at)
 
 **BM25 Index** (`internal/rag/`):
 - [iwilltry42/bm25-go](https://github.com/iwilltry42/bm25-go) (k1=1.5, b=0.75)
@@ -108,8 +116,8 @@ LINE Webhook → Gin Handler
 
 **Background Jobs** (Taiwan time/Asia/Taipei):
 - **Sticker**: Startup only
-- **Daily Refresh** (3:00 AM): contact, course (always), syllabus (auto-enabled if LLM API key)
-- **Cache Cleanup** (4:00 AM): Delete expired contacts/courses/syllabi (7-day TTL) + VACUUM
+- **Daily Refresh** (3:00 AM): contact, course+programs (always), syllabus (auto-enabled if LLM API key)
+- **Cache Cleanup** (4:00 AM): Delete expired contacts/courses/programs/syllabi (7-day TTL) + VACUUM
 - **Metrics/Rate Limiter Cleanup**: Every 5 minutes
 
 **Data availability**:
@@ -146,11 +154,12 @@ lineutil.QuickReplyMainFeatures()   // 課程→學號→聯絡→緊急 (instru
 lineutil.QuickReplyContactNav()     // 聯絡→緊急→說明 (contact module)
 lineutil.QuickReplyStudentNav()     // 學號→學年→系代碼→說明 (id module)
 lineutil.QuickReplyCourseNav(bool)  // 課程→找課(if smart)→說明 (course module)
+lineutil.QuickReplyProgramNav()     // 學程列表→學程→說明 (program module)
 lineutil.QuickReplyErrorRecovery(retryText) // 重試→說明 (errors with retry)
 
 // Sender pattern (REQUIRED)
 // System/Help: "北大小幫手" (unified for bot-level messages)
-// Modules: "課程小幫手", "學號小幫手", "聯繫小幫手" (module-specific)
+// Modules: "課程小幫手", "學號小幫手", "聯繫小幫手", "學程小幫手" (module-specific)
 // Special: "貼圖小幫手" (sticker responses only)
 sender := lineutil.GetSender("北大小幫手", stickerManager)  // Once at handler start
 msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
