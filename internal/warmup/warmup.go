@@ -412,8 +412,9 @@ func formatSemesters(semesters []course.Semester) string {
 }
 
 // warmupSyllabusModule warms syllabus cache and BM25 index
-// Fetches syllabus content for all courses in cache, using content hash for incremental updates
-// Only processes courses that have changed since last warmup
+// ONLY processes courses from the most recent 2 semesters (with cached data)
+// Uses content hash for incremental updates - only re-scrapes changed syllabi
+// Other semesters are not processed to reduce scraping load
 func warmupSyllabusModule(ctx context.Context, db *storage.DB, client *scraper.Client, bm25Index *rag.BM25Index, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
 	startTime := time.Now()
 	defer func() {
@@ -424,18 +425,37 @@ func warmupSyllabusModule(ctx context.Context, db *storage.DB, client *scraper.C
 
 	log.Info("Starting syllabus module warmup")
 
-	// Get all courses from recent semesters
-	courses, err := db.GetCoursesByRecentSemesters(ctx)
+	// Get the most recent 2 semesters that have cached data
+	semesters, err := db.GetDistinctRecentSemesters(ctx, 2)
 	if err != nil {
-		return fmt.Errorf("failed to get courses: %w", err)
+		return fmt.Errorf("failed to get recent semesters: %w", err)
 	}
 
-	if len(courses) == 0 {
-		log.Info("No courses found for syllabus warmup")
+	if len(semesters) == 0 {
+		log.Info("No recent semesters found for syllabus warmup")
 		return nil
 	}
 
-	log.WithField("total_courses", len(courses)).Info("Processing syllabi for courses")
+	log.WithField("semesters", len(semesters)).Info("Found recent semesters for syllabus warmup")
+
+	// Collect courses from the most recent 2 semesters only
+	var courses []storage.Course
+	for _, sem := range semesters {
+		semCourses, err := db.GetCoursesByYearTerm(ctx, sem.Year, sem.Term)
+		if err != nil {
+			log.WithError(err).WithField("year", sem.Year).WithField("term", sem.Term).Warn("Failed to get courses for semester")
+			continue
+		}
+		courses = append(courses, semCourses...)
+		log.WithField("year", sem.Year).WithField("term", sem.Term).WithField("count", len(semCourses)).Info("Loaded courses for semester")
+	}
+
+	if len(courses) == 0 {
+		log.Info("No courses found in recent semesters for syllabus warmup")
+		return nil
+	}
+
+	log.WithField("total_courses", len(courses)).Info("Processing syllabi for courses from recent 2 semesters")
 
 	// Create syllabus scraper
 	syllabusScraper := syllabus.NewScraper(client)

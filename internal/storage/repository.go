@@ -803,8 +803,42 @@ func (db *DB) GetCoursesByYearTerm(ctx context.Context, year, term int) ([]Cours
 	return scanCourses(rows)
 }
 
+// GetDistinctRecentSemesters retrieves the most recent 2 distinct semesters (year, term pairs)
+// from courses that have cached data. Returns semesters ordered by year DESC, term DESC.
+// Used by syllabus warmup to determine which semesters need BM25 indexing.
+func (db *DB) GetDistinctRecentSemesters(ctx context.Context, limit int) ([]struct{ Year, Term int }, error) {
+	ttlTimestamp := db.getTTLTimestamp()
+
+	query := `SELECT DISTINCT year, term
+		FROM courses
+		WHERE cached_at > ?
+		ORDER BY year DESC, term DESC
+		LIMIT ?`
+
+	rows, err := db.reader.QueryContext(ctx, query, ttlTimestamp, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get distinct recent semesters: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var semesters []struct{ Year, Term int }
+	for rows.Next() {
+		var semester struct{ Year, Term int }
+		if err := rows.Scan(&semester.Year, &semester.Term); err != nil {
+			return nil, fmt.Errorf("failed to scan semester: %w", err)
+		}
+		semesters = append(semesters, semester)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows error: %w", err)
+	}
+
+	return semesters, nil
+}
+
 // GetCoursesByRecentSemesters retrieves all courses from recent semesters (current + previous)
-// Used for syllabus warmup and fuzzy character-set matching when SQL LIKE doesn't find results
+// Used for fuzzy character-set matching when SQL LIKE doesn't find results
 // Only returns non-expired cache entries based on configured TTL (7-day cache for courses)
 // No limit - returns all courses from the most recent 2 semesters that have cached data
 func (db *DB) GetCoursesByRecentSemesters(ctx context.Context) ([]Course, error) {

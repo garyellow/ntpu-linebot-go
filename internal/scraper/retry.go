@@ -14,17 +14,22 @@ import (
 // Stops retrying immediately if the error is a permanentError (e.g., 404/403/401).
 //
 // maxRetries: maximum number of retry attempts (0 = no retry, just try once)
-// initialDelay: initial delay before first retry (e.g., 4s)
+// initialDelay: initial delay before first retry (e.g., 1s)
 //
 // Backoff formula: delay = initialDelay * 2^attempt ± 25% jitter
-// Example with initialDelay=4s, maxRetries=5:
+// Example with initialDelay=1s, maxRetries=10:
 //
 //	attempt 0: immediate (first try)
-//	attempt 1: ~4s  (3s - 5s)
-//	attempt 2: ~8s  (6s - 10s)
-//	attempt 3: ~16s (12s - 20s)
-//	attempt 4: ~32s (24s - 40s)
-//	attempt 5: ~64s (48s - 80s)
+//	attempt 1: ~1s    (0.75s - 1.25s)
+//	attempt 2: ~2s    (1.5s - 2.5s)
+//	attempt 3: ~4s    (3s - 5s)
+//	attempt 4: ~8s    (6s - 10s)
+//	attempt 5: ~16s   (12s - 20s)
+//	attempt 6: ~32s   (24s - 40s)
+//	attempt 7: ~64s   (48s - 80s)
+//	attempt 8: ~128s  (96s - 160s)
+//	attempt 9: ~256s  (192s - 320s)
+//	attempt 10: ~512s (384s - 640s)
 func RetryWithBackoff(ctx context.Context, maxRetries int, initialDelay time.Duration, fn func() error) error {
 	var lastErr error
 	startTime := time.Now()
