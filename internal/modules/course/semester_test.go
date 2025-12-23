@@ -456,3 +456,151 @@ func TestCurrentMonth(t *testing.T) {
 		searchYears[0], searchTerms[0], searchYears[1], searchTerms[1],
 		searchYears[2], searchTerms[2], searchYears[3], searchTerms[3])
 }
+
+// TestSemesterDetectorDataDriven tests the data-driven semester detection methods
+func TestSemesterDetectorDataDriven(t *testing.T) {
+	t.Run("GetRecentSemesters returns cached data", func(t *testing.T) {
+		mockCount := func(ctx context.Context, year, term int) (int, error) {
+			return 1000, nil
+		}
+
+		detector := NewSemesterDetector(mockCount)
+
+		// Before RefreshSemesters, should fallback to calendar-based
+		years, terms := detector.GetRecentSemesters()
+		if len(years) != 2 || len(terms) != 2 {
+			t.Errorf("Expected 2 semesters, got %d years and %d terms", len(years), len(terms))
+		}
+
+		// After RefreshSemesters, should use cached data
+		detector.RefreshSemesters(context.Background())
+		years, terms = detector.GetRecentSemesters()
+		if len(years) != 2 || len(terms) != 2 {
+			t.Errorf("Expected 2 semesters after refresh, got %d years and %d terms", len(years), len(terms))
+		}
+	})
+
+	t.Run("GetExtendedSemesters returns semesters 3-4", func(t *testing.T) {
+		mockCount := func(ctx context.Context, year, term int) (int, error) {
+			return 1000, nil
+		}
+
+		detector := NewSemesterDetector(mockCount)
+		detector.RefreshSemesters(context.Background())
+
+		years, terms := detector.GetExtendedSemesters()
+		if len(years) != 2 || len(terms) != 2 {
+			t.Errorf("Expected 2 extended semesters, got %d years and %d terms", len(years), len(terms))
+		}
+
+		// Extended semesters should be older than recent ones
+		recentYears, recentTerms := detector.GetRecentSemesters()
+		recentKey := recentYears[1]*10 + recentTerms[1]
+		extendedKey := years[0]*10 + terms[0]
+		if extendedKey >= recentKey {
+			t.Errorf("Extended semesters should be older than recent. Recent: %d-%d, Extended: %d-%d",
+				recentYears[1], recentTerms[1], years[0], terms[0])
+		}
+	})
+
+	t.Run("HasData returns false before refresh", func(t *testing.T) {
+		detector := NewSemesterDetector(nil)
+		if detector.HasData() {
+			t.Error("Expected HasData to return false before RefreshSemesters")
+		}
+	})
+
+	t.Run("HasData returns true after refresh", func(t *testing.T) {
+		mockCount := func(ctx context.Context, year, term int) (int, error) {
+			return 1000, nil
+		}
+
+		detector := NewSemesterDetector(mockCount)
+		detector.RefreshSemesters(context.Background())
+		if !detector.HasData() {
+			t.Error("Expected HasData to return true after RefreshSemesters")
+		}
+	})
+
+	t.Run("GetAllSemesters returns 4 semesters", func(t *testing.T) {
+		mockCount := func(ctx context.Context, year, term int) (int, error) {
+			return 1000, nil
+		}
+
+		detector := NewSemesterDetector(mockCount)
+		detector.RefreshSemesters(context.Background())
+
+		years, terms := detector.GetAllSemesters()
+		if len(years) != 4 || len(terms) != 4 {
+			t.Errorf("Expected 4 semesters, got %d years and %d terms", len(years), len(terms))
+		}
+
+		// Verify order is newest to oldest
+		for i := 0; i < len(years)-1; i++ {
+			currKey := years[i]*10 + terms[i]
+			nextKey := years[i+1]*10 + terms[i+1]
+			if currKey <= nextKey {
+				t.Errorf("Semesters not in descending order at index %d: %d-%d vs %d-%d",
+					i, years[i], terms[i], years[i+1], terms[i+1])
+			}
+		}
+
+		t.Logf("All semesters: %d-%d, %d-%d, %d-%d, %d-%d",
+			years[0], terms[0], years[1], terms[1], years[2], terms[2], years[3], terms[3])
+	})
+
+	t.Run("RefreshSemesters uses data availability", func(t *testing.T) {
+		callCount := 0
+		mockCount := func(ctx context.Context, year, term int) (int, error) {
+			callCount++
+			if callCount == 1 {
+				return 0, nil // Newest semester has no data
+			}
+			return 1000, nil
+		}
+
+		detector := NewSemesterDetector(mockCount)
+		detector.RefreshSemesters(context.Background())
+
+		// Should have shifted back by one semester due to no data in newest
+		years, _ := detector.GetAllSemesters()
+		if len(years) != 4 {
+			t.Errorf("Expected 4 semesters, got %d", len(years))
+		}
+
+		// Verify the count function was called to check data availability
+		if callCount == 0 {
+			t.Error("Expected count function to be called during RefreshSemesters")
+		}
+	})
+
+	t.Run("DetectWarmupSemesters also caches data", func(t *testing.T) {
+		mockCount := func(ctx context.Context, year, term int) (int, error) {
+			return 1000, nil
+		}
+
+		detector := NewSemesterDetector(mockCount)
+
+		// HasData should be false before
+		if detector.HasData() {
+			t.Error("Expected HasData to be false before DetectWarmupSemesters")
+		}
+
+		semesters := detector.DetectWarmupSemesters(context.Background())
+
+		// HasData should be true after
+		if !detector.HasData() {
+			t.Error("Expected HasData to be true after DetectWarmupSemesters")
+		}
+
+		if len(semesters) != 4 {
+			t.Errorf("Expected 4 semesters from DetectWarmupSemesters, got %d", len(semesters))
+		}
+
+		// GetRecentSemesters should now return cached data
+		years, terms := detector.GetRecentSemesters()
+		if len(years) != 2 || len(terms) != 2 {
+			t.Errorf("Expected 2 recent semesters, got %d years and %d terms", len(years), len(terms))
+		}
+	})
+}

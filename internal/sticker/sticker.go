@@ -142,11 +142,9 @@ func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
 		// Save each sticker to database
 		for _, stickerURL := range res.stickers {
 			sticker := &storage.Sticker{
-				URL:          stickerURL,
-				Source:       res.source,
-				CachedAt:     time.Now().Unix(),
-				SuccessCount: 1,
-				FailureCount: 0,
+				URL:      stickerURL,
+				Source:   res.source,
+				CachedAt: time.Now().Unix(),
 			}
 			if err := m.db.SaveSticker(ctx, sticker); err != nil {
 				m.logger.WithError(err).WithField("url", stickerURL).Warn("Failed to save sticker")
@@ -163,11 +161,9 @@ func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
 		// Save fallback stickers to database
 		for _, stickerURL := range fallbackStickers {
 			sticker := &storage.Sticker{
-				URL:          stickerURL,
-				Source:       "fallback",
-				CachedAt:     time.Now().Unix(),
-				SuccessCount: 0,
-				FailureCount: 0,
+				URL:      stickerURL,
+				Source:   "fallback",
+				CachedAt: time.Now().Unix(),
 			}
 			if err := m.db.SaveSticker(ctx, sticker); err != nil {
 				m.logger.WithError(err).WithField("url", stickerURL).Warn("Failed to save fallback sticker")
@@ -337,10 +333,8 @@ func (m *Manager) RefreshStickers(ctx context.Context) error {
 	return nil
 }
 
-// GetRandomSticker returns a random sticker URL (guaranteed to never be empty)
-// Uses a background goroutine for non-blocking counter updates.
-//
-//nolint:contextcheck // Internal goroutine intentionally uses context.Background() for fire-and-forget operation
+// GetRandomSticker returns a random sticker URL (guaranteed to never be empty).
+// Uses crypto/rand for statistically uniform random selection.
 func (m *Manager) GetRandomSticker() string {
 	m.mu.RLock()
 	stickers := m.stickers
@@ -368,21 +362,8 @@ func (m *Manager) GetRandomSticker() string {
 		// Fallback to first sticker on crypto failure (extremely rare)
 		idxBig = big.NewInt(0)
 	}
-	selectedURL := stickers[idxBig.Int64()]
 
-	// Update success count in database (non-blocking)
-	// Uses background context with timeout to prevent goroutine leaks on shutdown
-	// Errors are intentionally ignored: sticker selection count is non-critical
-	// and logging would spam logs on every message
-	go func(url string) {
-		//nolint:contextcheck // Intentionally using context.Background() for non-blocking fire-and-forget operation
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		_ = m.db.UpdateStickerSuccess(ctx, url)
-	}(selectedURL)
-
-	return selectedURL
+	return stickers[idxBig.Int64()]
 }
 
 // IsLoaded returns whether stickers have been loaded

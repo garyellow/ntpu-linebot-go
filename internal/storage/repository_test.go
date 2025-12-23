@@ -486,9 +486,9 @@ func TestStickerDataNeverExpires(t *testing.T) {
 	}
 
 	// Insert old sticker (manually set cached_at to 30 days ago)
-	query := `INSERT INTO stickers (url, source, cached_at, success_count, failure_count) VALUES (?, ?, ?, ?, ?)`
+	query := `INSERT INTO stickers (url, source, cached_at) VALUES (?, ?, ?)`
 	oldTime := time.Now().Add(-30 * 24 * time.Hour).Unix()
-	_, err := db.writer.ExecContext(ctx, query, "https://example.com/old.png", "spy_family", oldTime, 0, 0)
+	_, err := db.writer.ExecContext(ctx, query, "https://example.com/old.png", "spy_family", oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
@@ -644,14 +644,102 @@ func TestGetCoursesByRecentSemesters(t *testing.T) {
 	}
 }
 
-// TestGetCoursesByRecentSemestersLimit tests the LIMIT 2000 constraint
-func TestGetCoursesByRecentSemestersLimit(t *testing.T) {
+// TestGetDistinctRecentSemesters tests retrieving distinct recent semesters
+func TestGetDistinctRecentSemesters(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
 	ctx := context.Background()
 
-	// This test verifies the query structure without inserting 2000+ records
-	// Just verify the method works with empty database
+	// Insert courses from different semesters
+	courses := []*Course{
+		{
+			UID:      "1132U0001",
+			Year:     113,
+			Term:     2,
+			No:       "U0001",
+			Title:    "課程A",
+			Teachers: []string{"王教授"},
+		},
+		{
+			UID:      "1132U0002",
+			Year:     113,
+			Term:     2,
+			No:       "U0002",
+			Title:    "課程B",
+			Teachers: []string{"李教授"},
+		},
+		{
+			UID:      "1131U0001",
+			Year:     113,
+			Term:     1,
+			No:       "U0001",
+			Title:    "課程C",
+			Teachers: []string{"張教授"},
+		},
+		{
+			UID:      "1122U0001",
+			Year:     112,
+			Term:     2,
+			No:       "U0001",
+			Title:    "課程D",
+			Teachers: []string{"陳教授"},
+		},
+		{
+			UID:      "1121U0001",
+			Year:     112,
+			Term:     1,
+			No:       "U0001",
+			Title:    "課程E",
+			Teachers: []string{"林教授"},
+		},
+	}
+
+	for _, c := range courses {
+		if err := db.SaveCourse(ctx, c); err != nil {
+			t.Fatalf("SaveCourse failed: %v", err)
+		}
+	}
+
+	// Get most recent 2 semesters
+	semesters, err := db.GetDistinctRecentSemesters(ctx, 2)
+	if err != nil {
+		t.Fatalf("GetDistinctRecentSemesters failed: %v", err)
+	}
+
+	// Should return 2 semesters: 113-2 and 113-1
+	if len(semesters) != 2 {
+		t.Errorf("Expected 2 semesters, got %d", len(semesters))
+	}
+
+	// Verify ordering (newest first)
+	if len(semesters) >= 2 {
+		if semesters[0].Year != 113 || semesters[0].Term != 2 {
+			t.Errorf("Expected first semester to be 113-2, got %d-%d", semesters[0].Year, semesters[0].Term)
+		}
+		if semesters[1].Year != 113 || semesters[1].Term != 1 {
+			t.Errorf("Expected second semester to be 113-1, got %d-%d", semesters[1].Year, semesters[1].Term)
+		}
+	}
+
+	// Test with limit=4
+	semesters, err = db.GetDistinctRecentSemesters(ctx, 4)
+	if err != nil {
+		t.Fatalf("GetDistinctRecentSemesters(4) failed: %v", err)
+	}
+
+	// Should return 4 semesters
+	if len(semesters) != 4 {
+		t.Errorf("Expected 4 semesters, got %d", len(semesters))
+	}
+}
+
+// TestGetCoursesByRecentSemestersEmpty tests the method with empty database
+func TestGetCoursesByRecentSemestersEmpty(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+	ctx := context.Background()
+
+	// Verify the method works with empty database
 	courses, err := db.GetCoursesByRecentSemesters(ctx)
 	if err != nil {
 		t.Fatalf("GetCoursesByRecentSemesters failed on empty database: %v", err)

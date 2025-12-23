@@ -31,7 +31,7 @@ type Client struct {
 
 // NewClient creates a new scraper client with URL failover support
 // timeout: HTTP request timeout (e.g., 60s)
-// maxRetries: max retry attempts with exponential backoff (e.g., 3)
+// maxRetries: max retry attempts with exponential backoff (e.g., 10)
 // baseURLs: map of domain to list of base URLs for failover
 func NewClient(timeout time.Duration, maxRetries int, baseURLs map[string][]string) *Client {
 	return &Client{
@@ -50,28 +50,20 @@ func NewClient(timeout time.Duration, maxRetries int, baseURLs map[string][]stri
 	}
 }
 
-// SuccessDelay is the fixed delay after each successful request (anti-scraping)
-const SuccessDelay = 2 * time.Second
-
 // GetDocument performs a GET request and parses the response as HTML.
 // Includes retry with exponential backoff, gzip decompression, and Big5 encoding conversion.
-// Anti-scraping delay is applied AFTER document processing to avoid context cancellation issues.
+// No fixed delay between requests - relies on retry backoff for rate limiting.
 func (c *Client) GetDocument(ctx context.Context, reqURL string) (*goquery.Document, error) {
 	resp, err := c.doRequest(ctx, "GET", reqURL, "")
 	if err != nil {
 		return nil, err
 	}
 
-	// Process document BEFORE sleep to avoid context cancellation affecting response body reading.
-	// The HTTP response body is tied to the request context, so if context is canceled
-	// during sleep, the body may become unreadable.
+	// Process document and return immediately on success
 	doc, err := c.processResponseToDocument(resp)
 	if err != nil {
 		return nil, err
 	}
-
-	// Anti-scraping delay after successful request (ignore context cancellation)
-	_ = Sleep(ctx, SuccessDelay)
 
 	return doc, nil
 }
@@ -83,21 +75,18 @@ func (c *Client) PostFormDocument(ctx context.Context, postURL string, formData 
 
 // PostFormDocumentRaw performs a POST request with raw form data string and parses the response as HTML.
 // Use this when you need custom encoding (e.g., Big5) instead of standard UTF-8 url.Values encoding.
-// Anti-scraping delay is applied AFTER document processing to avoid context cancellation issues.
+// No fixed delay between requests - relies on retry backoff for rate limiting.
 func (c *Client) PostFormDocumentRaw(ctx context.Context, postURL, formDataStr string) (*goquery.Document, error) {
 	resp, err := c.doRequest(ctx, "POST", postURL, formDataStr)
 	if err != nil {
 		return nil, err
 	}
 
-	// Process document BEFORE sleep to avoid context cancellation affecting response body reading.
+	// Process document and return immediately on success
 	doc, err := c.processResponseToDocument(resp)
 	if err != nil {
 		return nil, err
 	}
-
-	// Anti-scraping delay after successful request (ignore context cancellation)
-	_ = Sleep(ctx, SuccessDelay)
 
 	return doc, nil
 }
@@ -105,11 +94,12 @@ func (c *Client) PostFormDocumentRaw(ctx context.Context, postURL, formDataStr s
 // doRequest performs an HTTP request with retry logic and status code handling.
 // This is the core request method used by GetDocument and PostFormDocumentRaw.
 // Returns the response on success; caller is responsible for closing the body.
+// Retry starts from 1 second with exponential backoff up to maxRetries (default: 10).
 func (c *Client) doRequest(ctx context.Context, method, reqURL, body string) (*http.Response, error) {
 	var resp *http.Response
 	var lastErr error
 
-	err := RetryWithBackoff(ctx, c.maxRetries, 4*time.Second, func() error {
+	err := RetryWithBackoff(ctx, c.maxRetries, 1*time.Second, func() error {
 		// Create request with optional body
 		var bodyReader io.Reader = http.NoBody
 		if body != "" {

@@ -36,14 +36,15 @@ import (
 //
 // Pattern priority (1=highest): UID → CourseNo → Historical → Smart → Extended → Regular
 type Handler struct {
-	db             *storage.DB
-	scraper        *scraper.Client
-	metrics        *metrics.Metrics
-	logger         *logger.Logger
-	stickerManager *sticker.Manager
-	bm25Index      *rag.BM25Index
-	queryExpander  genai.QueryExpander // Interface for multi-provider support
-	llmRateLimiter *ratelimit.LLMRateLimiter
+	db               *storage.DB
+	scraper          *scraper.Client
+	metrics          *metrics.Metrics
+	logger           *logger.Logger
+	stickerManager   *sticker.Manager
+	bm25Index        *rag.BM25Index
+	queryExpander    genai.QueryExpander // Interface for multi-provider support
+	llmRateLimiter   *ratelimit.LLMRateLimiter
+	semesterDetector *SemesterDetector // Data-driven semester detection
 
 	// matchers contains all pattern-handler pairs sorted by priority.
 	// Shared by CanHandle and HandleMessage for consistent routing.
@@ -132,6 +133,7 @@ var (
 // NewHandler creates a new course handler.
 // Optional: bm25Index, queryExpander, llmRateLimiter (pass nil if unused).
 // Initializes and sorts matchers by priority during construction.
+// The semesterDetector is initialized with db.CountCoursesBySemester for data-driven semester detection.
 func NewHandler(
 	db *storage.DB,
 	scraper *scraper.Client,
@@ -142,15 +144,19 @@ func NewHandler(
 	queryExpander genai.QueryExpander, // Interface for multi-provider support
 	llmRateLimiter *ratelimit.LLMRateLimiter,
 ) *Handler {
+	// Create semester detector with database count function
+	semesterDetector := NewSemesterDetector(db.CountCoursesBySemester)
+
 	h := &Handler{
-		db:             db,
-		scraper:        scraper,
-		metrics:        metrics,
-		logger:         logger,
-		stickerManager: stickerManager,
-		bm25Index:      bm25Index,
-		queryExpander:  queryExpander,
-		llmRateLimiter: llmRateLimiter,
+		db:               db,
+		scraper:          scraper,
+		metrics:          metrics,
+		logger:           logger,
+		stickerManager:   stickerManager,
+		bm25Index:        bm25Index,
+		queryExpander:    queryExpander,
+		llmRateLimiter:   llmRateLimiter,
+		semesterDetector: semesterDetector,
 	}
 
 	// Initialize Pattern-Action Table
@@ -211,6 +217,35 @@ func (h *Handler) initializeMatchers() {
 // IsBM25SearchEnabled returns true if BM25 search is enabled.
 func (h *Handler) IsBM25SearchEnabled() bool {
 	return h.bm25Index != nil && h.bm25Index.IsEnabled()
+}
+
+// RefreshSemesters updates the cached semester data from database.
+// This should be called after warmup completes to ensure user queries
+// use data-driven semester detection based on actual course availability.
+func (h *Handler) RefreshSemesters(ctx context.Context) {
+	if h.semesterDetector == nil {
+		return
+	}
+	h.semesterDetector.RefreshSemesters(ctx)
+	if h.semesterDetector.HasData() {
+		years, terms := h.semesterDetector.GetAllSemesters()
+		h.logger.WithModule(ModuleName).
+			WithField("semesters", formatSemesterList(years, terms)).
+			Info("Refreshed semester data (data-driven)")
+	}
+}
+
+// formatSemesterList formats semester pairs for logging (e.g., "113-2, 113-1, 112-2, 112-1")
+func formatSemesterList(years, terms []int) string {
+	if len(years) == 0 {
+		return ""
+	}
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf("%d-%d", years[0], terms[0]))
+	for i := 1; i < len(years); i++ {
+		builder.WriteString(fmt.Sprintf(", %d-%d", years[i], terms[i]))
+	}
+	return builder.String()
 }
 
 // hasQueryExpander returns true if query expander is available.
@@ -631,8 +666,8 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 
 	log.Infof("Handling course number query: %s", courseNo)
 
-	// Get semesters to search based on current date
-	searchYears, searchTerms := getSemestersToSearch()
+	// Get semesters to search from data-driven semester detection
+	searchYears, searchTerms := h.semesterDetector.GetRecentSemesters()
 
 	// Search in cache first
 	for i := range searchYears {
@@ -785,12 +820,12 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 	// Step 2: ALWAYS try fuzzy character-set matching to find additional results
 	// This catches cases like "線代" -> "線性代數" that SQL LIKE misses
 	// SQL LIKE only finds consecutive substrings, but fuzzy matching finds scattered characters
-	// Get courses based on search range (2 or 4 semesters)
+	// Get courses based on search range (2 or 4 semesters) - data-driven
 	var searchYears, searchTerms []int
 	if extended {
-		searchYears, searchTerms = getExtendedSemesters()
+		searchYears, searchTerms = h.semesterDetector.GetExtendedSemesters()
 	} else {
-		searchYears, searchTerms = getSemestersToSearch()
+		searchYears, searchTerms = h.semesterDetector.GetRecentSemesters()
 	}
 
 	// Get all courses for the specified semesters from cache

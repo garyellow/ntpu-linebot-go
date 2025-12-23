@@ -2,6 +2,7 @@ package course
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
@@ -11,12 +12,33 @@ type Semester struct {
 	Term int // 1 (Fall) or 2 (Spring)
 }
 
-// SemesterDetector provides intelligent semester detection for course queries.
-// It can detect the current active semester by checking actual course data availability.
+// SemesterDetector provides data-driven semester detection for course queries.
+// It detects available semesters by checking actual course data in the database,
+// rather than relying on calendar-based calculations.
+//
+// Design Philosophy:
+// - All semester decisions should be based on actual data availability
+// - Calendar-based calculation is only used as initial probe for warmup/detection
+// - User queries always use cached semester data from last detection
+//
+// Usage:
+// 1. Create with NewSemesterDetector(countFunc)
+// 2. Call RefreshSemesters(ctx) during warmup or periodically
+// 3. Use GetRecentSemesters() / GetExtendedSemesters() for user queries
 type SemesterDetector struct {
 	// countFunc is a function that counts courses for a given semester.
 	// This allows dependency injection for testing and different data sources.
 	countFunc func(ctx context.Context, year, term int) (int, error)
+
+	// mu protects concurrent access to cachedYears and cachedTerms.
+	// RefreshSemesters writes to these fields while GetRecentSemesters,
+	// GetExtendedSemesters, HasData, and GetAllSemesters read from them.
+	mu sync.RWMutex
+
+	// cachedYears and cachedTerms store the 4 most recent semesters with data.
+	// Updated by RefreshSemesters(), used by GetRecentSemesters()/GetExtendedSemesters().
+	cachedYears []int
+	cachedTerms []int
 }
 
 // NewSemesterDetector creates a new SemesterDetector with the given course count function.
@@ -25,17 +47,18 @@ func NewSemesterDetector(countFunc func(ctx context.Context, year, term int) (in
 	return &SemesterDetector{countFunc: countFunc}
 }
 
-// getSemestersToSearch returns 2 recent semesters to search based on current date.
-// This is the default for user queries - most students only care about recent courses.
-// For warmup or extended search, use getExtendedSemesters (4 semesters).
+// getSemestersToSearch returns 2 recent semesters based on current date (calendar-based).
+// This is a fallback for when SemesterDetector has no cached data.
+//
+// Prefer using SemesterDetector.GetRecentSemesters() for data-driven semester detection.
 func getSemestersToSearch() ([]int, []int) {
 	return getRecentSemestersForDate(time.Now())
 }
 
-// getExtendedSemesters returns 2 additional semesters (3rd and 4th) for extended search.
-// This excludes the first 2 semesters since those are already shown in regular search.
-// Use this when user explicitly wants to see more historical courses beyond recent ones.
-// Note: For warmup, use SemesterDetector.DetectWarmupSemesters() for intelligent detection.
+// getExtendedSemesters returns 2 additional semesters (3rd and 4th) based on current date (calendar-based).
+// This is a fallback for when SemesterDetector has no cached data.
+//
+// Prefer using SemesterDetector.GetExtendedSemesters() for data-driven semester detection.
 func getExtendedSemesters() ([]int, []int) {
 	years, terms := getSemestersForDate(time.Now())
 	// Skip first 2 semesters (already in regular search), return 3rd and 4th
@@ -182,9 +205,16 @@ func (d *SemesterDetector) DetectActiveSemesters(ctx context.Context) ([]int, []
 
 // DetectWarmupSemesters returns the 4 most recent semesters with course data.
 // This is used during warmup to determine which semesters should be cached.
+// Also updates the cached semesters for user queries.
 func (d *SemesterDetector) DetectWarmupSemesters(ctx context.Context) []Semester {
 	// Use DetectActiveSemesters to find which 4 semesters have data
 	years, terms := d.DetectActiveSemesters(ctx)
+
+	// Cache the detected semesters for user queries (protected by mutex)
+	d.mu.Lock()
+	d.cachedYears = years
+	d.cachedTerms = terms
+	d.mu.Unlock()
 
 	// Convert to Semester structs (should always be 4 semesters)
 	result := make([]Semester, len(years))
@@ -196,4 +226,68 @@ func (d *SemesterDetector) DetectWarmupSemesters(ctx context.Context) []Semester
 	}
 
 	return result
+}
+
+// RefreshSemesters detects and caches the 4 most recent semesters with data.
+// This should be called during warmup or periodically to update the cache.
+// User queries use the cached values via GetRecentSemesters/GetExtendedSemesters.
+func (d *SemesterDetector) RefreshSemesters(ctx context.Context) {
+	years, terms := d.DetectActiveSemesters(ctx)
+	d.mu.Lock()
+	d.cachedYears = years
+	d.cachedTerms = terms
+	d.mu.Unlock()
+}
+
+// GetRecentSemesters returns the 2 most recent semesters with data.
+// This is data-driven: returns semesters from the last RefreshSemesters/DetectWarmupSemesters call.
+// If no cached data, falls back to calendar-based detection.
+//
+// Returns: (years []int, terms []int) where years[i] and terms[i] form a semester pair.
+func (d *SemesterDetector) GetRecentSemesters() ([]int, []int) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	if len(d.cachedYears) >= 2 {
+		return d.cachedYears[:2], d.cachedTerms[:2]
+	}
+	// Fallback to calendar-based (should not happen in normal operation)
+	return getRecentSemestersForDate(time.Now())
+}
+
+// GetExtendedSemesters returns the 3rd and 4th semesters with data.
+// This is data-driven: returns semesters from the last RefreshSemesters/DetectWarmupSemesters call.
+// Used for "更多學期" (More Semesters) search.
+//
+// Returns: (years []int, terms []int) for semesters 3-4, or empty if not available.
+func (d *SemesterDetector) GetExtendedSemesters() ([]int, []int) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	if len(d.cachedYears) >= 4 {
+		return d.cachedYears[2:4], d.cachedTerms[2:4]
+	}
+	if len(d.cachedYears) > 2 {
+		return d.cachedYears[2:], d.cachedTerms[2:]
+	}
+	// Fallback to calendar-based (should not happen in normal operation)
+	return getExtendedSemesters()
+}
+
+// HasData returns true if the detector has cached semester data.
+// This indicates whether RefreshSemesters or DetectWarmupSemesters has been called.
+func (d *SemesterDetector) HasData() bool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return len(d.cachedYears) > 0
+}
+
+// GetAllSemesters returns all 4 cached semesters with data.
+// This is data-driven: returns semesters from the last RefreshSemesters/DetectWarmupSemesters call.
+func (d *SemesterDetector) GetAllSemesters() ([]int, []int) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	if len(d.cachedYears) > 0 {
+		return d.cachedYears, d.cachedTerms
+	}
+	// Fallback to calendar-based
+	return getSemestersForDate(time.Now())
 }

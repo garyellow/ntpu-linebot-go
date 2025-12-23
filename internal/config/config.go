@@ -124,7 +124,7 @@ func Load() (*Config, error) {
 
 		// Scraper Configuration
 		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", ScraperRequest),
-		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 5),
+		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 10), // Max 10 retries with exponential backoff (1s initial)
 		// IP first for faster scraping (avoids DNS lookup)
 		// URLs generated for users are hard-coded to domain in scrapers
 		ScraperBaseURLs: map[string][]string{

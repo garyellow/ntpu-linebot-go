@@ -75,7 +75,7 @@ NTPU LineBot 是一個為國立臺北大學設計的 LINE 聊天機器人，提�
 │             times, locations, detail_url, note, cached_at)      │
 │  • course_programs (course_uid, program_name, course_type,      │
 │                     cached_at) - 課程與學程關聯                    │
-│  • stickers (url, source, cached_at, success/failure_count)     │
+│  • stickers (url, source, cached_at)                            │
 │  • syllabi (uid, year, term, title, teachers, objectives,       │
 │             outline, schedule, content_hash, cached_at)         │
 └────────────────────────────┬──────────────────────┬─────────────┘
@@ -254,23 +254,22 @@ User Query → Bot Module → Repository Layer
 
 **Bot Module 選擇**:
 ```go
-// internal/webhook/handler.go
-func (h *Handler) handleMessageEvent(ctx context.Context, event webhook.MessageEvent) {
-    text := extractText(event)
-
+// internal/bot/registry.go - 模組註冊表
+func (r *Registry) DispatchMessage(ctx context.Context, text string) []msgs {
     // Strategy pattern: 依關鍵字選擇處理器
-    if h.idHandler.CanHandle(text) {
-        return h.idHandler.HandleMessage(ctx, text)
+    for _, handler := range r.handlers {
+        if handler.CanHandle(text) {
+            return handler.HandleMessage(ctx, text)
+        }
     }
-    if h.contactHandler.CanHandle(text) {
-        return h.contactHandler.HandleMessage(ctx, text)
-    }
-    if h.courseHandler.CanHandle(text) {
-        return h.courseHandler.HandleMessage(ctx, text)
-    }
-
-    return h.getHelpMessage()
+    return nil // No match - fallback to NLU
 }
+
+// 註冊順序決定優先級
+registry.Register(idHandler)      // 學號查詢
+registry.Register(contactHandler) // 聯絡資訊
+registry.Register(courseHandler)  // 課程查詢
+registry.Register(programHandler) // 學程查詢
 ```
 
 ## 關鍵技術決策
