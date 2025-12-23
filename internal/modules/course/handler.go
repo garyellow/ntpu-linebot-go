@@ -240,11 +240,12 @@ func formatSemesterList(years, terms []int) string {
 	if len(years) == 0 {
 		return ""
 	}
-	result := fmt.Sprintf("%d-%d", years[0], terms[0])
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf("%d-%d", years[0], terms[0]))
 	for i := 1; i < len(years); i++ {
-		result += fmt.Sprintf(", %d-%d", years[i], terms[i])
+		builder.WriteString(fmt.Sprintf(", %d-%d", years[i], terms[i]))
 	}
-	return result
+	return builder.String()
 }
 
 // hasQueryExpander returns true if query expander is available.

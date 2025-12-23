@@ -840,12 +840,12 @@ func (db *DB) GetDistinctRecentSemesters(ctx context.Context, limit int) ([]stru
 // GetCoursesByRecentSemesters retrieves all courses from recent semesters (current + previous)
 // Used for fuzzy character-set matching when SQL LIKE doesn't find results
 // Only returns non-expired cache entries based on configured TTL (7-day cache for courses)
-// No limit - returns all courses from the most recent 2 semesters that have cached data
+// Returns ALL courses with valid cache entries, regardless of which semesters are currently cached
 func (db *DB) GetCoursesByRecentSemesters(ctx context.Context) ([]Course, error) {
 	ttlTimestamp := db.getTTLTimestamp()
 
 	// Get all courses from recent semesters ordered by semester (year DESC, term DESC)
-	// Cache warmup loads 4 most recent semesters, so this will return those courses
+	// This returns all courses with cached_at > TTL threshold, typically from the 4 most recent semesters
 	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at
 		FROM courses WHERE cached_at > ? ORDER BY year DESC, term DESC`
 

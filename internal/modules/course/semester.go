@@ -2,6 +2,7 @@ package course
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
@@ -28,6 +29,11 @@ type SemesterDetector struct {
 	// countFunc is a function that counts courses for a given semester.
 	// This allows dependency injection for testing and different data sources.
 	countFunc func(ctx context.Context, year, term int) (int, error)
+
+	// mu protects concurrent access to cachedYears and cachedTerms.
+	// RefreshSemesters writes to these fields while GetRecentSemesters,
+	// GetExtendedSemesters, HasData, and GetAllSemesters read from them.
+	mu sync.RWMutex
 
 	// cachedYears and cachedTerms store the 4 most recent semesters with data.
 	// Updated by RefreshSemesters(), used by GetRecentSemesters()/GetExtendedSemesters().
@@ -204,9 +210,11 @@ func (d *SemesterDetector) DetectWarmupSemesters(ctx context.Context) []Semester
 	// Use DetectActiveSemesters to find which 4 semesters have data
 	years, terms := d.DetectActiveSemesters(ctx)
 
-	// Cache the detected semesters for user queries
+	// Cache the detected semesters for user queries (protected by mutex)
+	d.mu.Lock()
 	d.cachedYears = years
 	d.cachedTerms = terms
+	d.mu.Unlock()
 
 	// Convert to Semester structs (should always be 4 semesters)
 	result := make([]Semester, len(years))
@@ -225,8 +233,10 @@ func (d *SemesterDetector) DetectWarmupSemesters(ctx context.Context) []Semester
 // User queries use the cached values via GetRecentSemesters/GetExtendedSemesters.
 func (d *SemesterDetector) RefreshSemesters(ctx context.Context) {
 	years, terms := d.DetectActiveSemesters(ctx)
+	d.mu.Lock()
 	d.cachedYears = years
 	d.cachedTerms = terms
+	d.mu.Unlock()
 }
 
 // GetRecentSemesters returns the 2 most recent semesters with data.
@@ -235,6 +245,8 @@ func (d *SemesterDetector) RefreshSemesters(ctx context.Context) {
 //
 // Returns: (years []int, terms []int) where years[i] and terms[i] form a semester pair.
 func (d *SemesterDetector) GetRecentSemesters() ([]int, []int) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 	if len(d.cachedYears) >= 2 {
 		return d.cachedYears[:2], d.cachedTerms[:2]
 	}
@@ -248,6 +260,8 @@ func (d *SemesterDetector) GetRecentSemesters() ([]int, []int) {
 //
 // Returns: (years []int, terms []int) for semesters 3-4, or empty if not available.
 func (d *SemesterDetector) GetExtendedSemesters() ([]int, []int) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 	if len(d.cachedYears) >= 4 {
 		return d.cachedYears[2:4], d.cachedTerms[2:4]
 	}
@@ -261,12 +275,16 @@ func (d *SemesterDetector) GetExtendedSemesters() ([]int, []int) {
 // HasData returns true if the detector has cached semester data.
 // This indicates whether RefreshSemesters or DetectWarmupSemesters has been called.
 func (d *SemesterDetector) HasData() bool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 	return len(d.cachedYears) > 0
 }
 
 // GetAllSemesters returns all 4 cached semesters with data.
 // This is data-driven: returns semesters from the last RefreshSemesters/DetectWarmupSemesters call.
 func (d *SemesterDetector) GetAllSemesters() ([]int, []int) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 	if len(d.cachedYears) > 0 {
 		return d.cachedYears, d.cachedTerms
 	}
