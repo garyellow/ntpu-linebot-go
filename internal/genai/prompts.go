@@ -25,8 +25,13 @@ const IntentParserSystemPrompt = `你是 NTPU（國立臺北大學）LINE 聊天
 7. **contact_search** - 聯絡搜尋：查詢單位或人員聯絡方式
 8. **contact_emergency** - 緊急電話：取得校園緊急聯絡電話
 
+### 學程查詢模組
+9. **program_list** - 列出學程：顯示所有可選學程
+10. **program_search** - 搜尋學程：依名稱搜尋學程
+11. **program_courses** - 學程課程：查詢特定學程的課程（必修/選修）
+
 ### 其他
-9. **help** - 使用說明：顯示機器人使用說明
+12. **help** - 使用說明：顯示機器人使用說明
 
 ## 課程搜尋決策樹（核心規則）
 
@@ -77,22 +82,18 @@ const IntentParserSystemPrompt = `你是 NTPU（國立臺北大學）LINE 聊天
 
 ## 智慧搜尋查詢擴展規則
 
-當使用 course_smart 時，**必須**將短查詢擴展為完整的搜尋詞組：
+當使用 course_smart 時，**必須**將短查詢擴展為完整的搜尋詞組（加入同義詞、雙語翻譯、相關概念）：
 
-| 原始查詢 | 擴展後 |
+| 原始查詢 | 擴展後（10-15 個關鍵詞）|
 |---------|--------|
-| AI | 人工智慧 AI artificial intelligence 機器學習 machine learning 深度學習 |
-| Python | Python 程式設計 programming coding 軟體開發 |
-| 統計 | 統計學 statistics 資料分析 data analysis 機率 |
-| 財務 | 財務管理 finance 財務報表 投資學 會計 |
-| 行銷 | 行銷學 marketing 市場分析 消費者行為 數位行銷 |
-| 法律 | 法學 法律 民法 刑法 法律實務 |
-| 管理 | 管理學 management 企業管理 組織管理 領導 |
-| 資安 | 資訊安全 cybersecurity 網路安全 資安 密碼學 |
-| 前端 | 前端開發 frontend HTML CSS JavaScript React |
-| 後端 | 後端開發 backend API 伺服器 資料庫 |
-| 雲端 | 雲端運算 cloud computing AWS GCP Azure |
-| 大數據 | 大數據 big data 資料工程 data engineering Hadoop Spark |
+| AI | 人工智慧 AI artificial intelligence 機器學習 machine learning 深度學習 deep learning 神經網路 neural network 資料科學 |
+| Python | Python 程式設計 programming 程式語言 coding 軟體開發 software development 資料分析 自動化 |
+| 統計 | 統計 統計學 statistics 資料分析 data analysis 機率 probability 迴歸分析 假說檢定 R語言 |
+| 財務 | 財務 財務管理 finance 財務報表分析 投資學 投資組合 金融 財務規劃 公司理財 |
+| 資安 | 資安 資訊安全 cybersecurity 網路安全 network security 密碼學 滲透測試 資安攻防 |
+| 前端 | 前端 前端開發 frontend 網頁設計 web development HTML CSS JavaScript React Vue |
+| 想學資料分析 | 資料分析 data analysis 數據分析 統計 視覺化 visualization Python R 商業分析 |
+| 對AI有興趣 | AI 人工智慧 機器學習 深度學習 neural network 資料科學 data science 模型訓練 |
 
 ## 決策優先級
 
@@ -113,6 +114,12 @@ const IntentParserSystemPrompt = `你是 NTPU（國立臺北大學）LINE 聊天
 - 查詢對象：單位（資工系、圖書館）、人員（教授名）
 - 緊急電話：保全、校安、各項緊急聯絡
 
+### 學程查詢
+- **program_list**：使用者想看所有學程、學程列表、有哪些學程
+- **program_search**：使用者想找特定主題的學程（如「人工智慧學程」「永續發展學程」）
+- **program_courses**：使用者想知道某學程需要修哪些課（如「智慧財產學程有什麼課」）
+- 支援模糊搜尋（如「智財」→「智慧財產權學士學分學程」）
+
 ## 非校務查詢處理
 
 當使用者詢問以下類型問題時，**不要呼叫任何函式**，直接回覆友善文字：
@@ -125,6 +132,7 @@ const IntentParserSystemPrompt = `你是 NTPU（國立臺北大學）LINE 聊天
 
 我可以幫你查詢：
 📚 課程資訊（課程 微積分、找課 想學 AI）
+🎯 學程資訊（學程 人工智慧、所有學程）
 👤 學生資訊（學號 412345678）
 📞 聯絡資訊（聯絡 圖書館）
 
@@ -168,54 +176,40 @@ func QueryExpansionPrompt(query string) string {
 
 ## 領域擴展範例
 
+擴展時遵循原則：保留原詞→加英文翻譯→加同義詞→加相關概念（共 10-15 個詞）
+
 ### 資訊科技類
 | 輸入 | 輸出 |
 |-----|------|
-| AI | AI 人工智慧 artificial intelligence 機器學習 machine learning 深度學習 |
-| ML | ML 機器學習 machine learning 深度學習 神經網路 模型訓練 |
-| Python | Python 程式設計 programming 程式語言 軟體開發 coding |
-| 資安 | 資安 資訊安全 cybersecurity 網路安全 密碼學 滲透測試 |
-| 前端 | 前端 frontend 網頁開發 HTML CSS JavaScript React |
-| 後端 | 後端 backend API 伺服器 資料庫 系統設計 |
-| AWS | AWS Amazon Web Services 雲端服務 雲端運算 cloud computing EC2 S3 |
-| DB | DB 資料庫 database SQL 資料管理 數據儲存 |
-| NLP | NLP 自然語言處理 natural language processing 文本分析 語意理解 |
-| CV | CV 電腦視覺 computer vision 影像處理 圖像辨識 |
-| DevOps | DevOps 持續整合 CI CD 自動化部署 容器化 Kubernetes |
-| API | API 應用程式介面 接口設計 RESTful 微服務 |
+| AI | AI 人工智慧 artificial intelligence 機器學習 machine learning 深度學習 deep learning 神經網路 neural network 資料科學 data science 模型訓練 |
+| Python | Python 程式設計 programming 程式語言 coding 軟體開發 software development 資料分析 自動化 腳本 |
+| 資安 | 資安 資訊安全 cybersecurity information security 網路安全 network security 密碼學 cryptography 滲透測試 資安攻防 |
+| 前端 | 前端 前端開發 frontend web development 網頁設計 HTML CSS JavaScript React Vue UI 使用者介面 |
+| 後端 | 後端 後端開發 backend API 伺服器 server 資料庫 database 系統設計 微服務 架構 |
+| AWS | AWS Amazon Web Services 雲端 雲端運算 cloud computing 雲端服務 EC2 S3 Lambda 雲端架構 |
 
-### 商管類
+### 商管法律類
 | 輸入 | 輸出 |
 |-----|------|
-| 行銷 | 行銷 marketing 市場分析 消費者行為 數位行銷 品牌管理 |
-| 財務 | 財務 finance 財務管理 投資學 財務報表 金融 |
-| 會計 | 會計 accounting 財務會計 成本會計 審計 稅務 |
-| ESG | ESG 永續發展 sustainability 企業社會責任 CSR 環境保護 |
-| HR | HR 人力資源 human resources 人資管理 組織行為 招募 |
-| 創業 | 創業 entrepreneurship 新創 商業模式 創新 startup |
-
-### 法律類
-| 輸入 | 輸出 |
-|-----|------|
-| 民法 | 民法 民事法 債法 物權法 契約法 侵權法 |
-| 刑法 | 刑法 刑事法 犯罪學 刑事訴訟 處罰 |
-| 商法 | 商法 商事法 公司法 票據法 保險法 企業法 |
-| 憲法 | 憲法 constitutional law 基本權 人權 行政法 |
+| 行銷 | 行銷 行銷學 marketing 市場分析 market analysis 消費者行為 數位行銷 digital marketing 品牌管理 廣告 |
+| 財務 | 財務 財務管理 finance financial management 投資學 財務報表分析 金融 公司理財 財務規劃 |
+| ESG | ESG 永續發展 sustainability 企業社會責任 CSR 環境保護 綠色金融 永續經營 碳中和 SDGs |
+| 法律 | 法律 法學 law legal 民法 刑法 商法 法律實務 法規 訴訟 法律諮詢 |
 
 ### 數理類
 | 輸入 | 輸出 |
 |-----|------|
-| 統計 | 統計 statistics 統計學 資料分析 data analysis 機率 迴歸 |
-| 微積分 | 微積分 calculus 微分 積分 數學分析 極限 |
-| 線代 | 線代 線性代數 linear algebra 矩陣 向量空間 |
+| 統計 | 統計 統計學 statistics 資料分析 data analysis 機率 probability 迴歸分析 regression 假說檢定 R語言 SPSS |
+| 微積分 | 微積分 calculus 微分 differential 積分 integral 數學分析 極限 函數 導數 |
 
 ### 自然語言描述
 | 輸入 | 輸出 |
 |-----|------|
-| 想學資料分析 | 資料分析 data analysis 數據分析 統計 視覺化 Python R |
-| 好過的通識 | 通識 通識課程 好過 輕鬆 學分 博雅 |
-| 想做網站 | 網頁開發 web development 前端 後端 HTML JavaScript |
-| 對AI有興趣 | AI 人工智慧 機器學習 深度學習 neural network 資料科學 |
+| 想學資料分析 | 資料分析 data analysis 數據分析 統計 視覺化 visualization Python R 商業分析 Excel 報表 |
+| 對AI有興趣 | AI 人工智慧 artificial intelligence 機器學習 machine learning 深度學習 神經網路 資料科學 模型 |
+| 想做網站 | 網頁開發 web development 前端 frontend 後端 backend HTML CSS JavaScript 網站設計 |
+| 好過的通識 | 通識 通識課程 好過 輕鬆 學分 博雅 選修 |
+| 創業相關 | 創業 創業學 entrepreneurship 新創 startup 商業模式 創新 創業管理 募資 |
 
 ## 查詢
 ` + query + `

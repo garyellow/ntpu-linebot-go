@@ -51,7 +51,8 @@ type Application struct {
 	queryExpander  genai.QueryExpander // Interface type for multi-provider support
 	llmRateLimiter *ratelimit.LLMRateLimiter
 	userLimiter    *ratelimit.UserRateLimiter
-	wg             sync.WaitGroup // Track background goroutines for graceful shutdown
+	courseHandler  *course.Handler // For refreshing semester data after warmup
+	wg             sync.WaitGroup  // Track background goroutines for graceful shutdown
 }
 
 // Initialize creates and initializes a new application with all dependencies.
@@ -182,6 +183,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		queryExpander:  queryExpander,
 		llmRateLimiter: llmRateLimiter,
 		userLimiter:    userLimiter,
+		courseHandler:  courseHandler,
 	}
 
 	router.GET("/", app.redirectToGitHub)
@@ -601,6 +603,12 @@ func (a *Application) performProactiveWarmup(ctx context.Context, warmID bool) {
 	if err != nil {
 		a.logger.WithError(err).Error("Proactive warmup failed")
 		return
+	}
+
+	// Refresh semester data in course handler after warmup completes
+	// This ensures user queries use data-driven semester detection
+	if a.courseHandler != nil {
+		a.courseHandler.RefreshSemesters(ctx)
 	}
 
 	logEntry := a.logger.WithField("contacts", stats.Contacts.Load()).

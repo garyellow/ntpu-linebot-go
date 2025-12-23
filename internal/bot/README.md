@@ -5,12 +5,17 @@
 ## 架構
 
 ```
-bot/
-├── handler.go      # Handler 介面定義
-├── utils.go        # 共用工具（關鍵字匹配、搜尋詞提取）
-├── id/             # 學號查詢模組
-├── contact/        # 聯絡資訊模組
-└── course/         # 課程查詢模組
+internal/
+├── bot/              # 核心處理（Processor、Handler 介面）
+│   ├── handler.go    # Handler 介面定義
+│   ├── processor.go  # 事件處理器（NLU、Fallback 等）
+│   ├── registry.go   # 模組註冊表
+│   └── utils.go      # 共用工具（關鍵字匹配、搜尋詞提取）
+└── modules/          # 功能模組實作
+    ├── id/           # 學號查詢模組
+    ├── contact/      # 聯絡資訊模組
+    ├── course/       # 課程查詢模組
+    └── program/      # 學程查詢模組
 ```
 
 ## Handler 介面

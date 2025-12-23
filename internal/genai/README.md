@@ -74,6 +74,9 @@ internal/genai/
 | `id_department` | id | 科系代碼查詢 |
 | `contact_search` | contact | 聯絡資訊搜尋 |
 | `contact_emergency` | contact | 緊急電話 |
+| `program_list` | program | 列出所有學程 |
+| `program_search` | program | 搜尋學程 |
+| `program_courses` | program | 查詢學程課程（必修/選修）|
 | `help` | help | 使用說明 |
 
 ### 使用方式
