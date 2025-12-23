@@ -74,11 +74,9 @@ type ProgramCourse struct {
 
 // Sticker represents a sticker URL record
 type Sticker struct {
-	URL          string `json:"url"`
-	Source       string `json:"source"` // "spy_family", "ichigo", or "fallback"
-	CachedAt     int64  `json:"cached_at"`
-	SuccessCount int    `json:"success_count"`
-	FailureCount int    `json:"failure_count"`
+	URL      string `json:"url"`
+	Source   string `json:"source"` // "spy_family", "ichigo", or "fallback"
+	CachedAt int64  `json:"cached_at"`
 }
 
 // Syllabus represents a course syllabus record for smart search

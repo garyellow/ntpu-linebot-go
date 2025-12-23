@@ -65,9 +65,9 @@ func TestGetRandomStickerWithLoadedStickers(t *testing.T) {
 
 	// Mock some stickers in database
 	testStickers := []storage.Sticker{
-		{URL: "https://spy-family.net/sticker1.png", Source: "spy_family", CachedAt: time.Now().Unix(), SuccessCount: 0, FailureCount: 0},
-		{URL: "https://spy-family.net/sticker2.png", Source: "spy_family", CachedAt: time.Now().Unix(), SuccessCount: 0, FailureCount: 0},
-		{URL: "https://ichigoproduction.com/sticker1.png", Source: "ichigo", CachedAt: time.Now().Unix(), SuccessCount: 0, FailureCount: 0},
+		{URL: "https://spy-family.net/sticker1.png", Source: "spy_family", CachedAt: time.Now().Unix()},
+		{URL: "https://spy-family.net/sticker2.png", Source: "spy_family", CachedAt: time.Now().Unix()},
+		{URL: "https://ichigoproduction.com/sticker1.png", Source: "ichigo", CachedAt: time.Now().Unix()},
 	}
 
 	for _, s := range testStickers {
@@ -103,8 +103,8 @@ func TestLoadStickersFromDatabase(t *testing.T) {
 
 	// Save stickers to database
 	testStickers := []storage.Sticker{
-		{URL: "https://spy-family.net/test1.png", Source: "spy_family", CachedAt: time.Now().Unix(), SuccessCount: 5, FailureCount: 0},
-		{URL: "https://spy-family.net/test2.png", Source: "spy_family", CachedAt: time.Now().Unix(), SuccessCount: 3, FailureCount: 1},
+		{URL: "https://spy-family.net/test1.png", Source: "spy_family", CachedAt: time.Now().Unix()},
+		{URL: "https://spy-family.net/test2.png", Source: "spy_family", CachedAt: time.Now().Unix()},
 	}
 
 	for _, s := range testStickers {

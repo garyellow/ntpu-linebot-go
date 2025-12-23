@@ -486,9 +486,9 @@ func TestStickerDataNeverExpires(t *testing.T) {
 	}
 
 	// Insert old sticker (manually set cached_at to 30 days ago)
-	query := `INSERT INTO stickers (url, source, cached_at, success_count, failure_count) VALUES (?, ?, ?, ?, ?)`
+	query := `INSERT INTO stickers (url, source, cached_at) VALUES (?, ?, ?)`
 	oldTime := time.Now().Add(-30 * 24 * time.Hour).Unix()
-	_, err := db.writer.ExecContext(ctx, query, "https://example.com/old.png", "spy_family", oldTime, 0, 0)
+	_, err := db.writer.ExecContext(ctx, query, "https://example.com/old.png", "spy_family", oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}

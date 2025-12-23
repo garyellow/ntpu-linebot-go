@@ -128,13 +128,10 @@ func createStickersTable(ctx context.Context, db *sql.DB) error {
 	CREATE TABLE IF NOT EXISTS stickers (
 		url TEXT PRIMARY KEY,
 		source TEXT NOT NULL CHECK(source IN ('spy_family', 'ichigo', 'fallback')),
-		cached_at INTEGER NOT NULL,
-		success_count INTEGER DEFAULT 0,
-		failure_count INTEGER DEFAULT 0
+		cached_at INTEGER NOT NULL
 	);
 	CREATE INDEX IF NOT EXISTS idx_stickers_source ON stickers(source);
 	CREATE INDEX IF NOT EXISTS idx_stickers_cached_at ON stickers(cached_at);
-	CREATE INDEX IF NOT EXISTS idx_stickers_source ON stickers(source);
 	`
 
 	if _, err := db.ExecContext(ctx, query); err != nil {

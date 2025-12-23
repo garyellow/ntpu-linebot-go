@@ -967,20 +967,16 @@ func scanCourses(rows *sql.Rows) ([]Course, error) {
 // SaveSticker inserts or updates a sticker record
 func (db *DB) SaveSticker(ctx context.Context, sticker *Sticker) error {
 	query := `
-		INSERT INTO stickers (url, source, cached_at, success_count, failure_count)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO stickers (url, source, cached_at)
+		VALUES (?, ?, ?)
 		ON CONFLICT(url) DO UPDATE SET
 			source = excluded.source,
-			cached_at = excluded.cached_at,
-			success_count = excluded.success_count,
-			failure_count = excluded.failure_count
+			cached_at = excluded.cached_at
 	`
 	_, err := db.writer.ExecContext(ctx, query,
 		sticker.URL,
 		sticker.Source,
 		time.Now().Unix(),
-		sticker.SuccessCount,
-		sticker.FailureCount,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to save sticker: %w", err)
@@ -991,7 +987,7 @@ func (db *DB) SaveSticker(ctx context.Context, sticker *Sticker) error {
 // GetAllStickers retrieves all stickers from database.
 // Sticker data never expires; it is loaded on startup and updated only by explicit refresh.
 func (db *DB) GetAllStickers(ctx context.Context) ([]Sticker, error) {
-	query := `SELECT url, source, cached_at, success_count, failure_count FROM stickers`
+	query := `SELECT url, source, cached_at FROM stickers`
 
 	rows, err := db.reader.QueryContext(ctx, query)
 	if err != nil {
@@ -1003,59 +999,13 @@ func (db *DB) GetAllStickers(ctx context.Context) ([]Sticker, error) {
 
 	for rows.Next() {
 		var sticker Sticker
-		if err := rows.Scan(&sticker.URL, &sticker.Source, &sticker.CachedAt, &sticker.SuccessCount, &sticker.FailureCount); err != nil {
+		if err := rows.Scan(&sticker.URL, &sticker.Source, &sticker.CachedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan sticker row: %w", err)
 		}
 		stickers = append(stickers, sticker)
 	}
 
 	return stickers, nil
-}
-
-// GetStickersBySource retrieves stickers by source type.
-// Sticker data never expires; it is loaded on startup and updated only by explicit refresh.
-func (db *DB) GetStickersBySource(ctx context.Context, source string) ([]Sticker, error) {
-	query := `SELECT url, source, cached_at, success_count, failure_count FROM stickers WHERE source = ?`
-
-	rows, err := db.reader.QueryContext(ctx, query, source)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get stickers by source: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var stickers []Sticker
-
-	for rows.Next() {
-		var sticker Sticker
-		if err := rows.Scan(&sticker.URL, &sticker.Source, &sticker.CachedAt, &sticker.SuccessCount, &sticker.FailureCount); err != nil {
-			return nil, fmt.Errorf("failed to scan sticker row: %w", err)
-		}
-		stickers = append(stickers, sticker)
-	}
-
-	return stickers, nil
-}
-
-// UpdateStickerSuccess increments the success count for a sticker
-func (db *DB) UpdateStickerSuccess(ctx context.Context, url string) error {
-	query := `UPDATE stickers SET success_count = success_count + 1 WHERE url = ?`
-
-	_, err := db.writer.ExecContext(ctx, query, url)
-	if err != nil {
-		return fmt.Errorf("failed to update sticker success count: %w", err)
-	}
-	return nil
-}
-
-// UpdateStickerFailure increments the failure count for a sticker
-func (db *DB) UpdateStickerFailure(ctx context.Context, url string) error {
-	query := `UPDATE stickers SET failure_count = failure_count + 1 WHERE url = ?`
-
-	_, err := db.writer.ExecContext(ctx, query, url)
-	if err != nil {
-		return fmt.Errorf("failed to update sticker failure count: %w", err)
-	}
-	return nil
 }
 
 // CountStickers returns the total number of stickers.
@@ -1544,30 +1494,4 @@ func (db *DB) DeleteExpiredSyllabi(ctx context.Context, ttl time.Duration) (int6
 		return 0, fmt.Errorf("failed to get rows affected for syllabi: %w", err)
 	}
 	return rowsAffected, nil
-}
-
-// CountStickersBySource returns the number of stickers grouped by source.
-func (db *DB) CountStickersBySource(ctx context.Context) (map[string]int, error) {
-	query := `SELECT source, COUNT(*) FROM stickers GROUP BY source`
-	rows, err := db.reader.QueryContext(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query sticker counts: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	counts := make(map[string]int)
-	for rows.Next() {
-		var source string
-		var count int
-		if err := rows.Scan(&source, &count); err != nil {
-			return nil, fmt.Errorf("failed to scan sticker count: %w", err)
-		}
-		counts[source] = count
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate sticker counts: %w", err)
-	}
-
-	return counts, nil
 }
