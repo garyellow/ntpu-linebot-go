@@ -32,8 +32,8 @@ func TestLoad(t *testing.T) {
 		t.Errorf("Expected default port '10000', got '%s'", cfg.Port)
 	}
 
-	if cfg.ScraperMaxRetries != 5 {
-		t.Errorf("Expected default max retries 5, got %d", cfg.ScraperMaxRetries)
+	if cfg.ScraperMaxRetries != 10 {
+		t.Errorf("Expected default max retries 10, got %d", cfg.ScraperMaxRetries)
 	}
 }
 

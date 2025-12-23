@@ -2,9 +2,12 @@
 //
 // Daily refresh (3:00 AM Taiwan time):
 //   - contact, course: Always refreshed (7-day TTL)
-//   - syllabus: Auto-enabled when LLM API key is configured
+//   - syllabus: ONLY processes most recent 2 semesters with data (auto-enabled when LLM API key configured)
 //
 // Not in daily refresh: id (static; typically startup only), sticker (startup only)
+//
+// CRITICAL: Syllabus scraping is ONLY performed during warmup - never in real-time user queries.
+// User queries (e.g., smart search) use the pre-built BM25 index from cached syllabi (read-only).
 package warmup
 
 import (

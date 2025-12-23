@@ -145,7 +145,7 @@ LINE Webhook → Gin Handler
 
 **Background Jobs** (Taiwan time/Asia/Taipei):
 - **Sticker**: Startup only
-- **Daily Refresh** (3:00 AM): contact, course+programs (always), syllabus (auto-enabled if LLM API key)
+- **Daily Refresh** (3:00 AM): contact, course+programs (always), syllabus (only most recent 2 semesters, auto-enabled if LLM API key)
 - **Cache Cleanup** (4:00 AM): Delete expired contacts/courses/programs/syllabi (7-day TTL) + VACUUM
 - **Metrics/Rate Limiter Cleanup**: Every 5 minutes
 
@@ -160,11 +160,11 @@ LINE Webhook → Gin Handler
   - **Validation**: Uses `config.CourseSystemLaunchYear` as minimum, not limited by cache content
 - Contact: 7-day TTL
 - Sticker: Startup only, never expires
-- Syllabus: Auto-enabled when LLM API key configured
+- Syllabus: ONLY scraped during warmup for the most recent 2 semesters with cached data, 7-day TTL, auto-enabled when LLM API key configured
 
 ## Rate Limiting
 
-**Scraper** (`internal/scraper/client.go`): 2s rate limiting between requests, exponential backoff on failure (4s initial, max 5 retries, ±25% jitter), 60s HTTP timeout per request
+**Scraper** (`internal/scraper/client.go`): No fixed delay between successful requests, exponential backoff on failure (1s initial, max 10 retries, ±25% jitter), 60s HTTP timeout per request
 
 **Webhook**: Per-user (6 tokens, 1 token/5s refill), global (100 rps), silently drops excess requests
 
@@ -430,19 +430,48 @@ Fallback → getHelpMessage() + Warning Log
 - Gemini: `gemini-2.5-flash` (primary), `gemini-2.5-flash-lite` (fallback)
 - Groq: `meta-llama/llama-4-maverick-17b-128e-instruct` (intent), `meta-llama/llama-4-scout-17b-16e-instruct` (expander), with Llama 3.x Production fallbacks
 
+## Syllabus Module
+
+**CRITICAL: Syllabus scraping is ONLY performed during warmup - never in real-time user queries**
+
+**Warmup Behavior** (`internal/warmup/warmup.go:warmupSyllabusModule()`):
+1. Identify most recent 2 semesters with cached course data via `GetDistinctRecentSemesters(ctx, 2)`
+2. Load courses from those 2 semesters only via `GetCoursesByYearTerm(ctx, year, term)`
+3. Scrape syllabus for each course via `syllabus.ScrapeSyllabus(ctx, course)`
+4. Use SHA256 content hash for incremental updates (skip if content unchanged)
+5. Save to database and rebuild BM25 index
+
+**User Query Behavior**:
+- Smart search (`找課`) uses BM25 index built from cached syllabi (read-only)
+- Course detail queries show cached syllabus if available (read-only)
+- NO scraping occurs during user queries - all data is pre-cached
+
+**Cache Strategy**:
+- TTL: 7 days (enforced at SQL level: `WHERE cached_at > ?`)
+- Scope: Only most recent 2 semesters with data
+- Trigger: Daily refresh at 3:00 AM (auto-enabled when LLM API key configured)
+- Cleanup: Expired entries deleted at 4:00 AM
+
+**Data Flow**:
+```
+Warmup (3:00 AM) → Scrape Syllabi (2 semesters) → Save to DB → Rebuild BM25
+                                                      ↓
+User Query (`找課`) → BM25 Search (read-only) → Return cached results
+```
+
 ## Key File Locations
 
 - **Entry point**: `cmd/server/main.go` - Application entry point (minimalist)
 - **Application**: `internal/app/app.go` - Application lifecycle with DI, HTTP server, routes, middleware, background jobs
 - **Webhook handler**: `internal/webhook/handler.go:Handle()` (async processing)
-- **Warmup module**: `internal/warmup/warmup.go` (background cache warming)
+- **Warmup module**: `internal/warmup/warmup.go` (background cache warming, syllabus scraping)
 - **Bot module interface**: `internal/bot/handler.go`
 - **Context utilities**: `internal/ctxutil/context.go` (type-safe context values, PreserveTracing)
 - **DB schema**: `internal/storage/schema.go`
 - **LINE utilities**: `internal/lineutil/builder.go` (use instead of raw SDK)
 - **Sticker manager**: `internal/sticker/sticker.go` (avatar URLs for messages)
-- **Smart search**: `internal/rag/bm25.go` (BM25 index with Chinese tokenization)
+- **Smart search**: `internal/rag/bm25.go` (BM25 index with Chinese tokenization, read-only during queries)
 - **Query expander**: `internal/genai/gemini_expander.go` / `internal/genai/groq_expander.go` (LLM-based query expansion)
 - **NLU intent parser**: `internal/genai/gemini_intent.go` / `internal/genai/groq_intent.go` (Function Calling with Close method)
-- **Syllabus scraper**: `internal/syllabus/scraper.go` (course syllabus extraction)
+- **Syllabus scraper**: `internal/syllabus/scraper.go` (ONLY called by warmup module)
 - **Timeout constants**: `internal/config/timeouts.go` (all timeout/interval constants)
