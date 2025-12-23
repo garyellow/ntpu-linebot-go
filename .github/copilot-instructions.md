@@ -24,6 +24,24 @@ LINE chatbot for NTPU (National Taipei University) providing student ID lookup, 
 - **Async Operations**: `ctxutil.PreserveTracing()` for safe detached contexts (avoids memory leaks)
 - **Validation**: Load-time config validation, runtime parameter checks
 
+**Initialization flow** (`internal/app/app.go:Initialize()`):
+```
+1. Logger (slog with custom ContextHandler)
+2. Database (SQLite + WAL mode)
+3. Metrics (Prometheus registry)
+4. Scraper Client (rate-limited HTTP client)
+5. Sticker Manager (avatar URLs)
+6. BM25 Index (load from DB syllabi)
+7. GenAI (IntentParser + QueryExpander with fallback, auto-enabled if API keys present)
+8. LLMRateLimiter (per-user hourly token bucket, 50/hour default)
+9. UserRateLimiter (per-user request token bucket, webhook protection)
+10. Handlers (id, course, contact, program with DI)
+11. Registry (handler registration and dispatch)
+12. Processor (message/intent routing with rate limiting)
+13. Webhook (LINE event handler with async processing)
+14. HTTP Server (Gin with security headers, routes, graceful shutdown)
+```
+
 ## Architecture: Async Webhook Processing
 
 ```
@@ -60,10 +78,16 @@ LINE Webhook → Gin Handler
 **When adding new modules**:
 
 1. Implement `bot.Handler` interface (`internal/bot/handler.go`)
-2. Create handler in app.Initialize() with dependencies
-3. Register via `registry.Register(handler)`
-4. Use prefix convention for postback routing (`"course:"`, `"id:"`, `"contact:"`)
-5. Pass nil for optional dependencies (e.g., `bm25Index`, `queryExpander`, `llmRateLimiter`)
+2. Optionally implement `DispatchIntent(ctx, intent, params)` for NLU support (checked via type assertion)
+3. Create handler in app.Initialize() with dependencies (constructor-based DI)
+4. Register via `registry.Register(handler)` (handlers matched in registration order)
+5. Use prefix convention for postback routing (`"course:"`, `"id:"`, `"contact:"`, `"program:"`)
+6. Pass nil for optional dependencies (e.g., `bm25Index`, `queryExpander`, `llmRateLimiter`)
+
+**Registry dispatch flow**:
+- **Message**: First-match wins (registration order), `CanHandle()` → `HandleMessage()`
+- **Postback**: Module name lookup via `handlerMap`, `ParsePostback()` → `HandlePostback()`
+- **NLU Intent**: Type assertion for `DispatchIntent()`, falls back to `HandleMessage()` if unsupported
 
 **Course Module**:
 - **Precise search** (`課程`): SQL LIKE + fuzzy search (2 recent semesters: 1st-2nd)
@@ -85,11 +109,16 @@ LINE Webhook → Gin Handler
 - No SQL LIKE - pure application-layer filtering for maximum flexibility
 
 **Program Module**:
-- **Pattern-Action Table**: List, Search, Courses (priority-sorted matchers)
+- **Pattern-Action Table**: Priority-sorted matchers (lower number = higher priority)
+  - Priority 1 (highest): List (學程列表/program list/programs) - no parameters
+  - Priority 2: Search (學程 XX/program XX) - extracts search term after keyword
+  - Postback handlers: ViewCourses (`program:courses`), CourseProgramsList (`program:course_programs`)
 - **2-tier search**: SQL LIKE + fuzzy `ContainsAllRunes()` (same as contact module)
-- **Course ordering**: Required (必修) first, elective (選修) after
+- **Course ordering**: Required (必修) first, elective (選修) after, then by semester (newest first)
+- **NLU intents**: `list` (no params), `search` (query), `courses` (programName)
 - **Course detail integration**: "相關學程" button shows programs containing the course
 - **Data source**: Parsed from course "應修系級" + "必選修別" fields (filters items ending with "學程")
+- **Flex Message design**: Colored headers (blue for programs, green/cyan for courses by type)
 
 **All modules**:
 - Prefer text wrapping; use `TruncateRunes()` only for LINE API limits
@@ -138,6 +167,12 @@ LINE Webhook → Gin Handler
 **Scraper** (`internal/scraper/client.go`): 2s rate limiting between requests, exponential backoff on failure (4s initial, max 5 retries, ±25% jitter), 60s HTTP timeout per request
 
 **Webhook**: Per-user (6 tokens, 1 token/5s refill), global (100 rps), silently drops excess requests
+
+**LLM API** (`internal/ratelimit/llm_limiter.go`): Per-user hourly limits (default 50/hour) for NLU and query expansion operations
+- Token bucket with configurable `maxPerHour` burst capacity
+- Refill rate: `maxPerHour / 3600` tokens per second
+- Independent from webhook rate limiter to control expensive LLM operations separately
+- Auto-cleanup of inactive limiters every 5 minutes
 
 **LINE SDK Conventions**
 
@@ -288,23 +323,29 @@ lineutil.TruncateRunes(value, 20)                                               
 ## Task Commands
 
 ```powershell
-task dev              # Run server with debug logging
-task test             # Run tests (skips network tests for speed)
+task dev              # Run server with debug logging (LOG_LEVEL=debug)
+task test             # Run tests (skips network tests for speed, uses -short flag)
 task test:full        # Run all tests including network tests
-task test:race        # Run tests with race detector
-task test:coverage    # Coverage report with 80% threshold check
-task lint             # Run golangci-lint
-task fmt              # Format code and organize imports
-task build            # Build binaries to bin/
-task clean            # Remove build artifacts
-task compose:up       # Start monitoring stack (Prometheus/Grafana)
+task test:race        # Run tests with race detector (requires CGO_ENABLED=1)
+task test:coverage    # Coverage report with 80% threshold check (fails if < 80%)
+task lint             # Run golangci-lint (5m timeout)
+task fmt              # Format code and organize imports (goimports)
+task build            # Build binaries to bin/ (CGO_ENABLED=0)
+task clean            # Remove build artifacts (bin/, coverage files)
+task compose:up       # Start monitoring stack (Prometheus/Grafana, see deployments/)
 ```
+
+**Test patterns**:
+- Use `-short` flag to skip network tests: `if testing.Short() { t.Skip("skipping network test") }`
+- Table-driven tests with `t.Run()` for parallel execution
+- In-memory SQLite (`:memory:`) via `setupTestDB()` helper
 
 **Environment variables** (`.env`):
 - **Required**: `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN`
 - **Optional**: `GEMINI_API_KEY`, `GROQ_API_KEY` (enables NLU + Query Expansion with multi-provider fallback), `DATA_DIR` (default: `./data` on Windows, `/data` on Linux/Mac)
+- **LLM Configuration**: `LLM_PRIMARY_PROVIDER` (gemini/groq), `LLM_FALLBACK_PROVIDER` (gemini/groq), model override env vars (see `internal/config/config.go`)
 
-Production warmup runs automatically on server startup (non-blocking).
+Production warmup runs automatically on server startup (non-blocking). Database migration handled by `storage.New()`.
 
 ## Error Handling
 
@@ -336,6 +377,12 @@ histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by 
 ## Docker
 
 Multi-stage build (alpine builder + distroless runtime), healthcheck binary (no shell), volume permissions handled by application.
+
+**Build stages**:
+1. Builder: `golang:1.25.5-alpine` with CGO_ENABLED=0 for static binary
+2. Runtime: `gcr.io/distroless/static-debian13:nonroot` (no shell, minimal attack surface)
+3. Healthcheck: Custom binary (no `curl` dependency)
+4. Volumes: `/data` (SQLite + cache), owned by nonroot:nonroot
 
 ## NLU Intent Parser (Multi-Provider)
 
