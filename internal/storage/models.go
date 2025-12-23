@@ -32,20 +32,44 @@ type Contact struct {
 	CachedAt     int64  `json:"cached_at"`
 }
 
+// ProgramRequirement represents a course's requirement for an academic program (學程).
+// A course can belong to multiple programs with different requirement types.
+type ProgramRequirement struct {
+	ProgramName string `json:"program_name"` // Program name (e.g., "智慧財產權學士學分學程")
+	CourseType  string `json:"course_type"`  // Requirement type: "必" (required), "選" (elective), etc.
+}
+
 // Course represents a course record
 type Course struct {
-	UID         string   `json:"uid"`
-	Year        int      `json:"year"`
-	Term        int      `json:"term"`
-	No          string   `json:"no"`
-	Title       string   `json:"title"`
-	Teachers    []string `json:"teachers"`
-	TeacherURLs []string `json:"teacher_urls,omitzero"`
-	Times       []string `json:"times"`
-	Locations   []string `json:"locations"`
-	DetailURL   string   `json:"detail_url,omitzero"`
-	Note        string   `json:"note,omitzero"`
-	CachedAt    int64    `json:"cached_at"`
+	UID         string               `json:"uid"`
+	Year        int                  `json:"year"`
+	Term        int                  `json:"term"`
+	No          string               `json:"no"`
+	Title       string               `json:"title"`
+	Teachers    []string             `json:"teachers"`
+	TeacherURLs []string             `json:"teacher_urls,omitzero"`
+	Times       []string             `json:"times"`
+	Locations   []string             `json:"locations"`
+	DetailURL   string               `json:"detail_url,omitzero"`
+	Note        string               `json:"note,omitzero"`
+	Programs    []ProgramRequirement `json:"programs,omitzero"` // Academic programs this course belongs to
+	CachedAt    int64                `json:"cached_at"`
+}
+
+// Program represents an academic program (學程) with course statistics.
+// Used for displaying program list with course counts.
+type Program struct {
+	Name          string `json:"name"`           // Program name (e.g., "智慧財產權學士學分學程")
+	RequiredCount int    `json:"required_count"` // Number of required courses
+	ElectiveCount int    `json:"elective_count"` // Number of elective courses
+	TotalCount    int    `json:"total_count"`    // Total number of courses
+}
+
+// ProgramCourse represents a course within a program with its requirement type.
+// Used when listing courses for a specific program.
+type ProgramCourse struct {
+	Course     Course `json:"course"`      // Full course information
+	CourseType string `json:"course_type"` // Requirement type for this program: "必", "選", etc.
 }
 
 // Sticker represents a sticker URL record

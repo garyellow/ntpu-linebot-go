@@ -357,6 +357,15 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 			continue
 		}
 
+		// Save course-program relationships
+		if err := db.SaveCourseProgramsBatch(ctx, courses); err != nil {
+			log.WithError(err).
+				WithField("year", sem.Year).
+				WithField("term", sem.Term).
+				Warn("Failed to save course programs batch")
+			// Continue even if program save fails - course data is still valid
+		}
+
 		stats.Courses.Add(int64(len(courses)))
 		log.WithField("year", sem.Year).
 			WithField("term", sem.Term).

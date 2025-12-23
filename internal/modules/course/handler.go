@@ -570,7 +570,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 		// Cache hit
 		h.metrics.RecordCacheHit(ModuleName)
 		log.Debugf("Cache hit for course UID: %s", uid)
-		return h.formatCourseResponse(course)
+		return h.formatCourseResponseWithContext(ctx, course)
 	}
 
 	// Cache miss - scrape from website
@@ -616,7 +616,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 	}
 
 	h.metrics.RecordScraperRequest(ModuleName, "success", time.Since(startTime).Seconds())
-	return h.formatCourseResponse(course)
+	return h.formatCourseResponseWithContext(ctx, course)
 }
 
 // handleCourseNoQuery handles course number only queries (e.g., U0001, M0002)
@@ -649,7 +649,7 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 		if course != nil {
 			h.metrics.RecordCacheHit(ModuleName)
 			log.Debugf("Cache hit for course UID: %s (from course no: %s)", uid, courseNo)
-			return h.formatCourseResponse(course)
+			return h.formatCourseResponseWithContext(ctx, course)
 		}
 	}
 
@@ -676,7 +676,7 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 
 			h.metrics.RecordScraperRequest(ModuleName, "success", time.Since(startTime).Seconds())
 			log.Infof("Found course for UID: %s (from course no: %s)", uid, courseNo)
-			return h.formatCourseResponse(course)
+			return h.formatCourseResponseWithContext(ctx, course)
 		}
 	}
 
@@ -1072,6 +1072,12 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 // formatCourseResponse formats a single course as a LINE message
 // Uses colored header + body label for consistent detail page layout (no hero block)
 func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.MessageInterface {
+	return h.formatCourseResponseWithContext(context.Background(), course)
+}
+
+// formatCourseResponseWithContext formats a single course as a LINE message with context for database queries.
+// This allows querying related programs for the course.
+func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *storage.Course) []messaging_api.MessageInterface {
 	// Header: Course title with colored background (detail page style)
 	header := lineutil.NewColoredHeader(lineutil.ColoredHeaderInfo{
 		Title: lineutil.FormatCourseTitleWithUID(course.Title, course.UID),
@@ -1128,37 +1134,88 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 	// Build footer actions using button rows for 2-column layout
 	var footerRows [][]*lineutil.FlexButton
 
-	// Row 1: 課程大綱 + 查詢系統 (外部連結使用藍色)
+	// Query course programs first to determine layout
+	programs, err := h.db.GetCoursePrograms(ctx, course.UID)
+	if err != nil {
+		h.logger.WithModule(ModuleName).WithError(err).Warnf("Failed to get programs for course %s", course.UID)
+	}
+
+	// Build course query URL (used in different rows depending on whether programs exist)
+	courseQueryURL := fmt.Sprintf("https://sea.cc.ntpu.edu.tw/pls/dev_stud/course_query_all.queryByKeyword?qYear=%d&qTerm=%d&courseno=%s&seq1=A&seq2=M",
+		course.Year, course.Term, course.No)
+
+	// Row 1 layout depends on whether course has programs
 	row1 := make([]*lineutil.FlexButton, 0, 2)
 	if course.DetailURL != "" {
 		row1 = append(row1, lineutil.NewFlexButton(
 			lineutil.NewURIAction("📄 課程大綱", course.DetailURL),
 		).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
 	}
-	courseQueryURL := fmt.Sprintf("https://sea.cc.ntpu.edu.tw/pls/dev_stud/course_query_all.queryByKeyword?qYear=%d&qTerm=%d&courseno=%s&seq1=A&seq2=M",
-		course.Year, course.Term, course.No)
-	row1 = append(row1, lineutil.NewFlexButton(
-		lineutil.NewURIAction("🔍 查詢系統", courseQueryURL),
-	).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
+
+	// If no programs, add query system to row 1; otherwise query system goes to row 2
+	if len(programs) == 0 {
+		row1 = append(row1, lineutil.NewFlexButton(
+			lineutil.NewURIAction("🔍 查詢系統", courseQueryURL),
+		).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
+	}
+
 	if len(row1) > 0 {
 		footerRows = append(footerRows, row1)
 	}
 
-	// Row 2: 教師課表 + 教師課程 (if teachers exist)
+	// Row 2: 查詢系統 + 學程 (if course has programs)
+	if len(programs) > 0 {
+		row2 := make([]*lineutil.FlexButton, 0, 2)
+
+		// Add query system button
+		row2 = append(row2, lineutil.NewFlexButton(
+			lineutil.NewURIAction("🔍 查詢系統", courseQueryURL),
+		).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
+
+		// Add program button
+		if len(programs) == 1 {
+			// Single program: show program name
+			firstProgram := programs[0]
+			displayText := lineutil.TruncateRunes(fmt.Sprintf("查看「%s」課程", firstProgram.ProgramName), 40)
+			row2 = append(row2, lineutil.NewFlexButton(
+				lineutil.NewPostbackActionWithDisplayText(
+					"🎓 相關學程",
+					displayText,
+					fmt.Sprintf("program:courses%s%s", bot.PostbackSplitChar, firstProgram.ProgramName),
+				),
+			).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm"))
+		} else {
+			// Multiple programs: show count and link to list
+			moreText := fmt.Sprintf("查看 %d 個相關學程", len(programs))
+			row2 = append(row2, lineutil.NewFlexButton(
+				lineutil.NewPostbackActionWithDisplayText(
+					"🎓 相關學程",
+					moreText,
+					fmt.Sprintf("program:course_programs%s%s", bot.PostbackSplitChar, course.UID),
+				),
+			).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm"))
+		}
+
+		if len(row2) > 0 {
+			footerRows = append(footerRows, row2)
+		}
+	}
+
+	// Row 3: 教師課表 + 教師課程 (if teachers exist)
 	if len(course.Teachers) > 0 {
 		teacherName := course.Teachers[0]
-		row2 := make([]*lineutil.FlexButton, 0, 2)
+		row3 := make([]*lineutil.FlexButton, 0, 2)
 
 		// Teacher schedule button - opens the teacher's course table webpage (外部連結使用藍色)
 		if len(course.TeacherURLs) > 0 && course.TeacherURLs[0] != "" {
-			row2 = append(row2, lineutil.NewFlexButton(
+			row3 = append(row3, lineutil.NewFlexButton(
 				lineutil.NewURIAction("📅 教師課表", course.TeacherURLs[0]),
 			).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
 		}
 
 		// Teacher all courses button - searches for all courses taught by this teacher (內部指令使用紫色)
 		displayText := lineutil.TruncateRunes(fmt.Sprintf("搜尋 %s 的近期課程", teacherName), 40)
-		row2 = append(row2, lineutil.NewFlexButton(
+		row3 = append(row3, lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText(
 				"👨‍🏫 教師課程",
 				displayText,
@@ -1166,32 +1223,32 @@ func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.M
 			),
 		).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm"))
 
-		if len(row2) > 0 {
-			footerRows = append(footerRows, row2)
+		if len(row3) > 0 {
+			footerRows = append(footerRows, row3)
 		}
 	}
 
-	// Row 3: Dcard 查詢 + 選課大全
+	// Row 4: Dcard 查詢 + 選課大全
 	if len(course.Teachers) > 0 {
 		teacherName := course.Teachers[0]
-		row3 := make([]*lineutil.FlexButton, 0, 2)
+		row4 := make([]*lineutil.FlexButton, 0, 2)
 
 		// Dcard search button - Google search with site:dcard.tw/f/ntpu (外部連結使用藍色)
 		dcardQuery := fmt.Sprintf("%s %s site:dcard.tw/f/ntpu", teacherName, course.Title)
 		dcardURL := "https://www.google.com/search?q=" + url.QueryEscape(dcardQuery)
-		row3 = append(row3, lineutil.NewFlexButton(
+		row4 = append(row4, lineutil.NewFlexButton(
 			lineutil.NewURIAction("💬 Dcard", dcardURL),
 		).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
 
 		// 選課大全 button (外部連結使用藍色)
 		courseSelectionQuery := fmt.Sprintf("%s %s", teacherName, course.Title)
 		courseSelectionURL := "https://no21.ntpu.org/?s=" + url.QueryEscape(courseSelectionQuery)
-		row3 = append(row3, lineutil.NewFlexButton(
+		row4 = append(row4, lineutil.NewFlexButton(
 			lineutil.NewURIAction("📖 選課大全", courseSelectionURL),
 		).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
 
-		if len(row3) > 0 {
-			footerRows = append(footerRows, row3)
+		if len(row4) > 0 {
+			footerRows = append(footerRows, row4)
 		}
 	}
 

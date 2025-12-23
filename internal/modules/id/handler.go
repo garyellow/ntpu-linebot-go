@@ -416,7 +416,7 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 	// If multiple matches, show all options
 	if len(matches) > 1 {
 		var builder strings.Builder
-		builder.WriteString(fmt.Sprintf("🔍「%s」找到多個符合的系所：\n\n", deptName))
+		fmt.Fprintf(&builder, "🔍「%s」找到多個符合的系所：\n\n", deptName)
 		for _, m := range matches {
 			builder.WriteString(fmt.Sprintf("• %s → %s\n", m.name, m.code))
 		}
@@ -660,24 +660,18 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	const studentsPerMessage = 100                                  // Students per message
 	const maxDisplayStudents = maxListMessages * studentsPerMessage // 400 students max
 
-	displayCount := len(students)
-	if displayCount > maxDisplayStudents {
-		displayCount = maxDisplayStudents
-	}
+	displayCount := min(len(students), maxDisplayStudents)
 
 	for i := 0; i < displayCount; i += studentsPerMessage {
-		end := i + studentsPerMessage
-		if end > displayCount {
-			end = displayCount
-		}
+		end := min(i+studentsPerMessage, displayCount)
 
 		var builder strings.Builder
-		builder.WriteString(fmt.Sprintf("📋 搜尋結果（第 %d-%d 筆，共 %d 筆）\n\n", i+1, end, totalCount))
+		fmt.Fprintf(&builder, "📋 搜尋結果（第 %d-%d 筆，共 %d 筆）\n\n", i+1, end, totalCount)
 
 		for j := i; j < end; j++ {
 			student := students[j]
-			builder.WriteString(fmt.Sprintf("%s  %s  %d  %s\n",
-				student.ID, student.Name, student.Year, student.Department))
+			fmt.Fprintf(&builder, "%s  %s  %d  %s\n",
+				student.ID, student.Name, student.Year, student.Department)
 		}
 
 		listMsg := lineutil.NewTextMessageWithConsistentSender(builder.String(), sender)
@@ -705,14 +699,14 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	// Add warning if we have more results than displayed
 	if totalCount > maxDisplayStudents {
 		infoBuilder.WriteString("⚠️ 搜尋結果達到顯示上限\n\n")
-		infoBuilder.WriteString(fmt.Sprintf("已顯示前 %d 筆結果（共找到 %d 筆），建議：\n", maxDisplayStudents, totalCount))
+		fmt.Fprintf(&infoBuilder, "已顯示前 %d 筆結果（共找到 %d 筆），建議：\n", maxDisplayStudents, totalCount)
 		infoBuilder.WriteString("• 輸入更完整的姓名\n")
 		infoBuilder.WriteString("• 使用「學年」功能按年度查詢\n\n")
 		infoBuilder.WriteString("────────────────\n\n")
 	}
 
 	// Always add department inference disclaimer
-	infoBuilder.WriteString("ℹ️ 系所資訊說明\n\n")
+	infoBuilder.WriteString("ℹ️ 系所資訊說明\n")
 	infoBuilder.WriteString("系所資訊由學號推測，若有轉系之類的情況可能與實際不符。\n\n")
 	infoBuilder.WriteString("📊 姓名查詢範圍\n")
 	infoBuilder.WriteString("• 日間部大學部：101-113 學年度\n")

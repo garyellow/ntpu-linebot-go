@@ -97,6 +97,18 @@ return handler.HandleMessage(ctx, rawText)
 - **Postback 前綴**：`course:`
 - **Sender 名稱**：課程小幫手
 
+### program/ - 學程查詢
+- **關鍵字**：學程、program
+- **功能**：
+  - 列出所有學程（學程列表）
+  - 搜尋學程（學程 + 關鍵字）
+  - 查看學程課程（必修在前、選修在後）
+  - 課程相關學程查詢（課程詳情頁「相關學程」按鈕）
+- **搜尋策略**：SQL LIKE (program_name) + 模糊 ContainsAllRunes (program_name)
+- **資料來源**：從課程「應修系級」+「必選修別」欄位解析（篩選以「學程」結尾的項目）
+- **Postback 前綴**：`program:`
+- **Sender 名稱**：學程小幫手
+
 **使用者指引**：
 | 方式 | 關鍵字 | 適用情境 | 範例 |
 |------|--------|----------|------|
@@ -151,7 +163,7 @@ term := bot.ExtractSearchTerm("課程 微積分", "課程") // → "微積分"
 - 「線性代數」→ SQL LIKE 有結果 → 跳過 fuzzy → 漏掉其他匹配 ❌
 
 **函式位置**：
-- `bot.ContainsAllRunes(text, search)` - 判斷 text 是否包含 search 的所有字元（rune）
+- `stringutil.ContainsAllRunes(text, search)` - 判斷 text 是否包含 search 的所有字元（rune）
 
 ## Fallback 策略（情境化錯誤訊息）
 
