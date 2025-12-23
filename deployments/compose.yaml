@@ -39,7 +39,7 @@ services:
 
       # Scraper Configuration
       - SCRAPER_TIMEOUT=${SCRAPER_TIMEOUT:-60s}
-      - SCRAPER_MAX_RETRIES=${SCRAPER_MAX_RETRIES:-5}
+      - SCRAPER_MAX_RETRIES=${SCRAPER_MAX_RETRIES:-10}
 
       # Webhook Configuration
       - WEBHOOK_TIMEOUT=${WEBHOOK_TIMEOUT:-60s}
