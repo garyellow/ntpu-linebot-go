@@ -644,14 +644,13 @@ func TestGetCoursesByRecentSemesters(t *testing.T) {
 	}
 }
 
-// TestGetCoursesByRecentSemestersLimit tests the LIMIT 2000 constraint
-func TestGetCoursesByRecentSemestersLimit(t *testing.T) {
+// TestGetCoursesByRecentSemestersEmpty tests the method with empty database
+func TestGetCoursesByRecentSemestersEmpty(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
 	ctx := context.Background()
 
-	// This test verifies the query structure without inserting 2000+ records
-	// Just verify the method works with empty database
+	// Verify the method works with empty database
 	courses, err := db.GetCoursesByRecentSemesters(ctx)
 	if err != nil {
 		t.Fatalf("GetCoursesByRecentSemesters failed on empty database: %v", err)

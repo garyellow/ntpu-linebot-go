@@ -804,14 +804,16 @@ func (db *DB) GetCoursesByYearTerm(ctx context.Context, year, term int) ([]Cours
 }
 
 // GetCoursesByRecentSemesters retrieves all courses from recent semesters (current + previous)
-// Used for fuzzy character-set matching when SQL LIKE doesn't find results
-// Only returns non-expired cache entries based on configured TTL
+// Used for syllabus warmup and fuzzy character-set matching when SQL LIKE doesn't find results
+// Only returns non-expired cache entries based on configured TTL (7-day cache for courses)
+// No limit - returns all courses from the most recent 2 semesters that have cached data
 func (db *DB) GetCoursesByRecentSemesters(ctx context.Context) ([]Course, error) {
 	ttlTimestamp := db.getTTLTimestamp()
 
-	// Get up to 2000 most recent courses ordered by semester (year, term)
+	// Get all courses from recent semesters ordered by semester (year DESC, term DESC)
+	// Cache warmup loads 4 most recent semesters, so this will return those courses
 	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at
-		FROM courses WHERE cached_at > ? ORDER BY year DESC, term DESC LIMIT 2000`
+		FROM courses WHERE cached_at > ? ORDER BY year DESC, term DESC`
 
 	rows, err := db.reader.QueryContext(ctx, query, ttlTimestamp)
 	if err != nil {
