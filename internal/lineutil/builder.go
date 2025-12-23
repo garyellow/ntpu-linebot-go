@@ -607,7 +607,7 @@ func QuickReplyMoreSemestersAction(keyword string) QuickReplyItem {
 
 // QuickReplyMainNav returns the main navigation quick reply items.
 // Use this for welcome messages, help messages, and general navigation.
-// Order: 📚 課程 → � 學程 → 🎓 學號 → 📞 聯絡 → 🚨 緊急 → 📖 說明
+// Order: 📚 課程 → 🎯 學程 → 🎓 學號 → 📞 聯絡 → 🚨 緊急 → 📖 說明
 func QuickReplyMainNav() []QuickReplyItem {
 	return []QuickReplyItem{
 		QuickReplyCourseAction(),
