@@ -1,6 +1,5 @@
 # Prometheus configuration for external Bot monitoring
-# This file uses environment variable placeholders that must be replaced before use.
-# See setup.sh for automated configuration.
+# Environment variables are automatically substituted at container startup
 
 global:
   scrape_interval: 15s
@@ -27,13 +26,13 @@ scrape_configs:
     scheme: https
     metrics_path: /metrics
     static_configs:
-      - targets: ['BOT_HOST_PLACEHOLDER']
+      - targets: ['${BOT_HOST}']
         labels:
           component: 'api'
           deployment: 'external'
     basic_auth:
-      username: 'METRICS_USERNAME_PLACEHOLDER'
-      password: 'METRICS_PASSWORD_PLACEHOLDER'
+      username: '${METRICS_USERNAME}'
+      password: '${METRICS_PASSWORD}'
     tls_config:
       # Set to true if using self-signed certificates
       insecure_skip_verify: false

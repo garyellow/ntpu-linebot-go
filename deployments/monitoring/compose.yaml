@@ -3,18 +3,43 @@
 # See README.md for usage instructions
 
 services:
+  # Init container to generate prometheus.yml from template
+  prometheus-init:
+    image: busybox:latest
+    container_name: ntpu-prometheus-init
+    volumes:
+      - ./prometheus/prometheus.yml.template:/template/prometheus.yml.template:ro
+      - prometheus-config:/config
+    environment:
+      - BOT_HOST=${BOT_HOST:?BOT_HOST is required}
+      - METRICS_USERNAME=${METRICS_USERNAME:-prometheus}
+      - METRICS_PASSWORD=${METRICS_PASSWORD:?METRICS_PASSWORD is required}
+    command:
+      - /bin/sh
+      - -c
+      - |
+        echo "Generating prometheus.yml..."
+        sed -e "s|\$${BOT_HOST}|$$BOT_HOST|g" \
+            -e "s|\$${METRICS_USERNAME}|$$METRICS_USERNAME|g" \
+            -e "s|\$${METRICS_PASSWORD}|$$METRICS_PASSWORD|g" \
+            /template/prometheus.yml.template > /config/prometheus.yml
+        echo "Done. Config:"
+        echo "  BOT_HOST: $$BOT_HOST"
+        echo "  METRICS_USERNAME: $$METRICS_USERNAME"
+    restart: "no"
+
   # Prometheus - NO exposed ports (use nginx gateway)
   prometheus:
     image: prom/prometheus:latest
-    container_name: ntpu-prometheus
+    container_name: ntpu-prometheus-mon
     restart: unless-stopped
     # ports: NOT exposed - use access/compose.yaml for on-demand access
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-config:/etc/prometheus/config:ro
       - ../shared/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus-data:/prometheus
     command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--config.file=/etc/prometheus/config/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=15d'
       - '--storage.tsdb.retention.size=2GB'
@@ -42,11 +67,14 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    depends_on:
+      prometheus-init:
+        condition: service_completed_successfully
 
   # Alertmanager - NO exposed ports (use nginx gateway)
   alertmanager:
     image: prom/alertmanager:latest
-    container_name: ntpu-alertmanager
+    container_name: ntpu-alertmanager-mon
     restart: unless-stopped
     # ports: NOT exposed - use access/compose.yaml for on-demand access
     volumes:
@@ -80,7 +108,7 @@ services:
   # Grafana - NO exposed ports (use nginx gateway)
   grafana:
     image: grafana/grafana:latest
-    container_name: ntpu-grafana
+    container_name: ntpu-grafana-mon
     restart: unless-stopped
     # ports: NOT exposed - use access/compose.yaml for on-demand access
     volumes:
@@ -121,6 +149,7 @@ services:
         condition: service_healthy
 
 volumes:
+  prometheus-config:
   prometheus-data:
   alertmanager-data:
   grafana-data:

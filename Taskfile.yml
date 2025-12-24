@@ -182,15 +182,6 @@ tasks:
     cmds:
       - docker compose logs -f {{.CLI_ARGS}}
 
-  monitoring:setup:
-    desc: Generate prometheus.yml for external Bot monitoring
-    dir: deployments/monitoring
-    cmds:
-      - cmd: .\setup.cmd
-        platforms: [windows]
-      - cmd: ./setup.sh
-        platforms: [linux, darwin]
-
   # Nginx Gateway for monitoring access
   monitoring:access:up:
     desc: Open monitoring dashboard access
