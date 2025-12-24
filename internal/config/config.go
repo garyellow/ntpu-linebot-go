@@ -39,6 +39,10 @@ type Config struct {
 	LLMPrimaryProvider  string // Primary LLM provider: "gemini" or "groq" (default: "gemini")
 	LLMFallbackProvider string // Fallback LLM provider: "gemini" or "groq" (default: "groq")
 
+	// Metrics Authentication
+	MetricsUsername string // Username for /metrics endpoint Basic Auth (default: "prometheus")
+	MetricsPassword string // Password for /metrics endpoint Basic Auth (empty = no auth)
+
 	// Server Configuration
 	Port            string
 	LogLevel        string
@@ -112,6 +116,10 @@ func Load() (*Config, error) {
 		// LLM Provider Configuration
 		LLMPrimaryProvider:  getEnv("LLM_PRIMARY_PROVIDER", "gemini"),
 		LLMFallbackProvider: getEnv("LLM_FALLBACK_PROVIDER", "groq"),
+
+		// Metrics Authentication
+		MetricsUsername: getEnv("METRICS_USERNAME", "prometheus"),
+		MetricsPassword: getEnv("METRICS_PASSWORD", ""),
 
 		// Server Configuration
 		Port:            getEnv("PORT", "10000"),
