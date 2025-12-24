@@ -55,10 +55,7 @@ cd deployments/monitoring
 cp .env.example .env
 # 編輯 .env，設定 BOT_HOST 和 METRICS_PASSWORD
 
-# 產生 Prometheus 配置
-./setup.sh  # 或 Windows: .\setup.cmd
-
-# 啟動監控
+# 啟動監控（配置會自動生成）
 docker compose up -d
 ```
 
@@ -169,7 +166,6 @@ task access:up         # 開啟監控訪問
 task access:down       # 關閉監控訪問（釋放端口）
 
 # Monitoring Only
-task monitoring:setup        # 產生 prometheus.yml
 task monitoring:up           # 啟動
 task monitoring:down         # 停止
 task monitoring:access:up    # 開啟監控訪問

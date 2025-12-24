@@ -68,19 +68,9 @@ METRICS_USERNAME=prometheus
 METRICS_PASSWORD=your_secure_password
 ```
 
-### 3. 產生 Prometheus 配置
+### 3. 啟動監控
 
-由於 Prometheus 不支援環境變數，需要使用 setup script 產生配置：
-
-```bash
-# Linux/macOS
-./setup.sh
-
-# Windows
-.\setup.cmd
-```
-
-### 4. 啟動監控
+Prometheus 配置會在容器啟動時自動從 `.env` 生成：
 
 ```bash
 docker compose up -d
