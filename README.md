@@ -153,11 +153,22 @@
 
 以下內容適用於想要自行架設的開發者。一般使用者直接加好友即可使用。
 
+### 執行方式
+
+| 類別 | 模式 | 說明 |
+|------|------|------|
+| **僅 Bot** | Go 直接執行 | `go run ./cmd/server` |
+| | Docker Container | `docker run garyellow/ntpu-linebot-go` |
+| **Bot + 監控** | Full Stack | Bot + 監控同 Docker 網路 |
+| | Monitoring Only | Bot 在雲端，監控在本地 |
+
+> 完整部署說明請參閱 [deployments/README.md](deployments/README.md)。
+
 ### 環境需求
 
-- Go 1.25+（本機開發）
-- Docker + Docker Compose（推薦）
-- （可選）[Gemini API Key](https://aistudio.google.com/apikey)：啟用自然語言理解與智慧搜尋功能
+- Go 1.25+（Go 直接執行）
+- Docker + Docker Compose（容器部署）
+- [Gemini API Key](https://aistudio.google.com/apikey)（可選，啟用 AI 功能）
 
 ### 取得 LINE Bot 憑證
 
@@ -166,98 +177,70 @@
 3. 取得 **Channel Secret**（Basic settings）
 4. 發行 **Channel Access Token**（Messaging API）
 
-### 方案 A：Docker Compose（推薦）
+### 快速開始
 
-```bash
-git clone https://github.com/garyellow/ntpu-linebot-go.git
-cd ntpu-linebot-go/deployments/full
-
-cp .env.example .env
-# 編輯 .env 填入 LINE_CHANNEL_ACCESS_TOKEN 和 LINE_CHANNEL_SECRET
-# （可選）填入 GEMINI_API_KEY 或 GROQ_API_KEY 以啟用 AI 功能
-
-docker compose up -d
-```
-
-**服務端點**：
-
-| 端點 | 說明 |
-|------|------|
-| `/webhook` | LINE Webhook URL |
-| `/livez` | Liveness (進程存活,不檢查外部依賴) |
-| `/readyz` | Readiness (服務就緒,檢查 DB + cache) |
-| `/metrics` | Prometheus 指標 |
-
-> ⚠️ 本機測試需使用 [ngrok](https://ngrok.com/) 等工具將 localhost 轉發至公網。
-
-### 方案 B：本機開發
+**Go 直接執行：**
 
 ```bash
 git clone https://github.com/garyellow/ntpu-linebot-go.git
 cd ntpu-linebot-go
 
-go mod download
-
 cp .env.example .env
 # 編輯 .env 填入 LINE 憑證
-# Windows: DATA_DIR=./data | Linux/Mac: DATA_DIR=/data
 
-go run ./cmd/server
+task dev
 ```
 
-### 開發指令
+**Docker Container：**
 
-使用 [Task](https://taskfile.dev/) 執行常用指令：
+```bash
+docker run -d -p 10000:10000 \
+  -e LINE_CHANNEL_ACCESS_TOKEN=xxx \
+  -e LINE_CHANNEL_SECRET=xxx \
+  -v ./data:/data \
+  garyellow/ntpu-linebot-go:latest
+```
+
+**Full Stack（含監控）：**
+
+```bash
+cd deployments/full
+cp .env.example .env
+docker compose up -d
+```
+
+### 服務端點
+
+| 端點 | 說明 |
+|------|------|
+| `/webhook` | LINE Webhook URL |
+| `/livez` | Liveness |
+| `/readyz` | Readiness |
+| `/metrics` | Prometheus 指標 |
+
+> ⚠️ 本機測試需使用 [ngrok](https://ngrok.com/) 等工具將 localhost 轉發至公網。
+
+### 開發指令
 
 ```bash
 task dev              # 啟動開發伺服器
 task test             # 執行測試
-task test:coverage    # 測試覆蓋率報告
 task lint             # 程式碼檢查
 task ci               # 完整 CI 流程
 ```
-
-### 監控（可選）
-
-部署包含 Prometheus + Grafana + Alertmanager：
-
-```bash
-# 存取監控介面
-task access:up         # 開啟
-task access:down       # 關閉（釋放端口）
-
-# 其他指令
-task compose:ps        # 查看服務狀態
-task compose:logs      # 查看日誌
-```
-
-| 服務 | 網址 | 帳密 |
-|------|------|------|
-| Grafana | `http://localhost:3000` | admin / 請設定 `GRAFANA_PASSWORD` |
-| Prometheus | `http://localhost:9090` | - |
-| Alertmanager | `http://localhost:9093` | - |
-
-> 更多部署模式（如僅監控外部 Bot）請參閱 [deployments/README.md](deployments/README.md)。
 
 ### 疑難排解
 
 | 問題 | 解決方法 |
 |------|----------|
 | 服務無法啟動 | 檢查 `.env` 是否正確設定 LINE 憑證 |
-| 首次回應緩慢 | 服務啟動後會在背景預熱快取（約 5-10 分鐘） |
+| 首次回應緩慢 | 背景預熱快取中（約 5-10 分鐘）|
 | Webhook 驗證失敗 | 確認 `LINE_CHANNEL_SECRET` 正確 |
-| 需要清空所有資料 | 執行 `docker compose down -v && docker compose up -d`（會刪除所有 volumes） |
-
-啟用詳細日誌：
-
-```bash
-LOG_LEVEL=debug go run ./cmd/server
-```
 
 ### 更多文件
 
 - 📐 [架構設計](docs/architecture.md)
-- 📊 [監控設定](deployments/README.md)
+- 📊 [部署說明](deployments/README.md)
 - 🔧 [環境變數](.env.example)
 
 </details>

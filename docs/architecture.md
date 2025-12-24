@@ -546,9 +546,35 @@ ntpu_job_duration_seconds{job, module}
 
 ## 部署架構
 
-支援三種部署模式，詳見 [deployments/README.md](../deployments/README.md)。
+支援四種部署模式，詳見 [deployments/README.md](../deployments/README.md)。
 
-### Mode 1: Full Stack（Bot + 監控）
+### 僅 Bot
+
+#### Go 直接執行
+
+開發測試用，直接執行 Go 程式，無需 Docker 或監控。
+
+```bash
+task dev
+# 或
+go run ./cmd/server
+```
+
+#### Docker Container
+
+單獨執行 Bot 容器，不含監控。
+
+```bash
+docker run -d -p 10000:10000 \
+  -e LINE_CHANNEL_ACCESS_TOKEN=xxx \
+  -e LINE_CHANNEL_SECRET=xxx \
+  -v ./data:/data \
+  garyellow/ntpu-linebot-go:latest
+```
+
+### Bot + 監控
+
+#### Full Stack（Bot + 監控）
 
 Bot 和監控三件套在同一 Docker 網路，適合單機部署。
 
@@ -578,7 +604,7 @@ task access:down  # 關閉（釋放端口）
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Mode 2: Monitoring Only（外部 Bot）
+#### Monitoring Only（外部 Bot）
 
 Bot 部署在雲端（Cloud Run、Fly.io 等），監控在本地。使用 HTTPS + Basic Auth 拉取 metrics。
 
@@ -608,16 +634,6 @@ docker compose up -d
 │  │prometheus│ │ grafana │ │alertmgr│ │
 │  └──────────┘ └─────────┘ └───────┘  │
 └──────────────────────────────────────┘
-```
-
-### Mode 3: Local Go Execution
-
-開發測試用，直接執行 Go 程式，無需 Docker 或監控。
-
-```bash
-task dev
-# 或
-go run ./cmd/server
 ```
 
 ### Metrics 驗證

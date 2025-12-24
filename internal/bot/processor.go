@@ -283,7 +283,7 @@ func (p *Processor) buildWelcomeFlexMessage(nluEnabled bool, sender *messaging_a
 			WithColor(lineutil.ColorButtonExternal).
 			WithHeight("sm").
 			WithMargin("sm").FlexButton,
-		lineutil.NewFlexButton(lineutil.NewURIAction("👨‍💻 作者聯繫方式", "https://linktr.ee/huang.guan.ying")).
+		lineutil.NewFlexButton(lineutil.NewURIAction("👨‍💻 聯繫作者", "https://linktr.ee/garyellow")).
 			WithStyle("secondary").
 			WithHeight("sm").
 			WithMargin("sm").FlexButton,
