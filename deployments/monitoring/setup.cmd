@@ -38,12 +38,7 @@ REM Generate prometheus.yml from template
 echo Generating prometheus.yml...
 
 REM Use PowerShell for sed-like replacement
-powershell -Command ^
-    "(Get-Content 'prometheus\prometheus.yml.template') ^
-    -replace 'BOT_HOST_PLACEHOLDER', '%BOT_HOST%' ^
-    -replace 'METRICS_USERNAME_PLACEHOLDER', '%METRICS_USERNAME%' ^
-    -replace 'METRICS_PASSWORD_PLACEHOLDER', '%METRICS_PASSWORD%' ^
-    | Set-Content 'prometheus\prometheus.yml'"
+powershell -Command "(Get-Content 'prometheus\prometheus.yml.template') -replace 'BOT_HOST_PLACEHOLDER', '%BOT_HOST%' -replace 'METRICS_USERNAME_PLACEHOLDER', '%METRICS_USERNAME%' -replace 'METRICS_PASSWORD_PLACEHOLDER', '%METRICS_PASSWORD%' | Set-Content 'prometheus\prometheus.yml'"
 
 echo prometheus.yml generated successfully.
 echo.
