@@ -43,9 +43,9 @@
                 "height": 405
             },
             "action": {
-                "label": "北大官網",
+                "label": "聯繫作者",
                 "type": "uri",
-                "uri": "https://www.ntpu.edu.tw"
+                "uri": "https://linktr.ee/garyellow"
             }
         }
     ]
