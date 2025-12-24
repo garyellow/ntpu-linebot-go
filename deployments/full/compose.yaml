@@ -85,7 +85,7 @@ services:
   # Prometheus - NO exposed ports (use nginx gateway)
   prometheus:
     image: prom/prometheus:latest
-    container_name: ntpu-prometheus
+    container_name: ntpu-prometheus-full
     restart: unless-stopped
     # ports: NOT exposed - use access/compose.yaml for on-demand access
     volumes:
@@ -128,7 +128,7 @@ services:
   # Alertmanager - NO exposed ports (use nginx gateway)
   alertmanager:
     image: prom/alertmanager:latest
-    container_name: ntpu-alertmanager
+    container_name: ntpu-alertmanager-full
     restart: unless-stopped
     # ports: NOT exposed - use access/compose.yaml for on-demand access
     volumes:
@@ -162,7 +162,7 @@ services:
   # Grafana - NO exposed ports (use nginx gateway)
   grafana:
     image: grafana/grafana:latest
-    container_name: ntpu-grafana
+    container_name: ntpu-grafana-full
     restart: unless-stopped
     # ports: NOT exposed - use access/compose.yaml for on-demand access
     volumes:

@@ -5,7 +5,7 @@
 services:
   nginx-gateway:
     image: nginx:alpine
-    container_name: ntpu-nginx-gateway-monitoring
+    container_name: ntpu-nginx-gateway-mon
     restart: "no"
     ports:
       - "${GRAFANA_PORT:-3000}:3000"
