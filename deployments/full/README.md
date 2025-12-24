@@ -100,3 +100,54 @@ docker compose pull && docker compose up -d
 ```
 
 所有服務透過 Docker 內部網路 `ntpu_bot_network` 通訊，Prometheus 使用內部位址 `ntpu-linebot:10000` 拉取 metrics。
+
+---
+
+## 訪問監控介面
+
+預設不暴露監控端口，需要時才開啟：
+
+### 開啟監控訪問
+
+```bash
+cd access
+docker compose up -d
+# 或
+task access:up
+```
+
+現在可以訪問：
+- Grafana: http://localhost:3000
+- Prometheus: http://localhost:9090
+- Alertmanager: http://localhost:9093
+
+### 關閉監控訪問（釋放端口）
+
+```bash
+cd access
+docker compose down
+# 或
+task access:down
+```
+
+---
+
+## 架構
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   ntpu_bot_network                       │
+│  ┌─────────────┐  ┌────────────┐  ┌───────────────────┐ │
+│  │ ntpu-linebot│  │ prometheus │  │ grafana           │ │
+│  │   :10000    │  │ (內部)     │  │ (內部)            │ │
+│  └─────────────┘  └────────────┘  └───────────────────┘ │
+│                          ↑                ↑              │
+│                   ┌──────┴────────────────┘              │
+│              ┌────────────┐                              │
+│              │nginx-gateway│ ← 按需啟動                   │
+│              │:3000 :9090 :9093                          │
+│              └────────────┘                              │
+└─────────────────────────────────────────────────────────┘
+```
+
+Nginx gateway 在需要時啟動，代理請求到內部服務，關閉後釋放端口。

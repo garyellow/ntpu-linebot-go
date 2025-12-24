@@ -150,6 +150,19 @@ tasks:
     cmds:
       - docker compose restart {{.CLI_ARGS}}
 
+  # Nginx Gateway for monitoring access
+  access:up:
+    desc: Open monitoring dashboard access (Grafana:3000, Prometheus:9090, Alertmanager:9093)
+    dir: deployments/full/access
+    cmds:
+      - docker compose up -d
+
+  access:down:
+    desc: Close monitoring dashboard access (release ports)
+    dir: deployments/full/access
+    cmds:
+      - docker compose down
+
   # Docker Compose - Monitoring Only (for external Bot)
   monitoring:up:
     desc: Start monitoring stack (for external Bot)
@@ -177,6 +190,19 @@ tasks:
         platforms: [windows]
       - cmd: ./setup.sh
         platforms: [linux, darwin]
+
+  # Nginx Gateway for monitoring access
+  monitoring:access:up:
+    desc: Open monitoring dashboard access
+    dir: deployments/monitoring/access
+    cmds:
+      - docker compose up -d
+
+  monitoring:access:down:
+    desc: Close monitoring dashboard access (release ports)
+    dir: deployments/monitoring/access
+    cmds:
+      - docker compose down
 
   # CI Pipeline
   ci:

@@ -153,17 +153,21 @@ deployments/
 
 ```bash
 # Full Stack
-task compose:up       # 啟動 full stack
-task compose:down     # 停止 full stack
-task compose:logs     # 查看日誌
+task compose:up        # 啟動
+task compose:down      # 停止
+task compose:logs      # 查看日誌
+task access:up         # 開啟監控訪問
+task access:down       # 關閉監控訪問（釋放端口）
 
 # Monitoring Only
-task monitoring:setup # 產生 prometheus.yml（首次或更新認證後）
-task monitoring:up    # 啟動監控
-task monitoring:down  # 停止監控
+task monitoring:setup        # 產生 prometheus.yml
+task monitoring:up           # 啟動
+task monitoring:down         # 停止
+task monitoring:access:up    # 開啟監控訪問
+task monitoring:access:down  # 關閉監控訪問（釋放端口）
 
 # 開發
-task dev              # 本地執行 (go run)
+task dev               # 本地執行 (go run)
 ```
 
 ---
