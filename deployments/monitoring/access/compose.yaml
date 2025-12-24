@@ -1,0 +1,27 @@
+# Nginx Gateway for Monitoring Access
+# Provides on-demand access to Grafana, Prometheus, and Alertmanager
+# Usage: docker compose up -d (to expose ports) / docker compose down (to release ports)
+
+services:
+  nginx-gateway:
+    image: nginx:alpine
+    container_name: ntpu-nginx-gateway-monitoring
+    restart: "no"
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+      - "${PROMETHEUS_PORT:-9090}:9090"
+      - "${ALERTMANAGER_PORT:-9093}:9093"
+    volumes:
+      - ../../shared/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - ntpu_monitoring_network
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t 2>/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+networks:
+  ntpu_monitoring_network:
+    external: true

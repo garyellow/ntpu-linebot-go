@@ -21,13 +21,16 @@ cd deployments/full
 cp .env.example .env
 # 編輯 .env 填入 LINE_CHANNEL_ACCESS_TOKEN 和 LINE_CHANNEL_SECRET
 docker compose up -d
+
+# 存取監控介面
+task access:up
 ```
 
-**存取介面**：
+**存取介面**（執行 `task access:up` 後）：
 - Grafana: http://localhost:3000 (admin/admin123)
 - Prometheus: http://localhost:9090
 - Alertmanager: http://localhost:9093
-- Bot: http://localhost:10000
+- Bot: http://localhost:10000（始終可用）
 
 詳細說明請參閱 [full/README.md](./full/README.md)。
 
@@ -106,10 +109,14 @@ deployments/
 ├── README.md            # 本文件
 ├── full/                # Mode 1: Bot + 監控
 │   ├── compose.yaml
+│   ├── access/          # nginx gateway
+│   │   └── compose.yaml
 │   ├── .env.example
 │   └── README.md
 ├── monitoring/          # Mode 2: 僅監控
 │   ├── compose.yaml
+│   ├── access/          # nginx gateway
+│   │   └── compose.yaml
 │   ├── prometheus/
 │   │   ├── prometheus.yml.template
 │   │   └── .gitignore
@@ -122,12 +129,14 @@ deployments/
     │   └── alerts.yml
     ├── alertmanager/
     │   └── alertmanager.yml
-    └── grafana/
-        ├── dashboards/
-        │   ├── dashboard.yml
-        │   └── ntpu-linebot.json
-        └── datasources/
-            └── datasource.yml
+    ├── grafana/
+    │   ├── dashboards/
+    │   │   ├── dashboard.yml
+    │   │   └── ntpu-linebot.json
+    │   └── datasources/
+    │       └── datasource.yml
+    └── nginx/
+        └── nginx.conf   # 共用 nginx 配置
 ```
 
 ---
@@ -153,17 +162,21 @@ deployments/
 
 ```bash
 # Full Stack
-task compose:up       # 啟動 full stack
-task compose:down     # 停止 full stack
-task compose:logs     # 查看日誌
+task compose:up        # 啟動
+task compose:down      # 停止
+task compose:logs      # 查看日誌
+task access:up         # 開啟監控訪問
+task access:down       # 關閉監控訪問（釋放端口）
 
 # Monitoring Only
-task monitoring:setup # 產生 prometheus.yml（首次或更新認證後）
-task monitoring:up    # 啟動監控
-task monitoring:down  # 停止監控
+task monitoring:setup        # 產生 prometheus.yml
+task monitoring:up           # 啟動
+task monitoring:down         # 停止
+task monitoring:access:up    # 開啟監控訪問
+task monitoring:access:down  # 關閉監控訪問（釋放端口）
 
 # 開發
-task dev              # 本地執行 (go run)
+task dev               # 本地執行 (go run)
 ```
 
 ---

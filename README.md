@@ -222,11 +222,13 @@ task ci               # 完整 CI 流程
 部署包含 Prometheus + Grafana + Alertmanager：
 
 ```bash
-# 查看所有服務狀態
-task compose:ps
+# 存取監控介面
+task access:up         # 開啟
+task access:down       # 關閉（釋放端口）
 
-# 查看日誌
-task compose:logs
+# 其他指令
+task compose:ps        # 查看服務狀態
+task compose:logs      # 查看日誌
 ```
 
 | 服務 | 網址 | 帳密 |
