@@ -1,80 +1,32 @@
 # Deployments
 
-部署配置與監控堆疊。
+部署配置與執行方式說明。
 
-## 部署模式
+## 執行方式總覽
 
-| 模式 | 描述 | 使用場景 |
-|------|------|----------|
-| **[Full Stack](./full/)** | Bot + 監控三件套 | 單機部署，所有服務在同一 Docker 網路 |
-| **[Monitoring Only](./monitoring/)** | 僅監控三件套 | Bot 部署在雲端，監控在本地/其他伺服器 |
-| **Local Go** | 直接執行 Go | 開發測試，不需要監控 |
-
----
-
-## Mode 1: Full Stack
-
-Bot 和監控三件套（Prometheus、Grafana、Alertmanager）在同一 Docker 網路。
-
-```bash
-cd deployments/full
-cp .env.example .env
-# 編輯 .env 填入 LINE_CHANNEL_ACCESS_TOKEN 和 LINE_CHANNEL_SECRET
-docker compose up -d
-
-# 存取監控介面
-task access:up
-```
-
-**存取介面**（執行 `task access:up` 後）：
-- Grafana: http://localhost:3000 (admin/admin123)
-- Prometheus: http://localhost:9090
-- Alertmanager: http://localhost:9093
-- Bot: http://localhost:10000（始終可用）
-
-詳細說明請參閱 [full/README.md](./full/README.md)。
+| 類別 | 模式 | 說明 | 使用場景 |
+|------|------|------|----------|
+| **僅 Bot** | [Go 直接執行](#go-直接執行) | `go run ./cmd/server` | 開發測試 |
+| | [Docker Container](#docker-container) | `docker run` 單獨跑 Bot | 簡單部署 |
+| **Bot + 監控** | [Full Stack](#full-stack) | Bot + 監控三件套同網路 | 單機完整部署 |
+| | [Monitoring Only](#monitoring-only) | Bot 在雲端，本地只跑監控 | 雲端部署 + 本地監控 |
 
 ---
 
-## Mode 2: Monitoring Only
+# 僅 Bot
 
-Bot 部署在雲端（如 Cloud Run、Fly.io），監控三件套在本地。
+不含監控堆疊，適合開發測試或簡單部署。
 
-### 步驟 1: 在雲端 Bot 設定 Metrics 驗證
+## Go 直接執行
 
-```bash
-# 在雲端 Bot 設定環境變數
-METRICS_USERNAME=prometheus
-METRICS_PASSWORD=your_secure_password
-```
+開發或測試時直接執行 Go 程式。
 
-### 步驟 2: 啟動本地監控
+### 使用 Task（推薦）
 
 ```bash
-cd deployments/monitoring
 cp .env.example .env
-# 編輯 .env，設定 BOT_HOST 和 METRICS_PASSWORD
+# 編輯 .env 填入 LINE 憑證
 
-# 啟動監控（配置會自動生成）
-docker compose up -d
-```
-
-詳細說明請參閱 [monitoring/README.md](./monitoring/README.md)。
-
----
-
-## Mode 3: Local Go Execution
-
-開發或測試時直接執行 Go 程式，不需要 Docker 或監控。
-
-### 使用 Task
-
-```bash
-# 設定環境變數（或建立 .env 檔案）
-cp .env.example .env
-# 編輯 .env
-
-# 執行
 task dev
 ```
 
@@ -85,62 +37,193 @@ task dev
 export LINE_CHANNEL_ACCESS_TOKEN=xxx
 export LINE_CHANNEL_SECRET=xxx
 
-# 執行
+# Windows 需設定 DATA_DIR（預設 /data 在 Windows 無效）
+# Windows: DATA_DIR=./data
+
 go run ./cmd/server
 ```
 
-### 可選: 設定 Metrics 驗證
+### 可選設定
 
 ```bash
-# 如果需要保護 /metrics 端點
-export METRICS_USERNAME=prometheus
-export METRICS_PASSWORD=your_password
+# 啟用詳細日誌
+LOG_LEVEL=debug go run ./cmd/server
+
+# 保護 /metrics 端點
+METRICS_USERNAME=prometheus METRICS_PASSWORD=xxx go run ./cmd/server
 ```
 
 ---
 
-## 目錄結構
+## Docker Container
+
+單獨執行 Bot 容器，不含監控。
+
+### 快速啟動
+
+```bash
+docker run -d \
+  -p 10000:10000 \
+  -e LINE_CHANNEL_ACCESS_TOKEN=xxx \
+  -e LINE_CHANNEL_SECRET=xxx \
+  -v ./data:/data \
+  garyellow/ntpu-linebot-go:latest
+```
+
+### 可用映像標籤
+
+| 標籤 | 說明 |
+|------|------|
+| `latest` | 最新穩定版 |
+| `1.2.3` | 特定版本 |
+| `1.2` | 最新 1.2.x 版本 |
+| `1` | 最新 1.x.x 版本 |
+
+映像同時發布至：
+- Docker Hub: `garyellow/ntpu-linebot-go`
+- GHCR: `ghcr.io/garyellow/ntpu-linebot-go`
+
+### 環境變數
+
+詳見 [.env.example](../.env.example)，必填項目：
+
+| 變數 | 說明 |
+|------|------|
+| `LINE_CHANNEL_ACCESS_TOKEN` | LINE Bot Access Token |
+| `LINE_CHANNEL_SECRET` | LINE Bot Channel Secret |
+
+### 服務端點
+
+| 端點 | 說明 |
+|------|------|
+| `/webhook` | LINE Webhook URL |
+| `/livez` | Liveness（進程存活）|
+| `/readyz` | Readiness（服務就緒）|
+| `/metrics` | Prometheus 指標 |
+
+---
+
+# Bot + 監控
+
+包含 Prometheus + Grafana + Alertmanager 監控堆疊。
+
+## Full Stack
+
+Bot 和監控三件套在同一 Docker 網路，適合單機部署。
+
+### 快速啟動
+
+```bash
+cd deployments/full
+cp .env.example .env
+# 編輯 .env 填入 LINE_CHANNEL_ACCESS_TOKEN 和 LINE_CHANNEL_SECRET
+
+docker compose up -d
+```
+
+### 存取介面
+
+監控端口預設不對外暴露，需要時啟動 Gateway：
+
+```bash
+task access:up      # 開啟
+task access:down    # 關閉（釋放端口）
+```
+
+| 服務 | URL | 說明 |
+|------|-----|------|
+| Grafana | http://localhost:3000 | 儀表板 (admin/admin123) |
+| Prometheus | http://localhost:9090 | 監控資料 |
+| Alertmanager | http://localhost:9093 | 告警管理 |
+| Bot | http://localhost:10000 | 始終可用 |
+
+詳細說明請參閱 [full/README.md](./full/README.md)。
+
+---
+
+## Monitoring Only
+
+Bot 部署在雲端（如 Cloud Run、Fly.io），監控三件套在本地。
+
+### 步驟 1：在雲端 Bot 設定 Metrics 驗證
+
+```bash
+# 在雲端 Bot 設定環境變數
+METRICS_USERNAME=prometheus
+METRICS_PASSWORD=your_secure_password
+```
+
+### 步驟 2：啟動本地監控
+
+```bash
+cd deployments/monitoring
+cp .env.example .env
+# 編輯 .env，設定 BOT_HOST 和 METRICS_PASSWORD
+
+docker compose up -d
+```
+
+### 存取介面
+
+```bash
+task monitoring:access:up      # 開啟
+task monitoring:access:down    # 關閉
+```
+
+詳細說明請參閱 [monitoring/README.md](./monitoring/README.md)。
+
+---
+
+# 常用 Task 指令
+
+```bash
+# 僅 Bot
+task dev                       # Go 直接執行
+
+# Full Stack
+task compose:up                # 啟動
+task compose:down              # 停止
+task compose:logs              # 查看日誌
+task access:up                 # 開啟監控訪問
+task access:down               # 關閉監控訪問
+
+# Monitoring Only
+task monitoring:up             # 啟動
+task monitoring:down           # 停止
+task monitoring:access:up      # 開啟監控訪問
+task monitoring:access:down    # 關閉監控訪問
+```
+
+---
+
+# 目錄結構
 
 ```
 deployments/
 ├── README.md            # 本文件
-├── full/                # Mode 1: Bot + 監控
+├── full/                # Full Stack：Bot + 監控
 │   ├── compose.yaml
 │   ├── access/          # nginx gateway
-│   │   └── compose.yaml
 │   ├── .env.example
 │   └── README.md
-├── monitoring/          # Mode 2: 僅監控
+├── monitoring/          # Monitoring Only：僅監控
 │   ├── compose.yaml
 │   ├── access/          # nginx gateway
-│   │   └── compose.yaml
 │   ├── prometheus/
-│   │   ├── prometheus.yml.template
-│   │   └── .gitignore
-│   ├── setup.sh / setup.cmd
 │   ├── .env.example
 │   └── README.md
 └── shared/              # 共用配置
     ├── prometheus/
-    │   ├── prometheus-internal.yml
-    │   └── alerts.yml
     ├── alertmanager/
-    │   └── alertmanager.yml
     ├── grafana/
-    │   ├── dashboards/
-    │   │   ├── dashboard.yml
-    │   │   └── ntpu-linebot.json
-    │   └── datasources/
-    │       └── datasource.yml
     └── nginx/
-        └── nginx.conf   # 共用 nginx 配置
 ```
 
 ---
 
-## 告警規則
+# 告警規則
 
-告警規則配置在 `shared/prometheus/alerts.yml`，包含：
+告警規則配置在 `shared/prometheus/alerts.yml`：
 
 | 告警名稱 | 條件 | 嚴重度 |
 |---------|------|--------|
@@ -151,38 +234,14 @@ deployments/
 | LLMErrorRateHigh | LLM 錯誤率 > 20% | Warning |
 | CacheHitRateLow | 快取命中率 < 50% | Info |
 
-完整告警規則請參閱 [shared/prometheus/alerts.yml](./shared/prometheus/alerts.yml)。
-
 ---
 
-## 常用 Task 指令
-
-```bash
-# Full Stack
-task compose:up        # 啟動
-task compose:down      # 停止
-task compose:logs      # 查看日誌
-task access:up         # 開啟監控訪問
-task access:down       # 關閉監控訪問（釋放端口）
-
-# Monitoring Only
-task monitoring:up           # 啟動
-task monitoring:down         # 停止
-task monitoring:access:up    # 開啟監控訪問
-task monitoring:access:down  # 關閉監控訪問（釋放端口）
-
-# 開發
-task dev               # 本地執行 (go run)
-```
-
----
-
-## 安全最佳實踐
+# 安全最佳實踐
 
 1. **Metrics 驗證**
    - 外部部署時務必設定 `METRICS_PASSWORD`
    - 使用強密碼（20+ 字元）
-   - 內部 Docker 網路可不設密碼（向後相容）
+   - 內部 Docker 網路可不設密碼
 
 2. **Grafana**
    - 更改預設密碼 `admin123`
@@ -191,7 +250,3 @@ task dev               # 本地執行 (go run)
 3. **網路**
    - 僅暴露必要端口
    - 使用防火牆限制監控端口存取
-
-4. **憑證檔案**
-   - 不要將 `monitoring/prometheus/prometheus.yml` 提交到 Git
-   - 使用 `.gitignore` 保護敏感配置
