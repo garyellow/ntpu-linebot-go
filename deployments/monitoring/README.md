@@ -147,19 +147,11 @@ tls_config:
 
 ---
 
-## 按需訪問模式（可選）
+## 訪問監控介面
 
-如果不想讓端口（3000/9090/9093）始終佔用：
+預設不暴露監控端口，需要時才開啟：
 
-### 啟動（不暴露端口）
-
-```bash
-docker compose -f compose.access.yaml up -d
-# 或
-task monitoring:up:access
-```
-
-### 需要監控時開啟
+### 開啟監控訪問
 
 ```bash
 cd access
@@ -168,7 +160,12 @@ docker compose up -d
 task monitoring:access:up
 ```
 
-### 關閉（釋放端口）
+現在可以訪問：
+- Grafana: http://localhost:3000
+- Prometheus: http://localhost:9090
+- Alertmanager: http://localhost:9093
+
+### 關閉監控訪問（釋放端口）
 
 ```bash
 cd access

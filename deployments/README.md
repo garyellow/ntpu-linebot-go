@@ -21,13 +21,16 @@ cd deployments/full
 cp .env.example .env
 # 編輯 .env 填入 LINE_CHANNEL_ACCESS_TOKEN 和 LINE_CHANNEL_SECRET
 docker compose up -d
+
+# 存取監控介面
+task access:up
 ```
 
-**存取介面**：
+**存取介面**（執行 `task access:up` 後）：
 - Grafana: http://localhost:3000 (admin/admin123)
 - Prometheus: http://localhost:9090
 - Alertmanager: http://localhost:9093
-- Bot: http://localhost:10000
+- Bot: http://localhost:10000（始終可用）
 
 詳細說明請參閱 [full/README.md](./full/README.md)。
 
@@ -106,10 +109,14 @@ deployments/
 ├── README.md            # 本文件
 ├── full/                # Mode 1: Bot + 監控
 │   ├── compose.yaml
+│   ├── access/          # nginx gateway
+│   │   └── compose.yaml
 │   ├── .env.example
 │   └── README.md
 ├── monitoring/          # Mode 2: 僅監控
 │   ├── compose.yaml
+│   ├── access/          # nginx gateway
+│   │   └── compose.yaml
 │   ├── prometheus/
 │   │   ├── prometheus.yml.template
 │   │   └── .gitignore
@@ -122,12 +129,14 @@ deployments/
     │   └── alerts.yml
     ├── alertmanager/
     │   └── alertmanager.yml
-    └── grafana/
-        ├── dashboards/
-        │   ├── dashboard.yml
-        │   └── ntpu-linebot.json
-        └── datasources/
-            └── datasource.yml
+    ├── grafana/
+    │   ├── dashboards/
+    │   │   ├── dashboard.yml
+    │   │   └── ntpu-linebot.json
+    │   └── datasources/
+    │       └── datasource.yml
+    └── nginx/
+        └── nginx.conf   # 共用 nginx 配置
 ```
 
 ---
