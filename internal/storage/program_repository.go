@@ -241,16 +241,21 @@ func (db *DB) GetProgramCourses(ctx context.Context, programName string) ([]Prog
 	for rows.Next() {
 		var pc ProgramCourse
 		var teachers, teacherURLs, times, locations string
+		var detailURL, note sql.NullString
 
 		err := rows.Scan(
 			&pc.Course.UID, &pc.Course.Year, &pc.Course.Term, &pc.Course.No,
 			&pc.Course.Title, &teachers, &teacherURLs, &times, &locations,
-			&pc.Course.DetailURL, &pc.Course.Note, &pc.Course.CachedAt,
+			&detailURL, &note, &pc.Course.CachedAt,
 			&pc.CourseType,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan program course: %w", err)
 		}
+
+		// Handle nullable fields
+		pc.Course.DetailURL = detailURL.String
+		pc.Course.Note = note.String
 
 		// Parse JSON arrays
 		pc.Course.Teachers = parseJSONArray(teachers)
