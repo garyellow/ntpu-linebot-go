@@ -6,6 +6,7 @@ package scraper
 import (
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -302,7 +303,8 @@ func IsNetworkError(err error) bool {
 	}
 
 	// Check if it's a permanent error
-	if _, ok := err.(*permanentError); ok {
+	var permErr *permanentError
+	if errors.As(err, &permErr) {
 		return false
 	}
 

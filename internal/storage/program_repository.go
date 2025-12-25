@@ -250,7 +250,7 @@ func (db *DB) GetProgramCourses(ctx context.Context, programName string, years, 
 			ORDER BY
 				CASE WHEN cp.course_type = '必' THEN 0 ELSE 1 END,
 				c.year DESC,
-				c.term DESC
+			c.term DESC
 		`
 	} else {
 		// No semester filter - return all courses for the program
