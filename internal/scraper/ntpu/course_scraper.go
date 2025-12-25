@@ -101,7 +101,7 @@ func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, 
 			return nil, fmt.Errorf("context canceled before scraping courses: %w", err)
 		}
 
-		queryURL := fmt.Sprintf("%s%s%s&qEdu=%s", courseBaseURL, courseQueryByKeywordPath, baseParams, eduCode)
+		queryURL := fmt.Sprintf("%s%s%s&courseno=%s", courseBaseURL, courseQueryByKeywordPath, baseParams, eduCode)
 		doc, err := client.GetDocument(ctx, queryURL)
 		if err != nil {
 			// Try to recover with failover if needed

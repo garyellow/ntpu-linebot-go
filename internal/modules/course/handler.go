@@ -1086,22 +1086,9 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 			}
 			return h.formatCourseListResponse(courses)
 		}
-		// If recent but not found in cache, fall through to scraping (will save to historical_courses?
-		// NO, regular scraper saves to courses. key difference.)
-		// Ideally we should just return "not found" if it's supposed to be warmed up.
-		// But for safety, we might want to let it fall through or force scrape to 'courses'.
-		// Given the requirements, let's treat it as a standard cache miss for now,
-		// but specifically for the 'courses' table to keep consistency.
-
-		// To keep it simple and safe for this refactor:
-		// If it's effectively "recent", we should probably just use the standard scraping logic
-		// which writes to 'courses'.
-		// But re-implementing that here duplicates code.
-		// For now, let's just allow the fall-through to the historical scraping logic
-		// BUT catch the write.
-
-		// Actually best approach: If isRecent && cache miss, let it fall through to scrape,
-		// BUT we need to ensure we save to the right table.
+		// Cache miss for recent year: fall through to historical search/scraper path.
+		// Data will be saved to the appropriate table (courses for recent, historical_courses for old)
+		// based on the logic later in this function.
 	}
 
 	// Search in historical_courses cache first

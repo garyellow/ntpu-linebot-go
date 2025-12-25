@@ -312,9 +312,6 @@ func IsNetworkError(err error) bool {
 	if netErr, ok := err.(interface{ Timeout() bool }); ok && netErr.Timeout() {
 		return true
 	}
-	if netErr, ok := err.(interface{ Temporary() bool }); ok && netErr.Temporary() {
-		return true
-	}
 
 	// Check for common error strings if type assertion fails
 	errStr := err.Error()
