@@ -30,7 +30,9 @@ func setupTestHandler(t *testing.T) *Handler {
 	log := logger.New("info")
 	stickerMgr := sticker.NewManager(db, nil, log)
 
-	return NewHandler(db, m, log, stickerMgr)
+	// Note: semesterDetector is nil for tests - handleProgramCourses falls back
+	// to returning all courses when no semester filter is provided
+	return NewHandler(db, m, log, stickerMgr, nil)
 }
 
 // TestCanHandle verifies keyword pattern matching for program queries

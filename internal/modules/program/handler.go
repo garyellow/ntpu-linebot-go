@@ -15,6 +15,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
+	"github.com/garyellow/ntpu-linebot-go/internal/modules/course"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
@@ -27,10 +28,11 @@ import (
 //
 // Pattern priority (1=highest): PostbackViewCourses → List → Search
 type Handler struct {
-	db             *storage.DB
-	metrics        *metrics.Metrics
-	logger         *logger.Logger
-	stickerManager *sticker.Manager
+	db               *storage.DB
+	metrics          *metrics.Metrics
+	logger           *logger.Logger
+	stickerManager   *sticker.Manager
+	semesterDetector *course.SemesterDetector // Data-driven semester detection (shared with course module)
 
 	// matchers contains all pattern-handler pairs sorted by priority.
 	// Shared by CanHandle and HandleMessage for consistent routing.
@@ -47,7 +49,6 @@ const (
 	ModuleName               = "program" // Module identifier for registration
 	senderName               = "學程小幫手"
 	MaxProgramsPerSearch     = 30 // 3 carousels @ 10 bubbles (LINE max: 5 messages)
-	MaxCoursesPerProgram     = 40 // 4 carousels @ 10 bubbles
 	MaxTitleDisplayChars     = 50 // Truncation limit for program titles
 	PostbackPrefix           = "program:"
 	PostbackViewCoursesLabel = "查看課程"
@@ -94,18 +95,21 @@ var (
 )
 
 // NewHandler creates a new program handler.
+// Requires semesterDetector from course module for consistent 2-semester filtering.
 // Initializes and sorts matchers by priority during construction.
 func NewHandler(
 	db *storage.DB,
 	metrics *metrics.Metrics,
 	logger *logger.Logger,
 	stickerManager *sticker.Manager,
+	semesterDetector *course.SemesterDetector,
 ) *Handler {
 	h := &Handler{
-		db:             db,
-		metrics:        metrics,
-		logger:         logger,
-		stickerManager: stickerManager,
+		db:               db,
+		metrics:          metrics,
+		logger:           logger,
+		stickerManager:   stickerManager,
+		semesterDetector: semesterDetector,
 	}
 
 	// Initialize Pattern-Action Table
@@ -418,14 +422,26 @@ func (h *Handler) handleProgramSearch(ctx context.Context, searchTerm string) []
 }
 
 // handleProgramCourses retrieves and displays courses for a specific program.
+// Courses are filtered to the most recent 2 semesters (consistent with smart search).
 func (h *Handler) handleProgramCourses(ctx context.Context, programName string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(ModuleName)
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	log.Infof("Handling program courses query: %s", programName)
 
-	// Get program courses from database
-	programCourses, err := h.db.GetProgramCourses(ctx, programName)
+	// Get recent 2 semesters from semester detector (data-driven)
+	var years, terms []int
+	if h.semesterDetector != nil {
+		years, terms = h.semesterDetector.GetRecentSemesters()
+		log.Debugf("Using semester filter: years=%v, terms=%v", years, terms)
+	} else {
+		// No semester detector available - will return all courses
+		// This should only happen in tests; in production, semesterDetector is always set
+		log.Debug("No semester detector available, returning all program courses")
+	}
+
+	// Get program courses from database (filtered by 2 semesters)
+	programCourses, err := h.db.GetProgramCourses(ctx, programName, years, terms)
 	if err != nil {
 		log.WithError(err).Error("Failed to get program courses")
 		msg := lineutil.NewTextMessageWithConsistentSender(
@@ -438,7 +454,7 @@ func (h *Handler) handleProgramCourses(ctx context.Context, programName string) 
 
 	if len(programCourses) == 0 {
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("📭 「%s」目前沒有課程資料\n\n請稍後再試，系統會定期更新課程資訊。", programName),
+			fmt.Sprintf("📭 「%s」在近 2 學期沒有課程資料\n\n💡 該學程可能在本學期未開設相關課程。", programName),
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply(QuickReplyProgramNav())
@@ -446,7 +462,7 @@ func (h *Handler) handleProgramCourses(ctx context.Context, programName string) 
 	}
 
 	h.metrics.RecordCacheHit(ModuleName)
-	log.Infof("Found %d courses for program: %s", len(programCourses), programName)
+	log.Infof("Found %d courses for program: %s (2 semesters)", len(programCourses), programName)
 
 	// Separate required and elective courses
 	var requiredCourses, electiveCourses []storage.ProgramCourse
@@ -455,21 +471,6 @@ func (h *Handler) handleProgramCourses(ctx context.Context, programName string) 
 			requiredCourses = append(requiredCourses, pc)
 		} else {
 			electiveCourses = append(electiveCourses, pc)
-		}
-	}
-
-	// Limit total results
-	totalLimit := MaxCoursesPerProgram
-	if len(requiredCourses)+len(electiveCourses) > totalLimit {
-		// Prioritize required courses
-		if len(requiredCourses) >= totalLimit {
-			requiredCourses = requiredCourses[:totalLimit]
-			electiveCourses = nil
-		} else {
-			remainingSlots := totalLimit - len(requiredCourses)
-			if len(electiveCourses) > remainingSlots {
-				electiveCourses = electiveCourses[:remainingSlots]
-			}
 		}
 	}
 

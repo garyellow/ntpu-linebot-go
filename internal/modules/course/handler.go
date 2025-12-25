@@ -219,6 +219,12 @@ func (h *Handler) IsBM25SearchEnabled() bool {
 	return h.bm25Index != nil && h.bm25Index.IsEnabled()
 }
 
+// GetSemesterDetector returns the semester detector for sharing with other modules.
+// This enables consistent 2-semester filtering across course and program modules.
+func (h *Handler) GetSemesterDetector() *SemesterDetector {
+	return h.semesterDetector
+}
+
 // RefreshSemesters updates the cached semester data from database.
 // This should be called after warmup completes to ensure user queries
 // use data-driven semester detection based on actual course availability.
@@ -789,6 +795,14 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 
 	var courses []storage.Course
 
+	// Get courses based on search range (2 or 4 semesters) - data-driven
+	var searchYears, searchTerms []int
+	if extended {
+		searchYears, searchTerms = h.semesterDetector.GetExtendedSemesters()
+	} else {
+		searchYears, searchTerms = h.semesterDetector.GetRecentSemesters()
+	}
+
 	// Step 1: Try SQL LIKE search for title first
 	titleCourses, err := h.db.SearchCoursesByTitle(ctx, searchTerm)
 	if err != nil {
@@ -817,16 +831,12 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 		courses = append(courses, teacherCourses...)
 	}
 
+	// Filter SQL results by semester scope to ensure consistency
+	courses = filterCoursesBySemesters(courses, searchYears, searchTerms)
+
 	// Step 2: ALWAYS try fuzzy character-set matching to find additional results
 	// This catches cases like "線代" -> "線性代數" that SQL LIKE misses
 	// SQL LIKE only finds consecutive substrings, but fuzzy matching finds scattered characters
-	// Get courses based on search range (2 or 4 semesters) - data-driven
-	var searchYears, searchTerms []int
-	if extended {
-		searchYears, searchTerms = h.semesterDetector.GetExtendedSemesters()
-	} else {
-		searchYears, searchTerms = h.semesterDetector.GetRecentSemesters()
-	}
 
 	// Get all courses for the specified semesters from cache
 	for i := range searchYears {
@@ -1025,20 +1035,101 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 		return h.handleUnifiedCourseSearch(ctx, keyword)
 	}
 
+	// Check if the requested year is in the recent/active semesters (Hot Data)
+	// If so, we should query the 'courses' table instead of 'historical_courses'
+	// to avoid data duplication and ensure we use the pre-warmed cache.
+	isRecent := false
+	if h.semesterDetector != nil {
+		recentYears, _ := h.semesterDetector.GetRecentSemesters()
+		for _, recentYear := range recentYears {
+			if year == recentYear {
+				isRecent = true
+				break
+			}
+		}
+		// Also check extended semesters (3rd and 4th) as they are also in 'courses' table
+		if !isRecent {
+			extendedYears, _ := h.semesterDetector.GetExtendedSemesters()
+			for _, extendedYear := range extendedYears {
+				if year == extendedYear {
+					isRecent = true
+					break
+				}
+			}
+		}
+	}
+
+	// If it's a recent year, redirect to the hot path logic
+	if isRecent {
+		log.Infof("Requested year %d is recent, using hot cache (courses table)", year)
+		// Reuse the logic from handleRegularPattern but filtered by year
+		var courses []storage.Course
+		for _, term := range []int{1, 2} {
+			termCourses, err := h.db.GetCoursesByYearTerm(ctx, year, term)
+			if err != nil {
+				log.WithError(err).Warnf("Failed to get courses for year %d term %d", year, term)
+				continue
+			}
+			// Filter by keyword using fuzzy matching
+			for _, c := range termCourses {
+				if stringutil.ContainsAllRunes(c.Title, keyword) {
+					courses = append(courses, c)
+				}
+			}
+		}
+
+		if len(courses) > 0 {
+			h.metrics.RecordCacheHit(ModuleName)
+			// Limit results
+			if len(courses) > MaxCoursesPerSearch {
+				courses = courses[:MaxCoursesPerSearch]
+			}
+			return h.formatCourseListResponse(courses)
+		}
+		// If recent but not found in cache, fall through to scraping (will save to historical_courses?
+		// NO, regular scraper saves to courses. key difference.)
+		// Ideally we should just return "not found" if it's supposed to be warmed up.
+		// But for safety, we might want to let it fall through or force scrape to 'courses'.
+		// Given the requirements, let's treat it as a standard cache miss for now,
+		// but specifically for the 'courses' table to keep consistency.
+
+		// To keep it simple and safe for this refactor:
+		// If it's effectively "recent", we should probably just use the standard scraping logic
+		// which writes to 'courses'.
+		// But re-implementing that here duplicates code.
+		// For now, let's just allow the fall-through to the historical scraping logic
+		// BUT catch the write.
+
+		// Actually best approach: If isRecent && cache miss, let it fall through to scrape,
+		// BUT we need to ensure we save to the right table.
+	}
+
 	// Search in historical_courses cache first
-	// Search in both terms for the specified year
+	// Search by year (returns both semesters) from historical_courses table
+	cachedCourses, err := h.db.SearchHistoricalCoursesByYear(ctx, year)
+	if err != nil {
+		log.WithError(err).Warnf("Failed to get historical courses for year %d", year)
+	}
+
 	var courses []storage.Course
-	for _, term := range []int{1, 2} {
-		termCourses, err := h.db.GetCoursesByYearTerm(ctx, year, term)
-		if err != nil {
-			log.WithError(err).Warnf("Failed to get courses for year %d term %d", year, term)
+	// Filter by keyword using fuzzy matching (Title OR Teacher)
+	for _, c := range cachedCourses {
+		// Check title
+		if stringutil.ContainsAllRunes(c.Title, keyword) {
+			courses = append(courses, c)
 			continue
 		}
-		// Filter by keyword using fuzzy matching
-		for _, c := range termCourses {
-			if stringutil.ContainsAllRunes(c.Title, keyword) {
-				courses = append(courses, c)
+
+		// Check teachers
+		teacherMatch := false
+		for _, teacher := range c.Teachers {
+			if stringutil.ContainsAllRunes(teacher, keyword) {
+				teacherMatch = true
+				break
 			}
+		}
+		if teacherMatch {
+			courses = append(courses, c)
 		}
 	}
 
@@ -1057,10 +1148,37 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	log.Infof("Cache miss for historical course: year=%d, keyword=%s, scraping...", year, keyword)
 
 	// Use term=0 to query both semesters at once (more efficient)
-	scrapedCourses, err := ntpu.ScrapeCourses(ctx, h.scraper, year, 0, keyword)
-	if err != nil {
-		log.WithError(err).WithField("year", year).
-			Warn("Failed to scrape historical courses")
+	// Strategy: Dual scrape (Parallel-ish) to catch both Course Title and Teacher Name matches
+	// 1. Scrape by Course Title (original logic)
+	scrapedCoursesTitle, errTitle := ntpu.ScrapeCourses(ctx, h.scraper, year, 0, keyword)
+	if errTitle != nil {
+		log.WithError(errTitle).WithField("year", year).Warn("Failed to scrape historical courses by title")
+	}
+
+	// 2. Scrape by Teacher Name (new specific logic)
+	scrapedCoursesTeacher, errTeacher := ntpu.ScrapeCoursesByTeacher(ctx, h.scraper, year, 0, keyword)
+	if errTeacher != nil {
+		log.WithError(errTeacher).WithField("year", year).Warn("Failed to scrape historical courses by teacher")
+	}
+
+	// Merge results (Deduplicate by UID)
+	courseMap := make(map[string]*storage.Course)
+	for _, c := range scrapedCoursesTitle {
+		courseMap[c.UID] = c
+	}
+	for _, c := range scrapedCoursesTeacher {
+		courseMap[c.UID] = c
+	}
+
+	// Convert back to slice
+	scrapedCourses := make([]*storage.Course, 0, len(courseMap))
+	for _, c := range courseMap {
+		scrapedCourses = append(scrapedCourses, c)
+	}
+
+	// If both failed, treat as error
+	if errTitle != nil && errTeacher != nil {
+		log.Warn("Both title and teacher scraping failed")
 		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(
 			fmt.Sprintf("🔍 查無 %d 學年度「%s」的課程\n\n請確認\n• 學年度和課程名稱是否正確\n• 該課程是否有開設", year, keyword),
@@ -1074,10 +1192,17 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	}
 	log.Infof("Scraped %d historical courses for year=%d", len(scrapedCourses), year)
 
-	// Save courses to historical_courses table
+	// Save courses to correct table based on recency (Hot vs Cold)
 	for _, course := range scrapedCourses {
-		if err := h.db.SaveCourse(ctx, course); err != nil {
-			log.WithError(err).Warn("Failed to save historical course to cache")
+		var err error
+		if isRecent {
+			err = h.db.SaveCourse(ctx, course)
+		} else {
+			err = h.db.SaveHistoricalCourse(ctx, course)
+		}
+
+		if err != nil {
+			log.WithError(err).WithField("is_recent", isRecent).Warn("Failed to save course to cache")
 		}
 	}
 
@@ -1318,6 +1443,31 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 	msg.QuickReply = lineutil.NewQuickReply(quickReplyItems)
 
 	return []messaging_api.MessageInterface{msg}
+}
+
+// filterCoursesBySemesters filters a list of courses to include only those matching the specified years and terms.
+// years and terms slices must be of equal length and correspond positionally.
+func filterCoursesBySemesters(courses []storage.Course, years, terms []int) []storage.Course {
+	if len(years) == 0 || len(terms) == 0 || len(years) != len(terms) {
+		return courses
+	}
+
+	// Create a map for O(1) lookup: "year-term" -> bool
+	allowed := make(map[string]bool)
+	for i := range years {
+		key := fmt.Sprintf("%d-%d", years[i], terms[i])
+		allowed[key] = true
+	}
+
+	filtered := make([]storage.Course, 0, len(courses))
+	for _, c := range courses {
+		key := fmt.Sprintf("%d-%d", c.Year, c.Term)
+		if allowed[key] {
+			filtered = append(filtered, c)
+		}
+	}
+
+	return filtered
 }
 
 // extractUniqueSemesters extracts unique semesters from a sorted course list.

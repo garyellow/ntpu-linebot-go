@@ -131,7 +131,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	idHandler := id.NewHandler(db, scraperClient, m, log, stickerMgr)
 	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerMgr, bm25Index, queryExpander, llmRateLimiter)
 	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerMgr, cfg.Bot.MaxContactsPerSearch)
-	programHandler := program.NewHandler(db, m, log, stickerMgr)
+	programHandler := program.NewHandler(db, m, log, stickerMgr, courseHandler.GetSemesterDetector())
 
 	botRegistry := bot.NewRegistry()
 	botRegistry.Register(contactHandler)

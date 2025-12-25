@@ -1235,6 +1235,17 @@ func (db *DB) DeleteExpiredHistoricalCourses(ctx context.Context, ttl time.Durat
 	return rowsAffected, nil
 }
 
+// DeleteHistoricalCoursesByYearTerm deletes historical courses for a specific year and term.
+// This is used by warmup to clean up cold storage when data is promoted to hot storage.
+func (db *DB) DeleteHistoricalCoursesByYearTerm(ctx context.Context, year, term int) error {
+	query := `DELETE FROM historical_courses WHERE year = ? AND term = ?`
+	_, err := db.writer.ExecContext(ctx, query, year, term)
+	if err != nil {
+		return fmt.Errorf("failed to delete historical courses for year %d term %d: %w", year, term, err)
+	}
+	return nil
+}
+
 // CountHistoricalCourses returns the total number of historical courses
 func (db *DB) CountHistoricalCourses(ctx context.Context) (int, error) {
 	ttlTimestamp := db.getTTLTimestamp()
