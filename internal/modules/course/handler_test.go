@@ -263,16 +263,25 @@ func TestFormatCourseResponse(t *testing.T) {
 
 func TestFormatCourseResponse_NoDetailURL(t *testing.T) {
 	h := setupTestHandler(t)
+	ctx := context.Background()
 
+	// Save a course without DetailURL to test formatting
 	course := &storage.Course{
 		UID:      "1141U0001",
 		Year:     114,
 		Term:     1,
+		No:       "U0001",
 		Title:    "資料結構",
 		Teachers: []string{"王教授"},
 	}
 
-	messages := h.formatCourseResponse(course)
+	// Save course to database so HandleMessage can find it
+	if err := h.db.SaveCourse(ctx, course); err != nil {
+		t.Fatalf("Failed to save test course: %v", err)
+	}
+
+	// Test via HandleMessage with UID (triggers formatCourseResponseWithContext internally)
+	messages := h.HandleMessage(ctx, course.UID)
 
 	// Should return at least the text message
 	if len(messages) == 0 {
