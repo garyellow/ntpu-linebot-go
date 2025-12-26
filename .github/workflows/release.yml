@@ -72,11 +72,11 @@ jobs:
         # 3. Major version with alpine suffix (e.g., 1-alpine)
         type=semver,pattern={{major}}
 
-        # 4. Alpine tag - Points to the latest SemVer Alpine release
-        type=semver,pattern=alpine
+        # 4. Alpine tag - Points to the latest SemVer Alpine release (no suffix)
+        type=semver,pattern=alpine,suffix=
 
-        # 5. Dev-alpine tag - Points to the latest commit on default branch
-        type=raw,value=dev-alpine,enable={{is_default_branch}}
+        # 5. Dev-alpine tag - Points to the latest commit on default branch (no suffix)
+        type=raw,value=dev-alpine,enable={{is_default_branch}},suffix=
       push-to-dockerhub: true
     secrets:
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
