@@ -3,6 +3,7 @@ package course
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -247,14 +248,14 @@ func TestFormatCourseResponse(t *testing.T) {
 		Note:      "必修",
 	}
 
-	// Test with cache hit
-	messages := h.formatCourseResponse(course)
+	// Test HandleMessage with UID to verify course response formatting
+	messages := h.HandleMessage(context.Background(), course.UID)
 	if len(messages) == 0 {
 		t.Error("Expected messages for course response, got none")
 	}
 
 	// Test with fresh data
-	messages = h.formatCourseResponse(course)
+	messages = h.HandleMessage(context.Background(), course.UID)
 	if len(messages) == 0 {
 		t.Error("Expected messages for course response, got none")
 	}
@@ -1056,5 +1057,82 @@ func truncateString(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
 	}
+
 	return s[:maxLen] + "..."
+}
+
+// TestFilterCoursesBySemesters verifies semester filtering logic
+func TestFilterCoursesBySemesters(t *testing.T) {
+	tests := []struct {
+		name    string
+		courses []storage.Course
+		years   []int
+		terms   []int
+		want    []storage.Course
+	}{
+		{
+			name:    "empty input",
+			courses: []storage.Course{},
+			years:   []int{113},
+			terms:   []int{1},
+			want:    []storage.Course{},
+		},
+		{
+			name: "no filter",
+			courses: []storage.Course{
+				{Year: 113, Term: 1},
+			},
+			years: nil,
+			terms: nil,
+			want: []storage.Course{
+				{Year: 113, Term: 1},
+			},
+		},
+		{
+			name: "filter match one",
+			courses: []storage.Course{
+				{Year: 113, Term: 1, Title: "Match"},
+				{Year: 112, Term: 1, Title: "NoMatch"},
+			},
+			years: []int{113},
+			terms: []int{1},
+			want: []storage.Course{
+				{Year: 113, Term: 1, Title: "Match"},
+			},
+		},
+		{
+			name: "filter match multiple semesters",
+			courses: []storage.Course{
+				{Year: 113, Term: 1, Title: "Match 1"},
+				{Year: 113, Term: 2, Title: "Match 2"},
+				{Year: 112, Term: 1, Title: "NoMatch"},
+			},
+			years: []int{113, 113},
+			terms: []int{1, 2},
+			want: []storage.Course{
+				{Year: 113, Term: 1, Title: "Match 1"},
+				{Year: 113, Term: 2, Title: "Match 2"},
+			},
+		},
+		{
+			name: "mismatched lengths (should return original)",
+			courses: []storage.Course{
+				{Year: 113, Term: 1},
+			},
+			years: []int{113},
+			terms: []int{},
+			want: []storage.Course{
+				{Year: 113, Term: 1},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := filterCoursesBySemesters(tt.courses, tt.years, tt.terms)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("filterCoursesBySemesters() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }

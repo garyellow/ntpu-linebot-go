@@ -108,7 +108,7 @@ func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, 
 			if scraper.IsNetworkError(err) {
 				newURL, failoverErr := seaCache(ctx, client)
 				if failoverErr == nil && newURL != courseBaseURL {
-					queryURL = fmt.Sprintf("%s%s%s&qEdu=%s", newURL, courseQueryByKeywordPath, baseParams, eduCode)
+					queryURL = fmt.Sprintf("%s%s%s&courseno=%s", newURL, courseQueryByKeywordPath, baseParams, eduCode)
 					doc, err = client.GetDocument(ctx, queryURL)
 				}
 			}

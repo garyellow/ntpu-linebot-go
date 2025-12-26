@@ -1070,9 +1070,20 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 				log.WithError(err).Warnf("Failed to get courses for year %d term %d", year, term)
 				continue
 			}
-			// Filter by keyword using fuzzy matching
+			// Filter by keyword using fuzzy matching (Title or Teacher)
 			for _, c := range termCourses {
-				if stringutil.ContainsAllRunes(c.Title, keyword) {
+				matched := stringutil.ContainsAllRunes(c.Title, keyword)
+				if !matched {
+					// Check teachers
+					for _, teacher := range c.Teachers {
+						if stringutil.ContainsAllRunes(teacher, keyword) {
+							matched = true
+							break
+						}
+					}
+				}
+
+				if matched {
 					courses = append(courses, c)
 				}
 			}
@@ -1214,12 +1225,6 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 		lineutil.QuickReplyHelpAction(),
 	})
 	return []messaging_api.MessageInterface{msg}
-}
-
-// formatCourseResponse formats a single course as a LINE message
-// Uses colored header + body label for consistent detail page layout (no hero block)
-func (h *Handler) formatCourseResponse(course *storage.Course) []messaging_api.MessageInterface {
-	return h.formatCourseResponseWithContext(context.Background(), course)
 }
 
 // formatCourseResponseWithContext formats a single course as a LINE message with context for database queries.
