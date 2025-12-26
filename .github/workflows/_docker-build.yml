@@ -8,6 +8,16 @@ on:
         description: 'Docker metadata tag definitions (one per line)'
         required: true
         type: string
+      flavor:
+        description: 'Docker metadata flavor configuration'
+        required: false
+        type: string
+        default: ''
+      dockerfile:
+        description: 'Path to Dockerfile'
+        required: false
+        type: string
+        default: 'Dockerfile'
       platforms:
         description: 'Target platforms'
         required: false
@@ -15,6 +25,11 @@ on:
         default: 'linux/amd64,linux/arm64'
       push-to-dockerhub:
         description: 'Whether to push to Docker Hub'
+        required: false
+        type: boolean
+        default: false
+      verify-base-image:
+        description: 'Whether to verify distroless base image with cosign'
         required: false
         type: boolean
         default: false
@@ -35,6 +50,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Install cosign
+        if: inputs.verify-base-image
+        uses: sigstore/cosign-installer@v4.0.0
+
+      - name: Verify distroless base image
+        if: inputs.verify-base-image
+        run: |
+          echo "Verifying distroless base image signature..."
+          # Verification failure = potential supply chain attack, do not skip
+          cosign verify gcr.io/distroless/static-debian13:nonroot \
+            --certificate-oidc-issuer https://accounts.google.com \
+            --certificate-identity keyless@distroless.iam.gserviceaccount.com
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -48,6 +76,7 @@ jobs:
           images: |
             ghcr.io/${{ github.repository }}
             ${{ inputs.push-to-dockerhub && github.repository || '' }}
+          flavor: ${{ inputs.flavor }}
           tags: ${{ inputs.tags }}
           labels: |
             org.opencontainers.image.title=NTPU LINE Bot
@@ -71,12 +100,13 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: ${{ inputs.dockerfile }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: ${{ inputs.platforms }}
-          cache-from: type=gha,scope=release
-          cache-to: type=gha,mode=max,scope=release
+          cache-from: type=gha,scope=release-${{ inputs.dockerfile }}
+          cache-to: type=gha,mode=max,scope=release-${{ inputs.dockerfile }}
           build-args: |
             VERSION=${{ steps.meta.outputs.version }}
             BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
