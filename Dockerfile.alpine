@@ -1,5 +1,5 @@
-# Distroless variant (default) - minimal attack surface for production
-# For debugging/shell access, use Dockerfile.alpine instead
+# Alpine variant for scenarios where distroless is not supported
+# This image includes a shell and package manager for debugging
 
 FROM --platform=$BUILDPLATFORM golang:1.25.5-alpine AS builder
 
@@ -36,7 +36,12 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 
 RUN mkdir -p /data-dir
 
-FROM gcr.io/distroless/static-debian13:nonroot
+FROM alpine:3.23
+
+# Install required packages and create non-root user
+RUN apk add --no-cache ca-certificates tzdata && \
+    addgroup -g 65532 -S nonroot && \
+    adduser -u 65532 -S nonroot -G nonroot -h /app
 
 WORKDIR /app
 

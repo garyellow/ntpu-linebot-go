@@ -195,11 +195,15 @@ task dev
 **Docker Container：**
 
 ```bash
+# Distroless（推薦）
 docker run -d -p 10000:10000 \
   -e LINE_CHANNEL_ACCESS_TOKEN=xxx \
   -e LINE_CHANNEL_SECRET=xxx \
   -v ./data:/data \
   garyellow/ntpu-linebot-go:latest
+
+# Alpine（debug 用）- 含 shell 可進入容器
+docker run ... garyellow/ntpu-linebot-go:alpine
 ```
 
 **Full Stack（含監控）：**

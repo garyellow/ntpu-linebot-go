@@ -72,16 +72,26 @@ docker run -d \
 
 ### 可用映像標籤
 
-| 標籤 | 說明 |
-|------|------|
-| `latest` | 最新穩定版 |
-| `1.2.3` | 特定版本 |
-| `1.2` | 最新 1.2.x 版本 |
-| `1` | 最新 1.x.x 版本 |
+提供兩種映像變體：
+
+| 變體 | Base Image | 適用場景 |
+|------|------------|----------|
+| **Distroless（預設）** | `gcr.io/distroless/static-debian13` | 生產環境（最小攻擊面） |
+| **Alpine** | `alpine:3.23` | 需要 shell/debug 的特殊場景 |
+
+| 標籤 | Distroless | Alpine |
+|------|------------|--------|
+| 最新穩定版 | `latest` | `alpine` |
+| 特定版本 | `1.2.3` | `1.2.3-alpine` |
+| Minor 版本 | `1.2` | `1.2-alpine` |
+| Major 版本 | `1` | `1-alpine` |
+| 開發版 | `dev` | `dev-alpine` |
 
 映像同時發布至：
 - Docker Hub: `garyellow/ntpu-linebot-go`
 - GHCR: `ghcr.io/garyellow/ntpu-linebot-go`
+
+> **建議**：生產環境使用 Distroless（無後綴標籤），僅在需要進入容器 debug 時使用 Alpine。
 
 ### 環境變數
 

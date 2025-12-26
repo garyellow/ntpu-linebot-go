@@ -582,14 +582,23 @@ go run ./cmd/server
 
 #### Docker Container
 
-單獨執行 Bot 容器，不含監控。
+單獨執行 Bot 容器，不含監控。提供兩種映像變體：
+
+| 變體 | Base Image | 適用場景 |
+|------|------------|----------|
+| **Distroless（預設）** | `gcr.io/distroless/static-debian13` | 生產環境（最小攻擊面） |
+| **Alpine** | `alpine:3.23` | 需要 shell/debug 的特殊場景 |
 
 ```bash
+# Distroless（推薦）
 docker run -d -p 10000:10000 \
   -e LINE_CHANNEL_ACCESS_TOKEN=xxx \
   -e LINE_CHANNEL_SECRET=xxx \
   -v ./data:/data \
   garyellow/ntpu-linebot-go:latest
+
+# Alpine（debug 用）
+docker run -it garyellow/ntpu-linebot-go:alpine sh
 ```
 
 ### Bot + 監控
