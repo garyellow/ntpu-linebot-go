@@ -202,8 +202,8 @@ docker run -d -p 10000:10000 \
   -v ./data:/data \
   garyellow/ntpu-linebot-go:latest
 
-# Alpine（debug 用）- 含 shell 可進入容器
-docker run ... garyellow/ntpu-linebot-go:alpine
+# Alpine（debug 用）- 進入容器 shell
+docker run -it --rm garyellow/ntpu-linebot-go:alpine sh
 ```
 
 **Full Stack（含監控）：**

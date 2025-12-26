@@ -58,6 +58,7 @@ jobs:
         if: inputs.verify-base-image
         run: |
           echo "Verifying distroless base image signature..."
+          # Verification failure = potential supply chain attack, do not skip
           cosign verify gcr.io/distroless/static-debian13:nonroot \
             --certificate-oidc-issuer https://accounts.google.com \
             --certificate-identity keyless@distroless.iam.gserviceaccount.com
