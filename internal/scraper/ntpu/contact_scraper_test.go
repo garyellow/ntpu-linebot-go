@@ -1,6 +1,7 @@
 package ntpu
 
 import (
+	"net/url"
 	"testing"
 )
 
@@ -10,6 +11,7 @@ func TestEncodeToBig5(t *testing.T) {
 		name     string
 		input    string
 		hasError bool
+		checkVal string
 	}{
 		{
 			name:     "Valid ASCII",
@@ -18,6 +20,12 @@ func TestEncodeToBig5(t *testing.T) {
 		},
 		{
 			name:     "Valid Chinese",
+			input:    "王", // Specific test case for PR review
+			hasError: false,
+			checkVal: "%A4%FD",
+		},
+		{
+			name:     "General Chinese",
 			input:    "測試",
 			hasError: false,
 		},
@@ -49,6 +57,14 @@ func TestEncodeToBig5(t *testing.T) {
 			}
 			if !tt.hasError && result == "" && tt.input != "" {
 				t.Error("Expected non-empty result")
+			}
+
+			// Verify specific value if provided (PR requirement)
+			if tt.checkVal != "" {
+				escaped := url.QueryEscape(result)
+				if escaped != tt.checkVal {
+					t.Errorf("Expected encoded value %s, got %s", tt.checkVal, escaped)
+				}
 			}
 		})
 	}

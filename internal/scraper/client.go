@@ -6,6 +6,7 @@ package scraper
 import (
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -291,4 +292,36 @@ func (c *Client) GetBaseURLs(domain string) []string {
 	result := make([]string, len(urls))
 	copy(result, urls)
 	return result
+}
+
+// IsNetworkError checks if the error is a network error or a temporary server error.
+// It returns true for timeout, connection reset, 5xx errors, etc.
+// It returns false for 4xx errors (except 429) or other permanent errors.
+func IsNetworkError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check if it's a permanent error
+	var permErr *permanentError
+	if errors.As(err, &permErr) {
+		return false
+	}
+
+	// Check for net.Error (timeouts, temporary network issues)
+	if netErr, ok := err.(interface{ Timeout() bool }); ok && netErr.Timeout() {
+		return true
+	}
+
+	// Check for common error strings if type assertion fails
+	errStr := err.Error()
+	if strings.Contains(errStr, "connection refused") ||
+		strings.Contains(errStr, "connection reset") ||
+		strings.Contains(errStr, "no such host") ||
+		strings.Contains(errStr, "server error") ||
+		strings.Contains(errStr, "rate limited") {
+		return true
+	}
+
+	return false
 }

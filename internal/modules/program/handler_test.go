@@ -9,6 +9,7 @@ import (
 	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
+	"github.com/garyellow/ntpu-linebot-go/internal/modules/course"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 	"github.com/prometheus/client_golang/prometheus"
@@ -30,7 +31,11 @@ func setupTestHandler(t *testing.T) *Handler {
 	log := logger.New("info")
 	stickerMgr := sticker.NewManager(db, nil, log)
 
-	return NewHandler(db, m, log, stickerMgr)
+	// Create a mock semester detector (nil is acceptable - handler will return all courses)
+	// In production, this comes from course.Handler.GetSemesterDetector()
+	var semesterDetector *course.SemesterDetector
+
+	return NewHandler(db, m, log, stickerMgr, semesterDetector)
 }
 
 // TestCanHandle verifies keyword pattern matching for program queries
@@ -468,5 +473,33 @@ func TestDispatchIntent_ParameterValidation(t *testing.T) {
 	_, err = h.DispatchIntent(ctx, IntentCourses, nil)
 	if err == nil {
 		t.Error("Expected error for courses intent without params")
+	}
+}
+
+// TestNewHandler_NilSemesterDetector verifies handler works without semester detector
+func TestNewHandler_NilSemesterDetector(t *testing.T) {
+	// Create test database
+	db, err := storage.New(context.Background(), ":memory:", 168*time.Hour)
+	if err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	// Create dependencies
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	log := logger.New("info")
+	stickerMgr := sticker.NewManager(db, nil, log)
+
+	// Create handler with nil semester detector (should not panic)
+	h := NewHandler(db, m, log, stickerMgr, nil)
+	if h == nil {
+		t.Fatal("Expected non-nil handler")
+	}
+
+	// Verify handler can still process queries (without semester filtering)
+	msgs := h.HandleMessage(context.Background(), "學程列表")
+	if len(msgs) == 0 {
+		t.Error("Expected messages for program list query")
 	}
 }

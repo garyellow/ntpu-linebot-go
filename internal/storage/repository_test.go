@@ -1657,3 +1657,126 @@ func TestCountSyllabi(t *testing.T) {
 		t.Errorf("Expected 3 syllabi, got %d", count)
 	}
 }
+
+// TestDeleteHistoricalCoursesByYearTerm verifies cleanup logic
+func TestDeleteHistoricalCoursesByYearTerm(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+	ctx := context.Background()
+
+	// Insert historical courses for different semesters
+	courses := []*Course{
+		{UID: "1051U001", Year: 105, Term: 1, Title: "ToDelete 1"},
+		{UID: "1051U002", Year: 105, Term: 1, Title: "ToDelete 2"},
+		{UID: "1052U001", Year: 105, Term: 2, Title: "Keep 1"},
+		{UID: "1041U001", Year: 104, Term: 1, Title: "Keep 2"},
+	}
+
+	for _, c := range courses {
+		if err := db.SaveHistoricalCourse(ctx, c); err != nil {
+			t.Fatalf("Failed to save historical course: %v", err)
+		}
+	}
+
+	// Delete 105-1
+	err := db.DeleteHistoricalCoursesByYearTerm(ctx, 105, 1)
+	if err != nil {
+		t.Fatalf("DeleteHistoricalCoursesByYearTerm failed: %v", err)
+	}
+
+	// Verify 105-1 are gone
+	results, err := db.SearchHistoricalCoursesByYear(ctx, 105)
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+
+	for _, r := range results {
+		if r.Term == 1 {
+			t.Errorf("Found course from term 1 that should be deleted: %v", r)
+		}
+	}
+
+	// Verify 105-2 remains
+	foundKeep := false
+	for _, r := range results {
+		if r.Term == 2 {
+			foundKeep = true
+			break
+		}
+	}
+	if !foundKeep {
+		t.Error("Expected 105-2 courses to remain")
+	}
+
+	// Verify 104-1 remains
+	results104, _ := db.SearchHistoricalCoursesByYear(ctx, 104)
+	if len(results104) != 1 {
+		t.Error("Expected 104 courses to remain")
+	}
+}
+
+// TestGetProgramCoursesFiltering verifies semester filtering logic for programs
+func TestGetProgramCoursesFiltering(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+	ctx := context.Background()
+
+	// Insert courses
+	courses := []*Course{
+		{UID: "1131U001", Year: 113, Term: 1, Title: "C1"},
+		{UID: "1132U001", Year: 113, Term: 2, Title: "C2"},
+		{UID: "1121U001", Year: 112, Term: 1, Title: "C3"},
+	}
+	if err := db.SaveCoursesBatch(ctx, courses); err != nil {
+		t.Fatalf("Failed to save courses: %v", err)
+	}
+
+	// Insert course programs (Must link course to program)
+	// Function signature: SaveCoursePrograms(ctx, courseUID, []ProgramRequirement)
+	programs := []struct {
+		uid  string
+		reqs []ProgramRequirement
+	}{
+		{"1131U001", []ProgramRequirement{{ProgramName: "TestProgram", CourseType: "必"}}},
+		{"1132U001", []ProgramRequirement{{ProgramName: "TestProgram", CourseType: "必"}}},
+		{"1121U001", []ProgramRequirement{{ProgramName: "TestProgram", CourseType: "修"}}},
+	}
+
+	for _, p := range programs {
+		if err := db.SaveCoursePrograms(ctx, p.uid, p.reqs); err != nil {
+			t.Fatalf("Failed to save programs for %s: %v", p.uid, err)
+		}
+	}
+
+	// Test case 1: No filter (should return all 3)
+	all, err := db.GetProgramCourses(ctx, "TestProgram", nil, nil)
+	if err != nil {
+		t.Fatalf("GetProgramCourses failed: %v", err)
+	}
+	if len(all) != 3 {
+		t.Errorf("Expected 3 courses (no filter), got %d", len(all))
+	}
+
+	// Test case 2: Filter specific semester (113-1)
+	filtered, err := db.GetProgramCourses(ctx, "TestProgram", []int{113}, []int{1})
+	if err != nil {
+		t.Fatalf("GetProgramCourses filtered failed: %v", err)
+	}
+	if len(filtered) != 1 {
+		t.Errorf("Expected 1 course (113-1), got %d", len(filtered))
+	}
+	// ProgramCourse has embedded Course
+	if len(filtered) > 0 && filtered[0].Course.Title != "C1" {
+		t.Errorf("Expected C1, got %s", filtered[0].Course.Title)
+	}
+
+	// Test case 3: Filter multiple semesters
+	multi, err := db.GetProgramCourses(ctx, "TestProgram", []int{113, 112}, []int{2, 1})
+	if err != nil {
+		t.Fatalf("GetProgramCourses multi-filter failed: %v", err)
+	}
+	// Should match 113-2 (C2) and 112-1 (C3)
+	if len(multi) != 2 {
+		t.Errorf("Expected 2 courses, got %d", len(multi))
+	}
+}

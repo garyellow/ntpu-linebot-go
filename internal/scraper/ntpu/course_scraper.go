@@ -98,28 +98,78 @@ func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, 
 	for _, eduCode := range AllEduCodes {
 		// Check context before each request
 		if err := ctx.Err(); err != nil {
-			return courses, fmt.Errorf("context canceled during course scraping (partial results): %w", err)
+			return nil, fmt.Errorf("context canceled before scraping courses: %w", err)
 		}
 
 		queryURL := fmt.Sprintf("%s%s%s&courseno=%s", courseBaseURL, courseQueryByKeywordPath, baseParams, eduCode)
-
 		doc, err := client.GetDocument(ctx, queryURL)
 		if err != nil {
-			lastErr = fmt.Errorf("failed to fetch courses for code %s: %w", eduCode, err)
-			// Continue with other education codes instead of failing immediately
+			// Try to recover with failover if needed
+			if scraper.IsNetworkError(err) {
+				newURL, failoverErr := seaCache(ctx, client)
+				if failoverErr == nil && newURL != courseBaseURL {
+					queryURL = fmt.Sprintf("%s%s%s&courseno=%s", newURL, courseQueryByKeywordPath, baseParams, eduCode)
+					doc, err = client.GetDocument(ctx, queryURL)
+				}
+			}
+		}
+
+		if err != nil {
+			lastErr = err
 			continue
 		}
 
-		pageCourses := parseCoursesPage(ctx, doc, year, term)
-		courses = append(courses, pageCourses...)
+		if newCourses := parseCoursesPage(ctx, doc, year, term); len(newCourses) > 0 {
+			courses = append(courses, newCourses...)
+		}
 	}
 
-	// Return partial results with error if some requests failed
-	if lastErr != nil && len(courses) == 0 {
-		return nil, lastErr
+	if len(courses) == 0 && lastErr != nil {
+		return nil, fmt.Errorf("failed to fetch courses (last error): %w", lastErr)
 	}
 
 	return courses, nil
+}
+
+// ScrapeCoursesByTeacher scrapes courses by teacher name
+// Uses POST to {baseURL}/pls/dev_stud/course_query_all.queryByAllConditions with 'teach' parameter
+func ScrapeCoursesByTeacher(ctx context.Context, client *scraper.Client, year, term int, teacherName string) ([]*storage.Course, error) {
+	// Check context before starting
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("context canceled before scraping courses: %w", err)
+	}
+
+	// Get working base URL with failover support
+	courseBaseURL, err := seaCache(ctx, client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get working SEA URL: %w", err)
+	}
+
+	queryURL := fmt.Sprintf("%s%s", courseBaseURL, courseQueryByAllConditionsPath)
+
+	// Encode teacher name to Big5
+	big5Teach, err := encodeToBig5(teacherName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode teacher name to Big5: %w", err)
+	}
+
+	// Build POST form data with URL-encoded Big5 teacher name
+	// When term=0, omit qTerm to query both semesters at once
+	var formData string
+	if term == 0 {
+		formData = fmt.Sprintf("qYear=%d&teach=%s&seq1=A&seq2=M",
+			year, url.QueryEscape(big5Teach))
+	} else {
+		formData = fmt.Sprintf("qYear=%d&qTerm=%d&teach=%s&seq1=A&seq2=M",
+			year, term, url.QueryEscape(big5Teach))
+	}
+
+	doc, err := client.PostFormDocumentRaw(ctx, queryURL, formData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch courses by teacher: %w", err)
+	}
+
+	return parseCoursesPage(ctx, doc, year, term), nil
 }
 
 // ScrapeCourseByUID scrapes a specific course by its UID (year+term+no)

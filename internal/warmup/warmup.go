@@ -360,6 +360,15 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 			continue
 		}
 
+		// Cleanup potential cold data to ensure strict partitioning
+		// If we successfully saved to 'courses' (Hot), we must remove from 'historical_courses' (Cold)
+		if err := db.DeleteHistoricalCoursesByYearTerm(ctx, sem.Year, sem.Term); err != nil {
+			log.WithError(err).
+				WithField("year", sem.Year).
+				WithField("term", sem.Term).
+				Warn("Failed to cleanup historical courses (non-critical)")
+		}
+
 		// Save course-program relationships
 		if err := db.SaveCourseProgramsBatch(ctx, courses); err != nil {
 			log.WithError(err).

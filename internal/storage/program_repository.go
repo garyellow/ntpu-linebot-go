@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -178,6 +179,14 @@ func (db *DB) GetProgramByName(ctx context.Context, name string) (*Program, erro
 // SearchPrograms searches for programs by name using fuzzy matching.
 // Returns programs where name contains the search term.
 func (db *DB) SearchPrograms(ctx context.Context, searchTerm string) ([]Program, error) {
+	// Validate input
+	if len(searchTerm) > 100 {
+		return nil, errors.New("search term too long")
+	}
+
+	// Sanitize search term to prevent SQL LIKE special character issues
+	sanitized := sanitizeSearchTerm(searchTerm)
+
 	query := `
 		SELECT
 			program_name,
@@ -185,12 +194,12 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string) ([]Program,
 			SUM(CASE WHEN course_type != '必' THEN 1 ELSE 0 END) as elective_count,
 			COUNT(*) as total_count
 		FROM course_programs
-		WHERE program_name LIKE ?
+		WHERE program_name LIKE ? ESCAPE '\'
 		GROUP BY program_name
 		ORDER BY program_name
 	`
 
-	rows, err := db.reader.QueryContext(ctx, query, "%"+searchTerm+"%")
+	rows, err := db.reader.QueryContext(ctx, query, "%"+sanitized+"%")
 	if err != nil {
 		return nil, fmt.Errorf("search programs: %w", err)
 	}
@@ -212,26 +221,56 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string) ([]Program,
 	return programs, nil
 }
 
-// GetProgramCourses returns all courses for a given program.
+// GetProgramCourses returns courses for a given program, optionally filtered by semesters.
+// If years and terms are provided (non-empty, equal length), only courses from those semesters are returned.
+// If years and terms are empty or nil, all courses for the program are returned.
 // Courses are sorted by requirement type (必修 first, then 選修), then by semester (newest first).
-func (db *DB) GetProgramCourses(ctx context.Context, programName string) ([]ProgramCourse, error) {
-	// Join with courses table to get full course information
-	// Sort: 必修 first, then by year DESC, term DESC
-	query := `
-		SELECT
-			c.uid, c.year, c.term, c.no, c.title, c.teachers, c.teacher_urls,
-			c.times, c.locations, c.detail_url, c.note, c.cached_at,
-			cp.course_type
-		FROM course_programs cp
-		JOIN courses c ON cp.course_uid = c.uid
-		WHERE cp.program_name = ?
-		ORDER BY
-			CASE WHEN cp.course_type = '必' THEN 0 ELSE 1 END,
-			c.year DESC,
-			c.term DESC
-	`
+func (db *DB) GetProgramCourses(ctx context.Context, programName string, years, terms []int) ([]ProgramCourse, error) {
+	// Build query with optional semester filter
+	var query string
+	var args []interface{}
 
-	rows, err := db.reader.QueryContext(ctx, query, programName)
+	if len(years) > 0 && len(years) == len(terms) {
+		// Build semester filter: (year = ? AND term = ?) OR (year = ? AND term = ?) ...
+		var semesterConditions []string
+		args = append(args, programName)
+		for i := range years {
+			semesterConditions = append(semesterConditions, "(c.year = ? AND c.term = ?)")
+			args = append(args, years[i], terms[i])
+		}
+
+		query = `
+			SELECT
+				c.uid, c.year, c.term, c.no, c.title, c.teachers, c.teacher_urls,
+				c.times, c.locations, c.detail_url, c.note, c.cached_at,
+				cp.course_type
+			FROM course_programs cp
+			JOIN courses c ON cp.course_uid = c.uid
+			WHERE cp.program_name = ? AND (` + strings.Join(semesterConditions, " OR ") + `)
+			ORDER BY
+				CASE WHEN cp.course_type = '必' THEN 0 ELSE 1 END,
+				c.year DESC,
+			c.term DESC
+		`
+	} else {
+		// No semester filter - return all courses for the program
+		query = `
+			SELECT
+				c.uid, c.year, c.term, c.no, c.title, c.teachers, c.teacher_urls,
+				c.times, c.locations, c.detail_url, c.note, c.cached_at,
+				cp.course_type
+			FROM course_programs cp
+			JOIN courses c ON cp.course_uid = c.uid
+			WHERE cp.program_name = ?
+			ORDER BY
+				CASE WHEN cp.course_type = '必' THEN 0 ELSE 1 END,
+				c.year DESC,
+				c.term DESC
+		`
+		args = []interface{}{programName}
+	}
+
+	rows, err := db.reader.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query program courses: %w", err)
 	}
@@ -241,16 +280,21 @@ func (db *DB) GetProgramCourses(ctx context.Context, programName string) ([]Prog
 	for rows.Next() {
 		var pc ProgramCourse
 		var teachers, teacherURLs, times, locations string
+		var detailURL, note sql.NullString
 
 		err := rows.Scan(
 			&pc.Course.UID, &pc.Course.Year, &pc.Course.Term, &pc.Course.No,
 			&pc.Course.Title, &teachers, &teacherURLs, &times, &locations,
-			&pc.Course.DetailURL, &pc.Course.Note, &pc.Course.CachedAt,
+			&detailURL, &note, &pc.Course.CachedAt,
 			&pc.CourseType,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan program course: %w", err)
 		}
+
+		// Handle nullable fields
+		pc.Course.DetailURL = detailURL.String
+		pc.Course.Note = note.String
 
 		// Parse JSON arrays
 		pc.Course.Teachers = parseJSONArray(teachers)
