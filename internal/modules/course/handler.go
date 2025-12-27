@@ -1462,9 +1462,9 @@ func filterCoursesBySemesters(courses []storage.Course, years, terms []int) []st
 	return filtered
 }
 
-// extractUniqueSemesters extracts unique semesters from a sorted course list.
-// The input courses should be pre-sorted by semester (newest first).
-// Returns a slice of SemesterPair in the same order (newest first).
+// extractUniqueSemesters extracts unique semesters from a course list.
+// Returns a slice of SemesterPair sorted by semester (newest first).
+// The function internally sorts the result, so input order doesn't matter.
 //
 // This is used for data-driven label calculation:
 // - Index 0: 最新學期 (newest semester with data)
@@ -1484,6 +1484,14 @@ func extractUniqueSemesters(courses []storage.Course) []lineutil.SemesterPair {
 			})
 		}
 	}
+
+	// Sort by year descending, then term descending (newest first)
+	slices.SortFunc(semesters, func(a, b lineutil.SemesterPair) int {
+		if a.Year != b.Year {
+			return b.Year - a.Year // Descending
+		}
+		return b.Term - a.Term // Descending
+	})
 
 	return semesters
 }
@@ -1812,7 +1820,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 
 // formatSmartSearchResponse formats smart search results grouped by semester.
 // Results are separated into newest and previous semester groups (10 each max).
-// Uses the same semester labels as regular course search for consistency.
+// Each semester gets its own carousel row for clear visual separation.
 func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []rag.SearchResult) []messaging_api.MessageInterface {
 	if len(courses) == 0 {
 		sender := lineutil.GetSender(senderName, h.stickerManager)
@@ -1833,7 +1841,7 @@ func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []
 		confidenceMap[r.UID] = r.Confidence
 	}
 
-	// Extract unique semesters from courses (for GetSemesterLabel)
+	// Extract unique semesters from courses (sorted newest first)
 	dataSemesters := extractUniqueSemesters(courses)
 
 	// Group courses by semester
@@ -1846,7 +1854,6 @@ func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []
 	// Sort each semester's courses by confidence (best first)
 	for sem := range semesterCourses {
 		slices.SortFunc(semesterCourses[sem], func(a, b storage.Course) int {
-			// Sort by confidence descending
 			confA, confB := confidenceMap[a.UID], confidenceMap[b.UID]
 			if confA > confB {
 				return -1
@@ -1858,11 +1865,17 @@ func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []
 		})
 	}
 
-	// Take top 10 from each semester and build bubbles
+	// Build one carousel per semester (each semester = one row)
+	// Pre-allocate for max 2 semesters × 2 messages (text header + carousel) = 4
 	const maxPerSemester = 10
-	var bubbles []messaging_api.FlexBubble
+	messages := make([]messaging_api.MessageInterface, 0, 4)
 
-	for _, sem := range dataSemesters {
+	for i, sem := range dataSemesters {
+		// Only show top 2 semesters (最新學期 + 上個學期)
+		if i >= 2 {
+			break
+		}
+
 		semCourses := semesterCourses[sem]
 		if len(semCourses) == 0 {
 			continue
@@ -1874,33 +1887,27 @@ func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []
 		}
 
 		// Build bubbles for this semester
+		var bubbles []messaging_api.FlexBubble
 		for _, course := range semCourses {
 			confidence := confidenceMap[course.UID]
 			bubble := h.buildSmartCourseBubble(course, confidence)
 			bubbles = append(bubbles, *bubble.FlexBubble)
 		}
-	}
 
-	// Group into carousels
-	var messages []messaging_api.MessageInterface
+		// Create header text message for this semester
+		semLabel := lineutil.FormatSemesterShort(sem.Year, sem.Term)
+		headerText := fmt.Sprintf("📚 %s 相關課程", semLabel)
+		headerMsg := lineutil.NewTextMessageWithConsistentSender(headerText, sender)
+		messages = append(messages, headerMsg)
 
-	for i := 0; i < len(bubbles); i += lineutil.MaxBubblesPerCarousel {
-		end := i + lineutil.MaxBubblesPerCarousel
-		if end > len(bubbles) {
-			end = len(bubbles)
-		}
-
-		carousel := lineutil.NewFlexCarousel(bubbles[i:end])
-		altText := "🔮 智慧搜尋結果"
-		if i > 0 {
-			altText = fmt.Sprintf("智慧搜尋結果 (%d-%d)", i+1, end)
-		}
-		msg := lineutil.NewFlexMessage(altText, carousel)
+		// Create carousel for this semester
+		carousel := lineutil.NewFlexCarousel(bubbles)
+		msg := lineutil.NewFlexMessage("🔮 智慧搜尋結果", carousel)
 		msg.Sender = sender
 		messages = append(messages, msg)
 	}
 
-	// Add Quick Reply directly to messages (no header message needed)
+	// Add Quick Reply to the last message
 	lineutil.AddQuickReplyToMessages(messages,
 		lineutil.QuickReplySmartSearchAction(),
 		lineutil.QuickReplyCourseAction(),
