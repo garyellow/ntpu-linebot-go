@@ -251,23 +251,51 @@ func (idx *BM25Index) Search(query string, topN int) ([]BM25Result, error) {
 	return results, nil
 }
 
-// getNewestSemester returns the newest semester from BM25 results (data-driven).
-// Compares year first (higher is newer), then term (2 > 1).
-func getNewestSemester(results []BM25Result) (int, int) {
-	if len(results) == 0 {
-		return 0, 0
-	}
-	newestYear, newestTerm := results[0].Year, results[0].Term
-	for _, r := range results[1:] {
-		if r.Year > newestYear || (r.Year == newestYear && r.Term > newestTerm) {
-			newestYear, newestTerm = r.Year, r.Term
-		}
-	}
-	return newestYear, newestTerm
+// semesterPair represents a year-term combination for semester filtering.
+type semesterPair struct {
+	Year int
+	Term int
 }
 
-// SearchCourses performs BM25 search and returns results from newest semester only.
-// This ensures smart search always shows current/most recent course offerings.
+// getNewestTwoSemesters returns the newest 2 semesters from BM25 results (data-driven).
+// Returns a set of semester pairs for efficient lookup.
+// Compares year first (higher is newer), then term (2 > 1).
+func getNewestTwoSemesters(results []BM25Result) map[semesterPair]bool {
+	if len(results) == 0 {
+		return nil
+	}
+
+	// Collect all unique semesters
+	semesters := make(map[semesterPair]bool)
+	for _, r := range results {
+		semesters[semesterPair{Year: r.Year, Term: r.Term}] = true
+	}
+
+	// Convert to slice for sorting
+	semList := make([]semesterPair, 0, len(semesters))
+	for sem := range semesters {
+		semList = append(semList, sem)
+	}
+
+	// Sort by year descending, then term descending (newest first)
+	slices.SortFunc(semList, func(a, b semesterPair) int {
+		if a.Year != b.Year {
+			return b.Year - a.Year // Descending
+		}
+		return b.Term - a.Term // Descending
+	})
+
+	// Take top 2 semesters
+	result := make(map[semesterPair]bool)
+	for i := range min(2, len(semList)) {
+		result[semList[i]] = true
+	}
+
+	return result
+}
+
+// SearchCourses performs BM25 search and returns results from newest 2 semesters.
+// This ensures smart search shows current and recent course offerings.
 // Confidence is calculated as relative score within filtered results.
 func (idx *BM25Index) SearchCourses(_ context.Context, query string, topN int) ([]SearchResult, error) {
 	bm25Results, err := idx.Search(query, topN)
@@ -279,11 +307,11 @@ func (idx *BM25Index) SearchCourses(_ context.Context, query string, topN int) (
 		return nil, nil
 	}
 
-	// Filter to newest semester (data-driven)
-	newestYear, newestTerm := getNewestSemester(bm25Results)
+	// Filter to newest 2 semesters (data-driven)
+	newestSemesters := getNewestTwoSemesters(bm25Results)
 	var filteredResults []BM25Result
 	for _, r := range bm25Results {
-		if r.Year == newestYear && r.Term == newestTerm {
+		if newestSemesters[semesterPair{Year: r.Year, Term: r.Term}] {
 			filteredResults = append(filteredResults, r)
 		}
 	}

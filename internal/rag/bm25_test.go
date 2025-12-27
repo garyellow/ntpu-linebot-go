@@ -2,6 +2,7 @@ package rag
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
@@ -716,78 +717,88 @@ func TestBM25Index_MaxSearchResultsConstant(t *testing.T) {
 	t.Logf("MaxSearchResults = %d", MaxSearchResults)
 }
 
-// TestGetNewestSemester tests the semester comparison logic
-func TestGetNewestSemester(t *testing.T) {
+// TestGetNewestTwoSemesters tests the semester extraction logic
+func TestGetNewestTwoSemesters(t *testing.T) {
 	tests := []struct {
-		name        string
-		results     []BM25Result
-		wantYear    int
-		wantTerm    int
-		expectPanic bool
+		name    string
+		results []BM25Result
+		want    map[semesterPair]bool
 	}{
 		{
-			name: "Multiple years - 114 is newest",
+			name: "Multiple years - returns 114-1 and 113-2",
 			results: []BM25Result{
 				{UID: "1141U0001", Year: 114, Term: 1, Score: 10.0},
 				{UID: "1132U0001", Year: 113, Term: 2, Score: 9.0},
 				{UID: "1131U0001", Year: 113, Term: 1, Score: 8.0},
 				{UID: "1122U0001", Year: 112, Term: 2, Score: 7.0},
 			},
-			wantYear: 114,
-			wantTerm: 1,
+			want: map[semesterPair]bool{
+				{Year: 114, Term: 1}: true,
+				{Year: 113, Term: 2}: true,
+			},
 		},
 		{
-			name: "Same year - term 2 is newer than term 1",
+			name: "Same year - returns both terms",
 			results: []BM25Result{
 				{UID: "1131U0001", Year: 113, Term: 1, Score: 10.0},
 				{UID: "1132U0001", Year: 113, Term: 2, Score: 9.0},
 			},
-			wantYear: 113,
-			wantTerm: 2,
+			want: map[semesterPair]bool{
+				{Year: 113, Term: 2}: true,
+				{Year: 113, Term: 1}: true,
+			},
 		},
 		{
-			name: "All same semester",
+			name: "All same semester - returns single semester",
 			results: []BM25Result{
 				{UID: "1131U0001", Year: 113, Term: 1, Score: 10.0},
 				{UID: "1131U0002", Year: 113, Term: 1, Score: 9.0},
 				{UID: "1131U0003", Year: 113, Term: 1, Score: 8.0},
 			},
-			wantYear: 113,
-			wantTerm: 1,
+			want: map[semesterPair]bool{
+				{Year: 113, Term: 1}: true,
+			},
 		},
 		{
 			name: "Single result",
 			results: []BM25Result{
 				{UID: "1132U0001", Year: 113, Term: 2, Score: 10.0},
 			},
-			wantYear: 113,
-			wantTerm: 2,
+			want: map[semesterPair]bool{
+				{Year: 113, Term: 2}: true,
+			},
 		},
 		{
-			name: "Mixed order - finds newest correctly",
+			name: "Mixed order - returns newest 2",
 			results: []BM25Result{
 				{UID: "1122U0001", Year: 112, Term: 2, Score: 10.0},
-				{UID: "1141U0001", Year: 114, Term: 1, Score: 5.0}, // Newest (lower score but newest semester)
+				{UID: "1141U0001", Year: 114, Term: 1, Score: 5.0},
 				{UID: "1131U0001", Year: 113, Term: 1, Score: 9.0},
 				{UID: "1132U0001", Year: 113, Term: 2, Score: 8.0},
 			},
-			wantYear: 114,
-			wantTerm: 1,
+			want: map[semesterPair]bool{
+				{Year: 114, Term: 1}: true,
+				{Year: 113, Term: 2}: true,
+			},
 		},
 		{
-			name:     "Empty results",
-			results:  []BM25Result{},
-			wantYear: 0,
-			wantTerm: 0,
+			name:    "Empty results",
+			results: []BM25Result{},
+			want:    nil,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotYear, gotTerm := getNewestSemester(tt.results)
-			if gotYear != tt.wantYear || gotTerm != tt.wantTerm {
-				t.Errorf("getNewestSemester() = (%d, %d), want (%d, %d)",
-					gotYear, gotTerm, tt.wantYear, tt.wantTerm)
+			got := getNewestTwoSemesters(tt.results)
+			// Compare maps
+			if len(got) != len(tt.want) {
+				t.Errorf("getNewestTwoSemesters() returned %d semesters, want %d", len(got), len(tt.want))
+			}
+			for sem := range tt.want {
+				if !got[sem] {
+					t.Errorf("getNewestTwoSemesters() missing semester %d-%d", sem.Year, sem.Term)
+				}
 			}
 		})
 	}
@@ -874,14 +885,15 @@ func TestBM25Index_SearchCoursesMultiSemester(t *testing.T) {
 		t.Fatal("SearchCourses should return results for '雲端'")
 	}
 
-	t.Logf("Found %d results after newest semester filtering", len(results))
+	t.Logf("Found %d results after newest 2 semesters filtering", len(results))
 
-	// Verify: ALL results should be from newest semester only (114-1)
-	expectedYear, expectedTerm := 114, 1
+	// Verify: ALL results should be from newest 2 semesters (114-1 and 113-2)
+	allowedSemesters := map[string]bool{"114-1": true, "113-2": true}
 	for i, r := range results {
-		if r.Year != expectedYear || r.Term != expectedTerm {
-			t.Errorf("Result %d: UID=%s has semester %d-%d, want %d-%d (newest semester only)",
-				i, r.UID, r.Year, r.Term, expectedYear, expectedTerm)
+		semKey := fmt.Sprintf("%d-%d", r.Year, r.Term)
+		if !allowedSemesters[semKey] {
+			t.Errorf("Result %d: UID=%s has semester %s, want 114-1 or 113-2 (newest 2 semesters)",
+				i, r.UID, semKey)
 		}
 		t.Logf("  [%d] %s (%d-%d): confidence=%.2f", i+1, r.Title, r.Year, r.Term, r.Confidence)
 	}
@@ -898,11 +910,11 @@ func TestBM25Index_SearchCoursesMultiSemester(t *testing.T) {
 		}
 	}
 
-	// Verify: Results should only include courses from 114-1
-	// (Should NOT include 1132U0001, 1131U0001, 1122U0001 even though they match "雲端")
+	// Verify: Results should include courses from 114-1 AND 113-2
+	// Should NOT include 1131U0001 (113-1) or 1122U0001 (112-2) even though they match "雲端"
 	for _, r := range results {
-		if r.UID == "1132U0001" || r.UID == "1131U0001" || r.UID == "1122U0001" {
-			t.Errorf("Result should not include UID %s from older semester", r.UID)
+		if r.UID == "1131U0001" || r.UID == "1122U0001" {
+			t.Errorf("Result should not include UID %s from semesters older than newest 2", r.UID)
 		}
 	}
 }

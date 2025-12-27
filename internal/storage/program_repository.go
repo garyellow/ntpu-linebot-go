@@ -116,20 +116,48 @@ func (db *DB) SaveCourseProgramsBatch(ctx context.Context, courses []*Course) er
 }
 
 // GetAllPrograms returns all unique program names with course statistics.
+// If years and terms are provided (non-empty, equal length), statistics are limited to those semesters.
+// If years and terms are empty or nil, all courses for each program are counted (legacy behavior).
 // Programs are sorted alphabetically by name.
-func (db *DB) GetAllPrograms(ctx context.Context) ([]Program, error) {
-	query := `
-		SELECT
-			program_name,
-			SUM(CASE WHEN course_type = '必' THEN 1 ELSE 0 END) as required_count,
-			SUM(CASE WHEN course_type != '必' THEN 1 ELSE 0 END) as elective_count,
-			COUNT(*) as total_count
-		FROM course_programs
-		GROUP BY program_name
-		ORDER BY program_name
-	`
+func (db *DB) GetAllPrograms(ctx context.Context, years, terms []int) ([]Program, error) {
+	var query string
+	var args []interface{}
 
-	rows, err := db.reader.QueryContext(ctx, query)
+	if len(years) > 0 && len(years) == len(terms) {
+		// Build semester filter: (c.year = ? AND c.term = ?) OR ...
+		var semesterConditions []string
+		for i := range years {
+			semesterConditions = append(semesterConditions, "(c.year = ? AND c.term = ?)")
+			args = append(args, years[i], terms[i])
+		}
+
+		query = `
+			SELECT
+				cp.program_name,
+				SUM(CASE WHEN cp.course_type = '必' THEN 1 ELSE 0 END) as required_count,
+				SUM(CASE WHEN cp.course_type != '必' THEN 1 ELSE 0 END) as elective_count,
+				COUNT(*) as total_count
+			FROM course_programs cp
+			JOIN courses c ON cp.course_uid = c.uid
+			WHERE ` + strings.Join(semesterConditions, " OR ") + `
+			GROUP BY cp.program_name
+			ORDER BY cp.program_name
+		`
+	} else {
+		// No semester filter - count all courses (legacy behavior)
+		query = `
+			SELECT
+				program_name,
+				SUM(CASE WHEN course_type = '必' THEN 1 ELSE 0 END) as required_count,
+				SUM(CASE WHEN course_type != '必' THEN 1 ELSE 0 END) as elective_count,
+				COUNT(*) as total_count
+			FROM course_programs
+			GROUP BY program_name
+			ORDER BY program_name
+		`
+	}
+
+	rows, err := db.reader.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query programs: %w", err)
 	}
@@ -177,8 +205,9 @@ func (db *DB) GetProgramByName(ctx context.Context, name string) (*Program, erro
 }
 
 // SearchPrograms searches for programs by name using fuzzy matching.
+// If years and terms are provided (non-empty, equal length), statistics are limited to those semesters.
 // Returns programs where name contains the search term.
-func (db *DB) SearchPrograms(ctx context.Context, searchTerm string) ([]Program, error) {
+func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, terms []int) ([]Program, error) {
 	// Validate input
 	if len(searchTerm) > 100 {
 		return nil, errors.New("search term too long")
@@ -187,19 +216,47 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string) ([]Program,
 	// Sanitize search term to prevent SQL LIKE special character issues
 	sanitized := sanitizeSearchTerm(searchTerm)
 
-	query := `
-		SELECT
-			program_name,
-			SUM(CASE WHEN course_type = '必' THEN 1 ELSE 0 END) as required_count,
-			SUM(CASE WHEN course_type != '必' THEN 1 ELSE 0 END) as elective_count,
-			COUNT(*) as total_count
-		FROM course_programs
-		WHERE program_name LIKE ? ESCAPE '\'
-		GROUP BY program_name
-		ORDER BY program_name
-	`
+	var query string
+	var args []interface{}
 
-	rows, err := db.reader.QueryContext(ctx, query, "%"+sanitized+"%")
+	if len(years) > 0 && len(years) == len(terms) {
+		// Build semester filter: (c.year = ? AND c.term = ?) OR ...
+		var semesterConditions []string
+		args = append(args, "%"+sanitized+"%")
+		for i := range years {
+			semesterConditions = append(semesterConditions, "(c.year = ? AND c.term = ?)")
+			args = append(args, years[i], terms[i])
+		}
+
+		query = `
+			SELECT
+				cp.program_name,
+				SUM(CASE WHEN cp.course_type = '必' THEN 1 ELSE 0 END) as required_count,
+				SUM(CASE WHEN cp.course_type != '必' THEN 1 ELSE 0 END) as elective_count,
+				COUNT(*) as total_count
+			FROM course_programs cp
+			JOIN courses c ON cp.course_uid = c.uid
+			WHERE cp.program_name LIKE ? ESCAPE '\' AND (` + strings.Join(semesterConditions, " OR ") + `)
+			GROUP BY cp.program_name
+			ORDER BY cp.program_name
+		`
+	} else {
+		// No semester filter (legacy behavior)
+		query = `
+			SELECT
+				program_name,
+				SUM(CASE WHEN course_type = '必' THEN 1 ELSE 0 END) as required_count,
+				SUM(CASE WHEN course_type != '必' THEN 1 ELSE 0 END) as elective_count,
+				COUNT(*) as total_count
+			FROM course_programs
+			WHERE program_name LIKE ? ESCAPE '\'
+			GROUP BY program_name
+			ORDER BY program_name
+		`
+		args = []interface{}{"%" + sanitized + "%"}
+	}
+
+	rows, err := db.reader.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("search programs: %w", err)
 	}

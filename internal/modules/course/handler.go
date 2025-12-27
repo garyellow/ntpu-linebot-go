@@ -1462,9 +1462,9 @@ func filterCoursesBySemesters(courses []storage.Course, years, terms []int) []st
 	return filtered
 }
 
-// extractUniqueSemesters extracts unique semesters from a sorted course list.
-// The input courses should be pre-sorted by semester (newest first).
-// Returns a slice of SemesterPair in the same order (newest first).
+// extractUniqueSemesters extracts unique semesters from a course list.
+// Returns a slice of SemesterPair sorted by semester (newest first).
+// The function internally sorts the result, so input order doesn't matter.
 //
 // This is used for data-driven label calculation:
 // - Index 0: 最新學期 (newest semester with data)
@@ -1484,6 +1484,14 @@ func extractUniqueSemesters(courses []storage.Course) []lineutil.SemesterPair {
 			})
 		}
 	}
+
+	// Sort by year descending, then term descending (newest first)
+	slices.SortFunc(semesters, func(a, b lineutil.SemesterPair) int {
+		if a.Year != b.Year {
+			return b.Year - a.Year // Descending
+		}
+		return b.Term - a.Term // Descending
+	})
 
 	return semesters
 }
@@ -1810,7 +1818,9 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 	return h.formatSmartSearchResponse(courses, results)
 }
 
-// formatSmartSearchResponse formats smart search results with confidence labels
+// formatSmartSearchResponse formats smart search results grouped by semester.
+// Results are separated into newest and previous semester groups (10 each max).
+// Each semester gets its own carousel row for clear visual separation.
 func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []rag.SearchResult) []messaging_api.MessageInterface {
 	if len(courses) == 0 {
 		sender := lineutil.GetSender(senderName, h.stickerManager)
@@ -1825,40 +1835,79 @@ func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []
 
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
-	// Create confidence map for lookup
+	// Create confidence map for sorting within each semester
 	confidenceMap := make(map[string]float32)
 	for _, r := range results {
 		confidenceMap[r.UID] = r.Confidence
 	}
 
-	// Build bubbles with relevance labels based on confidence
-	bubbles := make([]messaging_api.FlexBubble, 0, len(courses))
+	// Extract unique semesters from courses (sorted newest first)
+	dataSemesters := extractUniqueSemesters(courses)
+
+	// Group courses by semester
+	semesterCourses := make(map[lineutil.SemesterPair][]storage.Course)
 	for _, course := range courses {
-		confidence := confidenceMap[course.UID]
-		bubble := h.buildSmartCourseBubble(course, confidence)
-		bubbles = append(bubbles, *bubble.FlexBubble)
+		sem := lineutil.SemesterPair{Year: course.Year, Term: course.Term}
+		semesterCourses[sem] = append(semesterCourses[sem], course)
 	}
 
-	// Group into carousels
-	var messages []messaging_api.MessageInterface
+	// Sort each semester's courses by confidence (best first)
+	for sem := range semesterCourses {
+		slices.SortFunc(semesterCourses[sem], func(a, b storage.Course) int {
+			confA, confB := confidenceMap[a.UID], confidenceMap[b.UID]
+			if confA > confB {
+				return -1
+			}
+			if confA < confB {
+				return 1
+			}
+			return 0
+		})
+	}
 
-	for i := 0; i < len(bubbles); i += lineutil.MaxBubblesPerCarousel {
-		end := i + lineutil.MaxBubblesPerCarousel
-		if end > len(bubbles) {
-			end = len(bubbles)
+	// Build one carousel per semester (each semester = one row)
+	// Pre-allocate for max 2 semesters × 2 messages (text header + carousel) = 4
+	const maxPerSemester = 10
+	messages := make([]messaging_api.MessageInterface, 0, 4)
+
+	for i, sem := range dataSemesters {
+		// Only show top 2 semesters (最新學期 + 上個學期)
+		if i >= 2 {
+			break
 		}
 
-		carousel := lineutil.NewFlexCarousel(bubbles[i:end])
-		altText := "🔮 智慧搜尋結果"
-		if i > 0 {
-			altText = fmt.Sprintf("智慧搜尋結果 (%d-%d)", i+1, end)
+		semCourses := semesterCourses[sem]
+		if len(semCourses) == 0 {
+			continue
 		}
-		msg := lineutil.NewFlexMessage(altText, carousel)
+
+		// Limit to 10 per semester
+		if len(semCourses) > maxPerSemester {
+			semCourses = semCourses[:maxPerSemester]
+		}
+
+		// Build bubbles for this semester
+		var bubbles []messaging_api.FlexBubble
+		for _, course := range semCourses {
+			confidence := confidenceMap[course.UID]
+			bubble := h.buildSmartCourseBubble(course, confidence)
+			bubbles = append(bubbles, *bubble.FlexBubble)
+		}
+
+		// Create header text message for this semester
+		semLabel := lineutil.FormatSemesterShort(sem.Year, sem.Term)
+		headerText := fmt.Sprintf("📚 %s 相關課程", semLabel)
+		headerMsg := lineutil.NewTextMessageWithConsistentSender(headerText, sender)
+		messages = append(messages, headerMsg)
+
+		// Create carousel for this semester
+		carousel := lineutil.NewFlexCarousel(bubbles)
+		msg := lineutil.NewFlexMessage("🔮 智慧搜尋結果", carousel)
 		msg.Sender = sender
 		messages = append(messages, msg)
 	}
 
-	// Add Quick Reply directly to messages (no header message needed)
+	// Add Quick Reply to the last message
 	lineutil.AddQuickReplyToMessages(messages,
 		lineutil.QuickReplySmartSearchAction(),
 		lineutil.QuickReplyCourseAction(),
@@ -1868,10 +1917,10 @@ func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []
 	return messages
 }
 
-// buildSmartCourseBubble creates a Flex Message bubble for a course with relevance label.
-// Uses colored header layout for visual hierarchy.
+// buildSmartCourseBubble creates a Flex Message bubble for smart search with relevance labels.
+// Uses getRelevanceLabel for confidence-based tags (green/teal gradient for relevance).
 func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float32) *lineutil.FlexBubble {
-	// Relevance label based on confidence (user-friendly labels)
+	// Get relevance label info (based on BM25 confidence)
 	labelInfo := getRelevanceLabel(confidence)
 
 	// Colored header with course title
@@ -1884,7 +1933,7 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 	// Build body contents using BodyContentBuilder
 	body := lineutil.NewBodyContentBuilder()
 
-	// First row is relevance label
+	// First row is relevance label (🎯最佳匹配/✨高度相關/📋部分相關)
 	body.AddComponent(lineutil.NewBodyLabel(labelInfo).FlexBox)
 
 	// 學期資訊 - first info row (no separator so it flows directly after the label)
@@ -1914,13 +1963,12 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 		).WithStyle("primary").WithColor(labelInfo.Color).WithHeight("sm").FlexButton,
 	).WithSpacing("sm")
 
-	bubble := lineutil.NewFlexBubble(
+	return lineutil.NewFlexBubble(
 		header,
 		nil, // No hero - title is in colored header
 		body.Build(),
 		footer,
 	)
-	return bubble
 }
 
 // getRelevanceLabel returns a user-friendly relevance label info based on relative BM25 score.

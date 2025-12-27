@@ -954,23 +954,6 @@ func TestHistoricalPattern_WesternYearConversion(t *testing.T) {
 	}
 }
 
-// TestDispatchIntent_SmartNoBM25Index tests smart search fallback (old test kept for compatibility).
-func TestDispatchIntent_SmartNoBM25Index_Legacy(t *testing.T) {
-	h := setupTestHandler(t)
-	// BM25Index is nil by default in setupTestHandler
-	ctx := context.Background()
-
-	msgs, err := h.DispatchIntent(ctx, IntentSmart, map[string]string{"query": "想學程式設計"})
-	if err != nil {
-		t.Errorf("DispatchIntent() unexpected error: %v", err)
-		return
-	}
-	// Should return a message indicating smart search is not available
-	if len(msgs) == 0 {
-		t.Error("DispatchIntent() expected fallback message, got none")
-	}
-}
-
 // TestExtractUniqueSemesters tests the data-driven semester extraction logic
 func TestExtractUniqueSemesters(t *testing.T) {
 	tests := []struct {

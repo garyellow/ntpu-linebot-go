@@ -49,6 +49,7 @@ const (
 	ModuleName               = "program" // Module identifier for registration
 	senderName               = "學程小幫手"
 	MaxProgramsPerSearch     = 30 // 3 carousels @ 10 bubbles (LINE max: 5 messages)
+	MaxCoursesPerProgram     = 50 // 5 carousels @ 10 bubbles (LINE API max capacity)
 	MaxTitleDisplayChars     = 50 // Truncation limit for program titles
 	PostbackPrefix           = "program:"
 	PostbackViewCoursesLabel = "查看課程"
@@ -325,8 +326,15 @@ func (h *Handler) handleProgramList(ctx context.Context) []messaging_api.Message
 
 	log.Info("Handling program list query")
 
-	// Get all programs from database
-	programs, err := h.db.GetAllPrograms(ctx)
+	// Get recent 2 semesters for filtering statistics (data-driven)
+	var years, terms []int
+	if h.semesterDetector != nil {
+		years, terms = h.semesterDetector.GetRecentSemesters()
+		log.Debugf("Using semester filter for program statistics: years=%v, terms=%v", years, terms)
+	}
+
+	// Get all programs from database with semester filter
+	programs, err := h.db.GetAllPrograms(ctx, years, terms)
 	if err != nil {
 		log.WithError(err).Error("Failed to get program list")
 		msg := lineutil.NewTextMessageWithConsistentSender(
@@ -364,9 +372,16 @@ func (h *Handler) handleProgramSearch(ctx context.Context, searchTerm string) []
 
 	log.Infof("Handling program search: %s", searchTerm)
 
+	// Get recent 2 semesters for filtering statistics (data-driven)
+	var years, terms []int
+	if h.semesterDetector != nil {
+		years, terms = h.semesterDetector.GetRecentSemesters()
+		log.Debugf("Using semester filter for program search: years=%v, terms=%v", years, terms)
+	}
+
 	// Search using SQL LIKE + fuzzy matching (2-tier parallel search)
 	// Tier 1: SQL LIKE for consecutive substring matches
-	programs, err := h.db.SearchPrograms(ctx, searchTerm)
+	programs, err := h.db.SearchPrograms(ctx, searchTerm, years, terms)
 	if err != nil {
 		log.WithError(err).Error("Failed to search programs")
 		msg := lineutil.NewTextMessageWithConsistentSender(
@@ -379,7 +394,7 @@ func (h *Handler) handleProgramSearch(ctx context.Context, searchTerm string) []
 
 	// Tier 2: Fuzzy character-set matching
 	// Get all programs and filter by character containment
-	allPrograms, err := h.db.GetAllPrograms(ctx)
+	allPrograms, err := h.db.GetAllPrograms(ctx, years, terms)
 	if err != nil {
 		log.WithError(err).Warn("Failed to get all programs for fuzzy matching")
 	} else {
@@ -471,6 +486,23 @@ func (h *Handler) handleProgramCourses(ctx context.Context, programName string) 
 			requiredCourses = append(requiredCourses, pc)
 		} else {
 			electiveCourses = append(electiveCourses, pc)
+		}
+	}
+
+	// Truncate to MaxCoursesPerProgram (LINE API limit: 5 carousels × 10 bubbles)
+	// Prioritize required courses over elective courses when truncating
+	totalCourses := len(requiredCourses) + len(electiveCourses)
+	if totalCourses > MaxCoursesPerProgram {
+		log.Infof("Truncating program courses from %d to %d", totalCourses, MaxCoursesPerProgram)
+		remaining := MaxCoursesPerProgram
+		if len(requiredCourses) >= remaining {
+			requiredCourses = requiredCourses[:remaining]
+			electiveCourses = nil
+		} else {
+			remaining -= len(requiredCourses)
+			if len(electiveCourses) > remaining {
+				electiveCourses = electiveCourses[:remaining]
+			}
 		}
 	}
 
