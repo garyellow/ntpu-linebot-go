@@ -287,7 +287,7 @@ func getNewestTwoSemesters(results []BM25Result) map[semesterPair]bool {
 
 	// Take top 2 semesters
 	result := make(map[semesterPair]bool)
-	for i := 0; i < min(2, len(semList)); i++ {
+	for i := range min(2, len(semList)) {
 		result[semList[i]] = true
 	}
 
