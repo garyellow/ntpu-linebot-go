@@ -116,7 +116,9 @@ func TestHandleMessage_ListSplit(t *testing.T) {
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
-	// 1. Seed database with 55 programs (Batch size is 50)
+	// 1. Seed database with 55 programs
+	// Per design change (Refactor Program List Display), all programs are consolidated
+	// into a single message if they fit within LINE's 5000 char limit
 	programs := make([]struct{ Name, Category, URL string }, 55)
 	for i := 0; i < 55; i++ {
 		programs[i] = struct{ Name, Category, URL string }{
@@ -133,25 +135,21 @@ func TestHandleMessage_ListSplit(t *testing.T) {
 	// 2. Call handler
 	msgs := h.HandleMessage(ctx, "學程列表")
 
-	// 3. Verify pagination
-	// Expect 2 messages:
-	// Msg 1: Programs 1-50
-	// Msg 2: Programs 51-55 + Footer
-	if len(msgs) != 2 {
-		t.Errorf("Expected 2 messages for 55 programs (batch size 50), got %d", len(msgs))
-	} else {
-		// Optional: Check content of first message
+	// 3. Verify single message (consolidated per design)
+	// All 55 programs fit within LINE's 5000 char limit (~3000 chars for short names)
+	if len(msgs) != 1 {
+		t.Errorf("Expected 1 message for 55 programs (consolidated), got %d", len(msgs))
+	}
+
+	// Verify it's a text message and not too long
+	if len(msgs) > 0 {
 		txtMsg, ok := msgs[0].(*messaging_api.TextMessage)
 		if !ok {
-			t.Fatalf("Message 1 is not a TextMessage, got %T", msgs[0])
+			t.Fatalf("Message is not a TextMessage, got %T", msgs[0])
 		}
-		text := txtMsg.Text
-		if utf8.RuneCountInString(text) > 4800 {
-			t.Errorf("Message 1 too long: %d runes", utf8.RuneCountInString(text))
+		if utf8.RuneCountInString(txtMsg.Text) > 5000 {
+			t.Errorf("Message too long: %d runes (LINE limit is 5000)", utf8.RuneCountInString(txtMsg.Text))
 		}
-		// Validating split point roughly
-		// "Program 50" should be in Msg 1, "Program 51" in Msg 2
-		// But let's just trust the count for now as precise text matching depends on sorting
 	}
 }
 

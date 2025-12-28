@@ -1257,11 +1257,13 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 		body.AddInfoRow("👨‍🏫", "授課教師", teacherNames, lineutil.DefaultInfoRowStyle())
 	}
 
-	// 時間 info - 轉換節次為實際時間
+	// 時間 info - 轉換節次為實際時間 (課程詳細使用 wrap=true 以完整顯示所有時間)
 	if len(course.Times) > 0 {
 		formattedTimes := lineutil.FormatCourseTimes(course.Times)
 		timeStr := strings.Join(formattedTimes, "、")
-		body.AddInfoRow("⏰", "上課時間", timeStr, lineutil.DefaultInfoRowStyle())
+		timeStyle := lineutil.DefaultInfoRowStyle()
+		timeStyle.Wrap = true // Full display in course detail page
+		body.AddInfoRow("⏰", "上課時間", timeStr, timeStyle)
 	}
 
 	// 地點 info
@@ -1270,11 +1272,12 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 		body.AddInfoRow("📍", "上課地點", locationStr, lineutil.DefaultInfoRowStyle())
 	}
 
-	// 備註 info
+	// 備註 info (課程詳細使用 wrap=true 允許較長備註顯示)
 	if course.Note != "" {
 		noteStyle := lineutil.DefaultInfoRowStyle()
 		noteStyle.ValueSize = "xs"
 		noteStyle.ValueColor = lineutil.ColorLabel // Use semantic color constant
+		noteStyle.Wrap = true                      // Allow note to wrap in detail page
 		body.AddInfoRow("📝", "備註", course.Note, noteStyle)
 	}
 

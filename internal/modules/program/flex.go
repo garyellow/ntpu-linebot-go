@@ -177,6 +177,11 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCou
 	sb.WriteString("━━━━━━━━━━━━━━━━\n")
 	sb.WriteString("💡 輸入「學程 關鍵字」搜尋特定學程")
 
+	// Add update time if available (use first program's cached_at)
+	if len(programs) > 0 && programs[0].CachedAt > 0 {
+		sb.WriteString(lineutil.FormatCacheTimeFooter(programs[0].CachedAt))
+	}
+
 	// Create the final (or only) message
 	msg := lineutil.NewTextMessageWithConsistentSender(sb.String(), sender)
 	msg.QuickReply = lineutil.NewQuickReply(QuickReplyProgramNav())
@@ -399,11 +404,8 @@ func (h *Handler) buildProgramCourseBubble(pc storage.ProgramCourse, isRequired 
 		body.AddInfoRow("⏰", "上課時間", timeStr, lineutil.DefaultInfoRowStyle())
 	}
 
-	// Location info
-	if len(pc.Course.Locations) > 0 {
-		locationStr := strings.Join(pc.Course.Locations, "、")
-		body.AddInfoRow("📍", "上課地點", locationStr, lineutil.DefaultInfoRowStyle())
-	}
+	// Note: Location info is omitted for program course bubbles to keep display compact
+	// Users can view full details by clicking "查看詳細"
 
 	// Footer: View course detail button (display course title, not UID)
 	viewDetailBtn := lineutil.NewFlexButton(

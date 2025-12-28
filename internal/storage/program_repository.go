@@ -198,14 +198,14 @@ func (db *DB) GetAllPrograms(ctx context.Context, years, terms []int) ([]Program
 				COALESCE(p.url, '') as url,
 				SUM(CASE WHEN cp.course_type = '必' AND (` + semesterCond + `) THEN 1 ELSE 0 END) as required_count,
 				SUM(CASE WHEN cp.course_type != '必' AND (` + semesterCond + `) THEN 1 ELSE 0 END) as elective_count,
-				SUM(CASE WHEN (` + semesterCond + `) THEN 1 ELSE 0 END) as total_count
+				SUM(CASE WHEN (` + semesterCond + `) THEN 1 ELSE 0 END) as total_count,
+				p.cached_at
 			FROM programs p
 			LEFT JOIN course_programs cp ON p.name = cp.program_name
 			LEFT JOIN courses c ON cp.course_uid = c.uid
 			GROUP BY p.name, p.category
 			ORDER BY p.name
 		`
-	} else {
 		// No semester filter - count all courses for each program in LMS list
 		query = `
 			SELECT
@@ -214,7 +214,8 @@ func (db *DB) GetAllPrograms(ctx context.Context, years, terms []int) ([]Program
 				COALESCE(p.url, '') as url,
 				SUM(CASE WHEN cp.course_type = '必' THEN 1 ELSE 0 END) as required_count,
 				SUM(CASE WHEN cp.course_type != '必' THEN 1 ELSE 0 END) as elective_count,
-				COUNT(cp.course_uid) as total_count
+				COUNT(cp.course_uid) as total_count,
+				p.cached_at
 			FROM programs p
 			LEFT JOIN course_programs cp ON p.name = cp.program_name
 			GROUP BY p.name, p.category
@@ -230,7 +231,7 @@ func (db *DB) GetAllPrograms(ctx context.Context, years, terms []int) ([]Program
 	var programs []Program
 	for rows.Next() {
 		var p Program
-		if err := rows.Scan(&p.Name, &p.Category, &p.URL, &p.RequiredCount, &p.ElectiveCount, &p.TotalCount); err != nil {
+		if err := rows.Scan(&p.Name, &p.Category, &p.URL, &p.RequiredCount, &p.ElectiveCount, &p.TotalCount, &p.CachedAt); err != nil {
 			return nil, fmt.Errorf("scan program: %w", err)
 		}
 		programs = append(programs, p)
@@ -252,7 +253,8 @@ func (db *DB) GetProgramByName(ctx context.Context, name string) (*Program, erro
 			COALESCE(p.url, '') as url,
 			SUM(CASE WHEN cp.course_type = '必' THEN 1 ELSE 0 END) as required_count,
 			SUM(CASE WHEN cp.course_type != '必' THEN 1 ELSE 0 END) as elective_count,
-			COUNT(cp.course_uid) as total_count
+			COUNT(cp.course_uid) as total_count,
+			p.cached_at
 		FROM programs p
 		LEFT JOIN course_programs cp ON p.name = cp.program_name
 		WHERE p.name = ?
@@ -260,7 +262,7 @@ func (db *DB) GetProgramByName(ctx context.Context, name string) (*Program, erro
 	`
 
 	var prog Program
-	err := db.reader.QueryRowContext(ctx, query, name).Scan(&prog.Name, &prog.Category, &prog.URL, &prog.RequiredCount, &prog.ElectiveCount, &prog.TotalCount)
+	err := db.reader.QueryRowContext(ctx, query, name).Scan(&prog.Name, &prog.Category, &prog.URL, &prog.RequiredCount, &prog.ElectiveCount, &prog.TotalCount, &prog.CachedAt)
 	if err == sql.ErrNoRows {
 		return nil, sql.ErrNoRows
 	}
@@ -300,7 +302,8 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, term
 				COALESCE(p.url, '') as url,
 				SUM(CASE WHEN cp.course_type = '必' AND (` + semesterCond + `) THEN 1 ELSE 0 END) as required_count,
 				SUM(CASE WHEN cp.course_type != '必' AND (` + semesterCond + `) THEN 1 ELSE 0 END) as elective_count,
-				SUM(CASE WHEN (` + semesterCond + `) THEN 1 ELSE 0 END) as total_count
+				SUM(CASE WHEN (` + semesterCond + `) THEN 1 ELSE 0 END) as total_count,
+				p.cached_at
 			FROM programs p
 			LEFT JOIN course_programs cp ON p.name = cp.program_name
 			LEFT JOIN courses c ON cp.course_uid = c.uid
@@ -308,7 +311,6 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, term
 			GROUP BY p.name, p.category
 			ORDER BY p.name
 		`
-	} else {
 		// No semester filter (legacy behavior)
 		query = `
 			SELECT
@@ -317,7 +319,8 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, term
 				COALESCE(p.url, '') as url,
 				SUM(CASE WHEN cp.course_type = '必' THEN 1 ELSE 0 END) as required_count,
 				SUM(CASE WHEN cp.course_type != '必' THEN 1 ELSE 0 END) as elective_count,
-				COUNT(cp.course_uid) as total_count
+				COUNT(cp.course_uid) as total_count,
+				p.cached_at
 			FROM programs p
 			LEFT JOIN course_programs cp ON p.name = cp.program_name
 			WHERE p.name LIKE ? ESCAPE '\'
@@ -336,7 +339,7 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, term
 	var programs []Program
 	for rows.Next() {
 		var p Program
-		if err := rows.Scan(&p.Name, &p.Category, &p.URL, &p.RequiredCount, &p.ElectiveCount, &p.TotalCount); err != nil {
+		if err := rows.Scan(&p.Name, &p.Category, &p.URL, &p.RequiredCount, &p.ElectiveCount, &p.TotalCount, &p.CachedAt); err != nil {
 			return nil, fmt.Errorf("scan program: %w", err)
 		}
 		programs = append(programs, p)

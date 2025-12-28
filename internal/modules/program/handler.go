@@ -555,67 +555,12 @@ func (h *Handler) handleCourseProgramsList(ctx context.Context, courseUID string
 	h.metrics.RecordCacheHit(ModuleName)
 	log.Infof("Found %d programs for course: %s", len(programs), courseUID)
 
-	// For ≤10 programs, use Flex carousel (same style as program search)
-	if len(programs) <= MaxSearchResultsWithCard {
-		return h.formatCourseProgramsAsCarousel(ctx, courseName, programs)
-	}
-
-	// For >10 programs, use text list with course name display
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("🎓 課程「%s」的相關學程\n\n", courseName))
-
-	// Separate required and elective
-	var required, elective []storage.ProgramRequirement
-	for _, p := range programs {
-		if p.CourseType == "必" {
-			required = append(required, p)
-		} else {
-			elective = append(elective, p)
-		}
-	}
-
-	if len(required) > 0 {
-		sb.WriteString("✅ 必修學程：\n")
-		for _, p := range required {
-			sb.WriteString(fmt.Sprintf("• %s\n", p.ProgramName))
-		}
-		sb.WriteString("\n")
-	}
-
-	if len(elective) > 0 {
-		sb.WriteString("📝 選修學程：\n")
-		for _, p := range elective {
-			sb.WriteString(fmt.Sprintf("• %s\n", p.ProgramName))
-		}
-	}
-
-	sb.WriteString("\n💡 點擊下方按鈕查看學程的所有課程")
-
-	msg := lineutil.NewTextMessageWithConsistentSender(sb.String(), sender)
-
-	// Add quick reply items for each program (display course name in action text)
-	quickReplyItems := make([]lineutil.QuickReplyItem, 0, len(programs)+2)
-	for _, p := range programs {
-		if len(quickReplyItems) >= 11 { // Leave room for list and help
-			break
-		}
-		quickReplyItems = append(quickReplyItems, lineutil.QuickReplyItem{
-			Action: lineutil.NewPostbackActionWithDisplayText(
-				lineutil.TruncateRunes("🎓 "+p.ProgramName, 20),
-				lineutil.TruncateRunes(fmt.Sprintf("查看「%s」課程", p.ProgramName), 40),
-				PostbackPrefix+"courses"+bot.PostbackSplitChar+p.ProgramName,
-			),
-		})
-	}
-	quickReplyItems = append(quickReplyItems, QuickReplyProgramListAction())
-	quickReplyItems = append(quickReplyItems, lineutil.QuickReplyHelpAction())
-
-	msg.QuickReply = lineutil.NewQuickReply(quickReplyItems)
-
-	return []messaging_api.MessageInterface{msg}
+	// Always use Flex carousel for related programs (allows unlimited rows via LINE API)
+	// This provides a consistent UI experience regardless of program count
+	return h.formatCourseProgramsAsCarousel(ctx, courseName, programs)
 }
 
-// formatCourseProgramsAsCarousel formats course programs as Flex carousel (for ≤10 programs).
+// formatCourseProgramsAsCarousel formats course programs as Flex carousel.
 func (h *Handler) formatCourseProgramsAsCarousel(ctx context.Context, courseName string, programs []storage.ProgramRequirement) []messaging_api.MessageInterface {
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 

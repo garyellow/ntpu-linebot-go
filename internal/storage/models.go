@@ -65,6 +65,7 @@ type Program struct {
 	RequiredCount int    `json:"required_count"` // Number of required courses
 	ElectiveCount int    `json:"elective_count"` // Number of elective courses
 	TotalCount    int    `json:"total_count"`    // Total number of courses
+	CachedAt      int64  `json:"cached_at"`      // Unix timestamp when program data was synced
 }
 
 // ProgramCourse represents a course within a program with its requirement type.
