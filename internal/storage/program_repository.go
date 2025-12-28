@@ -13,8 +13,8 @@ import (
 // buildSemesterConditions creates SQL conditions for filtering by semesters.
 // Returns the SQL condition string (e.g., "(c.year = ? AND c.term = ?) OR ..."),
 // the placeholder values as args, and whether any conditions were built.
-// The tablePrefix should be "c" for courses table references.
-func buildSemesterConditions(years, terms []int, tablePrefix string) (conditions string, args []interface{}, ok bool) {
+// Always uses "c" as table alias for courses table.
+func buildSemesterConditions(years, terms []int) (conditions string, args []interface{}, ok bool) {
 	if len(years) == 0 || len(years) != len(terms) {
 		return "", nil, false
 	}
@@ -22,7 +22,7 @@ func buildSemesterConditions(years, terms []int, tablePrefix string) (conditions
 	parts := make([]string, 0, len(years))
 	args = make([]interface{}, 0, len(years)*2)
 	for i := range years {
-		parts = append(parts, fmt.Sprintf("(%s.year = ? AND %s.term = ?)", tablePrefix, tablePrefix))
+		parts = append(parts, "(c.year = ? AND c.term = ?)")
 		args = append(args, years[i], terms[i])
 	}
 	return strings.Join(parts, " OR "), args, true
@@ -180,7 +180,7 @@ func (db *DB) GetAllPrograms(ctx context.Context, years, terms []int) ([]Program
 	var query string
 	var args []any
 
-	if semesterCond, semesterArgs, ok := buildSemesterConditions(years, terms, "c"); ok {
+	if semesterCond, semesterArgs, ok := buildSemesterConditions(years, terms); ok {
 		// We use semesterCond 3 times in the query (required_count, elective_count, total_count)
 		// so we need to replicate the arguments 3 times.
 		args = make([]any, 0, len(semesterArgs)*3)
@@ -250,7 +250,7 @@ func (db *DB) GetProgramByName(ctx context.Context, name string, years, terms []
 	var query string
 	var args []any
 
-	if semesterCond, semesterArgs, ok := buildSemesterConditions(years, terms, "c"); ok {
+	if semesterCond, semesterArgs, ok := buildSemesterConditions(years, terms); ok {
 		// Semester args replicated 3 times (for required_count, elective_count, total_count)
 		args = append(args, name)
 		for range 3 {
@@ -319,7 +319,7 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, term
 	// Search term first
 	args = append(args, "%"+sanitized+"%")
 
-	if semesterCond, semesterArgs, ok := buildSemesterConditions(years, terms, "c"); ok {
+	if semesterCond, semesterArgs, ok := buildSemesterConditions(years, terms); ok {
 		// Semester args replicated 3 times
 		for range 3 {
 			args = append(args, semesterArgs...)
@@ -390,7 +390,7 @@ func (db *DB) GetProgramCourses(ctx context.Context, programName string, years, 
 	var query string
 	var args []any
 
-	if semesterCond, semesterArgs, ok := buildSemesterConditions(years, terms, "c"); ok {
+	if semesterCond, semesterArgs, ok := buildSemesterConditions(years, terms); ok {
 		// Program name first, then semester args
 		args = append(args, programName)
 		args = append(args, semesterArgs...)
