@@ -14,6 +14,7 @@ import (
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	"github.com/garyellow/ntpu-linebot-go/internal/config"
+	"github.com/garyellow/ntpu-linebot-go/internal/data"
 	"github.com/garyellow/ntpu-linebot-go/internal/genai"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
@@ -25,6 +26,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/rag"
 	"github.com/garyellow/ntpu-linebot-go/internal/ratelimit"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
+	"github.com/garyellow/ntpu-linebot-go/internal/scraper/ntpu"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 	"github.com/garyellow/ntpu-linebot-go/internal/warmup"
@@ -491,8 +493,14 @@ func (a *Application) runCacheCleanup(ctx context.Context) {
 		totalDeleted += deleted
 	}
 
-	if deleted, err := a.db.DeleteExpiredCoursePrograms(ctx); err != nil {
+	if deleted, err := a.db.DeleteExpiredCoursePrograms(ctx, a.cfg.CacheTTL); err != nil {
 		a.logger.WithError(err).Error("Failed to cleanup expired course programs")
+	} else {
+		totalDeleted += deleted
+	}
+
+	if deleted, err := a.db.DeleteExpiredPrograms(ctx, a.cfg.CacheTTL); err != nil {
+		a.logger.WithError(err).Error("Failed to cleanup expired programs")
 	} else {
 		totalDeleted += deleted
 	}
@@ -593,6 +601,37 @@ func (a *Application) performProactiveWarmup(ctx context.Context, warmID bool) {
 	warmupCtx, cancel := context.WithTimeout(ctx, config.WarmupProactive)
 	defer cancel()
 
+	// Sync program data (LMS URLs) to database
+	// 1. Try dynamic scraping from LMS (auto-discovers new programs)
+	// 2. Fall back to static data if scraping fails or returns no results
+	var programsToSync []struct{ Name, Category, URL string }
+
+	dynamicPrograms, err := ntpu.ScrapePrograms(warmupCtx, a.scraperClient)
+	if err == nil && len(dynamicPrograms) > 0 {
+		a.logger.WithField("count", len(dynamicPrograms)).Info("Scraped program data from LMS")
+		programsToSync = make([]struct{ Name, Category, URL string }, len(dynamicPrograms))
+		for i, p := range dynamicPrograms {
+			programsToSync[i] = struct{ Name, Category, URL string }{Name: p.Name, Category: p.Category, URL: p.URL}
+		}
+	} else {
+		// Fallback to static data
+		if err != nil {
+			a.logger.WithError(err).Warn("Failed to scrape programs, using static data")
+		} else {
+			a.logger.Warn("Scraped 0 programs, using static data as fallback")
+		}
+		programsToSync = make([]struct{ Name, Category, URL string }, len(data.AllPrograms))
+		for i, p := range data.AllPrograms {
+			programsToSync[i] = struct{ Name, Category, URL string }{Name: p.Name, Category: "", URL: p.URL}
+		}
+	}
+
+	if err := a.db.SyncPrograms(warmupCtx, programsToSync); err != nil {
+		a.logger.WithError(err).Warn("Failed to sync program data")
+	} else {
+		a.logger.WithField("count", len(programsToSync)).Info("Program metadata synced")
+	}
+
 	opts := warmup.Options{
 		Reset:     false,
 		HasLLMKey: a.cfg.HasLLMProvider(),
@@ -657,12 +696,14 @@ func (a *Application) recordCacheSizeMetrics(ctx context.Context) {
 	contactCount, _ := a.db.CountContacts(ctx)
 	courseCount, _ := a.db.CountCourses(ctx)
 	syllabiCount, _ := a.db.CountSyllabi(ctx)
+	programCount, _ := a.db.CountPrograms(ctx)
 	stickerCount := a.stickerManager.Count()
 
 	a.metrics.SetCacheSize("students", studentCount)
 	a.metrics.SetCacheSize("contacts", contactCount)
 	a.metrics.SetCacheSize("courses", courseCount)
 	a.metrics.SetCacheSize("syllabi", syllabiCount)
+	a.metrics.SetCacheSize("programs", programCount)
 	a.metrics.SetCacheSize("stickers", stickerCount)
 
 	if a.bm25Index != nil {

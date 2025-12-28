@@ -442,7 +442,7 @@ func parseProgramFields(td5, td6 *goquery.Selection) []storage.ProgramRequiremen
 		}
 
 		programs = append(programs, storage.ProgramRequirement{
-			ProgramName: item,
+			ProgramName: cleanProgramName(item),
 			CourseType:  courseType,
 		})
 	}

@@ -115,10 +115,48 @@ func (db *DB) SaveCourseProgramsBatch(ctx context.Context, courses []*Course) er
 	return nil
 }
 
-// GetAllPrograms returns all unique program names with course statistics.
+// SyncPrograms synchronizes program metadata (name + category + URL) from static data.
+// Uses INSERT OR REPLACE to upsert program information.
+func (db *DB) SyncPrograms(ctx context.Context, programs []struct{ Name, Category, URL string }) error {
+	if len(programs) == 0 {
+		return nil
+	}
+
+	tx, err := db.writer.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	cachedAt := time.Now().Unix()
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT OR REPLACE INTO programs (name, category, url, cached_at)
+		VALUES (?, ?, ?, ?)
+	`)
+	if err != nil {
+		return fmt.Errorf("prepare statement: %w", err)
+	}
+	defer func() { _ = stmt.Close() }()
+
+	for _, p := range programs {
+		_, err = stmt.ExecContext(ctx, p.Name, p.Category, p.URL, cachedAt)
+		if err != nil {
+			return fmt.Errorf("insert program %s (%s): %w", p.Name, p.Category, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+// GetAllPrograms returns all unique program names with course statistics and LMS URLs.
 // If years and terms are provided (non-empty, equal length), statistics are limited to those semesters.
 // If years and terms are empty or nil, all courses for each program are counted (legacy behavior).
 // Programs are sorted alphabetically by name.
+// URL is fetched from the programs table via LEFT JOIN.
 func (db *DB) GetAllPrograms(ctx context.Context, years, terms []int) ([]Program, error) {
 	var query string
 	var args []interface{}
@@ -131,32 +169,49 @@ func (db *DB) GetAllPrograms(ctx context.Context, years, terms []int) ([]Program
 			args = append(args, years[i], terms[i])
 		}
 
+		// Query flipped: Select from programs table first (Source of Truth)
+		// Note: course_programs is joined via LEFT JOIN, so programs without courses still appear.
+		// However, we need to be careful with the WHERE clause on semester.
+		// If we put semester condition in WHERE, it filters out the program entirely if no courses match.
+		// So semester condition must be in the JOIN ON clause or we need a subquery.
+		// Subquery is safer for aggregation:
+		/*
+		   SELECT p.name, p.url, ...
+		   FROM programs p
+		   LEFT JOIN course_programs cp ON p.name = cp.program_name
+		   LEFT JOIN courses c ON cp.course_uid = c.uid AND (semester_conditions)
+		   ...
+		*/
 		query = `
 			SELECT
-				cp.program_name,
-				SUM(CASE WHEN cp.course_type = '必' THEN 1 ELSE 0 END) as required_count,
-				SUM(CASE WHEN cp.course_type != '必' THEN 1 ELSE 0 END) as elective_count,
-				COUNT(*) as total_count
-			FROM course_programs cp
-			JOIN courses c ON cp.course_uid = c.uid
-			WHERE ` + strings.Join(semesterConditions, " OR ") + `
-			GROUP BY cp.program_name
-			ORDER BY cp.program_name
+				p.name,
+				MAX(p.category) as category,
+				COALESCE(p.url, '') as url,
+				SUM(CASE WHEN cp.course_type = '必' AND (` + strings.Join(semesterConditions, " OR ") + `) THEN 1 ELSE 0 END) as required_count,
+				SUM(CASE WHEN cp.course_type != '必' AND (` + strings.Join(semesterConditions, " OR ") + `) THEN 1 ELSE 0 END) as elective_count,
+				SUM(CASE WHEN (` + strings.Join(semesterConditions, " OR ") + `) THEN 1 ELSE 0 END) as total_count
+			FROM programs p
+			LEFT JOIN course_programs cp ON p.name = cp.program_name
+			LEFT JOIN courses c ON cp.course_uid = c.uid
+			GROUP BY p.name
+			ORDER BY p.name
 		`
 	} else {
-		// No semester filter - count all courses (legacy behavior)
+		// No semester filter - count all courses for each program in LMS list
 		query = `
 			SELECT
-				program_name,
-				SUM(CASE WHEN course_type = '必' THEN 1 ELSE 0 END) as required_count,
-				SUM(CASE WHEN course_type != '必' THEN 1 ELSE 0 END) as elective_count,
-				COUNT(*) as total_count
-			FROM course_programs
-			GROUP BY program_name
-			ORDER BY program_name
+				p.name,
+				MAX(p.category) as category,
+				COALESCE(p.url, '') as url,
+				SUM(CASE WHEN cp.course_type = '必' THEN 1 ELSE 0 END) as required_count,
+				SUM(CASE WHEN cp.course_type != '必' THEN 1 ELSE 0 END) as elective_count,
+				COUNT(cp.course_uid) as total_count
+			FROM programs p
+			LEFT JOIN course_programs cp ON p.name = cp.program_name
+			GROUP BY p.name
+			ORDER BY p.name
 		`
 	}
-
 	rows, err := db.reader.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query programs: %w", err)
@@ -166,7 +221,7 @@ func (db *DB) GetAllPrograms(ctx context.Context, years, terms []int) ([]Program
 	var programs []Program
 	for rows.Next() {
 		var p Program
-		if err := rows.Scan(&p.Name, &p.RequiredCount, &p.ElectiveCount, &p.TotalCount); err != nil {
+		if err := rows.Scan(&p.Name, &p.Category, &p.URL, &p.RequiredCount, &p.ElectiveCount, &p.TotalCount); err != nil {
 			return nil, fmt.Errorf("scan program: %w", err)
 		}
 		programs = append(programs, p)
@@ -179,21 +234,24 @@ func (db *DB) GetAllPrograms(ctx context.Context, years, terms []int) ([]Program
 	return programs, nil
 }
 
-// GetProgramByName returns a single program with statistics by exact name match.
+// GetProgramByName returns a single program with statistics and URL by exact name match.
 func (db *DB) GetProgramByName(ctx context.Context, name string) (*Program, error) {
 	query := `
 		SELECT
-			program_name,
-			SUM(CASE WHEN course_type = '必' THEN 1 ELSE 0 END) as required_count,
-			SUM(CASE WHEN course_type != '必' THEN 1 ELSE 0 END) as elective_count,
-			COUNT(*) as total_count
-		FROM course_programs
-		WHERE program_name = ?
-		GROUP BY program_name
+			p.name,
+			MAX(p.category) as category,
+			COALESCE(p.url, '') as url,
+			SUM(CASE WHEN cp.course_type = '必' THEN 1 ELSE 0 END) as required_count,
+			SUM(CASE WHEN cp.course_type != '必' THEN 1 ELSE 0 END) as elective_count,
+			COUNT(cp.course_uid) as total_count
+		FROM programs p
+		LEFT JOIN course_programs cp ON p.name = cp.program_name
+		WHERE p.name = ?
+		GROUP BY p.name
 	`
 
-	var p Program
-	err := db.reader.QueryRowContext(ctx, query, name).Scan(&p.Name, &p.RequiredCount, &p.ElectiveCount, &p.TotalCount)
+	var prog Program
+	err := db.reader.QueryRowContext(ctx, query, name).Scan(&prog.Name, &prog.Category, &prog.URL, &prog.RequiredCount, &prog.ElectiveCount, &prog.TotalCount)
 	if err == sql.ErrNoRows {
 		return nil, sql.ErrNoRows
 	}
@@ -201,12 +259,12 @@ func (db *DB) GetProgramByName(ctx context.Context, name string) (*Program, erro
 		return nil, fmt.Errorf("query program by name: %w", err)
 	}
 
-	return &p, nil
+	return &prog, nil
 }
 
 // SearchPrograms searches for programs by name using fuzzy matching.
 // If years and terms are provided (non-empty, equal length), statistics are limited to those semesters.
-// Returns programs where name contains the search term.
+// Returns programs where name contains the search term, including URL from programs table.
 func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, terms []int) ([]Program, error) {
 	// Validate input
 	if len(searchTerm) > 100 {
@@ -230,28 +288,34 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, term
 
 		query = `
 			SELECT
-				cp.program_name,
-				SUM(CASE WHEN cp.course_type = '必' THEN 1 ELSE 0 END) as required_count,
-				SUM(CASE WHEN cp.course_type != '必' THEN 1 ELSE 0 END) as elective_count,
-				COUNT(*) as total_count
-			FROM course_programs cp
-			JOIN courses c ON cp.course_uid = c.uid
-			WHERE cp.program_name LIKE ? ESCAPE '\' AND (` + strings.Join(semesterConditions, " OR ") + `)
-			GROUP BY cp.program_name
-			ORDER BY cp.program_name
+				p.name,
+				MAX(p.category) as category,
+				COALESCE(p.url, '') as url,
+				SUM(CASE WHEN cp.course_type = '必' AND (` + strings.Join(semesterConditions, " OR ") + `) THEN 1 ELSE 0 END) as required_count,
+				SUM(CASE WHEN cp.course_type != '必' AND (` + strings.Join(semesterConditions, " OR ") + `) THEN 1 ELSE 0 END) as elective_count,
+				SUM(CASE WHEN (` + strings.Join(semesterConditions, " OR ") + `) THEN 1 ELSE 0 END) as total_count
+			FROM programs p
+			LEFT JOIN course_programs cp ON p.name = cp.program_name
+			LEFT JOIN courses c ON cp.course_uid = c.uid
+			WHERE p.name LIKE ? ESCAPE '\'
+			GROUP BY p.name
+			ORDER BY p.name
 		`
 	} else {
 		// No semester filter (legacy behavior)
 		query = `
 			SELECT
-				program_name,
-				SUM(CASE WHEN course_type = '必' THEN 1 ELSE 0 END) as required_count,
-				SUM(CASE WHEN course_type != '必' THEN 1 ELSE 0 END) as elective_count,
-				COUNT(*) as total_count
-			FROM course_programs
-			WHERE program_name LIKE ? ESCAPE '\'
-			GROUP BY program_name
-			ORDER BY program_name
+				p.name,
+				MAX(p.category) as category,
+				COALESCE(p.url, '') as url,
+				SUM(CASE WHEN cp.course_type = '必' THEN 1 ELSE 0 END) as required_count,
+				SUM(CASE WHEN cp.course_type != '必' THEN 1 ELSE 0 END) as elective_count,
+				COUNT(cp.course_uid) as total_count
+			FROM programs p
+			LEFT JOIN course_programs cp ON p.name = cp.program_name
+			WHERE p.name LIKE ? ESCAPE '\'
+			GROUP BY p.name
+			ORDER BY p.name
 		`
 		args = []interface{}{"%" + sanitized + "%"}
 	}
@@ -265,7 +329,7 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, term
 	var programs []Program
 	for rows.Next() {
 		var p Program
-		if err := rows.Scan(&p.Name, &p.RequiredCount, &p.ElectiveCount, &p.TotalCount); err != nil {
+		if err := rows.Scan(&p.Name, &p.Category, &p.URL, &p.RequiredCount, &p.ElectiveCount, &p.TotalCount); err != nil {
 			return nil, fmt.Errorf("scan program: %w", err)
 		}
 		programs = append(programs, p)
@@ -307,7 +371,7 @@ func (db *DB) GetProgramCourses(ctx context.Context, programName string, years, 
 			ORDER BY
 				CASE WHEN cp.course_type = '必' THEN 0 ELSE 1 END,
 				c.year DESC,
-			c.term DESC
+				c.term DESC
 		`
 	} else {
 		// No semester filter - return all courses for the program
@@ -404,16 +468,50 @@ func (db *DB) GetCoursePrograms(ctx context.Context, courseUID string) ([]Progra
 	return programs, nil
 }
 
-// DeleteExpiredCoursePrograms deletes course-program relationships older than TTL.
-func (db *DB) DeleteExpiredCoursePrograms(ctx context.Context) (int64, error) {
-	threshold := time.Now().Add(-db.cacheTTL).Unix()
+// DeleteExpiredCoursePrograms removes course-program relationships older than the specified TTL.
+// Returns the number of deleted entries.
+func (db *DB) DeleteExpiredCoursePrograms(ctx context.Context, ttl time.Duration) (int64, error) {
+	query := `DELETE FROM course_programs WHERE cached_at < ?`
+	expiryTime := time.Now().Add(-ttl).Unix()
 
-	result, err := db.writer.ExecContext(ctx, "DELETE FROM course_programs WHERE cached_at < ?", threshold)
+	result, err := db.writer.ExecContext(ctx, query, expiryTime)
 	if err != nil {
-		return 0, fmt.Errorf("delete expired course programs: %w", err)
+		return 0, fmt.Errorf("failed to delete expired course programs: %w", err)
 	}
 
-	return result.RowsAffected()
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get rows affected for course programs: %w", err)
+	}
+	return rowsAffected, nil
+}
+
+// DeleteExpiredPrograms removes programs older than the specified TTL.
+// Returns the number of deleted entries.
+func (db *DB) DeleteExpiredPrograms(ctx context.Context, ttl time.Duration) (int64, error) {
+	query := `DELETE FROM programs WHERE cached_at < ?`
+	expiryTime := time.Now().Add(-ttl).Unix()
+
+	result, err := db.writer.ExecContext(ctx, query, expiryTime)
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete expired programs: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get rows affected for programs: %w", err)
+	}
+	return rowsAffected, nil
+}
+
+// CountPrograms returns the total number of programs in the database.
+func (db *DB) CountPrograms(ctx context.Context) (int, error) {
+	var count int
+	err := db.reader.QueryRowContext(ctx, "SELECT COUNT(*) FROM programs").Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count programs: %w", err)
+	}
+	return count, nil
 }
 
 // parseJSONArray parses a JSON array string into a slice.

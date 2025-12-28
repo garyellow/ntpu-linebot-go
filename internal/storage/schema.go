@@ -34,6 +34,11 @@ func InitSchema(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 
+	// Create programs table for academic program metadata (學程)
+	if err := createProgramsTable(ctx, db); err != nil {
+		return err
+	}
+
 	// Create course_programs table for course-program relationships (學程)
 	if err := createCourseProgramsTable(ctx, db); err != nil {
 		return err
@@ -196,6 +201,27 @@ func createSyllabiTable(ctx context.Context, db *sql.DB) error {
 
 	if _, err := db.ExecContext(ctx, query); err != nil {
 		return fmt.Errorf("create syllabi table: %w", err)
+	}
+
+	return nil
+}
+
+// createProgramsTable creates table for academic program metadata (學程).
+// Stores program name and LMS detail URL for each program.
+// Program-course relationships are stored in course_programs table.
+func createProgramsTable(ctx context.Context, db *sql.DB) error {
+	query := `
+	CREATE TABLE IF NOT EXISTS programs (
+		name TEXT PRIMARY KEY,
+		category TEXT NOT NULL,
+		url TEXT NOT NULL,
+		cached_at INTEGER NOT NULL DEFAULT 0
+	);
+	CREATE INDEX IF NOT EXISTS idx_programs_cached_at ON programs(cached_at);
+	`
+
+	if _, err := db.ExecContext(ctx, query); err != nil {
+		return fmt.Errorf("create programs table: %w", err)
 	}
 
 	return nil

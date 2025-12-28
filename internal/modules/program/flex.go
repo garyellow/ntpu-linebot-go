@@ -20,8 +20,86 @@ const (
 	ColorHeaderElective = "#0891B2" // 選修 - cyan (選擇、靈活)
 )
 
-// formatProgramListResponse formats a list of programs as carousel Flex Messages.
+// formatProgramListResponse formats a list of programs as a text message.
+// Uses text-based display to handle large lists (>50 programs).
+// Format:
+// 🎓 學程列表 (共 N 個)
+// ────────────────
+//  1. 學程名稱 (必X/選Y)
+//     https://lms.ntpu.edu.tw/...
+//
+// 2. 學程名稱...
+// formatProgramListResponse formats a list of programs as a text message.
+// Uses text-based display to handle large lists (>50 programs).
+// Splits into multiple messages if needed to avoid 5000 char limit.
 func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCount int) []messaging_api.MessageInterface {
+	sender := lineutil.GetSender(senderName, h.stickerManager)
+	var messages []messaging_api.MessageInterface
+
+	// Batch size to keep messages reasonably sized (LINE limit is 5000 chars)
+	const batchSize = 30
+
+	for i := 0; i < len(programs); i += batchSize {
+		end := i + batchSize
+		if end > len(programs) {
+			end = len(programs)
+		}
+
+		batchPrograms := programs[i:end]
+		var sb strings.Builder
+
+		if i == 0 {
+			sb.WriteString(fmt.Sprintf("🎓 學程列表 (共 %d 個)\n", totalCount))
+			sb.WriteString("━━━━━━━━━━━━━━━━\n\n")
+		}
+
+		for j, prog := range batchPrograms {
+			// Global index
+			idx := i + j + 1
+
+			// Format:
+			// 1. 學程名稱 | 必 X / 選 Y (if counts > 0)
+			// 🔗 https://...
+
+			sb.WriteString(fmt.Sprintf("%d. %s", idx, prog.Name))
+
+			// Show course counts if available
+			if prog.RequiredCount > 0 || prog.ElectiveCount > 0 {
+				sb.WriteString(fmt.Sprintf(" | 必修 %d 門 · 選修 %d 門", prog.RequiredCount, prog.ElectiveCount))
+			}
+			sb.WriteString("\n")
+
+			// Add URL if available
+			if prog.URL != "" {
+				sb.WriteString(fmt.Sprintf("🔗 %s\n", prog.URL))
+			}
+
+			// Add spacing between items
+			sb.WriteString("\n")
+		}
+
+		// Footer on the last message
+		if end == len(programs) {
+			sb.WriteString("━━━━━━━━━━━━━━━━\n")
+			sb.WriteString("💡 輸入「學程 關鍵字」搜尋特定學程")
+		}
+
+		msg := lineutil.NewTextMessageWithConsistentSender(sb.String(), sender)
+
+		// Add quick reply to the last message only
+		if end == len(programs) {
+			msg.QuickReply = lineutil.NewQuickReply(QuickReplyProgramNav())
+		}
+
+		messages = append(messages, msg)
+	}
+
+	return messages
+}
+
+// formatProgramSearchResponse formats search results as carousel Flex Messages.
+// Used when results are few enough to be displayed in a carousel (<= MaxSearchResultsWithCard).
+func (h *Handler) formatProgramSearchResponse(programs []storage.Program) []messaging_api.MessageInterface {
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	// Build carousel bubbles
@@ -32,16 +110,7 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCou
 	}
 
 	// Build carousel messages
-	messages := lineutil.BuildCarouselMessages("學程列表", bubbles, sender)
-
-	// Add result count message if needed
-	if totalCount > MaxProgramsPerSearch {
-		countMsg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("📊 找到 %d 個學程，顯示前 %d 個\n\n💡 可使用「學程 關鍵字」縮小搜尋範圍", totalCount, MaxProgramsPerSearch),
-			sender,
-		)
-		messages = append([]messaging_api.MessageInterface{countMsg}, messages...)
-	}
+	messages := lineutil.BuildCarouselMessages("學程搜尋結果", bubbles, sender)
 
 	// Add quick reply to last message
 	if len(messages) > 0 {
@@ -63,7 +132,8 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCou
 //	│ ✅ 必修：8 門            │
 //	│ 📝 選修：7 門            │
 //	├──────────────────────────┤
-//	│     [查看課程]           │  <- Footer button (internal)
+//	│ [📋 查看學程詳細]        │  <- Footer button (external URL, if available)
+//	│ [📚 查看課程]            │  <- Footer button (internal)
 //	└──────────────────────────┘
 func (h *Handler) buildProgramBubble(program storage.Program) *lineutil.FlexBubble {
 	// Header: Program name with colored background
@@ -96,7 +166,18 @@ func (h *Handler) buildProgramBubble(program storage.Program) *lineutil.FlexBubb
 		body.AddInfoRow("📝", "選修", fmt.Sprintf("%d 門", program.ElectiveCount), lineutil.DefaultInfoRowStyle())
 	}
 
-	// Footer: View courses button
+	// Build footer buttons
+	var footerButtons []*lineutil.FlexButton
+
+	// Add LMS detail page button if URL is available
+	if program.URL != "" {
+		detailBtn := lineutil.NewFlexButton(
+			lineutil.NewURIAction("📋 查看學程詳細", program.URL),
+		).WithStyle("secondary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm")
+		footerButtons = append(footerButtons, detailBtn)
+	}
+
+	// View courses button (internal)
 	viewCoursesBtn := lineutil.NewFlexButton(
 		lineutil.NewPostbackActionWithDisplayText(
 			"📚 "+PostbackViewCoursesLabel,
@@ -104,8 +185,9 @@ func (h *Handler) buildProgramBubble(program storage.Program) *lineutil.FlexBubb
 			PostbackPrefix+"courses"+bot.PostbackSplitChar+program.Name,
 		),
 	).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm")
+	footerButtons = append(footerButtons, viewCoursesBtn)
 
-	footer := lineutil.NewButtonFooter([]*lineutil.FlexButton{viewCoursesBtn})
+	footer := lineutil.NewButtonFooter(footerButtons)
 
 	return lineutil.NewFlexBubble(header, nil, body.Build(), footer)
 }
