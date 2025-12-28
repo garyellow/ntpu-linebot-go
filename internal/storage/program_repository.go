@@ -324,7 +324,7 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, term
 				SUM(CASE WHEN cp.course_type = '必' THEN 1 ELSE 0 END) as required_count,
 				SUM(CASE WHEN cp.course_type != '必' THEN 1 ELSE 0 END) as elective_count,
 				COUNT(cp.course_uid) as total_count,
-				p.cached_at
+				COALESCE(p.cached_at, 0) as cached_at
 			FROM programs p
 			LEFT JOIN course_programs cp ON p.name = cp.program_name
 			WHERE p.name LIKE ? ESCAPE '\'
