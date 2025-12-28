@@ -3,6 +3,7 @@ package program
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
@@ -10,18 +11,192 @@ import (
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
-// Color constants for program module
+// Color constants for program module (referencing lineutil design system)
 const (
 	// Program module header color (使用與課程相同的藍色系，表示學術相關)
 	ColorHeaderProgram = lineutil.ColorHeaderCourse // #3B82F6 - bright blue
 
-	// Course type colors for program courses carousel
-	ColorHeaderRequired = "#059669" // 必修 - deep teal (重要、必要)
-	ColorHeaderElective = "#0891B2" // 選修 - cyan (選擇、靈活)
+	// Course type colors for program courses carousel (引用 lineutil 設計系統)
+	ColorHeaderRequired = lineutil.ColorHeaderRequired // ✅ 必修 - deep teal
+	ColorHeaderElective = lineutil.ColorHeaderElective // 📝 選修 - cyan
+
+	// Category-based colors for program bubbles (引用 lineutil 設計系統)
+	// Gradient: 碩士類偏紫色系、學士類偏藍色系
+	ColorCategoryMasterCredit   = lineutil.ColorHeaderProgramMasterCredit   // 🎓 碩士學分學程
+	ColorCategoryBachelorCredit = lineutil.ColorHeaderProgramBachelorCredit // 📚 學士學分學程
+	ColorCategoryMixedCredit    = lineutil.ColorHeaderProgramMixedCredit    // 🎓 學士暨碩士學分學程
+	ColorCategoryMasterCross    = lineutil.ColorHeaderProgramMasterCross    // 🔗 碩士跨域微學程
+	ColorCategoryBachelorCross  = lineutil.ColorHeaderProgramBachelorCross  // 🔗 學士跨域微學程
+	ColorCategoryMixedCross     = lineutil.ColorHeaderProgramMixedCross     // 🔗 學士暨碩士跨域微學程
+	ColorCategoryMasterSingle   = lineutil.ColorHeaderProgramMasterSingle   // 📌 碩士單一領域微學程
+	ColorCategoryBachelorSingle = lineutil.ColorHeaderProgramBachelorSingle // 📌 學士單一領域微學程
+	ColorCategoryDefault        = lineutil.ColorHeaderProgramDefault        // 🎓 學程 (fallback)
 )
 
-// formatProgramListResponse formats a list of programs as carousel Flex Messages.
+// getCategoryLabel returns a BodyLabelInfo based on the program category.
+// Maps program categories to appropriate emoji, label text, and color.
+//
+// Categories (from LMS folders):
+//   - "碩士學分學程" - Master's credit program
+//   - "學士學分學程" - Bachelor's credit program
+//   - "學士暨碩士學分學程" - Joint bachelor/master credit program
+//   - "碩士跨域微學程" - Master's cross-domain micro-program
+//   - "學士跨域微學程" - Bachelor's cross-domain micro-program
+//   - "學士暨碩士跨域微學程" - Joint cross-domain micro-program
+//   - "碩士單一領域微學程" - Master's single-domain micro-program
+//   - "學士單一領域微學程" - Bachelor's single-domain micro-program
+//
+// Design rationale:
+//   - 碩士類 uses violet/purple gradient (academic prestige)
+//   - 學士類 uses blue/cyan gradient (fresh, approachable)
+//   - 跨域類 uses 🔗 emoji (cross-connection)
+//   - 單一領域 uses 📌 emoji (focused, specialized)
+func getCategoryLabel(category string) lineutil.BodyLabelInfo {
+	switch category {
+	case "碩士學分學程":
+		return lineutil.BodyLabelInfo{
+			Emoji: "🎓",
+			Label: "碩士學分學程",
+			Color: ColorCategoryMasterCredit,
+		}
+	case "學士學分學程":
+		return lineutil.BodyLabelInfo{
+			Emoji: "📚",
+			Label: "學士學分學程",
+			Color: ColorCategoryBachelorCredit,
+		}
+	case "學士暨碩士學分學程":
+		return lineutil.BodyLabelInfo{
+			Emoji: "🎓",
+			Label: "學士暨碩士學分學程",
+			Color: ColorCategoryMixedCredit,
+		}
+	case "碩士跨域微學程":
+		return lineutil.BodyLabelInfo{
+			Emoji: "🔗",
+			Label: "碩士跨域微學程",
+			Color: ColorCategoryMasterCross,
+		}
+	case "學士跨域微學程":
+		return lineutil.BodyLabelInfo{
+			Emoji: "🔗",
+			Label: "學士跨域微學程",
+			Color: ColorCategoryBachelorCross,
+		}
+	case "學士暨碩士跨域微學程":
+		return lineutil.BodyLabelInfo{
+			Emoji: "🔗",
+			Label: "學士暨碩士跨域微學程",
+			Color: ColorCategoryMixedCross,
+		}
+	case "碩士單一領域微學程":
+		return lineutil.BodyLabelInfo{
+			Emoji: "📌",
+			Label: "碩士單一領域微學程",
+			Color: ColorCategoryMasterSingle,
+		}
+	case "學士單一領域微學程":
+		return lineutil.BodyLabelInfo{
+			Emoji: "📌",
+			Label: "學士單一領域微學程",
+			Color: ColorCategoryBachelorSingle,
+		}
+	default:
+		// Fallback for unknown category or empty string
+		return lineutil.BodyLabelInfo{
+			Emoji: "🎓",
+			Label: "學程",
+			Color: ColorCategoryDefault,
+		}
+	}
+}
+
+// formatProgramListResponse formats a list of programs as a text message.
+// Uses text-based display to handle large lists.
+// Consolidates all programs into a single message if possible (limit 5000 chars).
 func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCount int) []messaging_api.MessageInterface {
+	sender := lineutil.GetSender(senderName, h.stickerManager)
+	var messages []messaging_api.MessageInterface
+
+	// Track rune count of sb (LINE limit is 5000 characters)
+	sbRunes := 0
+	var sb strings.Builder
+
+	// Track items in current message for batching
+	itemsInCurrentMsg := 0
+
+	header := fmt.Sprintf("🎓 學程列表 (共 %d 個)\n", totalCount)
+	sb.WriteString(header)
+	sbRunes += utf8.RuneCountInString(header)
+
+	separator := "━━━━━━━━━━━━━━━━\n\n"
+	sb.WriteString(separator)
+	sbRunes += utf8.RuneCountInString(separator)
+
+	for i, prog := range programs {
+		// Global index
+		idx := i + 1
+
+		// Proposed entry
+		var entry strings.Builder
+		fmt.Fprintf(&entry, "%d. %s", idx, prog.Name)
+
+		// Show course counts if available
+		if prog.RequiredCount > 0 || prog.ElectiveCount > 0 {
+			entry.WriteString(fmt.Sprintf(" | 必修 %d 門 · 選修 %d 門", prog.RequiredCount, prog.ElectiveCount))
+		}
+		entry.WriteString("\n")
+
+		// Add URL if available (LINE will auto-link)
+		if prog.URL != "" {
+			entry.WriteString(fmt.Sprintf("   📎 %s\n", prog.URL))
+		}
+
+		// Add spacing between items
+		entry.WriteString("\n")
+
+		entryStr := entry.String()
+		entryRunes := utf8.RuneCountInString(entryStr)
+
+		// Check limits:
+		// 1. Character limit (4700 buffer / 5000 max) - reserve ~300 chars for footer & overhead
+		// 2. Batch size limit (TextListBatchSize items/message)
+		if sbRunes+entryRunes > 4700 || itemsInCurrentMsg >= TextListBatchSize {
+			// Finalize current message
+			messages = append(messages, lineutil.NewTextMessageWithConsistentSender(sb.String(), sender))
+			sb.Reset()
+			sbRunes = 0
+			itemsInCurrentMsg = 0
+
+			continuationSeparator := "━━━━━━━━━━━━━━━━\n"
+			sb.WriteString(continuationSeparator)
+			sbRunes += utf8.RuneCountInString(continuationSeparator)
+
+			headerCont := fmt.Sprintf("🎓 學程列表 (續 - %d...)\n\n", idx)
+			sb.WriteString(headerCont)
+			sbRunes += utf8.RuneCountInString(headerCont)
+		}
+
+		sb.WriteString(entryStr)
+		sbRunes += entryRunes
+		itemsInCurrentMsg++
+	}
+
+	// Add footer
+	sb.WriteString("━━━━━━━━━━━━━━━━\n")
+	sb.WriteString("💡 輸入「學程 關鍵字」搜尋特定學程")
+
+	// Create the final (or only) message
+	msg := lineutil.NewTextMessageWithConsistentSender(sb.String(), sender)
+	msg.QuickReply = lineutil.NewQuickReply(QuickReplyProgramNav())
+	messages = append(messages, msg)
+
+	return messages
+}
+
+// formatProgramSearchResponse formats search results as carousel Flex Messages.
+// Used when results are few enough to be displayed in a carousel (<= MaxSearchResultsWithCard).
+func (h *Handler) formatProgramSearchResponse(programs []storage.Program) []messaging_api.MessageInterface {
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	// Build carousel bubbles
@@ -32,16 +207,7 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCou
 	}
 
 	// Build carousel messages
-	messages := lineutil.BuildCarouselMessages("學程列表", bubbles, sender)
-
-	// Add result count message if needed
-	if totalCount > MaxProgramsPerSearch {
-		countMsg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("📊 找到 %d 個學程，顯示前 %d 個\n\n💡 可使用「學程 關鍵字」縮小搜尋範圍", totalCount, MaxProgramsPerSearch),
-			sender,
-		)
-		messages = append([]messaging_api.MessageInterface{countMsg}, messages...)
-	}
+	messages := lineutil.BuildCarouselMessages("學程搜尋結果", bubbles, sender)
 
 	// Add quick reply to last message
 	if len(messages) > 0 {
@@ -56,31 +222,31 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCou
 // Layout:
 //
 //	┌──────────────────────────┐
-//	│      學程名稱             │  <- Colored header (blue)
+//	│      學程名稱             │  <- Colored header (category-based)
 //	├──────────────────────────┤
-//	│ 🎓 學程資訊              │  <- Body label
+//	│ 🎓 碩士學分學程          │  <- Body label (dynamic category)
 //	│ 📚 課程數量：15 門       │
 //	│ ✅ 必修：8 門            │
 //	│ 📝 選修：7 門            │
 //	├──────────────────────────┤
-//	│     [查看課程]           │  <- Footer button (internal)
+//	│ [📋 查看學程詳細]        │  <- Footer button (external URL, if available)
+//	│ [📚 查看課程]            │  <- Footer button (internal)
 //	└──────────────────────────┘
 func (h *Handler) buildProgramBubble(program storage.Program) *lineutil.FlexBubble {
-	// Header: Program name with colored background
+	// Get category label info (emoji, label, color based on category)
+	labelInfo := getCategoryLabel(program.Category)
+
+	// Header: Program name with category-based colored background
 	header := lineutil.NewColoredHeader(lineutil.ColoredHeaderInfo{
 		Title: lineutil.TruncateRunes(program.Name, MaxTitleDisplayChars),
-		Color: ColorHeaderProgram,
+		Color: labelInfo.Color,
 	})
 
 	// Build body contents
 	body := lineutil.NewBodyContentBuilder()
 
-	// Body label
-	body.AddComponent(lineutil.NewBodyLabel(lineutil.BodyLabelInfo{
-		Emoji: "🎓",
-		Label: "學程資訊",
-		Color: ColorHeaderProgram,
-	}).FlexBox)
+	// Body label: dynamic category tag
+	body.AddComponent(lineutil.NewBodyLabel(labelInfo).FlexBox)
 
 	// Course count info
 	totalCourses := program.RequiredCount + program.ElectiveCount
@@ -96,7 +262,18 @@ func (h *Handler) buildProgramBubble(program storage.Program) *lineutil.FlexBubb
 		body.AddInfoRow("📝", "選修", fmt.Sprintf("%d 門", program.ElectiveCount), lineutil.DefaultInfoRowStyle())
 	}
 
-	// Footer: View courses button
+	// Build footer buttons
+	var footerButtons []*lineutil.FlexButton
+
+	// Add LMS detail page button if URL is available
+	if program.URL != "" {
+		detailBtn := lineutil.NewFlexButton(
+			lineutil.NewURIAction("📋 查看學程詳細", program.URL),
+		).WithStyle("secondary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm")
+		footerButtons = append(footerButtons, detailBtn)
+	}
+
+	// View courses button (internal)
 	viewCoursesBtn := lineutil.NewFlexButton(
 		lineutil.NewPostbackActionWithDisplayText(
 			"📚 "+PostbackViewCoursesLabel,
@@ -104,8 +281,9 @@ func (h *Handler) buildProgramBubble(program storage.Program) *lineutil.FlexBubb
 			PostbackPrefix+"courses"+bot.PostbackSplitChar+program.Name,
 		),
 	).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm")
+	footerButtons = append(footerButtons, viewCoursesBtn)
 
-	footer := lineutil.NewButtonFooter([]*lineutil.FlexButton{viewCoursesBtn})
+	footer := lineutil.NewButtonFooter(footerButtons)
 
 	return lineutil.NewFlexBubble(header, nil, body.Build(), footer)
 }

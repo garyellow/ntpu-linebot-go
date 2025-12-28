@@ -57,9 +57,11 @@ type Course struct {
 }
 
 // Program represents an academic program (學程) with course statistics.
-// Used for displaying program list with course counts.
+// Used for displaying program list with course counts and LMS detail URL.
 type Program struct {
 	Name          string `json:"name"`           // Program name (e.g., "智慧財產權學士學分學程")
+	Category      string `json:"category"`       // Program category (e.g., "碩士學分學程")
+	URL           string `json:"url"`            // LMS detail page URL
 	RequiredCount int    `json:"required_count"` // Number of required courses
 	ElectiveCount int    `json:"elective_count"` // Number of elective courses
 	TotalCount    int    `json:"total_count"`    // Total number of courses

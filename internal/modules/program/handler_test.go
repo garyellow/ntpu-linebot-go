@@ -2,8 +2,10 @@ package program
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
@@ -12,6 +14,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/modules/course"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
+	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -105,6 +108,50 @@ func TestHandleMessage_List(t *testing.T) {
 				t.Error("Expected messages for program list query")
 			}
 		})
+	}
+}
+
+// TestHandleMessage_ListSplit verifies listing splits into multiple messages when exceeding batch size
+func TestHandleMessage_ListSplit(t *testing.T) {
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	// 1. Seed database with 35 programs (Batch size is 30)
+	programs := make([]struct{ Name, Category, URL string }, 35)
+	for i := 0; i < 35; i++ {
+		programs[i] = struct{ Name, Category, URL string }{
+			Name:     fmt.Sprintf("Program %02d", i+1),
+			Category: "Bachelor",
+			URL:      "http://example.com",
+		}
+	}
+
+	if err := h.db.SyncPrograms(ctx, programs); err != nil {
+		t.Fatalf("Failed to sync programs: %v", err)
+	}
+
+	// 2. Call handler
+	msgs := h.HandleMessage(ctx, "學程列表")
+
+	// 3. Verify pagination
+	// Expect 2 messages:
+	// Msg 1: Programs 1-30
+	// Msg 2: Programs 31-35 + Footer
+	if len(msgs) != 2 {
+		t.Errorf("Expected 2 messages for 35 programs (batch size 30), got %d", len(msgs))
+	} else {
+		// Optional: Check content of first message
+		txtMsg, ok := msgs[0].(*messaging_api.TextMessage)
+		if !ok {
+			t.Fatalf("Message 1 is not a TextMessage, got %T", msgs[0])
+		}
+		text := txtMsg.Text
+		if utf8.RuneCountInString(text) > 4800 {
+			t.Errorf("Message 1 too long: %d runes", utf8.RuneCountInString(text))
+		}
+		// Validating split point roughly
+		// "Program 30" should be in Msg 1, "Program 31" in Msg 2
+		// But let's just trust the count for now as precise text matching depends on sorting
 	}
 }
 

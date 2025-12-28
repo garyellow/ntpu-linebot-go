@@ -30,9 +30,8 @@ func GetSender(name string, stickerManager *sticker.Manager) *messaging_api.Send
 // LINE API limits: max 5000 characters per text message
 func NewTextMessageWithConsistentSender(text string, sender *messaging_api.Sender) *messaging_api.TextMessage {
 	// Validate and truncate if necessary (LINE API limit: 5000 chars)
-	if len(text) > 5000 {
-		text = TruncateRunes(text, 4997) + "..."
-	}
+	// TruncateRunes handles rune counting correctly
+	text = TruncateRunes(text, 5000)
 
 	return &messaging_api.TextMessage{
 		Text:   text,

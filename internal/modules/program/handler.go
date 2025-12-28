@@ -48,9 +48,11 @@ func (h *Handler) Name() string {
 const (
 	ModuleName               = "program" // Module identifier for registration
 	senderName               = "學程小幫手"
-	MaxProgramsPerSearch     = 30 // 3 carousels @ 10 bubbles (LINE max: 5 messages)
-	MaxCoursesPerProgram     = 50 // 5 carousels @ 10 bubbles (LINE API max capacity)
-	MaxTitleDisplayChars     = 50 // Truncation limit for program titles
+	MaxProgramsPerSearch     = 500 // Text-based display limit (increased to cover all programs)
+	TextListBatchSize        = 30  // Text-based list batch size (adjusted to 30 based on user feedback)
+	MaxSearchResultsWithCard = 10  // Flex carousel limit for search results
+	MaxCoursesPerProgram     = 50  // 5 carousels @ 10 bubbles (LINE API max capacity)
+	MaxTitleDisplayChars     = 50  // Truncation limit for program titles
 	PostbackPrefix           = "program:"
 	PostbackViewCoursesLabel = "查看課程"
 )
@@ -358,11 +360,12 @@ func (h *Handler) handleProgramList(ctx context.Context) []messaging_api.Message
 	log.Infof("Found %d programs", len(programs))
 
 	// Limit results
-	if len(programs) > MaxProgramsPerSearch {
+	totalCount := len(programs)
+	if totalCount > MaxProgramsPerSearch {
 		programs = programs[:MaxProgramsPerSearch]
 	}
 
-	return h.formatProgramListResponse(programs, len(programs))
+	return h.formatProgramListResponse(programs, totalCount)
 }
 
 // handleProgramSearch searches programs by name using 2-tier matching.
@@ -433,6 +436,12 @@ func (h *Handler) handleProgramSearch(ctx context.Context, searchTerm string) []
 		programs = programs[:MaxProgramsPerSearch]
 	}
 
+	// Use Flex Carousel for small number of search results (richer experience)
+	if len(programs) <= MaxSearchResultsWithCard {
+		return h.formatProgramSearchResponse(programs)
+	}
+
+	// Use Text List for larger number of results (easier to scan)
 	return h.formatProgramListResponse(programs, len(programs))
 }
 
