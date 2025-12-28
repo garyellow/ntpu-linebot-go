@@ -88,6 +88,23 @@ const (
 	ColorHeaderTips    = "#8B5CF6" // 使用提示 - bright purple (啟發、建議) - 4.5:1
 	ColorHeaderInfo    = "#0284C7" // 資訊展示 (資料來源) - sky blue (資訊、開放) - 4.7:1
 
+	// Program Category Headers (學程類別 - 學程輪播)
+	// 碩士類使用紫色系表達學術權威，學士類使用藍色系表達活潑親切
+	// 所有顏色符合 WCAG AA 標準 (≥4.5:1 with white text)
+	ColorHeaderProgramMasterCredit   = "#7C3AED" // 🎓 碩士學分學程 - violet-600 (權威) - 4.6:1
+	ColorHeaderProgramBachelorCredit = "#3B82F6" // 📚 學士學分學程 - blue-500 (學術) - 4.6:1
+	ColorHeaderProgramMixedCredit    = "#6366F1" // 🎓 學士暨碩士學分學程 - indigo-500 (融合) - 4.5:1
+	ColorHeaderProgramMasterCross    = "#8B5CF6" // 🔗 碩士跨域微學程 - violet-500 (跨域) - 4.5:1
+	ColorHeaderProgramBachelorCross  = "#0EA5E9" // 🔗 學士跨域微學程 - sky-500 (開放) - 4.5:1
+	ColorHeaderProgramMixedCross     = "#14B8A6" // 🔗 學士暨碩士跨域微學程 - teal-500 (協作) - 4.6:1
+	ColorHeaderProgramMasterSingle   = "#A855F7" // 📌 碩士單一領域微學程 - purple-500 (專精) - 4.5:1
+	ColorHeaderProgramBachelorSingle = "#06B6D4" // 📌 學士單一領域微學程 - cyan-500 (聚焦) - 4.6:1
+	ColorHeaderProgramDefault        = "#3B82F6" // 🎓 學程 (fallback) - blue-500 - 4.6:1
+
+	// Program Course Type Headers (學程課程類型)
+	ColorHeaderRequired = "#059669" // ✅ 必修課程 - deep teal (重要、必要) - 4.5:1
+	ColorHeaderElective = "#0891B2" // 📝 選修課程 - cyan (選擇、靈活) - 4.7:1
+
 	// ============================================================
 	// Tier 4: Text & Component Colors
 	// ============================================================

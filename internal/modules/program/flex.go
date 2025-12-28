@@ -10,15 +10,105 @@ import (
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
-// Color constants for program module
+// Color constants for program module (referencing lineutil design system)
 const (
 	// Program module header color (使用與課程相同的藍色系，表示學術相關)
 	ColorHeaderProgram = lineutil.ColorHeaderCourse // #3B82F6 - bright blue
 
-	// Course type colors for program courses carousel
-	ColorHeaderRequired = "#059669" // 必修 - deep teal (重要、必要)
-	ColorHeaderElective = "#0891B2" // 選修 - cyan (選擇、靈活)
+	// Course type colors for program courses carousel (引用 lineutil 設計系統)
+	ColorHeaderRequired = lineutil.ColorHeaderRequired // ✅ 必修 - deep teal
+	ColorHeaderElective = lineutil.ColorHeaderElective // 📝 選修 - cyan
+
+	// Category-based colors for program bubbles (引用 lineutil 設計系統)
+	// Gradient: 碩士類偏紫色系、學士類偏藍色系
+	ColorCategoryMasterCredit   = lineutil.ColorHeaderProgramMasterCredit   // 🎓 碩士學分學程
+	ColorCategoryBachelorCredit = lineutil.ColorHeaderProgramBachelorCredit // 📚 學士學分學程
+	ColorCategoryMixedCredit    = lineutil.ColorHeaderProgramMixedCredit    // 🎓 學士暨碩士學分學程
+	ColorCategoryMasterCross    = lineutil.ColorHeaderProgramMasterCross    // 🔗 碩士跨域微學程
+	ColorCategoryBachelorCross  = lineutil.ColorHeaderProgramBachelorCross  // 🔗 學士跨域微學程
+	ColorCategoryMixedCross     = lineutil.ColorHeaderProgramMixedCross     // 🔗 學士暨碩士跨域微學程
+	ColorCategoryMasterSingle   = lineutil.ColorHeaderProgramMasterSingle   // 📌 碩士單一領域微學程
+	ColorCategoryBachelorSingle = lineutil.ColorHeaderProgramBachelorSingle // 📌 學士單一領域微學程
+	ColorCategoryDefault        = lineutil.ColorHeaderProgramDefault        // 🎓 學程 (fallback)
 )
+
+// getCategoryLabel returns a BodyLabelInfo based on the program category.
+// Maps program categories to appropriate emoji, label text, and color.
+//
+// Categories (from LMS folders):
+//   - "碩士學分學程" - Master's credit program
+//   - "學士學分學程" - Bachelor's credit program
+//   - "學士暨碩士學分學程" - Joint bachelor/master credit program
+//   - "碩士跨域微學程" - Master's cross-domain micro-program
+//   - "學士跨域微學程" - Bachelor's cross-domain micro-program
+//   - "學士暨碩士跨域微學程" - Joint cross-domain micro-program
+//   - "碩士單一領域微學程" - Master's single-domain micro-program
+//   - "學士單一領域微學程" - Bachelor's single-domain micro-program
+//
+// Design rationale:
+//   - 碩士類 uses violet/purple gradient (academic prestige)
+//   - 學士類 uses blue/cyan gradient (fresh, approachable)
+//   - 跨域類 uses 🔗 emoji (cross-connection)
+//   - 單一領域 uses 📌 emoji (focused, specialized)
+func getCategoryLabel(category string) lineutil.BodyLabelInfo {
+	switch category {
+	case "碩士學分學程":
+		return lineutil.BodyLabelInfo{
+			Emoji: "🎓",
+			Label: "碩士學分學程",
+			Color: ColorCategoryMasterCredit,
+		}
+	case "學士學分學程":
+		return lineutil.BodyLabelInfo{
+			Emoji: "📚",
+			Label: "學士學分學程",
+			Color: ColorCategoryBachelorCredit,
+		}
+	case "學士暨碩士學分學程":
+		return lineutil.BodyLabelInfo{
+			Emoji: "🎓",
+			Label: "學士暨碩士學分學程",
+			Color: ColorCategoryMixedCredit,
+		}
+	case "碩士跨域微學程":
+		return lineutil.BodyLabelInfo{
+			Emoji: "🔗",
+			Label: "碩士跨域微學程",
+			Color: ColorCategoryMasterCross,
+		}
+	case "學士跨域微學程":
+		return lineutil.BodyLabelInfo{
+			Emoji: "🔗",
+			Label: "學士跨域微學程",
+			Color: ColorCategoryBachelorCross,
+		}
+	case "學士暨碩士跨域微學程":
+		return lineutil.BodyLabelInfo{
+			Emoji: "🔗",
+			Label: "學士暨碩士跨域微學程",
+			Color: ColorCategoryMixedCross,
+		}
+	case "碩士單一領域微學程":
+		return lineutil.BodyLabelInfo{
+			Emoji: "📌",
+			Label: "碩士單一領域微學程",
+			Color: ColorCategoryMasterSingle,
+		}
+	case "學士單一領域微學程":
+		return lineutil.BodyLabelInfo{
+			Emoji: "📌",
+			Label: "學士單一領域微學程",
+			Color: ColorCategoryBachelorSingle,
+		}
+	default:
+		// Fallback for unknown category or empty string
+		return lineutil.BodyLabelInfo{
+			Emoji: "🎓",
+			Label: "學程",
+			Color: ColorCategoryDefault,
+		}
+	}
+}
 
 // formatProgramListResponse formats a list of programs as a text message.
 // Uses text-based display to handle large lists (>50 programs).
@@ -125,9 +215,9 @@ func (h *Handler) formatProgramSearchResponse(programs []storage.Program) []mess
 // Layout:
 //
 //	┌──────────────────────────┐
-//	│      學程名稱             │  <- Colored header (blue)
+//	│      學程名稱             │  <- Colored header (category-based)
 //	├──────────────────────────┤
-//	│ 🎓 學程資訊              │  <- Body label
+//	│ 🎓 碩士學分學程          │  <- Body label (dynamic category)
 //	│ 📚 課程數量：15 門       │
 //	│ ✅ 必修：8 門            │
 //	│ 📝 選修：7 門            │
@@ -136,21 +226,20 @@ func (h *Handler) formatProgramSearchResponse(programs []storage.Program) []mess
 //	│ [📚 查看課程]            │  <- Footer button (internal)
 //	└──────────────────────────┘
 func (h *Handler) buildProgramBubble(program storage.Program) *lineutil.FlexBubble {
-	// Header: Program name with colored background
+	// Get category label info (emoji, label, color based on category)
+	labelInfo := getCategoryLabel(program.Category)
+
+	// Header: Program name with category-based colored background
 	header := lineutil.NewColoredHeader(lineutil.ColoredHeaderInfo{
 		Title: lineutil.TruncateRunes(program.Name, MaxTitleDisplayChars),
-		Color: ColorHeaderProgram,
+		Color: labelInfo.Color,
 	})
 
 	// Build body contents
 	body := lineutil.NewBodyContentBuilder()
 
-	// Body label
-	body.AddComponent(lineutil.NewBodyLabel(lineutil.BodyLabelInfo{
-		Emoji: "🎓",
-		Label: "學程資訊",
-		Color: ColorHeaderProgram,
-	}).FlexBox)
+	// Body label: dynamic category tag
+	body.AddComponent(lineutil.NewBodyLabel(labelInfo).FlexBox)
 
 	// Course count info
 	totalCourses := program.RequiredCount + program.ElectiveCount
