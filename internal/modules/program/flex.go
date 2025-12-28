@@ -114,9 +114,6 @@ func getCategoryLabel(category string) lineutil.BodyLabelInfo {
 // formatProgramListResponse formats a list of programs as a text message.
 // Uses text-based display to handle large lists.
 // Consolidates all programs into a single message if possible (limit 5000 chars).
-// formatProgramListResponse formats a list of programs as a text message.
-// Uses text-based display to handle large lists.
-// Consolidates all programs into a single message if possible (limit 5000 chars).
 func (h *Handler) formatProgramListResponse(programs []storage.Program, titleH1, footerText string) []messaging_api.MessageInterface {
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	var messages []messaging_api.MessageInterface
@@ -224,22 +221,6 @@ func (h *Handler) formatProgramSearchResponse(programs []storage.Program) []mess
 	return messages
 }
 
-// buildProgramBubble creates a Flex Bubble for a single program in the list.
-//
-// Layout:
-//
-//	┌──────────────────────────┐
-//	│      學程名稱             │  <- Colored header (category-based)
-//	├──────────────────────────┤
-//	│ 🎓 碩士學分學程          │  <- Body label (dynamic category)
-//	│ 📚 課程數量：15 門       │
-//	│ ✅ 必修：8 門            │
-//	│ 📝 選修：7 門            │
-//	├──────────────────────────┤
-//	│ [📋 查看學程詳細]        │  <- Footer button (external URL, if available)
-//	│ [📚 查看課程]            │  <- Footer button (internal)
-//	└──────────────────────────┘
-//
 // buildProgramBubble creates a Flex Bubble for a single program in the list.
 //
 // Layout:
@@ -361,9 +342,6 @@ func (h *Handler) formatProgramCoursesResponse(programName string, requiredCours
 
 	// Add header message with program info (show original counts, no "必修優先" text)
 	// Include disclaimer about referring to official program info page
-	// Add header message with program info (show original counts, no "必修優先" text)
-	// Include disclaimer about referring to official program info page
-	// Swapped warning and stats lines as requested
 	headerMsg := lineutil.NewTextMessageWithConsistentSender(
 		fmt.Sprintf("🎓 %s\n\n⚠️ 請同步參閱學程資訊頁面，各課程及其必選修別以學程科目規劃表所列為準\n\n📊 課程統計\n• 必修：%d 門\n• 選修：%d 門\n• 共計：%d 門\n\n⬇️ 以下為課程列表",
 			programName,
@@ -476,8 +454,6 @@ func (h *Handler) formatProgramCoursesAsTextList(programName string, requiredCou
 	var messages []messaging_api.MessageInterface
 
 	// Header message with program info and disclaimer
-	// Header message with program info and disclaimer
-	// Swapped warning and stats lines as requested
 	headerMsg := lineutil.NewTextMessageWithConsistentSender(
 		fmt.Sprintf("🎓 %s\n\n⚠️ 請同步參閱學程資訊頁面，各課程及其必選修別以學程科目規劃表所列為準\n\n📊 課程統計\n• 必修：%d 門\n• 選修：%d 門\n• 共計：%d 門\n\n⬇️ 以下為課程列表",
 			programName,
