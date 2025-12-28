@@ -537,7 +537,7 @@ func (h *Handler) formatProgramCoursesAsTextList(programName string, requiredCou
 
 	// Add footer message with search hint
 	footerMsg := lineutil.NewTextMessageWithConsistentSender(
-		"💡 可利用課程編號或課程名稱查詢相關課程詳細資訊\n\n⚠️ 請同步參閱學程資訊頁面，各課程及其必選修別以學程科目規劃表所列為準",
+		"💡 可利用課程編號或課程名稱查詢相關課程詳細資訊\n\n",
 		sender,
 	)
 	footerMsg.QuickReply = lineutil.NewQuickReply(QuickReplyProgramNav())

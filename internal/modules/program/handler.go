@@ -569,11 +569,18 @@ func (h *Handler) handleCourseProgramsList(ctx context.Context, courseUID string
 func (h *Handler) formatCourseProgramsAsCarousel(ctx context.Context, courseName string, programs []storage.ProgramRequirement) []messaging_api.MessageInterface {
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
+	// Get recent 2 semesters for consistent course count filtering
+	var years, terms []int
+	if h.semesterDetector != nil {
+		years, terms = h.semesterDetector.GetRecentSemesters()
+	}
+
 	// Build program bubbles
 	bubbles := make([]messaging_api.FlexBubble, 0, len(programs))
 	for _, p := range programs {
 		// Get full program info from database using exact name match
-		program, err := h.db.GetProgramByName(ctx, p.ProgramName)
+		// Pass semester filter to ensure course counts match "查看課程" results
+		program, err := h.db.GetProgramByName(ctx, p.ProgramName, years, terms)
 		if err != nil || program == nil {
 			// Create a minimal program struct if not found
 			minimalProgram := storage.Program{

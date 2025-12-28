@@ -244,24 +244,53 @@ func (db *DB) GetAllPrograms(ctx context.Context, years, terms []int) ([]Program
 }
 
 // GetProgramByName returns a single program with statistics and URL by exact name match.
-func (db *DB) GetProgramByName(ctx context.Context, name string) (*Program, error) {
-	query := `
-		SELECT
-			p.name,
-			p.category,
-			COALESCE(p.url, '') as url,
-			SUM(CASE WHEN cp.course_type = '必' THEN 1 ELSE 0 END) as required_count,
-			SUM(CASE WHEN cp.course_type != '必' THEN 1 ELSE 0 END) as elective_count,
-			COUNT(cp.course_uid) as total_count,
-			COALESCE(p.cached_at, 0) as cached_at
-		FROM programs p
-		LEFT JOIN course_programs cp ON p.name = cp.program_name
-		WHERE p.name = ?
-		GROUP BY p.name, p.category
-	`
+// If years and terms are provided (non-empty, equal length), statistics are limited to those semesters.
+// If years and terms are empty or nil, all courses for the program are counted.
+func (db *DB) GetProgramByName(ctx context.Context, name string, years, terms []int) (*Program, error) {
+	var query string
+	var args []any
+
+	if semesterCond, semesterArgs, ok := buildSemesterConditions(years, terms, "c"); ok {
+		// Semester args replicated 3 times (for required_count, elective_count, total_count)
+		args = append(args, name)
+		for range 3 {
+			args = append(args, semesterArgs...)
+		}
+
+		query = `
+			SELECT
+				p.name,
+				p.category,
+				COALESCE(p.url, '') as url,
+				SUM(CASE WHEN cp.course_type = '必' AND (` + semesterCond + `) THEN 1 ELSE 0 END) as required_count,
+				SUM(CASE WHEN cp.course_type != '必' AND (` + semesterCond + `) THEN 1 ELSE 0 END) as elective_count,
+				SUM(CASE WHEN (` + semesterCond + `) THEN 1 ELSE 0 END) as total_count,
+				COALESCE(p.cached_at, 0) as cached_at
+			FROM programs p
+			LEFT JOIN course_programs cp ON p.name = cp.program_name
+			LEFT JOIN courses c ON cp.course_uid = c.uid
+			WHERE p.name = ?
+			GROUP BY p.name, p.category`
+	} else {
+		// No semester filter - count all courses
+		args = []any{name}
+		query = `
+			SELECT
+				p.name,
+				p.category,
+				COALESCE(p.url, '') as url,
+				SUM(CASE WHEN cp.course_type = '必' THEN 1 ELSE 0 END) as required_count,
+				SUM(CASE WHEN cp.course_type != '必' THEN 1 ELSE 0 END) as elective_count,
+				COUNT(cp.course_uid) as total_count,
+				COALESCE(p.cached_at, 0) as cached_at
+			FROM programs p
+			LEFT JOIN course_programs cp ON p.name = cp.program_name
+			WHERE p.name = ?
+			GROUP BY p.name, p.category`
+	}
 
 	var prog Program
-	err := db.reader.QueryRowContext(ctx, query, name).Scan(&prog.Name, &prog.Category, &prog.URL, &prog.RequiredCount, &prog.ElectiveCount, &prog.TotalCount, &prog.CachedAt)
+	err := db.reader.QueryRowContext(ctx, query, args...).Scan(&prog.Name, &prog.Category, &prog.URL, &prog.RequiredCount, &prog.ElectiveCount, &prog.TotalCount, &prog.CachedAt)
 	if err == sql.ErrNoRows {
 		return nil, sql.ErrNoRows
 	}
