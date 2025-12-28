@@ -159,9 +159,9 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCou
 		entryRunes := utf8.RuneCountInString(entryStr)
 
 		// Check limits:
-		// 1. Character limit (4800 buffer / 5000 max)
+		// 1. Character limit (4700 buffer / 5000 max) - reserve ~300 chars for footer & overhead
 		// 2. Batch size limit (TextListBatchSize items/message)
-		if sbRunes+entryRunes > 4800 || itemsInCurrentMsg >= TextListBatchSize {
+		if sbRunes+entryRunes > 4700 || itemsInCurrentMsg >= TextListBatchSize {
 			// Finalize current message
 			messages = append(messages, lineutil.NewTextMessageWithConsistentSender(sb.String(), sender))
 			sb.Reset()

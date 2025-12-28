@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
@@ -140,9 +141,13 @@ func TestHandleMessage_ListSplit(t *testing.T) {
 		t.Errorf("Expected 2 messages for 35 programs (batch size 30), got %d", len(msgs))
 	} else {
 		// Optional: Check content of first message
-		text := msgs[0].(*messaging_api.TextMessage).Text
-		if len(text) > 4800 {
-			t.Errorf("Message 1 too long: %d characters", len(text))
+		txtMsg, ok := msgs[0].(*messaging_api.TextMessage)
+		if !ok {
+			t.Fatalf("Message 1 is not a TextMessage, got %T", msgs[0])
+		}
+		text := txtMsg.Text
+		if utf8.RuneCountInString(text) > 4800 {
+			t.Errorf("Message 1 too long: %d runes", utf8.RuneCountInString(text))
 		}
 		// Validating split point roughly
 		// "Program 30" should be in Msg 1, "Program 31" in Msg 2

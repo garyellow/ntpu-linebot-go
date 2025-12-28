@@ -178,10 +178,15 @@ func (db *DB) SyncPrograms(ctx context.Context, programs []struct{ Name, Categor
 // URL is fetched from the programs table via LEFT JOIN.
 func (db *DB) GetAllPrograms(ctx context.Context, years, terms []int) ([]Program, error) {
 	var query string
-	var args []interface{}
+	var args []any
 
 	if semesterCond, semesterArgs, ok := buildSemesterConditions(years, terms, "c"); ok {
-		args = semesterArgs
+		// We use semesterCond 3 times in the query (required_count, elective_count, total_count)
+		// so we need to replicate the arguments 3 times.
+		args = make([]any, 0, len(semesterArgs)*3)
+		for range 3 {
+			args = append(args, semesterArgs...)
+		}
 
 		// Query flipped: Select from programs table first (Source of Truth)
 		// Note: course_programs is joined via LEFT JOIN, so programs without courses still appear.
@@ -279,12 +284,14 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, term
 	sanitized := sanitizeSearchTerm(searchTerm)
 
 	var query string
-	var args []interface{}
+	var args []any
 
 	if semesterCond, semesterArgs, ok := buildSemesterConditions(years, terms, "c"); ok {
-		// Search term first, then semester args
+		// Search term first, then semester args replicated 3 times
 		args = append(args, "%"+sanitized+"%")
-		args = append(args, semesterArgs...)
+		for range 3 {
+			args = append(args, semesterArgs...)
+		}
 
 		query = `
 			SELECT
