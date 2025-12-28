@@ -429,7 +429,7 @@ func FormatLabel(prefix, content string, limit int) string {
 
 	prefixRunes := []rune(prefix)
 	contentRunes := []rune(content)
-	sepLen := len([]rune(separator))
+	const sepLen = 1 // separator is always a single space
 
 	// If prefix itself exceeds or equals limit, just return truncated prefix
 	if len(prefixRunes) >= limit {
