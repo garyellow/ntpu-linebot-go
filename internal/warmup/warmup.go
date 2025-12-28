@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/garyellow/ntpu-linebot-go/internal/config"
 	"github.com/garyellow/ntpu-linebot-go/internal/data"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
@@ -227,8 +228,9 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 	}()
 
 	// Warmup range: 101-113 (LMS 2.0 已無 114+ 資料)
+	// Warmup range: 101-113 (LMS 2.0 已無 114+ 資料)
 	currentYear := time.Now().Year() - 1911
-	fromYear := min(113, currentYear)
+	fromYear := min(config.IDDataYearEnd, currentYear)
 
 	// All department codes
 	departments := []string{
