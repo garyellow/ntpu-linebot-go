@@ -252,10 +252,12 @@ func (db *DB) GetProgramByName(ctx context.Context, name string, years, terms []
 
 	if semesterCond, semesterArgs, ok := buildSemesterConditions(years, terms); ok {
 		// Semester args replicated 3 times (for required_count, elective_count, total_count)
-		args = append(args, name)
+		// SQL: SELECT ... (args) ... WHERE name = ?
+		// So we must append semesterArgs FIRST, then name LAST.
 		for range 3 {
 			args = append(args, semesterArgs...)
 		}
+		args = append(args, name)
 
 		query = `
 			SELECT
@@ -317,13 +319,13 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, term
 	var args []any
 
 	// Search term first
-	args = append(args, "%"+sanitized+"%")
-
 	if semesterCond, semesterArgs, ok := buildSemesterConditions(years, terms); ok {
 		// Semester args replicated 3 times
 		for range 3 {
 			args = append(args, semesterArgs...)
 		}
+		// Search term comes LAST for the WHERE clause
+		args = append(args, "%"+sanitized+"%")
 
 		query = `
 			SELECT
