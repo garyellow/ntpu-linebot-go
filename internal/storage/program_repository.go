@@ -9,6 +9,23 @@ import (
 	"time"
 )
 
+// buildSemesterConditions creates SQL conditions for filtering by semesters.
+// Returns the SQL condition string (e.g., "(c.year = ? AND c.term = ?) OR ..."),
+// the placeholder values as args, and whether any conditions were built.
+// The tablePrefix should be "c" for courses table references.
+func buildSemesterConditions(years, terms []int, tablePrefix string) (conditions string, args []interface{}, ok bool) {
+	if len(years) == 0 || len(years) != len(terms) {
+		return "", nil, false
+	}
+
+	var parts []string
+	for i := range years {
+		parts = append(parts, fmt.Sprintf("(%s.year = ? AND %s.term = ?)", tablePrefix, tablePrefix))
+		args = append(args, years[i], terms[i])
+	}
+	return strings.Join(parts, " OR "), args, true
+}
+
 // SaveCoursePrograms saves course-program relationships for a course.
 // This replaces any existing program relationships for the course.
 func (db *DB) SaveCoursePrograms(ctx context.Context, courseUID string, programs []ProgramRequirement) error {
@@ -161,35 +178,20 @@ func (db *DB) GetAllPrograms(ctx context.Context, years, terms []int) ([]Program
 	var query string
 	var args []interface{}
 
-	if len(years) > 0 && len(years) == len(terms) {
-		// Build semester filter: (c.year = ? AND c.term = ?) OR ...
-		var semesterConditions []string
-		for i := range years {
-			semesterConditions = append(semesterConditions, "(c.year = ? AND c.term = ?)")
-			args = append(args, years[i], terms[i])
-		}
+	if semesterCond, semesterArgs, ok := buildSemesterConditions(years, terms, "c"); ok {
+		args = semesterArgs
 
 		// Query flipped: Select from programs table first (Source of Truth)
 		// Note: course_programs is joined via LEFT JOIN, so programs without courses still appear.
-		// However, we need to be careful with the WHERE clause on semester.
-		// If we put semester condition in WHERE, it filters out the program entirely if no courses match.
-		// So semester condition must be in the JOIN ON clause or we need a subquery.
-		// Subquery is safer for aggregation:
-		/*
-		   SELECT p.name, p.url, ...
-		   FROM programs p
-		   LEFT JOIN course_programs cp ON p.name = cp.program_name
-		   LEFT JOIN courses c ON cp.course_uid = c.uid AND (semester_conditions)
-		   ...
-		*/
+		// Semester condition is embedded in CASE expressions to count only matching courses.
 		query = `
 			SELECT
 				p.name,
 				MAX(p.category) as category,
 				COALESCE(p.url, '') as url,
-				SUM(CASE WHEN cp.course_type = '必' AND (` + strings.Join(semesterConditions, " OR ") + `) THEN 1 ELSE 0 END) as required_count,
-				SUM(CASE WHEN cp.course_type != '必' AND (` + strings.Join(semesterConditions, " OR ") + `) THEN 1 ELSE 0 END) as elective_count,
-				SUM(CASE WHEN (` + strings.Join(semesterConditions, " OR ") + `) THEN 1 ELSE 0 END) as total_count
+				SUM(CASE WHEN cp.course_type = '必' AND (` + semesterCond + `) THEN 1 ELSE 0 END) as required_count,
+				SUM(CASE WHEN cp.course_type != '必' AND (` + semesterCond + `) THEN 1 ELSE 0 END) as elective_count,
+				SUM(CASE WHEN (` + semesterCond + `) THEN 1 ELSE 0 END) as total_count
 			FROM programs p
 			LEFT JOIN course_programs cp ON p.name = cp.program_name
 			LEFT JOIN courses c ON cp.course_uid = c.uid
@@ -277,23 +279,19 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, term
 	var query string
 	var args []interface{}
 
-	if len(years) > 0 && len(years) == len(terms) {
-		// Build semester filter: (c.year = ? AND c.term = ?) OR ...
-		var semesterConditions []string
+	if semesterCond, semesterArgs, ok := buildSemesterConditions(years, terms, "c"); ok {
+		// Search term first, then semester args
 		args = append(args, "%"+sanitized+"%")
-		for i := range years {
-			semesterConditions = append(semesterConditions, "(c.year = ? AND c.term = ?)")
-			args = append(args, years[i], terms[i])
-		}
+		args = append(args, semesterArgs...)
 
 		query = `
 			SELECT
 				p.name,
 				MAX(p.category) as category,
 				COALESCE(p.url, '') as url,
-				SUM(CASE WHEN cp.course_type = '必' AND (` + strings.Join(semesterConditions, " OR ") + `) THEN 1 ELSE 0 END) as required_count,
-				SUM(CASE WHEN cp.course_type != '必' AND (` + strings.Join(semesterConditions, " OR ") + `) THEN 1 ELSE 0 END) as elective_count,
-				SUM(CASE WHEN (` + strings.Join(semesterConditions, " OR ") + `) THEN 1 ELSE 0 END) as total_count
+				SUM(CASE WHEN cp.course_type = '必' AND (` + semesterCond + `) THEN 1 ELSE 0 END) as required_count,
+				SUM(CASE WHEN cp.course_type != '必' AND (` + semesterCond + `) THEN 1 ELSE 0 END) as elective_count,
+				SUM(CASE WHEN (` + semesterCond + `) THEN 1 ELSE 0 END) as total_count
 			FROM programs p
 			LEFT JOIN course_programs cp ON p.name = cp.program_name
 			LEFT JOIN courses c ON cp.course_uid = c.uid
@@ -351,14 +349,10 @@ func (db *DB) GetProgramCourses(ctx context.Context, programName string, years, 
 	var query string
 	var args []interface{}
 
-	if len(years) > 0 && len(years) == len(terms) {
-		// Build semester filter: (year = ? AND term = ?) OR (year = ? AND term = ?) ...
-		var semesterConditions []string
+	if semesterCond, semesterArgs, ok := buildSemesterConditions(years, terms, "c"); ok {
+		// Program name first, then semester args
 		args = append(args, programName)
-		for i := range years {
-			semesterConditions = append(semesterConditions, "(c.year = ? AND c.term = ?)")
-			args = append(args, years[i], terms[i])
-		}
+		args = append(args, semesterArgs...)
 
 		query = `
 			SELECT
@@ -367,7 +361,7 @@ func (db *DB) GetProgramCourses(ctx context.Context, programName string, years, 
 				cp.course_type
 			FROM course_programs cp
 			JOIN courses c ON cp.course_uid = c.uid
-			WHERE cp.program_name = ? AND (` + strings.Join(semesterConditions, " OR ") + `)
+			WHERE cp.program_name = ? AND (` + semesterCond + `)
 			ORDER BY
 				CASE WHEN cp.course_type = '必' THEN 0 ELSE 1 END,
 				c.year DESC,

@@ -3,6 +3,7 @@ package ntpu
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strings"
 
@@ -59,7 +60,11 @@ func ScrapePrograms(ctx context.Context, client *scraper.Client) ([]ProgramInfo,
 	for _, folder := range programFolders {
 		folderPrograms, err := scrapeFolderAllPages(ctx, client, baseURL, folder, seen)
 		if err != nil {
-			// Log error but continue with other folders
+			// Log error but continue with other folders for graceful degradation
+			slog.DebugContext(ctx, "failed to scrape program folder",
+				"folder_id", folder.ID,
+				"category", folder.Category,
+				"error", err)
 			continue
 		}
 		programs = append(programs, folderPrograms...)

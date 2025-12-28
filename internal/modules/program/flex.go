@@ -126,11 +126,8 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCou
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	var messages []messaging_api.MessageInterface
 
-	// Batch size to keep messages reasonably sized (LINE limit is 5000 chars)
-	const batchSize = 30
-
-	for i := 0; i < len(programs); i += batchSize {
-		end := i + batchSize
+	for i := 0; i < len(programs); i += TextListBatchSize {
+		end := i + TextListBatchSize
 		if end > len(programs) {
 			end = len(programs)
 		}

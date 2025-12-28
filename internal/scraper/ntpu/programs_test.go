@@ -143,3 +143,72 @@ func TestPagination(t *testing.T) {
 		t.Error("Expected hasNext=false for page 2")
 	}
 }
+
+func TestExtractProgramsFromPage_EdgeCases(t *testing.T) {
+	t.Run("Empty document", func(t *testing.T) {
+		html := `<html><body></body></html>`
+		doc, _ := goquery.NewDocumentFromReader(strings.NewReader(html))
+		seen := make(map[string]bool)
+
+		results, hasNext := extractProgramsFromPage(doc, seen, "Category")
+		if len(results) != 0 {
+			t.Errorf("Expected 0 results for empty document, got %d", len(results))
+		}
+		if hasNext {
+			t.Error("Expected hasNext=false for empty document")
+		}
+	})
+
+	t.Run("Skip discontinued programs", func(t *testing.T) {
+		html := `
+			<a href="board.php?courseID=28286&f=doc&cid=100">正常學程</a>
+			<a href="board.php?courseID=28286&f=doc&cid=101">廢止學程</a>
+			<a href="board.php?courseID=28286&f=doc&cid=102">另一個正常學程</a>
+		`
+		doc, _ := goquery.NewDocumentFromReader(strings.NewReader(html))
+		seen := make(map[string]bool)
+
+		results, _ := extractProgramsFromPage(doc, seen, "Category")
+		if len(results) != 2 {
+			t.Errorf("Expected 2 results (excluding discontinued), got %d", len(results))
+		}
+		for _, r := range results {
+			if strings.Contains(r.Name, "廢止") {
+				t.Errorf("Discontinued program should be filtered: %s", r.Name)
+			}
+		}
+	})
+
+	t.Run("Skip non-program links", func(t *testing.T) {
+		html := `
+			<a href="board.php?courseID=28286&f=doc&cid=200">電機系課程</a>
+			<a href="board.php?courseID=28286&f=doc&cid=201">智慧財產權學士學分學程</a>
+			<a href="board.php?courseID=28286&f=other&cid=202">Other Link</a>
+		`
+		doc, _ := goquery.NewDocumentFromReader(strings.NewReader(html))
+		seen := make(map[string]bool)
+
+		results, _ := extractProgramsFromPage(doc, seen, "Category")
+		if len(results) != 1 {
+			t.Errorf("Expected 1 result (only 學程), got %d", len(results))
+		}
+		if len(results) > 0 && results[0].Name != "智慧財產權學士學分學程" {
+			t.Errorf("Expected '智慧財產權學士學分學程', got '%s'", results[0].Name)
+		}
+	})
+
+	t.Run("Handle malformed href", func(t *testing.T) {
+		html := `
+			<a href="">Empty href 學程</a>
+			<a>No href 學程</a>
+			<a href="board.php?courseID=28286&f=doc&cid=300">正常學程</a>
+		`
+		doc, _ := goquery.NewDocumentFromReader(strings.NewReader(html))
+		seen := make(map[string]bool)
+
+		results, _ := extractProgramsFromPage(doc, seen, "Category")
+		if len(results) != 1 {
+			t.Errorf("Expected 1 result (only valid href), got %d", len(results))
+		}
+	})
+}
