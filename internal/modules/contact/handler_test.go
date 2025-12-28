@@ -217,38 +217,6 @@ func TestFormatContactResults_LargeList(t *testing.T) {
 	}
 }
 
-func TestHandlePostback_ViewMore(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping network test in short mode")
-	}
-
-	h := setupTestHandler(t)
-	ctx := context.Background()
-
-	// Test "查看更多" postback
-	messages := h.HandlePostback(ctx, "查看更多$陳教授")
-
-	if len(messages) == 0 {
-		t.Error("Expected messages for postback, got none")
-	}
-}
-
-func TestHandlePostback_ViewInfo(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping network test in short mode")
-	}
-
-	h := setupTestHandler(t)
-	ctx := context.Background()
-
-	// Test "查看資訊" postback
-	messages := h.HandlePostback(ctx, "查看資訊$資工系")
-
-	if len(messages) == 0 {
-		t.Error("Expected messages for postback, got none")
-	}
-}
-
 func TestHandlePostback_InvalidData(t *testing.T) {
 	h := setupTestHandler(t)
 	ctx := context.Background()

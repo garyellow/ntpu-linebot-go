@@ -212,26 +212,11 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 	log := h.logger.WithModule(ModuleName)
 	log.Infof("Handling contact postback: %s", data)
 
-	// Handle "查看更多" postback (with or without prefix)
-	if strings.HasPrefix(data, "查看更多") {
-		parts := strings.Split(data, bot.PostbackSplitChar)
-		if len(parts) >= 2 {
-			name := parts[1]
-			return h.handleContactSearch(ctx, name)
-		}
-	}
-
-	// Handle "查看資訊" postback (with or without prefix)
-	if strings.HasPrefix(data, "查看資訊") {
-		parts := strings.Split(data, bot.PostbackSplitChar)
-		if len(parts) >= 2 {
-			name := parts[1]
-			return h.handleContactSearch(ctx, name)
-		}
-	}
+	// Strip module prefix if present (registry passes original data)
+	data = strings.TrimPrefix(data, "contact:")
 
 	// Handle "members" postback for viewing organization members
-	// Format: "contact:members${bot.PostbackSplitChar}{orgName}"
+	// Format: "members${bot.PostbackSplitChar}{orgName}"
 	if strings.HasPrefix(data, "members") {
 		parts := strings.Split(data, bot.PostbackSplitChar)
 		if len(parts) >= 2 {

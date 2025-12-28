@@ -568,6 +568,9 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 	log := h.logger.WithModule(ModuleName)
 	log.Infof("Handling course postback: %s", data)
 
+	// Strip module prefix if present (registry passes original data)
+	data = strings.TrimPrefix(data, "course:")
+
 	// Handle "授課課程" postback FIRST (before UID check, since teacher name might contain numbers)
 	if strings.HasPrefix(data, "授課課程") {
 		parts := strings.Split(data, bot.PostbackSplitChar)
@@ -579,7 +582,7 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 	}
 
 	// Check for course UID in postback (with or without prefix)
-	// Extract the actual UID from data (e.g., "course:1132U2236" -> "1132U2236")
+	// Extract the actual UID from data (e.g., "1132U2236")
 	if uidRegex.MatchString(data) {
 		uid := uidRegex.FindString(data)
 		return h.handleCourseUIDQuery(ctx, uid)
@@ -1329,14 +1332,14 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 
 		// Add program button
 		if len(programs) == 1 {
-			// Single program: show program name
+			// Single program: show program info (same as multiple programs)
 			firstProgram := programs[0]
-			displayText := lineutil.FormatLabel("查看課程", firstProgram.ProgramName, 40)
+			displayText := lineutil.FormatLabel("查看學程", firstProgram.ProgramName, 40)
 			row2 = append(row2, lineutil.NewFlexButton(
 				lineutil.NewPostbackActionWithDisplayText(
 					"🎓 相關學程",
 					displayText,
-					fmt.Sprintf("program:courses%s%s", bot.PostbackSplitChar, firstProgram.ProgramName),
+					fmt.Sprintf("program:course_programs%s%s", bot.PostbackSplitChar, course.UID),
 				),
 			).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm"))
 		} else {
