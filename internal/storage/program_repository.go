@@ -199,13 +199,14 @@ func (db *DB) GetAllPrograms(ctx context.Context, years, terms []int) ([]Program
 				SUM(CASE WHEN cp.course_type = '必' AND (` + semesterCond + `) THEN 1 ELSE 0 END) as required_count,
 				SUM(CASE WHEN cp.course_type != '必' AND (` + semesterCond + `) THEN 1 ELSE 0 END) as elective_count,
 				SUM(CASE WHEN (` + semesterCond + `) THEN 1 ELSE 0 END) as total_count,
-				p.cached_at
+				COALESCE(p.cached_at, 0) as cached_at
 			FROM programs p
 			LEFT JOIN course_programs cp ON p.name = cp.program_name
 			LEFT JOIN courses c ON cp.course_uid = c.uid
 			GROUP BY p.name, p.category
 			ORDER BY p.name
 		`
+	} else {
 		// No semester filter - count all courses for each program in LMS list
 		query = `
 			SELECT
@@ -215,7 +216,7 @@ func (db *DB) GetAllPrograms(ctx context.Context, years, terms []int) ([]Program
 				SUM(CASE WHEN cp.course_type = '必' THEN 1 ELSE 0 END) as required_count,
 				SUM(CASE WHEN cp.course_type != '必' THEN 1 ELSE 0 END) as elective_count,
 				COUNT(cp.course_uid) as total_count,
-				p.cached_at
+				COALESCE(p.cached_at, 0) as cached_at
 			FROM programs p
 			LEFT JOIN course_programs cp ON p.name = cp.program_name
 			GROUP BY p.name, p.category
@@ -254,7 +255,7 @@ func (db *DB) GetProgramByName(ctx context.Context, name string) (*Program, erro
 			SUM(CASE WHEN cp.course_type = '必' THEN 1 ELSE 0 END) as required_count,
 			SUM(CASE WHEN cp.course_type != '必' THEN 1 ELSE 0 END) as elective_count,
 			COUNT(cp.course_uid) as total_count,
-			p.cached_at
+			COALESCE(p.cached_at, 0) as cached_at
 		FROM programs p
 		LEFT JOIN course_programs cp ON p.name = cp.program_name
 		WHERE p.name = ?
@@ -288,9 +289,11 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, term
 	var query string
 	var args []any
 
+	// Search term first
+	args = append(args, "%"+sanitized+"%")
+
 	if semesterCond, semesterArgs, ok := buildSemesterConditions(years, terms, "c"); ok {
-		// Search term first, then semester args replicated 3 times
-		args = append(args, "%"+sanitized+"%")
+		// Semester args replicated 3 times
 		for range 3 {
 			args = append(args, semesterArgs...)
 		}
@@ -303,7 +306,7 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, term
 				SUM(CASE WHEN cp.course_type = '必' AND (` + semesterCond + `) THEN 1 ELSE 0 END) as required_count,
 				SUM(CASE WHEN cp.course_type != '必' AND (` + semesterCond + `) THEN 1 ELSE 0 END) as elective_count,
 				SUM(CASE WHEN (` + semesterCond + `) THEN 1 ELSE 0 END) as total_count,
-				p.cached_at
+				COALESCE(p.cached_at, 0) as cached_at
 			FROM programs p
 			LEFT JOIN course_programs cp ON p.name = cp.program_name
 			LEFT JOIN courses c ON cp.course_uid = c.uid
@@ -311,6 +314,7 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, term
 			GROUP BY p.name, p.category
 			ORDER BY p.name
 		`
+	} else {
 		// No semester filter (legacy behavior)
 		query = `
 			SELECT
