@@ -1032,15 +1032,8 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 
 	log.Infof("Handling historical course search: year=%d, keyword=%s", year, keyword)
 
-	// Check if this is a recent year (within warmup range) - use regular course search
-	if year >= currentYear-1 {
-		log.Infof("Year %d is within warmup range, redirecting to regular course search", year)
-		return h.handleUnifiedCourseSearch(ctx, keyword)
-	}
-
-	// Check if the requested year is in the recent/active semesters (Hot Data)
-	// If so, we should query the 'courses' table instead of 'historical_courses'
-	// to avoid data duplication and ensure we use the pre-warmed cache.
+	// Check if the requested year is in the recent/active semesters (Hot Data).
+	// If so, we query the 'courses' table instead of 'historical_courses' to use the pre-warmed cache.
 	isRecent := false
 	if h.semesterDetector != nil {
 		recentYears, _ := h.semesterDetector.GetRecentSemesters()
