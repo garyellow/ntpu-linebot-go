@@ -114,7 +114,7 @@ func getCategoryLabel(category string) lineutil.BodyLabelInfo {
 // formatProgramListResponse formats a list of programs as a text message.
 // Uses text-based display to handle large lists.
 // Consolidates all programs into a single message if possible (limit 5000 chars).
-func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCount int) []messaging_api.MessageInterface {
+func (h *Handler) formatProgramListResponse(programs []storage.Program, titleH1, footerText string) []messaging_api.MessageInterface {
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	var messages []messaging_api.MessageInterface
 
@@ -125,9 +125,9 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCou
 	// Track items in current message for batching
 	itemsInCurrentMsg := 0
 
-	header := fmt.Sprintf("🎓 學程列表 (共 %d 個)\n", totalCount)
-	sb.WriteString(header)
-	sbRunes += utf8.RuneCountInString(header)
+	// Use provided title (allows differentiation between "學程列表" and "Search Results")
+	sb.WriteString(titleH1 + "\n")
+	sbRunes += utf8.RuneCountInString(titleH1 + "\n")
 
 	separator := "━━━━━━━━━━━━━━━━\n\n"
 	sb.WriteString(separator)
@@ -139,6 +139,11 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCou
 
 		// Proposed entry
 		var entry strings.Builder
+		// Add newline before each program except the first one in the batch
+		if itemsInCurrentMsg > 0 {
+			entry.WriteString("\n")
+		}
+
 		fmt.Fprintf(&entry, "%d. %s", idx, prog.Name)
 
 		// Show course counts if available
@@ -149,16 +154,16 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCou
 
 		// Add URL if available (LINE will auto-link), remove https:// prefix to save chars
 		if prog.URL != "" {
-			entry.WriteString(fmt.Sprintf("   📎 %s\n", strings.TrimPrefix(prog.URL, "https://")))
+			entry.WriteString(fmt.Sprintf("📎 %s\n", strings.TrimPrefix(prog.URL, "https://")))
 		}
 
 		entryStr := entry.String()
 		entryRunes := utf8.RuneCountInString(entryStr)
 
 		// Check limits:
-		// 1. Character limit (4700 buffer / 5000 max) - reserve ~300 chars for footer & overhead
+		// 1. Character limit (4900 buffer / 5000 max) - increased from 4700 as requested
 		// 2. Batch size limit (TextListBatchSize items/message)
-		if sbRunes+entryRunes > 4700 || itemsInCurrentMsg >= TextListBatchSize {
+		if sbRunes+entryRunes > 4900 || itemsInCurrentMsg >= TextListBatchSize {
 			// Finalize current message
 			messages = append(messages, lineutil.NewTextMessageWithConsistentSender(sb.String(), sender))
 			sb.Reset()
@@ -166,6 +171,11 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCou
 			itemsInCurrentMsg = 0
 
 			// Continuation: no separator or header, just continue the list
+			// Note: For the first item of a new batch, we don't want the leading newline
+			if strings.HasPrefix(entryStr, "\n") {
+				entryStr = strings.TrimPrefix(entryStr, "\n")
+				entryRunes = utf8.RuneCountInString(entryStr)
+			}
 		}
 
 		sb.WriteString(entryStr)
@@ -175,12 +185,10 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCou
 
 	// Add footer
 	sb.WriteString("━━━━━━━━━━━━━━━━\n")
-	sb.WriteString("💡 輸入「學程 關鍵字」搜尋特定學程")
+	// Use provided footer text (allows different hints for list vs search)
+	sb.WriteString(footerText)
 
-	// Add update time if available (use first program's cached_at)
-	if len(programs) > 0 && programs[0].CachedAt > 0 {
-		sb.WriteString(lineutil.FormatCacheTimeFooter(programs[0].CachedAt))
-	}
+	// Note: Removed update time display as requested
 
 	// Create the final (or only) message
 	msg := lineutil.NewTextMessageWithConsistentSender(sb.String(), sender)
@@ -224,9 +232,11 @@ func (h *Handler) formatProgramSearchResponse(programs []storage.Program) []mess
 //	│ 📚 課程數量：15 門       │
 //	│ ✅ 必修：8 門            │
 //	│ 📝 選修：7 門            │
+//	│ ⚠️ 請參閱學程網頁...      │  <- Warning (if 0 courses)
 //	├──────────────────────────┤
-//	│ [📋 查看學程詳細]        │  <- Footer button (external URL, if available)
-//	│ [📚 查看課程]            │  <- Footer button (internal)
+//	│ [📋 學程資訊]            │  <- Footer button (row 1)
+//	├──────────────────────────┤
+//	│ [📚 查看課程]            │  <- Footer button (row 2, only if >0 courses)
 //	└──────────────────────────┘
 func (h *Handler) buildProgramBubble(program storage.Program) *lineutil.FlexBubble {
 	// Get category label info (emoji, label, color based on category)
@@ -258,28 +268,44 @@ func (h *Handler) buildProgramBubble(program storage.Program) *lineutil.FlexBubb
 		body.AddInfoRow("📝", "選修", fmt.Sprintf("%d 門", program.ElectiveCount), lineutil.DefaultInfoRowStyle())
 	}
 
-	// Build footer buttons
-	var footerButtons []*lineutil.FlexButton
+	// 0 courses warning
+	if totalCourses == 0 {
+		// Only show warning if there really are 0 courses (both required and elective)
+		body.AddInfoRow("⚠️", "注意", "近 2 學期無課程資料，請點擊「學程資訊」至網頁確認", lineutil.DefaultInfoRowStyle())
+	}
 
-	// Add LMS detail page button if URL is available (renamed to 學程資訊)
+	// Build footer buttons - using rows for vertical stacking
+	var footerRows []*lineutil.FlexButton
+
+	// Row 1: Add LMS detail page button if URL is available (renamed to 學程資訊)
 	if program.URL != "" {
 		detailBtn := lineutil.NewFlexButton(
 			lineutil.NewURIAction("📋 學程資訊", program.URL),
 		).WithStyle("secondary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm")
-		footerButtons = append(footerButtons, detailBtn)
+		footerRows = append(footerRows, detailBtn)
 	}
 
-	// View courses button (internal) - on separate line from above
-	viewCoursesBtn := lineutil.NewFlexButton(
-		lineutil.NewPostbackActionWithDisplayText(
-			"📚 "+PostbackViewCoursesLabel,
-			lineutil.TruncateRunes(fmt.Sprintf("查看「%s」的課程", program.Name), 40),
-			PostbackPrefix+"courses"+bot.PostbackSplitChar+program.Name,
-		),
-	).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm")
-	footerButtons = append(footerButtons, viewCoursesBtn)
+	// Row 2: View courses button (internal) - only if courses exist
+	// Stacked vertically: distinct row
+	if totalCourses > 0 {
+		viewCoursesBtn := lineutil.NewFlexButton(
+			lineutil.NewPostbackActionWithDisplayText(
+				"📚 "+PostbackViewCoursesLabel,
+				lineutil.TruncateRunes(fmt.Sprintf("查看「%s」的課程", program.Name), 40),
+				PostbackPrefix+"courses"+bot.PostbackSplitChar+program.Name,
+			),
+		).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm")
+		footerRows = append(footerRows, viewCoursesBtn)
+	}
 
-	footer := lineutil.NewButtonFooter(footerButtons)
+	// Pass as slice of slices to NewButtonFooter
+	// Each element in footerRows becomes a separate row with one button
+	rows := make([][]*lineutil.FlexButton, 0, len(footerRows))
+	for _, btn := range footerRows {
+		rows = append(rows, []*lineutil.FlexButton{btn})
+	}
+
+	footer := lineutil.NewButtonFooter(rows...)
 
 	return lineutil.NewFlexBubble(header, nil, body.Build(), footer)
 }
@@ -317,7 +343,7 @@ func (h *Handler) formatProgramCoursesResponse(programName string, requiredCours
 	// Add header message with program info (show original counts, no "必修優先" text)
 	// Include disclaimer about referring to official program info page
 	headerMsg := lineutil.NewTextMessageWithConsistentSender(
-		fmt.Sprintf("🎓 %s\n\n📊 課程統計\n• 必修：%d 門\n• 選修：%d 門\n• 共計：%d 門\n\n⬇️ 以下為課程列表\n\n⚠️ 請同步參閱學程資訊頁面，各課程及其必選修別以學程科目規劃表所列為準",
+		fmt.Sprintf("🎓 %s\n\n⚠️ 請同步參閱學程資訊頁面，各課程及其必選修別以學程科目規劃表所列為準\n\n📊 課程統計\n• 必修：%d 門\n• 選修：%d 門\n• 共計：%d 門\n\n⬇️ 以下為課程列表",
 			programName,
 			originalRequiredCount,
 			originalElectiveCount,
@@ -429,7 +455,7 @@ func (h *Handler) formatProgramCoursesAsTextList(programName string, requiredCou
 
 	// Header message with program info and disclaimer
 	headerMsg := lineutil.NewTextMessageWithConsistentSender(
-		fmt.Sprintf("🎓 %s\n\n📊 課程統計\n• 必修：%d 門\n• 選修：%d 門\n• 共計：%d 門\n\n⬇️ 以下為課程列表\n\n⚠️ 請同步參閱學程資訊頁面，各課程及其必選修別以學程科目規劃表所列為準",
+		fmt.Sprintf("🎓 %s\n\n⚠️ 請同步參閱學程資訊頁面，各課程及其必選修別以學程科目規劃表所列為準\n\n📊 課程統計\n• 必修：%d 門\n• 選修：%d 門\n• 共計：%d 門\n\n⬇️ 以下為課程列表",
 			programName,
 			originalRequiredCount,
 			originalElectiveCount,
