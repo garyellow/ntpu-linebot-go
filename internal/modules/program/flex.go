@@ -164,14 +164,17 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, titleH1,
 		// 1. Character limit (4900 buffer / 5000 max) - increased from 4700 as requested
 		// 2. Batch size limit (TextListBatchSize items/message)
 		if sbRunes+entryRunes > 4900 || itemsInCurrentMsg >= TextListBatchSize {
+			// Remove trailing newline from the last item of the current batch if present
+			currentContent := strings.TrimSuffix(sb.String(), "\n")
+
 			// Finalize current message
-			messages = append(messages, lineutil.NewTextMessageWithConsistentSender(sb.String(), sender))
+			messages = append(messages, lineutil.NewTextMessageWithConsistentSender(currentContent, sender))
 			sb.Reset()
 			sbRunes = 0
 			itemsInCurrentMsg = 0
 
 			// Continuation: no separator or header, just continue the list
-			// Note: For the first item of a new batch, we don't want the leading newline
+			// For the first item of a new batch, we don't want the leading newline
 			if strings.HasPrefix(entryStr, "\n") {
 				entryStr = strings.TrimPrefix(entryStr, "\n")
 				entryRunes = utf8.RuneCountInString(entryStr)
@@ -183,8 +186,14 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, titleH1,
 		itemsInCurrentMsg++
 	}
 
+	// Remove trailing newline from the last item of the final batch
+	finalContent := strings.TrimSuffix(sb.String(), "\n")
+
 	// Add footer
-	sb.WriteString("━━━━━━━━━━━━━━━━\n")
+	// Ensure there is a newline before separator if content doesn't end with one (it shouldn't now)
+	sb.Reset()
+	sb.WriteString(finalContent)
+	sb.WriteString("\n━━━━━━━━━━━━━━━━\n")
 	// Use provided footer text (allows different hints for list vs search)
 	sb.WriteString(footerText)
 
@@ -243,8 +252,9 @@ func (h *Handler) buildProgramBubble(program storage.Program) *lineutil.FlexBubb
 	labelInfo := getCategoryLabel(program.Category)
 
 	// Header: Program name with category-based colored background
+	// WARNING: Do NOT truncate program name here. It's the final info page, user needs full name.
 	header := lineutil.NewColoredHeader(lineutil.ColoredHeaderInfo{
-		Title: lineutil.TruncateRunes(program.Name, MaxTitleDisplayChars),
+		Title: program.Name,
 		Color: labelInfo.Color,
 	})
 
@@ -271,7 +281,10 @@ func (h *Handler) buildProgramBubble(program storage.Program) *lineutil.FlexBubb
 	// 0 courses warning
 	if totalCourses == 0 {
 		// Only show warning if there really are 0 courses (both required and elective)
-		body.AddInfoRow("⚠️", "注意", "近 2 學期無課程資料，請點擊「學程資訊」至網頁確認", lineutil.DefaultInfoRowStyle())
+		// Enable wrapping for this warning message to prevent truncation
+		warningStyle := lineutil.DefaultInfoRowStyle()
+		warningStyle.Wrap = true
+		body.AddInfoRow("⚠️", "注意", "近 2 學期無課程資料，請點擊「學程資訊」至網頁確認", warningStyle)
 	}
 
 	// Build footer buttons - using rows for vertical stacking
@@ -397,8 +410,9 @@ func (h *Handler) buildProgramCourseBubble(pc storage.ProgramCourse, isRequired 
 	}
 
 	// Header: Course title with colored background
+	// WARNING: Do NOT truncate course title here.
 	header := lineutil.NewColoredHeader(lineutil.ColoredHeaderInfo{
-		Title: lineutil.TruncateRunes(lineutil.FormatCourseTitleWithUID(pc.Course.Title, pc.Course.UID), MaxTitleDisplayChars),
+		Title: lineutil.FormatCourseTitleWithUID(pc.Course.Title, pc.Course.UID),
 		Color: headerColor,
 	})
 
