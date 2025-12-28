@@ -147,13 +147,10 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCou
 		}
 		entry.WriteString("\n")
 
-		// Add URL if available (LINE will auto-link)
+		// Add URL if available (LINE will auto-link), remove https:// prefix to save chars
 		if prog.URL != "" {
-			entry.WriteString(fmt.Sprintf("   📎 %s\n", prog.URL))
+			entry.WriteString(fmt.Sprintf("   📎 %s\n", strings.TrimPrefix(prog.URL, "https://")))
 		}
-
-		// Add spacing between items
-		entry.WriteString("\n")
 
 		entryStr := entry.String()
 		entryRunes := utf8.RuneCountInString(entryStr)
@@ -168,13 +165,7 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCou
 			sbRunes = 0
 			itemsInCurrentMsg = 0
 
-			continuationSeparator := "━━━━━━━━━━━━━━━━\n"
-			sb.WriteString(continuationSeparator)
-			sbRunes += utf8.RuneCountInString(continuationSeparator)
-
-			headerCont := fmt.Sprintf("🎓 學程列表 (續 - %d...)\n\n", idx)
-			sb.WriteString(headerCont)
-			sbRunes += utf8.RuneCountInString(headerCont)
+			// Continuation: no separator or header, just continue the list
 		}
 
 		sb.WriteString(entryStr)
@@ -265,15 +256,15 @@ func (h *Handler) buildProgramBubble(program storage.Program) *lineutil.FlexBubb
 	// Build footer buttons
 	var footerButtons []*lineutil.FlexButton
 
-	// Add LMS detail page button if URL is available
+	// Add LMS detail page button if URL is available (renamed to 學程資訊)
 	if program.URL != "" {
 		detailBtn := lineutil.NewFlexButton(
-			lineutil.NewURIAction("📋 查看學程詳細", program.URL),
+			lineutil.NewURIAction("📋 學程資訊", program.URL),
 		).WithStyle("secondary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm")
 		footerButtons = append(footerButtons, detailBtn)
 	}
 
-	// View courses button (internal)
+	// View courses button (internal) - on separate line from above
 	viewCoursesBtn := lineutil.NewFlexButton(
 		lineutil.NewPostbackActionWithDisplayText(
 			"📚 "+PostbackViewCoursesLabel,
@@ -290,7 +281,8 @@ func (h *Handler) buildProgramBubble(program storage.Program) *lineutil.FlexBubb
 
 // formatProgramCoursesResponse formats program courses as carousel Flex Messages.
 // Required courses are displayed first, followed by elective courses.
-func (h *Handler) formatProgramCoursesResponse(programName string, requiredCourses, electiveCourses []storage.ProgramCourse) []messaging_api.MessageInterface {
+// originalRequiredCount and originalElectiveCount are the actual counts before any truncation.
+func (h *Handler) formatProgramCoursesResponse(programName string, requiredCourses, electiveCourses []storage.ProgramCourse, originalRequiredCount, originalElectiveCount int) []messaging_api.MessageInterface {
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	// Build carousel bubbles
@@ -317,13 +309,14 @@ func (h *Handler) formatProgramCoursesResponse(programName string, requiredCours
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	// Add header message with program info
+	// Add header message with program info (show original counts, no "必修優先" text)
+	// Include disclaimer about referring to official program info page
 	headerMsg := lineutil.NewTextMessageWithConsistentSender(
-		fmt.Sprintf("🎓 %s\n\n📊 課程統計\n• 必修：%d 門\n• 選修：%d 門\n• 共計：%d 門\n\n⬇️ 以下為課程列表（必修優先）",
+		fmt.Sprintf("🎓 %s\n\n📊 課程統計\n• 必修：%d 門\n• 選修：%d 門\n• 共計：%d 門\n\n⬇️ 以下為課程列表\n\n⚠️ 請同步參閱學程資訊頁面，各課程及其必選修別以學程科目規劃表所列為準",
 			programName,
-			len(requiredCourses),
-			len(electiveCourses),
-			len(requiredCourses)+len(electiveCourses)),
+			originalRequiredCount,
+			originalElectiveCount,
+			originalRequiredCount+originalElectiveCount),
 		sender,
 	)
 
@@ -412,11 +405,11 @@ func (h *Handler) buildProgramCourseBubble(pc storage.ProgramCourse, isRequired 
 		body.AddInfoRow("📍", "上課地點", locationStr, lineutil.DefaultInfoRowStyle())
 	}
 
-	// Footer: View course detail button
+	// Footer: View course detail button (display course title, not UID)
 	viewDetailBtn := lineutil.NewFlexButton(
 		lineutil.NewPostbackActionWithDisplayText(
 			"📄 查看詳細",
-			lineutil.TruncateRunes(fmt.Sprintf("查詢課程 %s", pc.Course.UID), 40),
+			lineutil.TruncateRunes(fmt.Sprintf("查詢課程 %s", pc.Course.Title), 40),
 			"course:"+pc.Course.UID,
 		),
 	).WithStyle("primary").WithColor(headerColor).WithHeight("sm")
@@ -424,4 +417,89 @@ func (h *Handler) buildProgramCourseBubble(pc storage.ProgramCourse, isRequired 
 	footer := lineutil.NewButtonFooter([]*lineutil.FlexButton{viewDetailBtn})
 
 	return lineutil.NewFlexBubble(header, nil, body.Build(), footer)
+}
+
+// formatProgramCoursesAsTextList formats program courses as text messages when count exceeds carousel limit.
+// Each course is displayed as: {序號}. {課程編號} {課程名}
+func (h *Handler) formatProgramCoursesAsTextList(programName string, requiredCourses, electiveCourses []storage.ProgramCourse, originalRequiredCount, originalElectiveCount int) []messaging_api.MessageInterface {
+	sender := lineutil.GetSender(senderName, h.stickerManager)
+	var messages []messaging_api.MessageInterface
+
+	// Header message with program info and disclaimer
+	headerMsg := lineutil.NewTextMessageWithConsistentSender(
+		fmt.Sprintf("🎓 %s\n\n📊 課程統計\n• 必修：%d 門\n• 選修：%d 門\n• 共計：%d 門\n\n⬇️ 以下為課程列表\n\n⚠️ 請同步參閱學程資訊頁面，各課程及其必選修別以學程科目規劃表所列為準",
+			programName,
+			originalRequiredCount,
+			originalElectiveCount,
+			originalRequiredCount+originalElectiveCount),
+		sender,
+	)
+	messages = append(messages, headerMsg)
+
+	// Build course list text
+	var sb strings.Builder
+	idx := 0
+
+	// Add required courses
+	if len(requiredCourses) > 0 {
+		sb.WriteString("【必修課程】\n")
+		for _, pc := range requiredCourses {
+			idx++
+			sb.WriteString(fmt.Sprintf("%d. %s %s\n", idx, pc.Course.UID, pc.Course.Title))
+		}
+	}
+
+	// Add elective courses
+	if len(electiveCourses) > 0 {
+		if len(requiredCourses) > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString("【選修課程】\n")
+		for _, pc := range electiveCourses {
+			idx++
+			sb.WriteString(fmt.Sprintf("%d. %s %s\n", idx, pc.Course.UID, pc.Course.Title))
+		}
+	}
+
+	// Split into multiple messages if needed (4700 char limit per message)
+	content := sb.String()
+	if utf8.RuneCountInString(content) <= 4700 {
+		listMsg := lineutil.NewTextMessageWithConsistentSender(content, sender)
+		messages = append(messages, listMsg)
+	} else {
+		// Split by lines
+		lines := strings.Split(content, "\n")
+		var currentSb strings.Builder
+		currentRunes := 0
+
+		for _, line := range lines {
+			lineWithNewline := line + "\n"
+			lineRunes := utf8.RuneCountInString(lineWithNewline)
+
+			if currentRunes+lineRunes > 4700 {
+				// Finalize current message
+				messages = append(messages, lineutil.NewTextMessageWithConsistentSender(currentSb.String(), sender))
+				currentSb.Reset()
+				currentRunes = 0
+			}
+
+			currentSb.WriteString(lineWithNewline)
+			currentRunes += lineRunes
+		}
+
+		// Add remaining content
+		if currentSb.Len() > 0 {
+			messages = append(messages, lineutil.NewTextMessageWithConsistentSender(currentSb.String(), sender))
+		}
+	}
+
+	// Add footer message with search hint
+	footerMsg := lineutil.NewTextMessageWithConsistentSender(
+		"💡 可利用課程編號或課程名稱查詢相關課程詳細資訊\n\n⚠️ 請同步參閱學程資訊頁面，各課程及其必選修別以學程科目規劃表所列為準",
+		sender,
+	)
+	footerMsg.QuickReply = lineutil.NewQuickReply(QuickReplyProgramNav())
+	messages = append(messages, footerMsg)
+
+	return messages
 }

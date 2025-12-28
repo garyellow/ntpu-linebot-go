@@ -116,9 +116,9 @@ func TestHandleMessage_ListSplit(t *testing.T) {
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
-	// 1. Seed database with 35 programs (Batch size is 30)
-	programs := make([]struct{ Name, Category, URL string }, 35)
-	for i := 0; i < 35; i++ {
+	// 1. Seed database with 55 programs (Batch size is 50)
+	programs := make([]struct{ Name, Category, URL string }, 55)
+	for i := 0; i < 55; i++ {
 		programs[i] = struct{ Name, Category, URL string }{
 			Name:     fmt.Sprintf("Program %02d", i+1),
 			Category: "Bachelor",
@@ -135,10 +135,10 @@ func TestHandleMessage_ListSplit(t *testing.T) {
 
 	// 3. Verify pagination
 	// Expect 2 messages:
-	// Msg 1: Programs 1-30
-	// Msg 2: Programs 31-35 + Footer
+	// Msg 1: Programs 1-50
+	// Msg 2: Programs 51-55 + Footer
 	if len(msgs) != 2 {
-		t.Errorf("Expected 2 messages for 35 programs (batch size 30), got %d", len(msgs))
+		t.Errorf("Expected 2 messages for 55 programs (batch size 50), got %d", len(msgs))
 	} else {
 		// Optional: Check content of first message
 		txtMsg, ok := msgs[0].(*messaging_api.TextMessage)
@@ -150,7 +150,7 @@ func TestHandleMessage_ListSplit(t *testing.T) {
 			t.Errorf("Message 1 too long: %d runes", utf8.RuneCountInString(text))
 		}
 		// Validating split point roughly
-		// "Program 30" should be in Msg 1, "Program 31" in Msg 2
+		// "Program 50" should be in Msg 1, "Program 51" in Msg 2
 		// But let's just trust the count for now as precise text matching depends on sorting
 	}
 }

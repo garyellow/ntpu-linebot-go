@@ -49,9 +49,10 @@ const (
 	ModuleName               = "program" // Module identifier for registration
 	senderName               = "學程小幫手"
 	MaxProgramsPerSearch     = 500 // Text-based display limit (increased to cover all programs)
-	TextListBatchSize        = 30  // Text-based list batch size (adjusted to 30 based on user feedback)
+	TextListBatchSize        = 50  // Text-based list batch size
 	MaxSearchResultsWithCard = 10  // Flex carousel limit for search results
 	MaxCoursesPerProgram     = 50  // 5 carousels @ 10 bubbles (LINE API max capacity)
+	MaxCoursesInCarousel     = 40  // Carousel limit (first message is stats, leaves room for 4 carousels)
 	MaxTitleDisplayChars     = 50  // Truncation limit for program titles
 	PostbackPrefix           = "program:"
 	PostbackViewCoursesLabel = "查看課程"
@@ -498,24 +499,19 @@ func (h *Handler) handleProgramCourses(ctx context.Context, programName string) 
 		}
 	}
 
-	// Truncate to MaxCoursesPerProgram (LINE API limit: 5 carousels × 10 bubbles)
-	// Prioritize required courses over elective courses when truncating
-	totalCourses := len(requiredCourses) + len(electiveCourses)
-	if totalCourses > MaxCoursesPerProgram {
-		log.Infof("Truncating program courses from %d to %d", totalCourses, MaxCoursesPerProgram)
-		remaining := MaxCoursesPerProgram
-		if len(requiredCourses) >= remaining {
-			requiredCourses = requiredCourses[:remaining]
-			electiveCourses = nil
-		} else {
-			remaining -= len(requiredCourses)
-			if len(electiveCourses) > remaining {
-				electiveCourses = electiveCourses[:remaining]
-			}
-		}
+	// Store original counts before truncation for display
+	originalRequiredCount := len(requiredCourses)
+	originalElectiveCount := len(electiveCourses)
+	totalCourses := originalRequiredCount + originalElectiveCount
+
+	// Decision: Use carousel for ≤40 courses, text list for >40 courses
+	if totalCourses <= MaxCoursesInCarousel {
+		return h.formatProgramCoursesResponse(programName, requiredCourses, electiveCourses, originalRequiredCount, originalElectiveCount)
 	}
 
-	return h.formatProgramCoursesResponse(programName, requiredCourses, electiveCourses)
+	// For >40 courses, use text list format
+	log.Infof("Using text list format for %d courses (exceeds carousel limit %d)", totalCourses, MaxCoursesInCarousel)
+	return h.formatProgramCoursesAsTextList(programName, requiredCourses, electiveCourses, originalRequiredCount, originalElectiveCount)
 }
 
 // handleCourseProgramsList shows all programs that a course belongs to.
@@ -525,6 +521,15 @@ func (h *Handler) handleCourseProgramsList(ctx context.Context, courseUID string
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	log.Infof("Handling course programs list for: %s", courseUID)
+
+	// Get course info to display course name (not just UID)
+	course, err := h.db.GetCourseByUID(ctx, courseUID)
+	courseName := courseUID // Fallback to UID if course not found
+	if err != nil {
+		log.WithError(err).Warnf("Failed to get course info for %s, using UID as fallback", courseUID)
+	} else if course != nil {
+		courseName = course.Title
+	}
 
 	// Get all programs for this course
 	programs, err := h.db.GetCoursePrograms(ctx, courseUID)
@@ -550,9 +555,14 @@ func (h *Handler) handleCourseProgramsList(ctx context.Context, courseUID string
 	h.metrics.RecordCacheHit(ModuleName)
 	log.Infof("Found %d programs for course: %s", len(programs), courseUID)
 
-	// Build text message listing all programs
+	// For ≤10 programs, use Flex carousel (same style as program search)
+	if len(programs) <= MaxSearchResultsWithCard {
+		return h.formatCourseProgramsAsCarousel(ctx, courseName, programs)
+	}
+
+	// For >10 programs, use text list with course name display
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("🎓 課程 %s 的相關學程\n\n", courseUID))
+	sb.WriteString(fmt.Sprintf("🎓 課程「%s」的相關學程\n\n", courseName))
 
 	// Separate required and elective
 	var required, elective []storage.ProgramRequirement
@@ -583,7 +593,7 @@ func (h *Handler) handleCourseProgramsList(ctx context.Context, courseUID string
 
 	msg := lineutil.NewTextMessageWithConsistentSender(sb.String(), sender)
 
-	// Add quick reply items for each program
+	// Add quick reply items for each program (display course name in action text)
 	quickReplyItems := make([]lineutil.QuickReplyItem, 0, len(programs)+2)
 	for _, p := range programs {
 		if len(quickReplyItems) >= 11 { // Leave room for list and help
@@ -603,6 +613,63 @@ func (h *Handler) handleCourseProgramsList(ctx context.Context, courseUID string
 	msg.QuickReply = lineutil.NewQuickReply(quickReplyItems)
 
 	return []messaging_api.MessageInterface{msg}
+}
+
+// formatCourseProgramsAsCarousel formats course programs as Flex carousel (for ≤10 programs).
+func (h *Handler) formatCourseProgramsAsCarousel(ctx context.Context, courseName string, programs []storage.ProgramRequirement) []messaging_api.MessageInterface {
+	sender := lineutil.GetSender(senderName, h.stickerManager)
+
+	// Get recent 2 semesters for program statistics
+	var years, terms []int
+	if h.semesterDetector != nil {
+		years, terms = h.semesterDetector.GetRecentSemesters()
+	}
+
+	// Build program bubbles
+	bubbles := make([]messaging_api.FlexBubble, 0, len(programs))
+	for _, p := range programs {
+		// Get full program info from database
+		allPrograms, err := h.db.SearchPrograms(ctx, p.ProgramName, years, terms)
+		if err != nil || len(allPrograms) == 0 {
+			// Create a minimal program struct if not found
+			minimalProgram := storage.Program{
+				Name:     p.ProgramName,
+				Category: "",
+			}
+			bubble := h.buildProgramBubble(minimalProgram)
+			bubbles = append(bubbles, *bubble.FlexBubble)
+			continue
+		}
+		// Find exact match
+		var program storage.Program
+		for _, prog := range allPrograms {
+			if prog.Name == p.ProgramName {
+				program = prog
+				break
+			}
+		}
+		if program.Name == "" {
+			program = allPrograms[0]
+		}
+		bubble := h.buildProgramBubble(program)
+		bubbles = append(bubbles, *bubble.FlexBubble)
+	}
+
+	// Build carousel with header text
+	headerMsg := lineutil.NewTextMessageWithConsistentSender(
+		fmt.Sprintf("🎓 課程「%s」的相關學程\n\n共 %d 個學程，點擊下方卡片查看詳細資訊", courseName, len(programs)),
+		sender,
+	)
+
+	carouselMessages := lineutil.BuildCarouselMessages("相關學程", bubbles, sender)
+	messages := append([]messaging_api.MessageInterface{headerMsg}, carouselMessages...)
+
+	// Add quick reply to last message
+	if len(messages) > 0 {
+		lineutil.AddQuickReplyToMessages(messages, QuickReplyProgramNav()...)
+	}
+
+	return messages
 }
 
 // ================================================
