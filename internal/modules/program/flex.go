@@ -112,15 +112,6 @@ func getCategoryLabel(category string) lineutil.BodyLabelInfo {
 }
 
 // formatProgramListResponse formats a list of programs as a text message.
-// Uses text-based display to handle large lists (>50 programs).
-// Format:
-// 🎓 學程列表 (共 N 個)
-// ────────────────
-//  1. 學程名稱 (必X/選Y)
-//     https://lms.ntpu.edu.tw/...
-//
-// 2. 學程名稱...
-// formatProgramListResponse formats a list of programs as a text message.
 // Uses text-based display to handle large lists.
 // Consolidates all programs into a single message if possible (limit 5000 chars).
 func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCount int) []messaging_api.MessageInterface {
@@ -130,6 +121,9 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCou
 	// Track rune count of sb (LINE limit is 5000 characters)
 	sbRunes := 0
 	var sb strings.Builder
+
+	// Track items in current message for batching
+	itemsInCurrentMsg := 0
 
 	header := fmt.Sprintf("🎓 學程列表 (共 %d 個)\n", totalCount)
 	sb.WriteString(header)
@@ -164,17 +158,19 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCou
 		entryStr := entry.String()
 		entryRunes := utf8.RuneCountInString(entryStr)
 
-		// Check if adding this entry would exceed the limit (using 4800 characters as safety margin)
-		// Max Text Message length is 5000 characters.
-		if sbRunes+entryRunes > 4800 {
+		// Check limits:
+		// 1. Character limit (4800 buffer / 5000 max)
+		// 2. Batch size limit (TextListBatchSize items/message)
+		if sbRunes+entryRunes > 4800 || itemsInCurrentMsg >= TextListBatchSize {
 			// Finalize current message
 			messages = append(messages, lineutil.NewTextMessageWithConsistentSender(sb.String(), sender))
 			sb.Reset()
 			sbRunes = 0
+			itemsInCurrentMsg = 0
 
-			separator := "━━━━━━━━━━━━━━━━\n"
-			sb.WriteString(separator)
-			sbRunes += utf8.RuneCountInString(separator)
+			continuationSeparator := "━━━━━━━━━━━━━━━━\n"
+			sb.WriteString(continuationSeparator)
+			sbRunes += utf8.RuneCountInString(continuationSeparator)
 
 			headerCont := fmt.Sprintf("🎓 學程列表 (續 - %d...)\n\n", idx)
 			sb.WriteString(headerCont)
@@ -183,6 +179,7 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCou
 
 		sb.WriteString(entryStr)
 		sbRunes += entryRunes
+		itemsInCurrentMsg++
 	}
 
 	// Add footer

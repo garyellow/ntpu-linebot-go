@@ -49,6 +49,7 @@ const (
 	ModuleName               = "program" // Module identifier for registration
 	senderName               = "學程小幫手"
 	MaxProgramsPerSearch     = 500 // Text-based display limit (increased to cover all programs)
+	TextListBatchSize        = 30  // Text-based list batch size (adjusted to 30 based on user feedback)
 	MaxSearchResultsWithCard = 10  // Flex carousel limit for search results
 	MaxCoursesPerProgram     = 50  // 5 carousels @ 10 bubbles (LINE API max capacity)
 	MaxTitleDisplayChars     = 50  // Truncation limit for program titles

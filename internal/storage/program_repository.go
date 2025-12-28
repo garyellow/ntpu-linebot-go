@@ -189,7 +189,7 @@ func (db *DB) GetAllPrograms(ctx context.Context, years, terms []int) ([]Program
 		query = `
 			SELECT
 				p.name,
-				MAX(p.category) as category,
+				p.category,
 				COALESCE(p.url, '') as url,
 				SUM(CASE WHEN cp.course_type = '必' AND (` + semesterCond + `) THEN 1 ELSE 0 END) as required_count,
 				SUM(CASE WHEN cp.course_type != '必' AND (` + semesterCond + `) THEN 1 ELSE 0 END) as elective_count,
@@ -197,7 +197,7 @@ func (db *DB) GetAllPrograms(ctx context.Context, years, terms []int) ([]Program
 			FROM programs p
 			LEFT JOIN course_programs cp ON p.name = cp.program_name
 			LEFT JOIN courses c ON cp.course_uid = c.uid
-			GROUP BY p.name
+			GROUP BY p.name, p.category
 			ORDER BY p.name
 		`
 	} else {
@@ -205,14 +205,14 @@ func (db *DB) GetAllPrograms(ctx context.Context, years, terms []int) ([]Program
 		query = `
 			SELECT
 				p.name,
-				MAX(p.category) as category,
+				p.category,
 				COALESCE(p.url, '') as url,
 				SUM(CASE WHEN cp.course_type = '必' THEN 1 ELSE 0 END) as required_count,
 				SUM(CASE WHEN cp.course_type != '必' THEN 1 ELSE 0 END) as elective_count,
 				COUNT(cp.course_uid) as total_count
 			FROM programs p
 			LEFT JOIN course_programs cp ON p.name = cp.program_name
-			GROUP BY p.name
+			GROUP BY p.name, p.category
 			ORDER BY p.name
 		`
 	}
@@ -243,7 +243,7 @@ func (db *DB) GetProgramByName(ctx context.Context, name string) (*Program, erro
 	query := `
 		SELECT
 			p.name,
-			MAX(p.category) as category,
+			p.category,
 			COALESCE(p.url, '') as url,
 			SUM(CASE WHEN cp.course_type = '必' THEN 1 ELSE 0 END) as required_count,
 			SUM(CASE WHEN cp.course_type != '必' THEN 1 ELSE 0 END) as elective_count,
@@ -251,7 +251,7 @@ func (db *DB) GetProgramByName(ctx context.Context, name string) (*Program, erro
 		FROM programs p
 		LEFT JOIN course_programs cp ON p.name = cp.program_name
 		WHERE p.name = ?
-		GROUP BY p.name
+		GROUP BY p.name, p.category
 	`
 
 	var prog Program
@@ -289,7 +289,7 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, term
 		query = `
 			SELECT
 				p.name,
-				MAX(p.category) as category,
+				p.category,
 				COALESCE(p.url, '') as url,
 				SUM(CASE WHEN cp.course_type = '必' AND (` + semesterCond + `) THEN 1 ELSE 0 END) as required_count,
 				SUM(CASE WHEN cp.course_type != '必' AND (` + semesterCond + `) THEN 1 ELSE 0 END) as elective_count,
@@ -298,7 +298,7 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, term
 			LEFT JOIN course_programs cp ON p.name = cp.program_name
 			LEFT JOIN courses c ON cp.course_uid = c.uid
 			WHERE p.name LIKE ? ESCAPE '\'
-			GROUP BY p.name
+			GROUP BY p.name, p.category
 			ORDER BY p.name
 		`
 	} else {
@@ -306,7 +306,7 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, term
 		query = `
 			SELECT
 				p.name,
-				MAX(p.category) as category,
+				p.category,
 				COALESCE(p.url, '') as url,
 				SUM(CASE WHEN cp.course_type = '必' THEN 1 ELSE 0 END) as required_count,
 				SUM(CASE WHEN cp.course_type != '必' THEN 1 ELSE 0 END) as elective_count,
@@ -314,7 +314,7 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, term
 			FROM programs p
 			LEFT JOIN course_programs cp ON p.name = cp.program_name
 			WHERE p.name LIKE ? ESCAPE '\'
-			GROUP BY p.name
+			GROUP BY p.name, p.category
 			ORDER BY p.name
 		`
 		args = []interface{}{"%" + sanitized + "%"}
