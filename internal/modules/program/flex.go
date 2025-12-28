@@ -156,9 +156,9 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCou
 			}
 			sb.WriteString("\n")
 
-			// Add URL if available
+			// Add URL if available (LINE will auto-link)
 			if prog.URL != "" {
-				sb.WriteString(fmt.Sprintf("🔗 %s\n", prog.URL))
+				sb.WriteString(fmt.Sprintf("   📎 %s\n", prog.URL))
 			}
 
 			// Add spacing between items

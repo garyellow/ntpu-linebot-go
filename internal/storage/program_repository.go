@@ -18,7 +18,8 @@ func buildSemesterConditions(years, terms []int, tablePrefix string) (conditions
 		return "", nil, false
 	}
 
-	var parts []string
+	parts := make([]string, 0, len(years))
+	args = make([]interface{}, 0, len(years)*2)
 	for i := range years {
 		parts = append(parts, fmt.Sprintf("(%s.year = ? AND %s.term = ?)", tablePrefix, tablePrefix))
 		args = append(args, years[i], terms[i])

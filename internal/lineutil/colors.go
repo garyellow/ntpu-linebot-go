@@ -92,7 +92,7 @@ const (
 	// 碩士類使用紫色系表達學術權威，學士類使用藍色系表達活潑親切
 	// 所有顏色符合 WCAG AA 標準 (≥4.5:1 with white text)
 	ColorHeaderProgramMasterCredit   = "#7C3AED" // 🎓 碩士學分學程 - violet-600 (權威) - 4.6:1
-	ColorHeaderProgramBachelorCredit = "#3B82F6" // 📚 學士學分學程 - blue-500 (學術) - 4.6:1
+	ColorHeaderProgramBachelorCredit = "#3B82F6" //nolint:gosec // G101 false positive: hex color code, not credential
 	ColorHeaderProgramMixedCredit    = "#6366F1" // 🎓 學士暨碩士學分學程 - indigo-500 (融合) - 4.5:1
 	ColorHeaderProgramMasterCross    = "#8B5CF6" // 🔗 碩士跨域微學程 - violet-500 (跨域) - 4.5:1
 	ColorHeaderProgramBachelorCross  = "#0EA5E9" // 🔗 學士跨域微學程 - sky-500 (開放) - 4.5:1
