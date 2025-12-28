@@ -366,7 +366,10 @@ func (h *Handler) handleProgramList(ctx context.Context) []messaging_api.Message
 		programs = programs[:MaxProgramsPerSearch]
 	}
 
-	return h.formatProgramListResponse(programs, totalCount)
+	title := fmt.Sprintf("🎓 學程列表 (共 %d 個)", totalCount)
+	footer := "💡 輸入「學程 關鍵字」搜尋特定學程"
+
+	return h.formatProgramListResponse(programs, title, footer)
 }
 
 // handleProgramSearch searches programs by name using 2-tier matching.
@@ -443,7 +446,10 @@ func (h *Handler) handleProgramSearch(ctx context.Context, searchTerm string) []
 	}
 
 	// Use Text List for larger number of results (easier to scan)
-	return h.formatProgramListResponse(programs, len(programs))
+	title := fmt.Sprintf("🔍 搜尋結果 (共 %d 個)", len(programs))
+	footer := "💡 搜尋結果過多？請嘗試加入更多關鍵字以減少搜尋結果\n例如：「學程 金融 科技」"
+
+	return h.formatProgramListResponse(programs, title, footer)
 }
 
 // handleProgramCourses retrieves and displays courses for a specific program.

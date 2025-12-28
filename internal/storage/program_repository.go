@@ -204,8 +204,7 @@ func (db *DB) GetAllPrograms(ctx context.Context, years, terms []int) ([]Program
 			LEFT JOIN course_programs cp ON p.name = cp.program_name
 			LEFT JOIN courses c ON cp.course_uid = c.uid
 			GROUP BY p.name, p.category
-			ORDER BY p.name
-		`
+			ORDER BY p.name`
 	} else {
 		// No semester filter - count all courses for each program in LMS list
 		query = `
@@ -220,8 +219,7 @@ func (db *DB) GetAllPrograms(ctx context.Context, years, terms []int) ([]Program
 			FROM programs p
 			LEFT JOIN course_programs cp ON p.name = cp.program_name
 			GROUP BY p.name, p.category
-			ORDER BY p.name
-		`
+			ORDER BY p.name`
 	}
 	rows, err := db.reader.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -312,8 +310,7 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, term
 			LEFT JOIN courses c ON cp.course_uid = c.uid
 			WHERE p.name LIKE ? ESCAPE '\'
 			GROUP BY p.name, p.category
-			ORDER BY p.name
-		`
+			ORDER BY p.name`
 	} else {
 		// No semester filter (legacy behavior)
 		query = `
@@ -329,8 +326,7 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, term
 			LEFT JOIN course_programs cp ON p.name = cp.program_name
 			WHERE p.name LIKE ? ESCAPE '\'
 			GROUP BY p.name, p.category
-			ORDER BY p.name
-		`
+			ORDER BY p.name`
 		args = []interface{}{"%" + sanitized + "%"}
 	}
 
@@ -363,7 +359,7 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, term
 func (db *DB) GetProgramCourses(ctx context.Context, programName string, years, terms []int) ([]ProgramCourse, error) {
 	// Build query with optional semester filter
 	var query string
-	var args []interface{}
+	var args []any
 
 	if semesterCond, semesterArgs, ok := buildSemesterConditions(years, terms, "c"); ok {
 		// Program name first, then semester args
@@ -381,8 +377,7 @@ func (db *DB) GetProgramCourses(ctx context.Context, programName string, years, 
 			ORDER BY
 				CASE WHEN cp.course_type = '必' THEN 0 ELSE 1 END,
 				c.year DESC,
-				c.term DESC
-		`
+				c.term DESC`
 	} else {
 		// No semester filter - return all courses for the program
 		query = `
@@ -396,9 +391,8 @@ func (db *DB) GetProgramCourses(ctx context.Context, programName string, years, 
 			ORDER BY
 				CASE WHEN cp.course_type = '必' THEN 0 ELSE 1 END,
 				c.year DESC,
-				c.term DESC
-		`
-		args = []interface{}{programName}
+				c.term DESC`
+		args = []any{programName}
 	}
 
 	rows, err := db.reader.QueryContext(ctx, query, args...)
