@@ -18,7 +18,6 @@ func newTestBotConfig() BotConfig {
 		MaxMessageLength:          20000,
 		MaxPostbackDataSize:       300,
 		MaxCoursesPerSearch:       40,
-		MaxTitleDisplayChars:      60,
 		MaxStudentsPerSearch:      400,
 		MaxContactsPerSearch:      100,
 		ValidYearStart:            95,

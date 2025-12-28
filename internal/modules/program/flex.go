@@ -114,7 +114,7 @@ func getCategoryLabel(category string) lineutil.BodyLabelInfo {
 // formatProgramListResponse formats a list of programs as a text message.
 // Uses text-based display to handle large lists.
 // Consolidates all programs into a single message if possible (limit 5000 chars).
-func (h *Handler) formatProgramListResponse(programs []storage.Program, titleH1, footerText string) []messaging_api.MessageInterface {
+func (h *Handler) formatProgramListResponse(programs []storage.Program, headerTitle, footerText string) []messaging_api.MessageInterface {
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	var messages []messaging_api.MessageInterface
 
@@ -126,8 +126,8 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, titleH1,
 	itemsInCurrentMsg := 0
 
 	// Use provided title (allows differentiation between "學程列表" and "Search Results")
-	sb.WriteString(titleH1 + "\n")
-	sbRunes += utf8.RuneCountInString(titleH1 + "\n")
+	sb.WriteString(headerTitle + "\n")
+	sbRunes += utf8.RuneCountInString(headerTitle + "\n")
 
 	separator := "━━━━━━━━━━━━━━━━\n\n"
 	sb.WriteString(separator)
@@ -161,9 +161,9 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, titleH1,
 		entryRunes := utf8.RuneCountInString(entryStr)
 
 		// Check limits:
-		// 1. Character limit (4900 buffer / 5000 max) - increased from 4700 as requested
+		// 1. Character limit (TextListSafeBuffer buffer / MaxTextMessageLength max)
 		// 2. Batch size limit (TextListBatchSize items/message)
-		if sbRunes+entryRunes > 4900 || itemsInCurrentMsg >= TextListBatchSize {
+		if sbRunes+entryRunes > lineutil.TextListSafeBuffer || itemsInCurrentMsg >= TextListBatchSize {
 			// Remove trailing newline from the last item of the current batch if present
 			currentContent := strings.TrimSuffix(sb.String(), "\n")
 
@@ -304,7 +304,7 @@ func (h *Handler) buildProgramBubble(program storage.Program) *lineutil.FlexBubb
 		viewCoursesBtn := lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText(
 				"📚 "+PostbackViewCoursesLabel,
-				lineutil.TruncateRunes(fmt.Sprintf("查看「%s」的課程", program.Name), 40),
+				lineutil.FormatLabel("查看課程", program.Name, 40),
 				PostbackPrefix+"courses"+bot.PostbackSplitChar+program.Name,
 			),
 		).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm")
@@ -366,7 +366,7 @@ func (h *Handler) formatProgramCoursesResponse(programName string, requiredCours
 
 	// Build carousel messages
 	carouselMessages := lineutil.BuildCarouselMessages(
-		lineutil.TruncateRunes(programName+"課程", 400),
+		lineutil.FormatLabel("課程列表", programName, 400),
 		bubbles,
 		sender,
 	)
@@ -451,7 +451,7 @@ func (h *Handler) buildProgramCourseBubble(pc storage.ProgramCourse, isRequired 
 	viewDetailBtn := lineutil.NewFlexButton(
 		lineutil.NewPostbackActionWithDisplayText(
 			"📄 查看詳細",
-			lineutil.TruncateRunes(fmt.Sprintf("查詢課程 %s", pc.Course.Title), 40),
+			lineutil.FormatLabel("查詢課程", pc.Course.Title, 40),
 			"course:"+pc.Course.UID,
 		),
 	).WithStyle("primary").WithColor(headerColor).WithHeight("sm")
@@ -503,9 +503,9 @@ func (h *Handler) formatProgramCoursesAsTextList(programName string, requiredCou
 		}
 	}
 
-	// Split into multiple messages if needed (4700 char limit per message)
+	// Split into multiple messages if needed
 	content := sb.String()
-	if utf8.RuneCountInString(content) <= 4700 {
+	if utf8.RuneCountInString(content) <= lineutil.TextListSafeBuffer {
 		listMsg := lineutil.NewTextMessageWithConsistentSender(content, sender)
 		messages = append(messages, listMsg)
 	} else {
@@ -518,7 +518,7 @@ func (h *Handler) formatProgramCoursesAsTextList(programName string, requiredCou
 			lineWithNewline := line + "\n"
 			lineRunes := utf8.RuneCountInString(lineWithNewline)
 
-			if currentRunes+lineRunes > 4700 {
+			if currentRunes+lineRunes > lineutil.TextListSafeBuffer {
 				// Finalize current message
 				messages = append(messages, lineutil.NewTextMessageWithConsistentSender(currentSb.String(), sender))
 				currentSb.Reset()

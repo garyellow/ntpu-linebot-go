@@ -129,26 +129,6 @@ func MinCachedAt(cachedAts ...int64) int64 {
 // Data Source & Availability Hints
 // ================================================
 
-// NewDataSourceHint creates a Flex Text component for displaying data source/limitation info.
-// Style: xxs size, gray color, right-aligned, used to inform users about data boundaries.
-//
-// This follows UX best practice of being transparent about data limitations.
-//
-// Example usage:
-//
-//	body.AddComponent(NewDataSourceHint("數位學苑 2.0 資料（94-113 學年度）"))
-func NewDataSourceHint(text string) *FlexText {
-	if text == "" {
-		return nil
-	}
-
-	return NewFlexText(text).
-		WithSize("xxs").
-		WithColor(ColorGray400).
-		WithAlign("end").
-		WithMargin("sm")
-}
-
 // NewDataRangeHint creates a standardized hint about ID data availability.
 // Returns a Flex Text showing data range.
 //

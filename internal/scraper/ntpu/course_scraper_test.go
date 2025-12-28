@@ -9,13 +9,13 @@ import (
 func TestAllEduCodes(t *testing.T) {
 	expectedCodes := []string{"U", "M", "N", "P"}
 
-	if len(AllEduCodes) != len(expectedCodes) {
-		t.Errorf("Expected %d education codes, got %d", len(expectedCodes), len(AllEduCodes))
+	if len(allEducationCodes) != len(expectedCodes) {
+		t.Errorf("Expected %d education codes, got %d", len(expectedCodes), len(allEducationCodes))
 	}
 
 	for _, code := range expectedCodes {
 		found := false
-		for _, allCode := range AllEduCodes {
+		for _, allCode := range allEducationCodes {
 			if allCode == code {
 				found = true
 				break

@@ -66,11 +66,11 @@ func setupTestHandler(t *testing.T) *Handler {
 		MaxMessageLength:          20000,
 		MaxPostbackDataSize:       300,
 		MaxCoursesPerSearch:       40,
-		MaxTitleDisplayChars:      60,
-		MaxStudentsPerSearch:      400,
-		MaxContactsPerSearch:      100,
-		ValidYearStart:            95,
-		ValidYearEnd:              112,
+
+		MaxStudentsPerSearch: 400,
+		MaxContactsPerSearch: 100,
+		ValidYearStart:       95,
+		ValidYearEnd:         112,
 	}
 
 	llmRateLimiter := ratelimit.NewLLMRateLimiter(botCfg.LLMRateLimitPerHour, 5*time.Minute, m)

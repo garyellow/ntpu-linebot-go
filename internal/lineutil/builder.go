@@ -69,8 +69,8 @@ func NewImageMessage(originalContentURL, previewImageURL string) messaging_api.M
 func NewTextMessage(text string) *messaging_api.TextMessage {
 	// Validate and truncate if necessary (LINE API limit: 5000 characters, not bytes)
 	runes := []rune(text)
-	if len(runes) > 5000 {
-		text = TruncateRunes(text, 4997)
+	if len(runes) > MaxTextMessageLength {
+		text = TruncateRunes(text, MaxTextMessageLength-3) // Leave room for "..."
 	}
 
 	return &messaging_api.TextMessage{
@@ -84,13 +84,13 @@ func NewTextMessage(text string) *messaging_api.TextMessage {
 // LINE API limits: max 10 columns, each with max 4 actions
 func NewCarouselTemplate(altText string, columns []CarouselColumn) messaging_api.MessageInterface {
 	// Validate column count (LINE API limit: max 10 columns)
-	if len(columns) > 10 {
-		columns = columns[:10]
+	if len(columns) > MaxCarouselColumnCount {
+		columns = columns[:MaxCarouselColumnCount]
 	}
 
 	// Validate altText length (max 400 characters)
-	if len([]rune(altText)) > 400 {
-		altText = TruncateRunes(altText, 400)
+	if len([]rune(altText)) > MaxAltTextLength {
+		altText = TruncateRunes(altText, MaxAltTextLength)
 	}
 
 	templateColumns := make([]messaging_api.CarouselColumn, len(columns))
@@ -136,27 +136,27 @@ func NewButtonsTemplate(altText, title, text string, actions []Action) messaging
 // LINE API limits: max 4 actions, text max 60 chars (with image) or 160 chars (no image)
 func NewButtonsTemplateWithImage(altText, title, text, thumbnailImageURL string, actions []Action) messaging_api.MessageInterface {
 	// Validate action count (LINE API limit: max 4 actions)
-	if len(actions) > 4 {
-		actions = actions[:4]
+	if len(actions) > MaxTemplateActionCount {
+		actions = actions[:MaxTemplateActionCount]
 	}
 
 	// Validate text length based on whether image is present
-	maxTextLen := 160
+	maxTextLen := MaxTemplateTextNoImage
 	if thumbnailImageURL != "" {
-		maxTextLen = 60
+		maxTextLen = MaxTemplateTextWithImage
 	}
 	if len([]rune(text)) > maxTextLen {
 		text = TruncateRunes(text, maxTextLen)
 	}
 
 	// Validate title length (max 40 characters)
-	if len([]rune(title)) > 40 {
-		title = TruncateRunes(title, 40)
+	if len([]rune(title)) > MaxTemplateTitleLength {
+		title = TruncateRunes(title, MaxTemplateTitleLength)
 	}
 
 	// Validate altText length (max 400 characters)
-	if len([]rune(altText)) > 400 {
-		altText = TruncateRunes(altText, 400)
+	if len([]rune(altText)) > MaxAltTextLength {
+		altText = TruncateRunes(altText, MaxAltTextLength)
 	}
 
 	template := &messaging_api.ButtonsTemplate{
@@ -184,8 +184,8 @@ func NewButtonsTemplateWithImage(altText, title, text, thumbnailImageURL string,
 // LINE API limits: max 13 items
 func NewQuickReply(items []QuickReplyItem) *messaging_api.QuickReply {
 	// Validate item count (LINE API limit: max 13 items)
-	if len(items) > 13 {
-		items = items[:13]
+	if len(items) > MaxQuickReplyItemCount {
+		items = items[:MaxQuickReplyItemCount]
 	}
 
 	quickReplyItems := make([]messaging_api.QuickReplyItem, len(items))
@@ -212,8 +212,8 @@ func NewQuickReply(items []QuickReplyItem) *messaging_api.QuickReply {
 // The text is the confirmation question, yesAction and noAction are the button actions.
 func NewConfirmTemplate(altText, text string, yesAction, noAction Action) messaging_api.MessageInterface {
 	// Validate altText length (LINE API limit: max 400 characters)
-	if len([]rune(altText)) > 400 {
-		altText = TruncateRunes(altText, 400)
+	if len([]rune(altText)) > MaxAltTextLength {
+		altText = TruncateRunes(altText, MaxAltTextLength)
 	}
 
 	return &messaging_api.TemplateMessage{
@@ -275,8 +275,8 @@ func NewClipboardAction(label, clipboardText string) Action {
 // Flex messages allow for rich, customizable layouts.
 func NewFlexMessage(altText string, contents messaging_api.FlexContainerInterface) *messaging_api.FlexMessage {
 	// Validate altText length (LINE API limit: max 400 characters)
-	if len([]rune(altText)) > 400 {
-		altText = TruncateRunes(altText, 400)
+	if len([]rune(altText)) > MaxAltTextLength {
+		altText = TruncateRunes(altText, MaxAltTextLength)
 	}
 
 	return &messaging_api.FlexMessage{
@@ -408,6 +408,50 @@ func FormatCourseTitle(title, courseCode string) string {
 //	FormatCourseTitleWithUID("程式設計", "1132U0001") -> "程式設計 (U0001)"
 func FormatCourseTitleWithUID(title, uid string) string {
 	return FormatCourseTitle(title, ExtractCourseCode(uid))
+}
+
+// FormatLabel formats a label string with a prefix and content, safely truncating the content
+// to fit within the limit while preserving the prefix.
+//
+// Use this for button labels or headers where you need "Action: TargetName" format.
+//
+// Parameters:
+//   - prefix: The static prefix part (e.g., "查看", "查詢課程")
+//   - content: The dynamic content part to be truncated if needed (e.g., Program Name)
+//   - limit: The maximum rune count for the result string
+//
+// Example:
+//
+//	FormatLabel("查看", "非常長的學程名稱...", 10) -> "查看 非常長的..."
+func FormatLabel(prefix, content string, limit int) string {
+	// Standard separator space
+	const separator = " "
+
+	prefixRunes := []rune(prefix)
+	contentRunes := []rune(content)
+	sepLen := len([]rune(separator))
+
+	// If prefix itself exceeds or equals limit, just return truncated prefix
+	if len(prefixRunes) >= limit {
+		return TruncateRunes(prefix, limit)
+	}
+
+	// Calculate allowed space for content
+	// limit - len(prefix) - len(separator)
+	allowedContentLen := limit - len(prefixRunes) - sepLen
+
+	if allowedContentLen <= 0 {
+		// No space for content, return prefix (safe because we checked len(prefix) < limit)
+		return prefix
+	}
+
+	// Truncate content if necessary
+	truncatedContent := content
+	if len(contentRunes) > allowedContentLen {
+		truncatedContent = TruncateRunes(content, allowedContentLen)
+	}
+
+	return fmt.Sprintf("%s%s%s", prefix, separator, truncatedContent)
 }
 
 // FormatSemester formats year and term into a readable semester string.
