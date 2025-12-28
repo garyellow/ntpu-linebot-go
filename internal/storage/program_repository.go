@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -516,22 +517,11 @@ func parseJSONArray(jsonStr string) []string {
 		return nil
 	}
 
-	// Remove brackets and split by comma
-	jsonStr = strings.Trim(jsonStr, "[]")
-	if jsonStr == "" {
+	var result []string
+	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
+		// On error, return nil instead of failing partially
+		// This can happen if the DB data is corrupted or not in JSON format
 		return nil
 	}
-
-	// Split by comma and clean up quotes
-	parts := strings.Split(jsonStr, ",")
-	result := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		p = strings.Trim(p, "\"")
-		if p != "" {
-			result = append(result, p)
-		}
-	}
-
 	return result
 }

@@ -120,66 +120,59 @@ func getCategoryLabel(category string) lineutil.BodyLabelInfo {
 //
 // 2. 學程名稱...
 // formatProgramListResponse formats a list of programs as a text message.
-// Uses text-based display to handle large lists (>50 programs).
-// Splits into multiple messages if needed to avoid 5000 char limit.
+// Uses text-based display to handle large lists.
+// Consolidates all programs into a single message if possible (limit 5000 chars).
 func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCount int) []messaging_api.MessageInterface {
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	var messages []messaging_api.MessageInterface
 
-	for i := 0; i < len(programs); i += TextListBatchSize {
-		end := i + TextListBatchSize
-		if end > len(programs) {
-			end = len(programs)
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "🎓 學程列表 (共 %d 個)\n", totalCount)
+	sb.WriteString("━━━━━━━━━━━━━━━━\n\n")
+
+	for i, prog := range programs {
+		// Global index
+		idx := i + 1
+
+		// Proposed entry
+		var entry strings.Builder
+		fmt.Fprintf(&entry, "%d. %s", idx, prog.Name)
+
+		// Show course counts if available
+		if prog.RequiredCount > 0 || prog.ElectiveCount > 0 {
+			entry.WriteString(fmt.Sprintf(" | 必修 %d 門 · 選修 %d 門", prog.RequiredCount, prog.ElectiveCount))
+		}
+		entry.WriteString("\n")
+
+		// Add URL if available (LINE will auto-link)
+		if prog.URL != "" {
+			entry.WriteString(fmt.Sprintf("   📎 %s\n", prog.URL))
 		}
 
-		batchPrograms := programs[i:end]
-		var sb strings.Builder
+		// Add spacing between items
+		entry.WriteString("\n")
 
-		if i == 0 {
-			sb.WriteString(fmt.Sprintf("🎓 學程列表 (共 %d 個)\n", totalCount))
-			sb.WriteString("━━━━━━━━━━━━━━━━\n\n")
-		}
-
-		for j, prog := range batchPrograms {
-			// Global index
-			idx := i + j + 1
-
-			// Format:
-			// 1. 學程名稱 | 必 X / 選 Y (if counts > 0)
-			// 🔗 https://...
-
-			sb.WriteString(fmt.Sprintf("%d. %s", idx, prog.Name))
-
-			// Show course counts if available
-			if prog.RequiredCount > 0 || prog.ElectiveCount > 0 {
-				sb.WriteString(fmt.Sprintf(" | 必修 %d 門 · 選修 %d 門", prog.RequiredCount, prog.ElectiveCount))
-			}
-			sb.WriteString("\n")
-
-			// Add URL if available (LINE will auto-link)
-			if prog.URL != "" {
-				sb.WriteString(fmt.Sprintf("   📎 %s\n", prog.URL))
-			}
-
-			// Add spacing between items
-			sb.WriteString("\n")
-		}
-
-		// Footer on the last message
-		if end == len(programs) {
+		// Check if adding this entry would exceed the limit (using 4800 as safety margin)
+		// Max Text Message length is 5000.
+		if sb.Len()+entry.Len() > 4800 {
+			// Finalize current message
+			messages = append(messages, lineutil.NewTextMessageWithConsistentSender(sb.String(), sender))
+			sb.Reset()
 			sb.WriteString("━━━━━━━━━━━━━━━━\n")
-			sb.WriteString("💡 輸入「學程 關鍵字」搜尋特定學程")
+			fmt.Fprintf(&sb, "🎓 學程列表 (續 - %d...)\n\n", idx)
 		}
 
-		msg := lineutil.NewTextMessageWithConsistentSender(sb.String(), sender)
-
-		// Add quick reply to the last message only
-		if end == len(programs) {
-			msg.QuickReply = lineutil.NewQuickReply(QuickReplyProgramNav())
-		}
-
-		messages = append(messages, msg)
+		sb.WriteString(entry.String())
 	}
+
+	// Add footer
+	sb.WriteString("━━━━━━━━━━━━━━━━\n")
+	sb.WriteString("💡 輸入「學程 關鍵字」搜尋特定學程")
+
+	// Create the final (or only) message
+	msg := lineutil.NewTextMessageWithConsistentSender(sb.String(), sender)
+	msg.QuickReply = lineutil.NewQuickReply(QuickReplyProgramNav())
+	messages = append(messages, msg)
 
 	return messages
 }
