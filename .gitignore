@@ -40,7 +40,7 @@ build/
 *.db
 *.db-shm
 *.db-wal
-data/
+/data/
 
 # Coverage reports
 coverage

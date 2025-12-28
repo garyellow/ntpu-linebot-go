@@ -53,7 +53,7 @@ compose*.yaml
 Taskfile.yml
 
 # Data and logs
-data/
+/data/
 *.db
 *.log
 
