@@ -33,6 +33,21 @@ func TestCleanProgramName(t *testing.T) {
 			input:    "創新創業學士學分學程(104學年度更名，原名：創新產業管理學士學分學程) ★跨校（北醫、北科大）★",
 			expected: "創新創業學士學分學程",
 		},
+		{
+			name:     "Trailing whitespace",
+			input:    "金融科技學士學分學程  ",
+			expected: "金融科技學士學分學程",
+		},
+		{
+			name:     "Leading whitespace",
+			input:    "  金融科技學士學分學程",
+			expected: "金融科技學士學分學程",
+		},
+		{
+			name:     "Garbage after 學程",
+			input:    "金融科技學士學分學程abc",
+			expected: "金融科技學士學分學程",
+		},
 	}
 
 	for _, tt := range tests {

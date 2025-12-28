@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"regexp"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -190,25 +189,10 @@ func extractProgramsFromPage(doc *goquery.Document, seen map[string]bool, catego
 	return results, hasNext
 }
 
-// cleanProgramName removes annotation suffixes from program names.
-// Examples:
-//   - "金融科技與量化金融學士學分學程（112-1更名，原名：金融科技學士學分學程)" -> "金融科技與量化金融學士學分學程"
-//   - "創新創業學士學分學程(104學年度更名，原名：創新產業管理學士學分學程) ★跨校（北醫、北科大）★" -> "創新創業學士學分學程"
-//
-// Pattern to match content in parentheses containing "更名" or "學年度"
-// Matches: ( ...更名... ) or ( ...學年度... ) or fullwidth （...）
-var reRename = regexp.MustCompile(`[（(].*?(更名|學年度|原名).*?[)）]`)
-
 func cleanProgramName(name string) string {
-	// 1. Remove content in parentheses that contains "更名", "學年度", or "原名"
-	name = reRename.ReplaceAllString(name, "")
-
-	// 2. Remove "★跨校...★" type annotations
-	// Often appears as suffix
-	if idx := strings.Index(name, "★"); idx > 0 {
-		name = name[:idx]
+	// Find first "學程" and truncate (removes any annotations after the program name)
+	if idx := strings.Index(name, "學程"); idx >= 0 {
+		name = name[:idx+len("學程")]
 	}
-
-	// 3. Trim whitespace
 	return strings.TrimSpace(name)
 }
