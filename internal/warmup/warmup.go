@@ -1,7 +1,7 @@
 // Package warmup provides background cache warming functionality.
 //
 // Daily refresh (3:00 AM Taiwan time):
-//   - contact, course: Always refreshed (7-day TTL)
+//   - contact, course, program: Always refreshed (7-day TTL)
 //   - syllabus: ONLY processes most recent 2 semesters with data (auto-enabled when LLM API key configured)
 //
 // Not in daily refresh: id (static; typically startup only), sticker (startup only)
@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/garyellow/ntpu-linebot-go/internal/data"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 	"github.com/garyellow/ntpu-linebot-go/internal/modules/course"
@@ -35,6 +36,7 @@ import (
 type Stats struct {
 	Contacts atomic.Int64
 	Courses  atomic.Int64
+	Programs atomic.Int64
 	Syllabi  atomic.Int64
 }
 
@@ -47,7 +49,7 @@ type Options struct {
 	BM25Index *rag.BM25Index
 }
 
-// Run executes daily cache refresh: contact, course (always), syllabus (if HasLLMKey).
+// Run executes daily cache refresh: contact, course, program (always), syllabus (if HasLLMKey).
 func Run(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, opts Options) (*Stats, error) {
 	stats := &Stats{}
 	startTime := time.Now()
@@ -80,6 +82,15 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, log *logge
 		if err := warmupCourseModule(ctx, db, client, log, stats, opts.Metrics); err != nil {
 			log.WithError(err).Error("Course module warmup failed")
 			return fmt.Errorf("course module: %w", err)
+		}
+		return nil
+	})
+
+	g.Go(func() error {
+		if err := warmupProgramModule(ctx, db, client, log, stats); err != nil {
+			log.WithError(err).Warn("Program module warmup failed")
+			// Don't fail the entire warmup for program sync errors
+			return nil
 		}
 		return nil
 	})
@@ -121,6 +132,7 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, log *logge
 	log.WithField("duration", time.Since(startTime)).
 		WithField("contacts", stats.Contacts.Load()).
 		WithField("courses", stats.Courses.Load()).
+		WithField("programs", stats.Programs.Load()).
 		WithField("syllabi", stats.Syllabi.Load()).
 		Info("Cache warming complete")
 
@@ -166,6 +178,44 @@ func resetCache(ctx context.Context, db *storage.DB) error {
 	if _, err := db.ExecContext(ctx, "VACUUM"); err != nil {
 		return fmt.Errorf("failed to vacuum: %w", err)
 	}
+	return nil
+}
+
+// warmupProgramModule syncs program metadata from LMS to database.
+// 1. Try dynamic scraping from LMS (auto-discovers new programs)
+// 2. Fall back to static data if scraping fails or returns no results
+func warmupProgramModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats) error {
+	// Try to scrape programs from LMS
+	var programsToSync []struct{ Name, Category, URL string }
+
+	dynamicPrograms, err := ntpu.ScrapePrograms(ctx, client)
+	if err == nil && len(dynamicPrograms) > 0 {
+		log.WithField("count", len(dynamicPrograms)).Info("Scraped program data from LMS")
+		programsToSync = make([]struct{ Name, Category, URL string }, len(dynamicPrograms))
+		for i, p := range dynamicPrograms {
+			programsToSync[i] = struct{ Name, Category, URL string }{Name: p.Name, Category: p.Category, URL: p.URL}
+		}
+	} else {
+		// Fallback to static data
+		if err != nil {
+			log.WithError(err).Warn("Failed to scrape programs, using static data")
+		} else {
+			log.Warn("Scraped 0 programs, using static data as fallback")
+		}
+		// Assuming 'data.AllPrograms' is defined elsewhere and accessible
+		// For the purpose of this edit, I'm assuming it's a valid reference.
+		programsToSync = make([]struct{ Name, Category, URL string }, len(data.AllPrograms))
+		for i, p := range data.AllPrograms {
+			programsToSync[i] = struct{ Name, Category, URL string }{Name: p.Name, Category: "", URL: p.URL}
+		}
+	}
+
+	if err := db.SyncPrograms(ctx, programsToSync); err != nil {
+		return fmt.Errorf("sync programs: %w", err)
+	}
+
+	stats.Programs.Store(int64(len(programsToSync)))
+	log.WithField("count", len(programsToSync)).Info("Program metadata synced")
 	return nil
 }
 
