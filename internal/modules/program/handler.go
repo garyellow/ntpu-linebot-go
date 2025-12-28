@@ -569,18 +569,12 @@ func (h *Handler) handleCourseProgramsList(ctx context.Context, courseUID string
 func (h *Handler) formatCourseProgramsAsCarousel(ctx context.Context, courseName string, programs []storage.ProgramRequirement) []messaging_api.MessageInterface {
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
-	// Get recent 2 semesters for program statistics
-	var years, terms []int
-	if h.semesterDetector != nil {
-		years, terms = h.semesterDetector.GetRecentSemesters()
-	}
-
 	// Build program bubbles
 	bubbles := make([]messaging_api.FlexBubble, 0, len(programs))
 	for _, p := range programs {
-		// Get full program info from database
-		allPrograms, err := h.db.SearchPrograms(ctx, p.ProgramName, years, terms)
-		if err != nil || len(allPrograms) == 0 {
+		// Get full program info from database using exact name match
+		program, err := h.db.GetProgramByName(ctx, p.ProgramName)
+		if err != nil || program == nil {
 			// Create a minimal program struct if not found
 			minimalProgram := storage.Program{
 				Name:     p.ProgramName,
@@ -590,18 +584,7 @@ func (h *Handler) formatCourseProgramsAsCarousel(ctx context.Context, courseName
 			bubbles = append(bubbles, *bubble.FlexBubble)
 			continue
 		}
-		// Find exact match
-		var program storage.Program
-		for _, prog := range allPrograms {
-			if prog.Name == p.ProgramName {
-				program = prog
-				break
-			}
-		}
-		if program.Name == "" {
-			program = allPrograms[0]
-		}
-		bubble := h.buildProgramBubble(program)
+		bubble := h.buildProgramBubble(*program)
 		bubbles = append(bubbles, *bubble.FlexBubble)
 	}
 

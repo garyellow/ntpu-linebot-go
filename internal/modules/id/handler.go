@@ -249,8 +249,11 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 	log := h.logger.WithModule(ModuleName)
 	log.Infof("Handling ID postback: %s", data)
 
-	// Handle "兇" (easter egg) - support both with and without prefix
-	if data == "兇" || data == "id:兇" {
+	// Strip module prefix if present (registry passes original data)
+	data = strings.TrimPrefix(data, "id:")
+
+	// Handle "兇" (easter egg)
+	if data == "兇" {
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		return []messaging_api.MessageInterface{
 			lineutil.NewTextMessageWithConsistentSender("泥好兇喔～～(⊙﹏⊙)", sender),

@@ -202,8 +202,6 @@ func warmupProgramModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 		} else {
 			log.Warn("Scraped 0 programs, using static data as fallback")
 		}
-		// Assuming 'data.AllPrograms' is defined elsewhere and accessible
-		// For the purpose of this edit, I'm assuming it's a valid reference.
 		programsToSync = make([]struct{ Name, Category, URL string }, len(data.AllPrograms))
 		for i, p := range data.AllPrograms {
 			programsToSync[i] = struct{ Name, Category, URL string }{Name: p.Name, Category: "", URL: p.URL}
