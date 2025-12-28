@@ -24,8 +24,8 @@ const (
 	seaUserFacingURL = "https://sea.cc.ntpu.edu.tw"
 )
 
-// AllEduCodes contains education level codes (U=大學部, M=碩士班, N=碩士在職專班, P=博士班)
-var AllEduCodes = []string{"U", "M", "N", "P"}
+// allEducationCodes contains education level codes (U=大學部, M=碩士班, N=碩士在職專班, P=博士班)
+var allEducationCodes = []string{"U", "M", "N", "P"}
 
 // Classroom regex patterns
 var classroomRegex = regexp.MustCompile(`(?:教室|上課地點)[:：為](.*?)(?:$|[ .，。；【])`)
@@ -95,7 +95,7 @@ func ScrapeCourses(ctx context.Context, client *scraper.Client, year, term int, 
 	}
 
 	var lastErr error
-	for _, eduCode := range AllEduCodes {
+	for _, eduCode := range allEducationCodes {
 		// Check context before each request
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("context canceled before scraping courses: %w", err)
@@ -408,16 +408,16 @@ func parseTimeLocationField(td *goquery.Selection) (times []string, locations []
 //
 //	Field 5: <p align="left">智慧財產權學士學分學程 &nbsp;<br>電機系1 &nbsp;<br></p>
 //	Field 6: 必<br>必<br>
-func parseProgramFields(td5, td6 *goquery.Selection) []storage.ProgramRequirement {
+func parseProgramFields(deptCol, typeCol *goquery.Selection) []storage.ProgramRequirement {
 	programs := make([]storage.ProgramRequirement, 0)
 
 	// Get raw HTML and split by <br> to get individual items
 	// Field 5: 應修系級 - contains department/program names
-	field5HTML, _ := td5.Html()
+	field5HTML, _ := deptCol.Html()
 	field5Items := splitByBR(field5HTML)
 
 	// Field 6: 必選修別 - contains course types (必/選/通/etc.)
-	field6HTML, _ := td6.Html()
+	field6HTML, _ := typeCol.Html()
 	field6Items := splitByBR(field6HTML)
 
 	// Match items from both fields

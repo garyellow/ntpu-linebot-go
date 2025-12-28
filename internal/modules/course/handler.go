@@ -58,10 +58,10 @@ func (h *Handler) Name() string {
 
 // Module constants for course handler.
 const (
-	ModuleName           = "course" // Module identifier for registration
-	senderName           = "課程小幫手"
-	MaxCoursesPerSearch  = 40 // 4 carousels @ 10 bubbles, +1 slot for warning (LINE max: 5 messages)
-	MaxTitleDisplayChars = 60 // Truncation limit for course titles
+	ModuleName          = "course" // Module identifier for registration
+	senderName          = "課程小幫手"
+	MaxCoursesPerSearch = 40 // 4 carousels @ 10 bubbles, +1 slot for warning (LINE max: 5 messages)
+
 )
 
 // Pattern priorities (lower = higher).
@@ -1331,7 +1331,7 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 		if len(programs) == 1 {
 			// Single program: show program name
 			firstProgram := programs[0]
-			displayText := lineutil.TruncateRunes(fmt.Sprintf("查看「%s」課程", firstProgram.ProgramName), 40)
+			displayText := lineutil.FormatLabel("查看課程", firstProgram.ProgramName, 40)
 			row2 = append(row2, lineutil.NewFlexButton(
 				lineutil.NewPostbackActionWithDisplayText(
 					"🎓 相關學程",
@@ -1369,7 +1369,7 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 		}
 
 		// Teacher all courses button - searches for all courses taught by this teacher (內部指令使用紫色)
-		displayText := lineutil.TruncateRunes(fmt.Sprintf("搜尋 %s 的近期課程", teacherName), 40)
+		displayText := lineutil.FormatLabel("搜尋近期課程", teacherName, 40)
 		row3 = append(row3, lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText(
 				"👨‍🏫 教師課程",
@@ -1417,7 +1417,7 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 	)
 
 	// Limit altText to 400 chars (LINE API limit, using rune slicing for UTF-8 safety)
-	altText := lineutil.TruncateRunes(fmt.Sprintf("課程：%s", course.Title), 400)
+	altText := lineutil.FormatLabel("課程", course.Title, 400)
 	msg := lineutil.NewFlexMessage(altText, bubble.FlexBubble)
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	msg.Sender = sender
@@ -1585,7 +1585,7 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 
 		// Footer with "View Detail" button - displayText shows course title
 		// Button color syncs with header for visual harmony
-		displayText := fmt.Sprintf("查詢「%s」課程資訊", lineutil.TruncateRunes(course.Title, 30))
+		displayText := lineutil.FormatLabel("查詢課程資訊", course.Title, 40)
 		// Use course: prefix for proper postback routing
 		footer := lineutil.NewFlexBox("vertical",
 			lineutil.NewFlexButton(
@@ -1959,7 +1959,7 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 
 	// Footer with "View Detail" button
 	// Button color syncs with header for visual harmony
-	displayText := fmt.Sprintf("查詢「%s」課程資訊", lineutil.TruncateRunes(course.Title, 30))
+	displayText := lineutil.FormatLabel("查詢課程資訊", course.Title, 40)
 	footer := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText("📝 查看詳細", displayText, "course:"+course.UID),

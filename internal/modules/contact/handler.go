@@ -776,7 +776,7 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 			// Button color syncs with header for visual harmony
 			var row4Buttons []*lineutil.FlexButton
 			if c.Type == "organization" {
-				displayText := fmt.Sprintf("查詢「%s」的成員", lineutil.TruncateRunes(c.Name, 20))
+				displayText := lineutil.FormatLabel("查詢成員", c.Name, 40)
 				row4Buttons = append(row4Buttons,
 					lineutil.NewFlexButton(
 						lineutil.NewPostbackActionWithDisplayText("👥 查看成員", displayText, fmt.Sprintf("contact:members%s%s", bot.PostbackSplitChar, c.Name)),

@@ -51,9 +51,8 @@ const (
 	MaxProgramsPerSearch     = 500 // Text-based display limit (increased to cover all programs)
 	TextListBatchSize        = 50  // Text-based list batch size
 	MaxSearchResultsWithCard = 10  // Flex carousel limit for search results
-	MaxCoursesPerProgram     = 50  // 5 carousels @ 10 bubbles (LINE API max capacity)
-	MaxCoursesInCarousel     = 40  // Carousel limit (first message is stats, leaves room for 4 carousels)
-	MaxTitleDisplayChars     = 50  // Truncation limit for program titles
+
+	MaxCoursesInCarousel     = 40 // Carousel limit (first message is stats, leaves room for 4 carousels)
 	PostbackPrefix           = "program:"
 	PostbackViewCoursesLabel = "查看課程"
 )
