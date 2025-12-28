@@ -3,6 +3,7 @@ package program
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
@@ -126,9 +127,17 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCou
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	var messages []messaging_api.MessageInterface
 
+	// Track rune count of sb (LINE limit is 5000 characters)
+	sbRunes := 0
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "🎓 學程列表 (共 %d 個)\n", totalCount)
-	sb.WriteString("━━━━━━━━━━━━━━━━\n\n")
+
+	header := fmt.Sprintf("🎓 學程列表 (共 %d 個)\n", totalCount)
+	sb.WriteString(header)
+	sbRunes += utf8.RuneCountInString(header)
+
+	separator := "━━━━━━━━━━━━━━━━\n\n"
+	sb.WriteString(separator)
+	sbRunes += utf8.RuneCountInString(separator)
 
 	for i, prog := range programs {
 		// Global index
@@ -152,17 +161,28 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, totalCou
 		// Add spacing between items
 		entry.WriteString("\n")
 
-		// Check if adding this entry would exceed the limit (using 4800 as safety margin)
-		// Max Text Message length is 5000.
-		if sb.Len()+entry.Len() > 4800 {
+		entryStr := entry.String()
+		entryRunes := utf8.RuneCountInString(entryStr)
+
+		// Check if adding this entry would exceed the limit (using 4800 characters as safety margin)
+		// Max Text Message length is 5000 characters.
+		if sbRunes+entryRunes > 4800 {
 			// Finalize current message
 			messages = append(messages, lineutil.NewTextMessageWithConsistentSender(sb.String(), sender))
 			sb.Reset()
-			sb.WriteString("━━━━━━━━━━━━━━━━\n")
-			fmt.Fprintf(&sb, "🎓 學程列表 (續 - %d...)\n\n", idx)
+			sbRunes = 0
+
+			separator := "━━━━━━━━━━━━━━━━\n"
+			sb.WriteString(separator)
+			sbRunes += utf8.RuneCountInString(separator)
+
+			headerCont := fmt.Sprintf("🎓 學程列表 (續 - %d...)\n\n", idx)
+			sb.WriteString(headerCont)
+			sbRunes += utf8.RuneCountInString(headerCont)
 		}
 
-		sb.WriteString(entry.String())
+		sb.WriteString(entryStr)
+		sbRunes += entryRunes
 	}
 
 	// Add footer
