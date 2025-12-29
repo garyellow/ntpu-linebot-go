@@ -297,11 +297,13 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 				studentCount += int64(len(students))
 				completed++
 
-				if completed%20 == 0 || completed == totalTasks {
+				// Report progress every 5% or at completion
+				progressInterval := max(totalTasks/20, 1) // ~5% intervals, minimum 1
+				if completed%progressInterval == 0 || completed == totalTasks {
 					elapsed := time.Since(startTime)
 					avgTimePerTask := elapsed / time.Duration(completed)
 					estimatedRemaining := avgTimePerTask * time.Duration(totalTasks-completed)
-					log.WithField("progress", fmt.Sprintf("%d/%d", completed, totalTasks)).
+					log.WithField("progress", fmt.Sprintf("%d/%d (%.0f%%)", completed, totalTasks, float64(completed)*100/float64(totalTasks))).
 						WithField("students", studentCount).
 						WithField("type", st.name).
 						WithField("elapsed_min", int(elapsed.Minutes())).
@@ -606,12 +608,13 @@ processLoop:
 		newSyllabi = append(newSyllabi, syl)
 		updatedCount++
 
-		// Log progress every 50 courses for better visibility
-		if i > 0 && i%50 == 0 {
+		// Report progress every 5% or at completion for consistent visibility
+		progressInterval := max(len(courses)/20, 1) // ~5% intervals, minimum 1
+		if i > 0 && i%progressInterval == 0 {
 			elapsed := time.Since(startTime)
 			avgTimePerCourse := elapsed / time.Duration(i)
 			estimatedRemaining := avgTimePerCourse * time.Duration(len(courses)-i)
-			log.WithField("progress", fmt.Sprintf("%d/%d", i, len(courses))).
+			log.WithField("progress", fmt.Sprintf("%d/%d (%.0f%%)", i, len(courses), float64(i)*100/float64(len(courses)))).
 				WithField("updated", updatedCount).
 				WithField("skipped", skippedCount).
 				WithField("errors", errorCount).
