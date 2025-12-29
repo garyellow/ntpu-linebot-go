@@ -353,7 +353,6 @@ func (h *Handler) handleAllDepartmentCodes() []messaging_api.MessageInterface {
 	builder.WriteString("\n  資工系 → 85")
 	builder.WriteString("\n  通訊系 → 86")
 
-	builder.WriteString("\n\n💡 使用方式\n輸入「學年 112」後選擇科系即可查詢")
 	builder.WriteString("\n\n🎓 查詢碩博士班\n輸入「系名 XXX」（如：系名 法律）可搜尋所有學制")
 
 	sender := lineutil.GetSender(senderName, h.stickerManager)
@@ -368,10 +367,9 @@ func (h *Handler) handleAllDepartmentCodes() []messaging_api.MessageInterface {
 
 // handleDepartmentNameQuery handles department name to code queries with fuzzy matching.
 // Searches across all degree types: undergraduate, master's, and PhD programs.
-// Search Strategy:
-//  1. Exact match: Check short-name maps (DepartmentCodes, etc.) directly
-//  2. Fuzzy match: Use ContainsAllRunes to find matching department names
-//     Example: "資工" matches "資訊工程學系" because all chars exist in the full name
+// Uses ContainsAllRunes for character-set matching:
+//
+//	Example: "資工" matches "資訊工程學系" and "資訊工程學系碩士班"
 func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.MessageInterface {
 	deptName = strings.TrimSuffix(deptName, "系")
 	deptName = strings.TrimSuffix(deptName, "班")
@@ -385,7 +383,7 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 	}
 	var matches []deptMatch
 
-	// Helper to add matches from a map
+	// Helper to add matches from a map using character-set matching
 	addMatches := func(m map[string]string, degree string) {
 		for fullName, code := range m {
 			if stringutil.ContainsAllRunes(fullName, deptName) {
@@ -394,17 +392,7 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 		}
 	}
 
-	// Step 1: Check exact match in short-name maps first (for undergrad only)
-	if code, ok := ntpu.DepartmentCodes[deptName]; ok {
-		msg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("🎓 %s系（大學部）\n\n系代碼是：%s", deptName, code),
-			sender,
-		)
-		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyStudentNav())
-		return []messaging_api.MessageInterface{msg}
-	}
-
-	// Step 2: Fuzzy search across all degree types
+	// Fuzzy search across all degree types
 	addMatches(ntpu.FullDepartmentCodes, "大學部")
 	addMatches(ntpu.MasterDepartmentCodes, "碩士班")
 	addMatches(ntpu.PhDDepartmentCodes, "博士班")
