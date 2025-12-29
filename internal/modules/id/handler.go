@@ -309,10 +309,11 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 	return []messaging_api.MessageInterface{}
 }
 
-// handleAllDepartmentCodes returns all department codes organized by college
+// handleAllDepartmentCodes returns all undergraduate department codes organized by college.
+// Includes a tip for searching graduate program codes.
 func (h *Handler) handleAllDepartmentCodes() []messaging_api.MessageInterface {
 	var builder strings.Builder
-	builder.WriteString("📋 所有系代碼一覽\n")
+	builder.WriteString("📋 大學部系代碼一覽\n")
 
 	// 人文學院
 	builder.WriteString("\n📖 人文學院")
@@ -353,6 +354,7 @@ func (h *Handler) handleAllDepartmentCodes() []messaging_api.MessageInterface {
 	builder.WriteString("\n  通訊系 → 86")
 
 	builder.WriteString("\n\n💡 使用方式\n輸入「學年 112」後選擇科系即可查詢")
+	builder.WriteString("\n\n🎓 查詢碩博士班\n輸入「系名 XXX」（如：系名 法律）可搜尋所有學制")
 
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	msg := lineutil.NewTextMessageWithConsistentSender(builder.String(), sender)
@@ -364,64 +366,79 @@ func (h *Handler) handleAllDepartmentCodes() []messaging_api.MessageInterface {
 	return []messaging_api.MessageInterface{msg}
 }
 
-// handleDepartmentNameQuery handles department name to code queries with fuzzy matching
+// handleDepartmentNameQuery handles department name to code queries with fuzzy matching.
+// Searches across all degree types: undergraduate, master's, and PhD programs.
 // Search Strategy:
-//  1. Exact match: Check DepartmentCodes and FullDepartmentCodes maps directly
-//  2. Fuzzy match: If no exact match, use ContainsAllRunes to find matching department names
+//  1. Exact match: Check short-name maps (DepartmentCodes, etc.) directly
+//  2. Fuzzy match: Use ContainsAllRunes to find matching department names
 //     Example: "資工" matches "資訊工程學系" because all chars exist in the full name
 func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.MessageInterface {
 	deptName = strings.TrimSuffix(deptName, "系")
+	deptName = strings.TrimSuffix(deptName, "班")
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
-	// Step 1: Check regular department codes (exact match)
-	if code, ok := ntpu.DepartmentCodes[deptName]; ok {
-		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("%s系的系代碼是：%s", deptName, code), sender)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyDeptCodeAction(),
-		})
-		return []messaging_api.MessageInterface{msg}
+	// Define search sources with degree labels
+	type deptMatch struct {
+		name   string
+		code   string
+		degree string // 大學部, 碩士班, 博士班
 	}
+	var matches []deptMatch
 
-	// Step 2: Check full department codes (exact match)
-	if code, ok := ntpu.FullDepartmentCodes[deptName]; ok {
-		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("%s的系代碼是：%s", deptName, code), sender)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyDeptCodeAction(),
-		})
-		return []messaging_api.MessageInterface{msg}
-	}
-
-	// Step 3: Fuzzy matching - search in FullDepartmentCodes using ContainsAllRunes
-	// This enables "資工" to match "資訊工程學系"
-	var matches []struct {
-		name string
-		code string
-	}
-	for fullName, code := range ntpu.FullDepartmentCodes {
-		if stringutil.ContainsAllRunes(fullName, deptName) {
-			matches = append(matches, struct {
-				name string
-				code string
-			}{fullName, code})
+	// Helper to add matches from a map
+	addMatches := func(m map[string]string, degree string) {
+		for fullName, code := range m {
+			if stringutil.ContainsAllRunes(fullName, deptName) {
+				matches = append(matches, deptMatch{fullName, code, degree})
+			}
 		}
 	}
 
-	// If exactly one match, return it directly
-	if len(matches) == 1 {
+	// Step 1: Check exact match in short-name maps first (for undergrad only)
+	if code, ok := ntpu.DepartmentCodes[deptName]; ok {
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("🔍「%s」→ %s\n\n系代碼是：%s", deptName, matches[0].name, matches[0].code),
+			fmt.Sprintf("🎓 %s系（大學部）\n\n系代碼是：%s", deptName, code),
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyStudentNav())
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	// If multiple matches, show all options
+	// Step 2: Fuzzy search across all degree types
+	addMatches(ntpu.FullDepartmentCodes, "大學部")
+	addMatches(ntpu.MasterDepartmentCodes, "碩士班")
+	addMatches(ntpu.PhDDepartmentCodes, "博士班")
+
+	// If exactly one match, return it directly
+	if len(matches) == 1 {
+		msg := lineutil.NewTextMessageWithConsistentSender(
+			fmt.Sprintf("🔍「%s」→ %s（%s）\n\n系代碼是：%s", deptName, matches[0].name, matches[0].degree, matches[0].code),
+			sender,
+		)
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyStudentNav())
+		return []messaging_api.MessageInterface{msg}
+	}
+
+	// If multiple matches, group by degree and show all
 	if len(matches) > 1 {
 		var builder strings.Builder
-		fmt.Fprintf(&builder, "🔍「%s」找到多個符合的系所：\n\n", deptName)
-		for _, m := range matches {
-			builder.WriteString(fmt.Sprintf("• %s → %s\n", m.name, m.code))
+		fmt.Fprintf(&builder, "🔍「%s」找到 %d 個符合的系所：\n", deptName, len(matches))
+
+		// Group by degree for clearer display
+		degreeOrder := []string{"大學部", "碩士班", "博士班"}
+		for _, deg := range degreeOrder {
+			var degMatches []deptMatch
+			for _, m := range matches {
+				if m.degree == deg {
+					degMatches = append(degMatches, m)
+				}
+			}
+			if len(degMatches) > 0 {
+				fmt.Fprintf(&builder, "\n🎓 %s\n", deg)
+				for _, m := range degMatches {
+					builder.WriteString(fmt.Sprintf("  • %s → %s\n", m.name, m.code))
+				}
+			}
 		}
 		builder.WriteString("\n💡 輸入更完整的系名以縮小範圍")
 		msg := lineutil.NewTextMessageWithConsistentSender(builder.String(), sender)
@@ -437,20 +454,56 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 	return []messaging_api.MessageInterface{msg}
 }
 
-// handleDepartmentCodeQuery handles department code to name queries
+// handleDepartmentCodeQuery handles department code to name queries.
+// Searches across all degree types: undergraduate, master's, and PhD programs.
 func (h *Handler) handleDepartmentCodeQuery(code string) []messaging_api.MessageInterface {
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
-	// Check department names
+	// Collect all matches across degree types
+	type codeMatch struct {
+		name   string
+		degree string
+	}
+	var matches []codeMatch
+
+	// Check undergraduate names
 	if name, ok := ntpu.DepartmentNames[code]; ok {
-		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("系代碼 %s 是：%s系", code, name), sender)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyDeptCodeAction(),
-		})
+		matches = append(matches, codeMatch{name + "系", "大學部"})
+	}
+
+	// Check master's program names
+	if name, ok := ntpu.MasterDepartmentNames[code]; ok {
+		matches = append(matches, codeMatch{name, "碩士班"})
+	}
+
+	// Check PhD program names
+	if name, ok := ntpu.PhDDepartmentNames[code]; ok {
+		matches = append(matches, codeMatch{name, "博士班"})
+	}
+
+	// If exactly one match, return it directly
+	if len(matches) == 1 {
+		msg := lineutil.NewTextMessageWithConsistentSender(
+			fmt.Sprintf("🎓 系代碼 %s 是：%s（%s）", code, matches[0].name, matches[0].degree),
+			sender,
+		)
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyStudentNav())
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	msg := lineutil.NewTextMessageWithConsistentSender("🔍 查無該系代碼\n\n請輸入正確的系代碼\n例如：85（資工系）", sender)
+	// If multiple matches (same code used across degrees), show all
+	if len(matches) > 1 {
+		var builder strings.Builder
+		fmt.Fprintf(&builder, "🔍 系代碼 %s 對應多個系所：\n", code)
+		for _, m := range matches {
+			builder.WriteString(fmt.Sprintf("\n• %s（%s）", m.name, m.degree))
+		}
+		msg := lineutil.NewTextMessageWithConsistentSender(builder.String(), sender)
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyStudentNav())
+		return []messaging_api.MessageInterface{msg}
+	}
+
+	msg := lineutil.NewTextMessageWithConsistentSender("🔍 查無該系代碼\n\n請輸入正確的系代碼\n例如：85（資工系）、31（企管碩/博）", sender)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 		lineutil.QuickReplyDeptCodeAction(),
 		lineutil.QuickReplyHelpAction(),
