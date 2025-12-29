@@ -65,11 +65,10 @@ func TestCanHandle(t *testing.T) {
 		{"Email keyword at start", "email信箱", true},
 		{"信箱 keyword at start", "信箱查詢", true},
 
-		// Broad match keywords (anywhere in text)
-		{"Broad match '分機' keyword", "查詢分機", true},
-
-		// Keywords NOT at start (if not in Broad Match list) should NOT match
+		// Keywords NOT at start should NOT match (precise matching only)
 		{"Connect keyword not at start", "how to connect", false},
+		{"分機 keyword not at start", "查詢分機", false},
+		{"電話 keyword not at start", "查詢電話", false},
 		{"信箱 keyword not at start", "電子信箱", false},
 
 		// Invalid queries

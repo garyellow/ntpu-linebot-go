@@ -76,9 +76,8 @@ const (
 
 // Pattern priorities (lower = higher).
 const (
-	PriorityEmergency  = 1 // Prefix "緊急"
-	PriorityContact    = 2 // Regex match (e.g. "電話 xxx", "聯絡 xxx")
-	PriorityBroadMatch = 3 // Contains "電話" or "分機" (fallback)
+	PriorityEmergency = 1 // Prefix "緊急"
+	PriorityContact   = 2 // Regex match (e.g. "電話 xxx", "聯絡 xxx")
 )
 
 // PatternHandler processes a matched pattern and returns LINE messages.
@@ -131,7 +130,7 @@ func NewHandler(
 }
 
 // initializeMatchers sets up the pattern-action table.
-// Explicitly defines priority: Emergency > Contact Regex > Broad Match.
+// Priority order: Emergency > Contact Regex.
 func (h *Handler) initializeMatchers() {
 	h.matchers = []PatternMatcher{
 		{
@@ -147,17 +146,6 @@ func (h *Handler) initializeMatchers() {
 			priority: PriorityContact,
 			pattern:  contactRegex,
 			handler:  h.handleContactPattern,
-		},
-		{
-			name:     "Broad Match",
-			priority: PriorityBroadMatch,
-			matchFunc: func(text string) bool {
-				// Fallback for "電話 xxx" or "分機 xxx" that might not be caught by generic regex
-				// if keywords aren't at the start (though BuildKeywordRegex is usually ^ anchored).
-				// The original code handled Contains("電話") or Contains("分機").
-				return strings.Contains(text, "電話") || strings.Contains(text, "分機")
-			},
-			handler: h.handleBroadMatchPattern,
 		},
 	}
 
@@ -260,19 +248,6 @@ func (h *Handler) handleContactPattern(ctx context.Context, text string, matches
 		return h.handleEmptySearchTerm()
 	}
 	return h.handleContactSearch(ctx, searchTerm)
-}
-
-func (h *Handler) handleBroadMatchPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
-	// Extract the term (remove common keywords)
-	searchTerm := text
-	searchTerm = strings.ReplaceAll(searchTerm, "電話", "")
-	searchTerm = strings.ReplaceAll(searchTerm, "分機", "")
-	searchTerm = strings.TrimSpace(searchTerm)
-
-	if searchTerm != "" {
-		return h.handleContactSearch(ctx, searchTerm)
-	}
-	return h.handleEmptySearchTerm()
 }
 
 func (h *Handler) handleEmptySearchTerm() []messaging_api.MessageInterface {
