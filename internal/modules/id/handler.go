@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -24,14 +26,21 @@ import (
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
-// Handler handles student ID related queries.
-// It depends on *storage.DB directly for data access.
+// Handler handles student ID related queries using Pattern-Action Table architecture.
+// Both CanHandle() and HandleMessage() share the same matchers list, which structurally
+// guarantees routing consistency and eliminates the possibility of divergence.
+//
+// Pattern priority (1=highest): AllDeptCode → StudentID → DeptCode → DeptName → Year → Student
 type Handler struct {
 	db             *storage.DB
 	scraper        *scraper.Client
 	metrics        *metrics.Metrics
 	logger         *logger.Logger
 	stickerManager *sticker.Manager
+
+	// matchers contains all pattern-handler pairs sorted by priority.
+	// Shared by CanHandle and HandleMessage for consistent routing.
+	matchers []PatternMatcher
 }
 
 // Name returns the module name
@@ -45,19 +54,50 @@ const (
 	senderName = "學號小幫手"
 )
 
-// Valid keywords for student ID queries
+// Pattern priorities (lower = higher priority).
+// IMPORTANT: More specific patterns (e.g., "系代碼") must have higher priority
+// than less specific ones (e.g., "系") to prevent incorrect matches.
+const (
+	PriorityAllDeptCode = 1 // Exact match: "所有系代碼"
+	PriorityStudentID   = 2 // 8-9 digit numeric student ID
+	PriorityDeptCode    = 3 // Department code query (系代碼) - BEFORE DeptName
+	PriorityDeptName    = 4 // Department name query (系, 所, etc.)
+	PriorityYear        = 5 // Year query (學年)
+	PriorityStudent     = 6 // Student name/ID query (學號, 學生)
+)
+
+// PatternHandler processes a matched pattern and returns LINE messages.
+// Parameters: context, original text, regex match groups (matches[0] = full match).
+//
+// Contract: When invoked (pattern matched), MUST return at least one user-facing message.
+// Even if processing fails or validation errors occur, return error/help messages instead
+// of nil/empty slice to preserve CanHandle/HandleMessage consistency guarantee.
+type PatternHandler func(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface
+
+// PatternMatcher represents a pattern-action pair sorted by priority.
+type PatternMatcher struct {
+	pattern   *regexp.Regexp
+	priority  int
+	handler   PatternHandler
+	name      string            // For logging
+	matchFunc func(string) bool // Optional custom match function (for non-regex patterns)
+}
+
+// Keyword definitions for bot.BuildKeywordRegex (case-insensitive, ^-anchored).
 var (
 	validStudentKeywords = []string{
 		"學號", "學生", "姓名", "學生姓名", "學生編號",
 		"student", "id", // English keywords
 	}
-	validDepartmentKeywords = []string{
-		"系", "所", "系所", "科系", "系名", "系所名", "科系名", "系所名稱", "科系名稱",
-		"dep", "department", // English keywords
-	}
+	// validDepartmentCodeKeywords: MUST be checked before validDepartmentKeywords
+	// because "系代碼" contains "系"
 	validDepartmentCodeKeywords = []string{
 		"系代碼", "系所代碼", "科系代碼", "系編號", "系所編號", "科系編號",
 		"depCode", "departmentCode", // English keywords
+	}
+	validDepartmentKeywords = []string{
+		"系", "所", "系所", "科系", "系名", "系所名", "科系名", "系所名稱", "科系名稱",
+		"dep", "department", // English keywords
 	}
 	validYearKeywords = []string{
 		"學年", "年份", "年度", "學年度", "入學年", "入學學年", "入學年度",
@@ -65,14 +105,15 @@ var (
 	}
 
 	studentRegex    = bot.BuildKeywordRegex(validStudentKeywords)
-	departmentRegex = bot.BuildKeywordRegex(validDepartmentKeywords)
 	deptCodeRegex   = bot.BuildKeywordRegex(validDepartmentCodeKeywords)
+	departmentRegex = bot.BuildKeywordRegex(validDepartmentKeywords)
 	yearRegex       = bot.BuildKeywordRegex(validYearKeywords)
 	allDeptCodeText = "所有系代碼"
 )
 
 // NewHandler creates a new ID handler with required dependencies.
 // All parameters are mandatory for proper handler operation.
+// Initializes and sorts matchers by priority during construction.
 func NewHandler(
 	db *storage.DB,
 	scraper *scraper.Client,
@@ -80,13 +121,79 @@ func NewHandler(
 	logger *logger.Logger,
 	stickerManager *sticker.Manager,
 ) *Handler {
-	return &Handler{
+	h := &Handler{
 		db:             db,
 		scraper:        scraper,
 		metrics:        metrics,
 		logger:         logger,
 		stickerManager: stickerManager,
 	}
+
+	// Initialize Pattern-Action Table
+	h.initializeMatchers()
+
+	return h
+}
+
+// initializeMatchers sets up the Pattern-Action Table.
+// All pattern matching logic is defined here in one place.
+// Matchers are automatically sorted by priority after initialization.
+func (h *Handler) initializeMatchers() {
+	h.matchers = []PatternMatcher{
+		{
+			// Exact match: "所有系代碼"
+			pattern:  nil, // Uses matchFunc instead
+			priority: PriorityAllDeptCode,
+			handler:  h.handleAllDeptCodePattern,
+			name:     "AllDeptCode",
+			matchFunc: func(text string) bool {
+				return text == allDeptCodeText
+			},
+		},
+		{
+			// 8-9 digit numeric student ID
+			pattern:  nil, // Uses matchFunc instead
+			priority: PriorityStudentID,
+			handler:  h.handleStudentIDPattern,
+			name:     "StudentID",
+			matchFunc: func(text string) bool {
+				return len(text) >= 8 && len(text) <= 9 && stringutil.IsNumeric(text)
+			},
+		},
+		{
+			// Department code query (系代碼) - BEFORE DeptName
+			pattern:  deptCodeRegex,
+			priority: PriorityDeptCode,
+			handler:  h.handleDeptCodePattern,
+			name:     "DeptCode",
+		},
+		{
+			// Department name query (系, 所, etc.)
+			pattern:  departmentRegex,
+			priority: PriorityDeptName,
+			handler:  h.handleDeptNamePattern,
+			name:     "DeptName",
+		},
+		{
+			// Year query (學年)
+			pattern:  yearRegex,
+			priority: PriorityYear,
+			handler:  h.handleYearPattern,
+			name:     "Year",
+		},
+		{
+			// Student name/ID query (學號, 學生)
+			pattern:  studentRegex,
+			priority: PriorityStudent,
+			handler:  h.handleStudentPattern,
+			name:     "Student",
+		},
+	}
+
+	// Sort by priority (lower number = higher priority)
+	slices.SortFunc(h.matchers, func(a, b PatternMatcher) int {
+		return a.priority - b.priority
+	})
 }
 
 // Intent names for NLU dispatcher
@@ -143,105 +250,179 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 	}
 }
 
-// CanHandle checks if the message is for the ID module
-func (h *Handler) CanHandle(text string) bool {
+// findMatcher returns the first matching pattern or nil.
+// Used by both CanHandle and HandleMessage for consistent routing.
+func (h *Handler) findMatcher(text string) *PatternMatcher {
 	text = strings.TrimSpace(text)
-
-	if text == allDeptCodeText {
-		return true
+	for i := range h.matchers {
+		m := &h.matchers[i]
+		// Use custom match function if provided, otherwise use regex
+		if m.matchFunc != nil {
+			if m.matchFunc(text) {
+				return m
+			}
+		} else if m.pattern != nil && m.pattern.MatchString(text) {
+			return m
+		}
 	}
-
-	if len(text) >= 8 && len(text) <= 9 && stringutil.IsNumeric(text) {
-		return true
-	}
-
-	if studentRegex.MatchString(text) {
-		return true
-	}
-
-	if departmentRegex.MatchString(text) || deptCodeRegex.MatchString(text) {
-		return true
-	}
-
-	if yearRegex.MatchString(text) {
-		return true
-	}
-
-	return false
+	return nil
 }
 
-// HandleMessage handles text messages for the ID module
+// CanHandle returns true if any pattern matches (consistent with HandleMessage).
+func (h *Handler) CanHandle(text string) bool {
+	return h.findMatcher(text) != nil
+}
+
+// HandleMessage finds the matching pattern and executes its handler.
+// Returns empty slice if no pattern matches (fallback to NLU).
 func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
 	log.Debugf("Handling ID message: %s", text)
 
-	if text == allDeptCodeText {
-		return h.handleAllDepartmentCodes()
+	// Find matching pattern
+	matcher := h.findMatcher(text)
+	if matcher == nil {
+		return []messaging_api.MessageInterface{}
 	}
 
-	if len(text) >= 8 && len(text) <= 9 && stringutil.IsNumeric(text) {
-		return h.handleStudentIDQuery(ctx, text)
+	// Extract regex match groups (empty for non-regex matchers)
+	var matches []string
+	if matcher.pattern != nil {
+		matches = matcher.pattern.FindStringSubmatch(text)
+	} else {
+		matches = []string{text} // For custom matchers, just pass the text
 	}
 
-	// Handle department name query - extract term after keyword
-	if match := departmentRegex.FindString(text); match != "" {
-		searchTerm := bot.ExtractSearchTerm(text, match)
-		if searchTerm != "" {
-			return h.handleDepartmentNameQuery(searchTerm)
-		}
-	}
+	log.Debugf("Pattern matched: %s (priority %d)", matcher.name, matcher.priority)
 
-	// Handle department code query - extract term after keyword
-	if match := deptCodeRegex.FindString(text); match != "" {
-		searchTerm := bot.ExtractSearchTerm(text, match)
-		if searchTerm != "" {
-			return h.handleDepartmentCodeQuery(searchTerm)
-		}
-	}
+	// Call handler - must return non-empty per PatternHandler contract
+	result := matcher.handler(ctx, text, matches)
 
-	// Handle year query - extract year after keyword
-	if match := yearRegex.FindString(text); match != "" {
-		searchTerm := bot.ExtractSearchTerm(text, match)
-		if searchTerm != "" {
-			return h.handleYearQuery(searchTerm)
-		}
-		// No year provided - show guidance message
+	// Defensive check: handlers should never return nil/empty when pattern matched
+	if len(result) == 0 {
+		log.Errorf("Handler %s violated contract: returned empty for matched pattern", matcher.name)
+		// Return generic error to user
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			"📅 按學年度查詢學生\n\n請輸入學年度進行查詢\n例如：學年 112、學年 110\n\n📋 查詢流程：\n1️⃣ 選擇學院群（文法商/公社電資）\n2️⃣ 選擇學院\n3️⃣ 選擇系所\n4️⃣ 查看該系所所有學生\n\n⚠️ 僅提供 94-113 學年度資料",
+			"⚠️ 抱歉，處理您的查詢時發生問題\n\n請稍後再試或輸入「說明」查看使用方式。",
+			sender,
+		)
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNavCompact())
+		return []messaging_api.MessageInterface{msg}
+	}
+
+	return result
+}
+
+// ================================================
+// Pattern handler adapters - implement PatternHandler contract.
+// Must return non-empty messages when invoked (pattern matched).
+// ================================================
+
+// handleAllDeptCodePattern handles "所有系代碼" exact match.
+func (h *Handler) handleAllDeptCodePattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
+	return h.handleAllDepartmentCodes()
+}
+
+// handleStudentIDPattern handles 8-9 digit numeric student ID.
+func (h *Handler) handleStudentIDPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
+	return h.handleStudentIDQuery(ctx, text)
+}
+
+// handleDeptCodePattern handles department code query (系代碼 XX).
+func (h *Handler) handleDeptCodePattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
+	match := matches[0] // The matched keyword
+	searchTerm := bot.ExtractSearchTerm(text, match)
+
+	if searchTerm == "" {
+		// Help message with common codes
+		sender := lineutil.GetSender(senderName, h.stickerManager)
+		msg := lineutil.NewTextMessageWithConsistentSender(
+			"🔢 查詢系代碼對應的系名\n\n請輸入系代碼：\n例如：系代碼 85、系代碼 71\n\n💡 輸入「所有系代碼」查看完整對照表",
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("📅 查詢 112 學年度", "學年 112")},
-			{Action: lineutil.NewMessageAction("📅 查詢 111 學年度", "學年 111")},
-			{Action: lineutil.NewMessageAction("📅 查詢 110 學年度", "學年 110")},
+			lineutil.QuickReplyDeptCodeAction(),
+			lineutil.QuickReplyHelpAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	if loc := studentRegex.FindStringIndex(text); loc != nil {
-		match := studentRegex.FindString(text)
-		searchTerm := bot.ExtractSearchTerm(text, match)
-		if searchTerm == "" {
-			// If no search term provided, give helpful message
-			sender := lineutil.GetSender(senderName, h.stickerManager)
-			msg := lineutil.NewTextMessageWithConsistentSender("🎓 請在關鍵字後輸入查詢內容\n\n例如：\n• 學號 小明\n• 學號 412345678\n\n💡 提示：也可直接輸入 8-9 位學號", sender)
-			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-				lineutil.QuickReplyYearAction(),
-				lineutil.QuickReplyHelpAction(),
-			})
-			return []messaging_api.MessageInterface{msg}
-		}
+	return h.handleDepartmentCodeQuery(searchTerm)
+}
 
-		if stringutil.IsNumeric(searchTerm) && (len(searchTerm) == 8 || len(searchTerm) == 9) {
-			return h.handleStudentIDQuery(ctx, searchTerm)
-		}
-		return h.handleStudentNameQuery(ctx, searchTerm)
+// handleDeptNamePattern handles department name query (系 XX).
+func (h *Handler) handleDeptNamePattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
+	match := matches[0] // The matched keyword
+	searchTerm := bot.ExtractSearchTerm(text, match)
+
+	if searchTerm == "" {
+		// Help message
+		sender := lineutil.GetSender(senderName, h.stickerManager)
+		msg := lineutil.NewTextMessageWithConsistentSender(
+			"🔍 查詢系名對應的代碼\n\n請輸入系名：\n例如：系 資工、系 法律\n\n💡 輸入「所有系代碼」查看完整對照表",
+			sender,
+		)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			lineutil.QuickReplyDeptCodeAction(),
+			lineutil.QuickReplyHelpAction(),
+		})
+		return []messaging_api.MessageInterface{msg}
 	}
 
-	return []messaging_api.MessageInterface{}
+	return h.handleDepartmentNameQuery(searchTerm)
+}
+
+// handleYearPattern handles year query (學年 XXX).
+func (h *Handler) handleYearPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
+	match := matches[0] // The matched keyword
+	searchTerm := bot.ExtractSearchTerm(text, match)
+
+	if searchTerm != "" {
+		return h.handleYearQuery(searchTerm)
+	}
+
+	// No year provided - show guidance message
+	sender := lineutil.GetSender(senderName, h.stickerManager)
+	msg := lineutil.NewTextMessageWithConsistentSender(
+		"📅 按學年度查詢學生\n\n請輸入學年度進行查詢\n例如：學年 112、學年 110\n\n📋 查詢流程：\n1️⃣ 選擇學院群（文法商/公社電資）\n2️⃣ 選擇學院\n3️⃣ 選擇系所\n4️⃣ 查看該系所所有學生\n\n⚠️ 僅提供 94-113 學年度資料",
+		sender,
+	)
+	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+		{Action: lineutil.NewMessageAction("📅 查詢 112 學年度", "學年 112")},
+		{Action: lineutil.NewMessageAction("📅 查詢 111 學年度", "學年 111")},
+		{Action: lineutil.NewMessageAction("📅 查詢 110 學年度", "學年 110")},
+	})
+	return []messaging_api.MessageInterface{msg}
+}
+
+// handleStudentPattern handles student name/ID query (學號 XXX).
+func (h *Handler) handleStudentPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
+	match := matches[0] // The matched keyword
+	searchTerm := bot.ExtractSearchTerm(text, match)
+
+	if searchTerm == "" {
+		// If no search term provided, give helpful message
+		sender := lineutil.GetSender(senderName, h.stickerManager)
+		msg := lineutil.NewTextMessageWithConsistentSender(
+			"🎓 請在關鍵字後輸入查詢內容\n\n例如：\n• 學號 小明\n• 學號 412345678\n\n💡 提示：也可直接輸入 8-9 位學號",
+			sender,
+		)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			lineutil.QuickReplyYearAction(),
+			lineutil.QuickReplyHelpAction(),
+		})
+		return []messaging_api.MessageInterface{msg}
+	}
+
+	// If search term is numeric 8-9 digits, treat as student ID
+	if stringutil.IsNumeric(searchTerm) && (len(searchTerm) == 8 || len(searchTerm) == 9) {
+		return h.handleStudentIDQuery(ctx, searchTerm)
+	}
+
+	return h.handleStudentNameQuery(ctx, searchTerm)
 }
 
 // HandlePostback handles postback events for the ID module
@@ -428,7 +609,6 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 				}
 			}
 		}
-		builder.WriteString("\n💡 輸入更完整的系名以縮小範圍")
 		msg := lineutil.NewTextMessageWithConsistentSender(builder.String(), sender)
 		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyStudentNav())
 		return []messaging_api.MessageInterface{msg}

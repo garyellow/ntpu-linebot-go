@@ -12,6 +12,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
+	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -41,7 +42,8 @@ func setupTestHandler(t *testing.T) *Handler {
 
 // TestCanHandle tests the core routing logic - critical for correct request dispatch
 func TestCanHandle(t *testing.T) {
-	h := &Handler{}
+	// Use setupTestHandler to ensure matchers are initialized
+	h := setupTestHandler(t)
 
 	tests := []struct {
 		name  string
@@ -214,16 +216,39 @@ func TestHandleMessage_DepartmentName(t *testing.T) {
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
-	// Valid department
+	// 1. Valid department - General
 	msgs := h.HandleMessage(ctx, "系 資工")
 	if len(msgs) == 0 {
 		t.Error("Expected response for department query")
+	} else {
+		// Verify content contains "資工"
+		if txt, ok := msgs[0].(*messaging_api.TextMessage); ok {
+			if !strings.Contains(txt.Text, "資工") {
+				t.Errorf("Expected response to contain '資工', got: %s", txt.Text)
+			}
+		}
 	}
 
-	// Invalid department
+	// 2. Specific case: "系 法律" should found Law groups (multi-degree fix verification)
+	// Requires scraping or mocked data. Since we use real scraper in test setup (with mocked URL?),
+	// strict verification depends on scraper data.
+	// But we can at least ensure it returns a list representation (Flex Message for multiple results).
+	msgsLaw := h.HandleMessage(ctx, "系 法律")
+	if len(msgsLaw) == 0 {
+		t.Error("Expected response for '系 法律'")
+	}
+
+	// 3. Invalid department
 	msgs = h.HandleMessage(ctx, "系 不存在的系")
 	if len(msgs) == 0 {
 		t.Error("Expected error message for invalid department")
+	} else {
+		if txt, ok := msgs[0].(*messaging_api.TextMessage); ok {
+			// Update assertion to match actual code message
+			if !strings.Contains(txt.Text, "查無該系所") {
+				t.Errorf("Expected '查無該系所' error message, got: %s", txt.Text)
+			}
+		}
 	}
 }
 
@@ -232,13 +257,27 @@ func TestHandleMessage_DepartmentCode(t *testing.T) {
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
-	// Valid department code
+	// 1. Valid department code: "系代碼 85"
+	// This verifies Priority Logic:
+	// If routed correctly (PriorityDeptCode): Finds "85" -> "資工" -> Returns result.
+	// If routed incorrectly (PriorityDeptName): Finds "代碼 85" -> Search fail -> Returns "找不到".
 	msgs := h.HandleMessage(ctx, "系代碼 85")
 	if len(msgs) == 0 {
 		t.Error("Expected response for department code query")
+	} else {
+		if txt, ok := msgs[0].(*messaging_api.TextMessage); ok {
+			// Should contain "資工" (successful name lookup)
+			// Or should NOT contain "找不到"
+			if strings.Contains(txt.Text, "找不到") {
+				t.Errorf("Routing Error: '系代碼 85' was likely routed to DeptName handler (searching for '代碼 85'). Content: %s", txt.Text)
+			}
+			if !strings.Contains(txt.Text, "資工") {
+				t.Errorf("Expected response to contain '資工', got: %s", txt.Text)
+			}
+		}
 	}
 
-	// Invalid department code
+	// 2. Invalid department code
 	msgs = h.HandleMessage(ctx, "系代碼 999")
 	if len(msgs) == 0 {
 		t.Error("Expected error message for invalid department code")
