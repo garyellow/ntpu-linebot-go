@@ -2,7 +2,8 @@
 // Defines data boundaries and user-facing messages for explaining data limitations.
 //
 // NTPU LMS (數位學苑 2.0) deprecated in 2024:
-//   - Student ID data: 94-113 (live scraping), 101-113 (cached)
+//   - Student ID data: 94-113 (live scraping), 101-113 (cached warmup for all types)
+//   - Cached types: undergrad (prefix 4), master's (prefix 7), PhD (prefix 8)
 //   - New enrollments (114+): No data available
 package config
 
@@ -55,12 +56,10 @@ const (
 	// with a hint about data availability.
 	IDNotFoundWithCutoffHint = "🔍 查無「%s」的學號資料\n\n" +
 		"📊 姓名查詢範圍\n" +
-		"• 日間部大學部：101-113 學年度\n" +
-		"• 碩博士班/在職專班：僅限已查詢過的學號\n\n" +
+		"• 大學部/碩博士班：101-113 學年度\n\n" +
 		"💡 建議：\n" +
 		"• 確認姓名拼寫是否正確\n" +
-		"• 使用「學年」功能按年度查詢\n" +
-		"• 如為碩博士班，需先用學號查詢"
+		"• 使用「學年」功能按年度查詢"
 
 	// IDYear114PlusMessage is the message shown for 114+ year queries.
 	// Includes image reference and emotional acknowledgment.

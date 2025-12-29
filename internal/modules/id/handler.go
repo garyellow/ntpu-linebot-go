@@ -712,8 +712,7 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	infoBuilder.WriteString("ℹ️ 系所資訊說明\n")
 	infoBuilder.WriteString("系所資訊由學號推測，若有轉系之類的情況可能與實際不符。\n\n")
 	infoBuilder.WriteString("📊 姓名查詢範圍\n")
-	infoBuilder.WriteString("• 日間部大學部：101-113 學年度\n")
-	infoBuilder.WriteString("• 碩博士班/在職專班：僅限已查詢過的學號\n\n")
+	infoBuilder.WriteString("• 大學部/碩博士班：101-113 學年度\n\n")
 	infoBuilder.WriteString("💡 若找不到學生，可使用「學年」功能按年度查詢")
 
 	infoMsg := lineutil.NewTextMessageWithConsistentSender(infoBuilder.String(), sender)
@@ -764,8 +763,7 @@ func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_ap
 
 	// Add name search scope note (姓名查詢限制說明)
 	body.AddComponent(lineutil.NewFlexText(
-		"📊 姓名查詢僅涵蓋日間部大學部 101-113 學年度。 " +
-			"碩博士班/在職專班需先透過學號查詢後才能以姓名搜尋。").
+		"📊 姓名查詢涵蓋大學部/碩博士班 101-113 學年度。").
 		WithSize("xs").
 		WithColor(lineutil.ColorNote).
 		WithWrap(true).
@@ -1066,7 +1064,7 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 		h.metrics.RecordCacheMiss(ModuleName)
 		startTime := time.Now()
 
-		scrapedStudents, err := ntpu.ScrapeStudentsByYear(ctx, h.scraper, year, deptCode)
+		scrapedStudents, err := ntpu.ScrapeStudentsByYear(ctx, h.scraper, year, deptCode, ntpu.StudentTypeUndergrad)
 		if err != nil {
 			log.WithError(err).Errorf("Failed to scrape students for year %d dept %s", year, deptCode)
 			h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
