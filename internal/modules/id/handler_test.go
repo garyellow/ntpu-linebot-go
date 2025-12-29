@@ -229,7 +229,7 @@ func TestHandleMessage_DepartmentName(t *testing.T) {
 		}
 	}
 
-	// 2. Specific case: "系 法律" should found Law groups (multi-degree fix verification)
+	// 2. Specific case: "系 法律" should find Law groups (multi-degree fix verification)
 	// Requires scraping or mocked data. Since we use real scraper in test setup (with mocked URL?),
 	// strict verification depends on scraper data.
 	// But we can at least ensure it returns a list representation (Flex Message for multiple results).

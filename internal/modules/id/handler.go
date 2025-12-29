@@ -253,7 +253,6 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 // findMatcher returns the first matching pattern or nil.
 // Used by both CanHandle and HandleMessage for consistent routing.
 func (h *Handler) findMatcher(text string) *PatternMatcher {
-	text = strings.TrimSpace(text)
 	for i := range h.matchers {
 		m := &h.matchers[i]
 		// Use custom match function if provided, otherwise use regex
@@ -270,6 +269,7 @@ func (h *Handler) findMatcher(text string) *PatternMatcher {
 
 // CanHandle returns true if any pattern matches (consistent with HandleMessage).
 func (h *Handler) CanHandle(text string) bool {
+	text = strings.TrimSpace(text)
 	return h.findMatcher(text) != nil
 }
 
