@@ -99,6 +99,7 @@ var MasterDepartmentCodes = map[string]string{
 
 // PhDDepartmentCodes maps PhD program department names to codes (博士班)
 var PhDDepartmentCodes = map[string]string{
+	"企業管理學系博士班":       "31",
 	"會計學系博士班":         "32",
 	"法律學系博士班":         "51",
 	"經濟學系博士班":         "61",
@@ -133,9 +134,84 @@ func IsLawDepartment(deptCode string) bool {
 	return strings.HasPrefix(deptCode, "71")
 }
 
+// Student type prefixes for scraping
+const (
+	StudentTypeUndergrad = "4" // 大學部
+	StudentTypeMaster    = "7" // 碩士班
+	StudentTypePhD       = "8" // 博士班
+)
+
 const (
 	studentSearchPath = "/portfolio/search.php"
 )
+
+// UndergradDeptCodes contains undergraduate department codes for scraping.
+var UndergradDeptCodes = []string{
+	"71", "712", "714", "716", // 法律學系 (法學/司法/財法)
+	"72",         // 公共行政暨政策學系
+	"73",         // 經濟學系
+	"742", "744", // 社會學系/社會工作學系
+	"75", // 財政學系
+	"76", // 不動產與城鄉環境學系
+	"77", // 會計學系
+	"78", // 統計學系
+	"79", // 企業管理學系
+	"80", // 金融與合作經營學系
+	"81", // 中國文學系
+	"82", // 應用外語學系
+	"83", // 歷史學系
+	"84", // 休閒運動管理學系
+	"85", // 資訊工程學系
+	"86", // 通訊工程學系
+	"87", // 電機工程學系
+}
+
+// MasterDeptCodes contains master's program department codes for scraping.
+var MasterDeptCodes = []string{
+	"31", // 企業管理學系碩士班
+	"32", // 會計學系碩士班
+	"33", // 統計學系碩士班
+	"34", // 金融與合作經營學系碩士班
+	"35", // 國際企業研究所碩士班
+	"36", // 資訊管理研究所
+	"37", // 財務金融英語碩士學位學程
+	"41", // 民俗藝術與文化資產研究所
+	"42", // 古典文獻學研究所
+	"43", // 中國文學系碩士班
+	"44", // 歷史學系碩士班
+	"51", // 法律學系碩士班一般生組
+	"52", // 法律學系碩士班法律專業組
+	"61", // 經濟學系碩士班
+	"62", // 社會學系碩士班
+	"63", // 社會工作學系碩士班
+	"64", // 犯罪學研究所
+	"71", // 公共行政暨政策學系碩士班
+	"72", // 財政學系碩士班
+	"73", // 不動產與城鄉環境學系碩士班
+	"74", // 都市計劃研究所碩士班
+	"75", // 自然資源與環境管理研究所碩士班
+	"76", // 城市治理英語碩士學位學程
+	"77", // 會計學系碩士在職專班
+	"78", // 統計學系碩士在職專班
+	"79", // 企業管理學系碩士在職專班
+	"81", // 通訊工程學系碩士班
+	"82", // 電機工程學系碩士班
+	"83", // 資訊工程學系碩士班
+	"91", // 智慧醫療管理英語碩士學位學程
+}
+
+// PhDDeptCodes contains PhD program department codes for scraping.
+var PhDDeptCodes = []string{
+	"31", // 企業管理學系博士班
+	"32", // 會計學系博士班
+	"51", // 法律學系博士班
+	"61", // 經濟學系博士班
+	"71", // 公共行政暨政策學系博士班
+	"73", // 不動產與城鄉環境學系博士班
+	"74", // 都市計劃研究所博士班
+	"75", // 自然資源與環境管理研究所博士班
+	"76", // 電機資訊學院博士班
+}
 
 // lmsCache is a package-level helper for LMS URL caching.
 // Returns the cached working URL or detects a new one.
@@ -143,11 +219,12 @@ func lmsCache(ctx context.Context, client *scraper.Client) (string, error) {
 	return scraper.NewURLCache(client, "lms").Get(ctx)
 }
 
-// ScrapeStudentsByYear scrapes students by year and department code
-// URL: {baseURL}/portfolio/search.php?fmScope=2&page=1&fmKeyword=4{year}{deptCode}
-// Returns a list of students matching the criteria
-// Supports automatic URL failover across multiple LMS endpoints
-func ScrapeStudentsByYear(ctx context.Context, client *scraper.Client, year int, deptCode string) ([]*storage.Student, error) {
+// ScrapeStudentsByYear scrapes students by year, department code and student type.
+// URL: {baseURL}/portfolio/search.php?fmScope=2&page=1&fmKeyword={studentType}{year}{deptCode}
+// studentType: "4" for undergrad, "7" for master's, "8" for PhD
+// Returns a list of students matching the criteria.
+// Supports automatic URL failover across multiple LMS endpoints.
+func ScrapeStudentsByYear(ctx context.Context, client *scraper.Client, year int, deptCode, studentType string) ([]*storage.Student, error) {
 	// Check context before starting
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("context canceled before scraping students: %w", err)
@@ -161,9 +238,10 @@ func ScrapeStudentsByYear(ctx context.Context, client *scraper.Client, year int,
 		return nil, fmt.Errorf("failed to get working LMS URL: %w", err)
 	}
 
-	// Build search keyword: 4{year}{deptCode}
-	// Example: 411271 for year 112, department 71 (法律)
-	keyword := fmt.Sprintf("4%d%s", year, deptCode)
+	// Build search keyword: {studentType}{year}{deptCode}
+	// Example: 411271 for undergrad year 112, department 71 (法律)
+	// Example: 711271 for master's year 112, department 71 (公行碩)
+	keyword := fmt.Sprintf("%s%d%s", studentType, year, deptCode)
 
 	// First request to get total pages
 	url := fmt.Sprintf("%s%s?fmScope=2&page=1&fmKeyword=%s", baseURL, studentSearchPath, keyword)

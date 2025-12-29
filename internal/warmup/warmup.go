@@ -219,6 +219,7 @@ func warmupProgramModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 }
 
 // warmupIDModule warms student ID cache (sequential execution).
+// Scrapes undergraduate (prefix 4), master's (prefix 7), and PhD (prefix 8) students.
 func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, m *metrics.Metrics) error {
 	startTime := time.Now()
 	defer func() {
@@ -228,70 +229,87 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 	}()
 
 	// Warmup range: 101-113 (LMS 2.0 已無 114+ 資料)
-	// Warmup range: 101-113 (LMS 2.0 已無 114+ 資料)
 	currentYear := time.Now().Year() - 1911
 	fromYear := min(config.IDDataYearEnd, currentYear)
 
-	// All department codes
-	departments := []string{
-		"71", "712", "714", "716", "72", "73", "742", "744",
-		"75", "76", "77", "78", "79", "80", "81", "82", "83", "84", "85", "86", "87",
+	// Define student types with their respective department codes
+	studentTypes := []struct {
+		prefix string
+		depts  []string
+		name   string
+	}{
+		{ntpu.StudentTypeUndergrad, ntpu.UndergradDeptCodes, "大學部"},
+		{ntpu.StudentTypeMaster, ntpu.MasterDeptCodes, "碩士班"},
+		{ntpu.StudentTypePhD, ntpu.PhDDeptCodes, "博士班"},
 	}
 
-	totalTasks := (fromYear - 100) * len(departments)
-	log.WithField("tasks", totalTasks).Info("Starting ID module warmup")
+	// Calculate total tasks
+	var totalTasks int
+	for _, st := range studentTypes {
+		totalTasks += (fromYear - 100) * len(st.depts)
+	}
+	log.WithField("tasks", totalTasks).Info("Starting ID module warmup (undergrad + master's + PhD)")
 
 	var completed int
 	var errorCount int
 	var studentCount int64
 	var errs []error
 
-	for year := fromYear; year > 100; year-- {
-		for _, dept := range departments {
-			select {
-			case <-ctx.Done():
-				log.WithField("completed", completed).
-					WithField("errors", errorCount).
-					Warn("ID module warmup canceled")
-				return fmt.Errorf("canceled: %w", ctx.Err())
-			default:
-			}
+	for _, st := range studentTypes {
+		log.WithField("type", st.name).WithField("depts", len(st.depts)).Info("Warming up student type")
 
-			students, err := ntpu.ScrapeStudentsByYear(ctx, client, year, dept)
-			if err != nil {
-				log.WithError(err).
-					WithField("year", year).
-					WithField("dept", dept).
-					Warn("Failed to scrape students")
-				errs = append(errs, fmt.Errorf("scrape year=%d dept=%s: %w", year, dept, err))
-				errorCount++
-				continue
-			}
+		for year := fromYear; year > 100; year-- {
+			for _, dept := range st.depts {
+				select {
+				case <-ctx.Done():
+					log.WithField("completed", completed).
+						WithField("errors", errorCount).
+						Warn("ID module warmup canceled")
+					return fmt.Errorf("canceled: %w", ctx.Err())
+				default:
+				}
 
-			// Save to database
-			if err := db.SaveStudentsBatch(ctx, students); err != nil {
-				log.WithError(err).
-					WithField("year", year).
-					WithField("dept", dept).
-					WithField("count", len(students)).
-					Warn("Failed to save student batch")
-				errs = append(errs, fmt.Errorf("save year=%d dept=%s: %w", year, dept, err))
-				errorCount++
-				continue
-			}
+				students, err := ntpu.ScrapeStudentsByYear(ctx, client, year, dept, st.prefix)
+				if err != nil {
+					log.WithError(err).
+						WithField("year", year).
+						WithField("dept", dept).
+						WithField("type", st.name).
+						Warn("Failed to scrape students")
+					errs = append(errs, fmt.Errorf("scrape year=%d dept=%s type=%s: %w", year, dept, st.name, err))
+					errorCount++
+					continue
+				}
 
-			studentCount += int64(len(students))
-			completed++
+				// Save to database
+				if err := db.SaveStudentsBatch(ctx, students); err != nil {
+					log.WithError(err).
+						WithField("year", year).
+						WithField("dept", dept).
+						WithField("type", st.name).
+						WithField("count", len(students)).
+						Warn("Failed to save student batch")
+					errs = append(errs, fmt.Errorf("save year=%d dept=%s type=%s: %w", year, dept, st.name, err))
+					errorCount++
+					continue
+				}
 
-			if completed%10 == 0 || completed == totalTasks {
-				elapsed := time.Since(startTime)
-				avgTimePerTask := elapsed / time.Duration(completed)
-				estimatedRemaining := avgTimePerTask * time.Duration(totalTasks-completed)
-				log.WithField("progress", fmt.Sprintf("%d/%d", completed, totalTasks)).
-					WithField("students", studentCount).
-					WithField("elapsed_min", int(elapsed.Minutes())).
-					WithField("est_remaining_min", int(estimatedRemaining.Minutes())).
-					Info("ID module progress")
+				studentCount += int64(len(students))
+				completed++
+
+				// Report progress every 5% or at completion
+				progressInterval := max(totalTasks/20, 1) // ~5% intervals, minimum 1
+				if completed%progressInterval == 0 || completed == totalTasks {
+					elapsed := time.Since(startTime)
+					avgTimePerTask := elapsed / time.Duration(completed)
+					estimatedRemaining := avgTimePerTask * time.Duration(totalTasks-completed)
+					log.WithField("progress", fmt.Sprintf("%d/%d (%.0f%%)", completed, totalTasks, float64(completed)*100/float64(totalTasks))).
+						WithField("students", studentCount).
+						WithField("type", st.name).
+						WithField("elapsed_min", int(elapsed.Minutes())).
+						WithField("est_remaining_min", int(estimatedRemaining.Minutes())).
+						Info("ID module progress")
+				}
 			}
 		}
 	}
@@ -590,12 +608,13 @@ processLoop:
 		newSyllabi = append(newSyllabi, syl)
 		updatedCount++
 
-		// Log progress every 50 courses for better visibility
-		if i > 0 && i%50 == 0 {
+		// Report progress every 5% or at completion for consistent visibility
+		progressInterval := max(len(courses)/20, 1) // ~5% intervals, minimum 1
+		if i > 0 && i%progressInterval == 0 {
 			elapsed := time.Since(startTime)
 			avgTimePerCourse := elapsed / time.Duration(i)
 			estimatedRemaining := avgTimePerCourse * time.Duration(len(courses)-i)
-			log.WithField("progress", fmt.Sprintf("%d/%d", i, len(courses))).
+			log.WithField("progress", fmt.Sprintf("%d/%d (%.0f%%)", i, len(courses), float64(i)*100/float64(len(courses)))).
 				WithField("updated", updatedCount).
 				WithField("skipped", skippedCount).
 				WithField("errors", errorCount).
