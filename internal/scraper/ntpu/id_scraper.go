@@ -41,9 +41,9 @@ var DepartmentCodes = map[string]string{
 // FullDepartmentCodes maps full department names to codes (大學部)
 var FullDepartmentCodes = map[string]string{
 	"法律學系":       "71",
-	"法學組":        "712",
-	"司法組":        "714",
-	"財經法組":       "716",
+	"法律學系法學組":    "712",
+	"法律學系司法組":    "714",
+	"法律學系財經法組":   "716",
 	"公共行政暨政策學系":  "72",
 	"經濟學系":       "73",
 	"社會學系":       "742",

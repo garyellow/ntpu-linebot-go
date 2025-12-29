@@ -5,6 +5,7 @@ package contact
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -32,6 +33,10 @@ type Handler struct {
 	logger           *logger.Logger
 	stickerManager   *sticker.Manager
 	maxContactsLimit int // Maximum contacts per search (from config)
+
+	// matchers contains all pattern-handler pairs sorted by priority.
+	// Shared by CanHandle and HandleMessage for consistent routing.
+	matchers []PatternMatcher
 }
 
 // Name returns the module name
@@ -69,6 +74,24 @@ const (
 	homHospital   = "0226723456" // 恩主公醫院
 )
 
+// Pattern priorities (lower = higher).
+const (
+	PriorityEmergency = 1 // Prefix "緊急"
+	PriorityContact   = 2 // Regex match (e.g. "電話 xxx", "聯絡 xxx")
+)
+
+// PatternHandler processes a matched pattern and returns LINE messages.
+type PatternHandler func(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface
+
+// PatternMatcher represents a pattern-action pair sorted by priority.
+type PatternMatcher struct {
+	pattern   *regexp.Regexp
+	priority  int
+	handler   PatternHandler
+	name      string            // For logging
+	matchFunc func(string) bool // Optional custom matching logic (precedence over pattern)
+}
+
 // Valid keywords for contact queries
 var (
 	validContactKeywords = []string{
@@ -94,7 +117,7 @@ func NewHandler(
 	stickerManager *sticker.Manager,
 	maxContactsLimit int,
 ) *Handler {
-	return &Handler{
+	h := &Handler{
 		db:               db,
 		scraper:          scraper,
 		metrics:          metrics,
@@ -102,6 +125,34 @@ func NewHandler(
 		stickerManager:   stickerManager,
 		maxContactsLimit: maxContactsLimit,
 	}
+	h.initializeMatchers()
+	return h
+}
+
+// initializeMatchers sets up the pattern-action table.
+// Priority order: Emergency > Contact Regex.
+func (h *Handler) initializeMatchers() {
+	h.matchers = []PatternMatcher{
+		{
+			name:     "Emergency",
+			priority: PriorityEmergency,
+			matchFunc: func(text string) bool {
+				return strings.HasPrefix(text, "緊急")
+			},
+			handler: h.handleEmergencyPattern,
+		},
+		{
+			name:     "Contact Regex",
+			priority: PriorityContact,
+			pattern:  contactRegex,
+			handler:  h.handleContactPattern,
+		},
+	}
+
+	// Sort by priority (1 is highest)
+	slices.SortFunc(h.matchers, func(a, b PatternMatcher) int {
+		return a.priority - b.priority
+	})
 }
 
 // Intent names for NLU dispatcher
@@ -111,13 +162,7 @@ const (
 )
 
 // DispatchIntent handles NLU-parsed intents for the contact module.
-// It validates required parameters and calls the appropriate handler method.
-//
-// Supported intents:
-//   - "search": requires "query" param, calls handleContactSearch
-//   - "emergency": no params required, calls handleEmergencyPhones
-//
-// Returns error if intent is unknown or required parameters are missing.
+// ... (DispatchIntent implementation remains the same)
 func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[string]string) ([]messaging_api.MessageInterface, error) {
 	// Validate parameters first (before logging) to support testing with nil dependencies
 	switch intent {
@@ -143,21 +188,30 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 	}
 }
 
+// findMatcher returns the first matching pattern or nil.
+// Used by both CanHandle and HandleMessage for consistent routing.
+func (h *Handler) findMatcher(text string) *PatternMatcher {
+	// Optimization: Callers (CanHandle, HandleMessage) are responsible for TrimSpace
+	// to avoid redundant allocations.
+	for i := range h.matchers {
+		m := &h.matchers[i]
+		// Use custom match function if provided, otherwise use regex
+		if m.matchFunc != nil {
+			if m.matchFunc(text) {
+				return m
+			}
+		} else if m.pattern != nil && m.pattern.MatchString(text) {
+			return m
+		}
+	}
+	return nil
+}
+
 // CanHandle checks if the message is for the contact module
 func (h *Handler) CanHandle(text string) bool {
+	// Ensure input is trimmed before matching (optimization)
 	text = strings.TrimSpace(text)
-
-	// Check for emergency keyword (must be at start)
-	if strings.HasPrefix(text, "緊急") {
-		return true
-	}
-
-	// Check for contact keywords (includes 電話, 分機, email, 信箱, etc.)
-	if contactRegex.MatchString(text) {
-		return true
-	}
-
-	return false
+	return h.findMatcher(text) != nil
 }
 
 // HandleMessage handles text messages for the contact module
@@ -165,46 +219,42 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
-	log.Debugf("Handling contact message: %s", text)
-
-	// Handle emergency phone request
-	if strings.HasPrefix(text, "緊急") {
-		return h.handleEmergencyPhones()
+	matcher := h.findMatcher(text)
+	if matcher == nil {
+		return []messaging_api.MessageInterface{}
 	}
 
-	// Handle contact search - extract search term after keyword
-	if match := contactRegex.FindString(text); match != "" {
-		searchTerm := bot.ExtractSearchTerm(text, match)
+	log.Debugf("Route matched: %s (Priority: %d)", matcher.name, matcher.priority)
 
-		if searchTerm == "" {
-			// If no search term provided, give helpful message
-			sender := lineutil.GetSender(senderName, h.stickerManager)
-			msg := lineutil.NewTextMessageWithConsistentSender("📞 請輸入查詢內容\n\n例如：\n• 聯絡 資工系\n• 電話 圖書館\n• 分機 學務處\n\n💡 提示：輸入「緊急」可查看緊急聯絡電話", sender)
-			msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyContactNav())
-			return []messaging_api.MessageInterface{msg}
-		}
-		return h.handleContactSearch(ctx, searchTerm)
+	var matches []string
+	if matcher.pattern != nil {
+		matches = matcher.pattern.FindStringSubmatch(text)
 	}
 
-	// Handle phone/extension queries (fallback if not caught by regex)
-	if strings.Contains(text, "電話") || strings.Contains(text, "分機") {
-		// Extract the term (remove common keywords)
-		searchTerm := text
-		searchTerm = strings.ReplaceAll(searchTerm, "電話", "")
-		searchTerm = strings.ReplaceAll(searchTerm, "分機", "")
-		searchTerm = strings.TrimSpace(searchTerm)
+	return matcher.handler(ctx, text, matches)
+}
 
-		if searchTerm != "" {
-			return h.handleContactSearch(ctx, searchTerm)
-		}
-		// No search term - provide guidance
-		sender := lineutil.GetSender(senderName, h.stickerManager)
-		msg := lineutil.NewTextMessageWithConsistentSender("📞 請輸入要查詢的單位或人員\n\n例如：\n• 電話 資工系\n• 分機 圖書館", sender)
-		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyContactNav())
-		return []messaging_api.MessageInterface{msg}
+// Adapter functions for PatternHandler
+
+func (h *Handler) handleEmergencyPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
+	return h.handleEmergencyPhones()
+}
+
+func (h *Handler) handleContactPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
+	matchStr := matches[0] // Full match
+	searchTerm := bot.ExtractSearchTerm(text, matchStr)
+
+	if searchTerm == "" {
+		return h.handleEmptySearchTerm()
 	}
+	return h.handleContactSearch(ctx, searchTerm)
+}
 
-	return []messaging_api.MessageInterface{}
+func (h *Handler) handleEmptySearchTerm() []messaging_api.MessageInterface {
+	sender := lineutil.GetSender(senderName, h.stickerManager)
+	msg := lineutil.NewTextMessageWithConsistentSender("📞 請輸入查詢內容\n\n例如：\n• 聯絡 資工系\n• 電話 圖書館\n• 分機 學務處\n\n💡 提示：輸入「緊急」可查看緊急聯絡電話", sender)
+	msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyContactNav())
+	return []messaging_api.MessageInterface{msg}
 }
 
 // HandlePostback handles postback events for the contact module
