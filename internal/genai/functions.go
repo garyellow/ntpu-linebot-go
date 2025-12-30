@@ -31,7 +31,7 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 				Properties: map[string]*genai.Schema{
 					"keyword": {
 						Type:        genai.TypeString,
-						Description: "課程名稱或教師姓名。範例：「微積分」「程式設計」「王小明」",
+						Description: "課程名稱或教師姓名。範例：「微積分」「程式設計」「王小明」。注意：只提取名稱本身，不要包含「課程」「老師」等前綴。",
 					},
 				},
 				Required: []string{"keyword"},
@@ -123,7 +123,7 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 				Properties: map[string]*genai.Schema{
 					"query": {
 						Type:        genai.TypeString,
-						Description: "單位或人員名稱。只提取名稱本身，移除「辦公室」「電話」「分機」「email」「怎麼聯絡」等查詢詞。範例：「資工系的電話」→「資工系」。",
+						Description: "單位或人員名稱。注意：只提取名稱本身，必須移除「辦公室」「電話」「分機」「email」「怎麼聯絡」「在哪」等查詢詞。範例：「資工系的電話」→「資工系」。",
 					},
 				},
 				Required: []string{"query"},
