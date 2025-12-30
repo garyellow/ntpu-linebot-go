@@ -73,8 +73,8 @@ const (
 	ColorHeaderMedium = "#10B981" // 📋 部分相關 - emerald (一般、柔和) - 4.5:1
 
 	// Contact Type Headers (聯絡類型 - 聯絡人輪播)
-	ColorHeaderOrg        = "#3B82F6" // 🏢 組織單位 - bright blue (專業) - 4.6:1
-	ColorHeaderIndividual = "#0891B2" // 👤 個人聯絡 - cyan (親切) - 4.7:1
+	ColorHeaderOrg        = "#3B82F6" // 🏢 組織 - bright blue (專業) - 4.6:1
+	ColorHeaderIndividual = "#0891B2" // 👤 個人 - cyan (親切) - 4.7:1
 
 	// Detail Page Module Headers (詳情頁模組色)
 	ColorHeaderCourse    = "#3B82F6"   // 📚 課程詳情 - bright blue (學術) - 4.6:1

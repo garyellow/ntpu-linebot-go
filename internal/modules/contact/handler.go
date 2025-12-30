@@ -393,7 +393,7 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 //
 // Performance notes:
 //   - SQL LIKE is indexed and fast; most queries resolve here
-//   - Fuzzy matching loads up to 1000 contacts; runs in parallel for complete results
+//   - Fuzzy matching loads all contacts; runs in parallel for complete results
 //   - Search variants only affect scraping, not cache lookups
 func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(ModuleName)
@@ -421,7 +421,10 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	if err == nil && len(allContacts) > 0 {
 		for _, c := range allContacts {
 			// Fuzzy character-set matching: check if all runes in searchTerm exist in target
-			// Search in: name, title, organization, superior
+			// Search Priority:
+			// 1. Name: Covers Person Name ("王大明") and Organization Name ("資訊工程學系")
+			// 2. Organization: Covers the department/unit a person belongs to ("資工系" finds members)
+			// 3. Title/Superior: Supplementary info
 			if stringutil.ContainsAllRunes(c.Name, searchTerm) ||
 				stringutil.ContainsAllRunes(c.Title, searchTerm) ||
 				stringutil.ContainsAllRunes(c.Organization, searchTerm) ||
@@ -707,13 +710,13 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 			if c.Type == "organization" {
 				bodyLabel = lineutil.BodyLabelInfo{
 					Emoji: "🏢",
-					Label: "組織單位",
+					Label: "組織",
 					Color: lineutil.ColorHeaderOrg,
 				}
 			} else {
 				bodyLabel = lineutil.BodyLabelInfo{
 					Emoji: "👤",
-					Label: "個人聯絡",
+					Label: "個人",
 					Color: lineutil.ColorHeaderIndividual,
 				}
 			}

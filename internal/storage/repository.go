@@ -490,7 +490,7 @@ func (db *DB) GetAllContacts(ctx context.Context) ([]Contact, error) {
 	ttlTimestamp := db.getTTLTimestamp()
 
 	query := `SELECT uid, type, name, name_en, title, organization, extension, phone, email, website, location, superior, cached_at
-		FROM contacts WHERE cached_at > ? ORDER BY type, name LIMIT 1000`
+		FROM contacts WHERE cached_at > ? ORDER BY type, name`
 
 	rows, err := db.reader.QueryContext(ctx, query, ttlTimestamp)
 	if err != nil {
