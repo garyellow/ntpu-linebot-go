@@ -23,7 +23,6 @@ func TestIntentModuleMap(t *testing.T) {
 		// Program module
 		"program_list",
 		"program_search",
-		"program_courses",
 		// Help
 		"help",
 	}
@@ -61,7 +60,6 @@ func TestParamKeyMap(t *testing.T) {
 		// Program module
 		{"program_list", "", false}, // No parameters
 		{"program_search", "query", true},
-		{"program_courses", "programName", true},
 		// Help
 		{"help", "", false}, // No parameters
 	}
