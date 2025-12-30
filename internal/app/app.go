@@ -692,7 +692,7 @@ func securityHeadersMiddleware() gin.HandlerFunc {
 }
 
 // loggingMiddleware logs HTTP requests with appropriate log levels.
-// Follows industry best practices for HTTP status code logging:
+// Follows industry for HTTP status code logging:
 // - 5xx: Error (server issues requiring immediate attention)
 // - 4xx: Warn (client errors, except 404 which is common noise)
 // - 404: Debug (common probes: robots.txt, favicon.ico, security.txt)

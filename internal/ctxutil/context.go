@@ -1,5 +1,5 @@
 // Package ctxutil provides type-safe context value management.
-// Uses private key types to prevent collisions, following Go best practices.
+// Uses private key types to prevent collisions.
 package ctxutil
 
 import (

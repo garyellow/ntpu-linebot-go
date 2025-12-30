@@ -690,7 +690,7 @@ func (p *Processor) buildAIModeFlexMessage(sender *messaging_api.Sender) messagi
 				WithSize("sm").
 				WithColor(lineutil.ColorSubtext).
 				WithFlex(0).FlexText,
-			lineutil.NewFlexText("「資工系辦公室在哪裡」").
+			lineutil.NewFlexText("「資工系的電話是多少」").
 				WithSize("sm").
 				WithColor(lineutil.ColorText).
 				WithMargin("sm").

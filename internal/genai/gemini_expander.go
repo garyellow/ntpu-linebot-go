@@ -138,6 +138,6 @@ func (e *geminiQueryExpander) Close() error {
 	if e == nil {
 		return nil
 	}
-	// Future: Add client.Close() when SDK supports it
+	// Note: genai.Client does not require explicit cleanup in current SDK version
 	return nil
 }

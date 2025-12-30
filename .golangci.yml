@@ -59,7 +59,7 @@ linters:
     - makezero      # Check slice initialization
     - nilnil        # Disallow simultaneous nil returns
     - protogetter   # Reports direct reads from proto message fields
-    - testifylint   # Testify best practices
+    - testifylint   # Testify
     - thelper       # Test helper detection
     - unparam       # Detect unused function parameters
     - usestdlibvars # Use standard library constants

@@ -20,7 +20,7 @@ import (
 // This pattern is optimal for read-heavy workloads where URL changes are rare.
 // References:
 // - https://pkg.go.dev/sync/atomic#Value
-// - Go best practice: measure first, cache strategically
+// - Go: measure first, cache strategically
 type URLCache struct {
 	client *Client
 	domain string

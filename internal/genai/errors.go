@@ -59,7 +59,7 @@ func (e *LLMError) Unwrap() error {
 }
 
 // ClassifyError determines the appropriate action based on the error.
-// This follows industry best practices for LLM API error handling:
+// This follows industry for LLM API error handling:
 //   - Transient errors (429, 5xx, network) → Retry
 //   - Quota exhaustion → Fallback to other provider
 //   - Permanent errors (400, 401, 403, 404) → Fail immediately

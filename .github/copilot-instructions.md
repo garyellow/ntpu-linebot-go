@@ -201,7 +201,7 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
 // Use same sender for all messages in one reply
 ```
 
-**UX Best Practices**:
+**UX**:
 - Always provide Quick Reply (including errors)
 - Use `lineutil.QuickReply*` presets for consistency
 - Show loading animation for long queries (> 1s)

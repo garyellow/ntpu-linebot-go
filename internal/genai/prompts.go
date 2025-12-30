@@ -61,39 +61,24 @@ const IntentParserSystemPrompt = `你是 NTPU（國立臺北大學）LINE 聊天
 - 抽象需求描述（輕鬆過的通識、實用的程式課）
 - 領域概念而非課程名稱（人工智慧、資料分析）
 
-**範例**：
-✅ 「想學資料分析」→ course_smart(query="資料分析 data analysis 數據分析 統計")
-✅ 「對 AI 有興趣」→ course_smart(query="人工智慧 AI 機器學習 深度學習")
-✅ 「有什麼好過的通識」→ course_smart(query="通識課程 好過 輕鬆 學分")
-✅ 「想學寫網站」→ course_smart(query="網頁開發 web development 前端 後端")
-✅ 「有教 Python 的課嗎」→ course_smart(query="Python 程式設計 programming")
-✅ 「找跟創業相關的」→ course_smart(query="創業 創新 商業模式 entrepreneurship")
+**範例**（保留使用者原意，系統會自動擴展）：
+✅ 「想學資料分析」→ course_smart(query="資料分析")
+✅ 「對 AI 有興趣」→ course_smart(query="AI")
+✅ 「有什麼好過的通識」→ course_smart(query="好過的通識")
+✅ 「想學寫網站」→ course_smart(query="寫網站")
+✅ 「有教 Python 的課嗎」→ course_smart(query="Python")
+✅ 「找跟創業相關的」→ course_smart(query="創業")
 
 ### 📋 course_uid（編號查詢）
 **使用時機**：使用者提供課程編號
 
 **辨識特徵**：
-- 包含 7-8 位的課程編號格式（年度學期+課號）
-- 格式如：1131U0001、1132M0002、113U0001
+- 完整課程編號：年度學期+課號（如 1131U0001）
+- 或僅課號部分（如 U0001、M0002）
 
 **範例**：
 ✅ 「1131U0001」→ course_uid(uid="1131U0001")
 ✅ 「查一下 1132M0002」→ course_uid(uid="1132M0002")
-
-## 智慧搜尋查詢擴展規則
-
-當使用 course_smart 時，**必須**將短查詢擴展為完整的搜尋詞組（加入同義詞、雙語翻譯、相關概念）：
-
-| 原始查詢 | 擴展後（10-15 個關鍵詞）|
-|---------|--------|
-| AI | 人工智慧 AI artificial intelligence 機器學習 machine learning 深度學習 deep learning 神經網路 neural network 資料科學 |
-| Python | Python 程式設計 programming 程式語言 coding 軟體開發 software development 資料分析 自動化 |
-| 統計 | 統計 統計學 statistics 資料分析 data analysis 機率 probability 迴歸分析 假說檢定 R語言 |
-| 財務 | 財務 財務管理 finance 財務報表分析 投資學 投資組合 金融 財務規劃 公司理財 |
-| 資安 | 資安 資訊安全 cybersecurity 網路安全 network security 密碼學 滲透測試 資安攻防 |
-| 前端 | 前端 前端開發 frontend 網頁設計 web development HTML CSS JavaScript React Vue |
-| 想學資料分析 | 資料分析 data analysis 數據分析 統計 視覺化 visualization Python R 商業分析 |
-| 對AI有興趣 | AI 人工智慧 機器學習 深度學習 neural network 資料科學 data science 模型訓練 |
 
 ## 決策優先級
 
@@ -108,7 +93,7 @@ const IntentParserSystemPrompt = `你是 NTPU（國立臺北大學）LINE 聊天
 ### 學生查詢
 - 學號格式：8-9 位數字（如 412345678、41234567）
 - 姓名查詢：支援部分姓名
-- **注意**：僅支援 113 學年度以前的學生資料，114 以後無資料
+- **注意**：資料範圍依資料庫實際收錄為準
 
 ### 聯絡資訊
 - 查詢對象：單位（資工系、圖書館）、人員（教授名）
@@ -150,7 +135,7 @@ const IntentParserSystemPrompt = `你是 NTPU（國立臺北大學）LINE 聊天
 **範例 2**：使用者說「資工系」（可能查課程、聯絡或科系代碼）
 「請問您是想查詢：
 1️⃣ 資工系開的課程？
-2️⃣ 資工系辦公室聯絡方式？
+2️⃣ 資工系的聯絡方式？
 3️⃣ 資工系的系代碼？」`
 
 // QueryExpansionPrompt creates the prompt for query expansion.
