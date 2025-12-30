@@ -7,6 +7,7 @@ import (
 )
 
 func TestRetryWithBackoff_Success(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	attempts := 0
 
@@ -30,6 +31,7 @@ func TestRetryWithBackoff_Success(t *testing.T) {
 }
 
 func TestRetryWithBackoff_MaxRetriesExceeded(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	attempts := 0
 	expectedError := &testError{"permanent error"}
@@ -55,6 +57,7 @@ func TestRetryWithBackoff_MaxRetriesExceeded(t *testing.T) {
 }
 
 func TestRetryWithBackoff_ContextCanceled(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	attempts := 0
 
@@ -73,6 +76,7 @@ func TestRetryWithBackoff_ContextCanceled(t *testing.T) {
 }
 
 func TestRetryWithBackoff_ExponentialBackoff(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	attempts := 0
 	timestamps := []time.Time{}
@@ -101,6 +105,7 @@ func TestRetryWithBackoff_ExponentialBackoff(t *testing.T) {
 }
 
 func TestSleep_Success(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	start := time.Now()
@@ -118,6 +123,7 @@ func TestSleep_Success(t *testing.T) {
 }
 
 func TestSleep_ContextCanceled(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Cancel immediately

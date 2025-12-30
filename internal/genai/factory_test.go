@@ -6,6 +6,7 @@ import (
 )
 
 func TestDefaultLLMConfig(t *testing.T) {
+	t.Parallel()
 	cfg := DefaultLLMConfig()
 
 	// Check default provider order
@@ -48,6 +49,7 @@ func TestDefaultLLMConfig(t *testing.T) {
 }
 
 func TestDefaultRetryConfig(t *testing.T) {
+	t.Parallel()
 	cfg := DefaultRetryConfig()
 
 	if cfg.MaxAttempts != DefaultMaxRetryAttempts {
@@ -62,6 +64,7 @@ func TestDefaultRetryConfig(t *testing.T) {
 }
 
 func TestLLMConfig_HasAnyProvider(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		cfg      LLMConfig
@@ -98,6 +101,7 @@ func TestLLMConfig_HasAnyProvider(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := tt.cfg.HasAnyProvider(); got != tt.expected {
 				t.Errorf("HasAnyProvider() = %v, want %v", got, tt.expected)
 			}
@@ -106,6 +110,7 @@ func TestLLMConfig_HasAnyProvider(t *testing.T) {
 }
 
 func TestLLMConfig_HasProvider(t *testing.T) {
+	t.Parallel()
 	cfg := LLMConfig{
 		Gemini: ProviderConfig{APIKey: "gemini-key"},
 	}
@@ -122,6 +127,7 @@ func TestLLMConfig_HasProvider(t *testing.T) {
 }
 
 func TestLLMConfig_GetFallbackProvider(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		cfg      LLMConfig
@@ -165,6 +171,7 @@ func TestLLMConfig_GetFallbackProvider(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := tt.cfg.GetFallbackProvider(); got != tt.expected {
 				t.Errorf("GetFallbackProvider() = %v, want %v", got, tt.expected)
 			}
@@ -173,6 +180,7 @@ func TestLLMConfig_GetFallbackProvider(t *testing.T) {
 }
 
 func TestCreateIntentParser_NoProviders(t *testing.T) {
+	t.Parallel()
 	cfg := DefaultLLMConfig()
 	// No API keys set
 
@@ -186,6 +194,7 @@ func TestCreateIntentParser_NoProviders(t *testing.T) {
 }
 
 func TestCreateQueryExpander_NoProviders(t *testing.T) {
+	t.Parallel()
 	cfg := DefaultLLMConfig()
 	// No API keys set
 
@@ -199,6 +208,7 @@ func TestCreateQueryExpander_NoProviders(t *testing.T) {
 }
 
 func TestProviderString(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		provider Provider
 		expected string
@@ -210,6 +220,7 @@ func TestProviderString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.provider), func(t *testing.T) {
+			t.Parallel()
 			if got := tt.provider.String(); got != tt.expected {
 				t.Errorf("Provider.String() = %v, want %v", got, tt.expected)
 			}

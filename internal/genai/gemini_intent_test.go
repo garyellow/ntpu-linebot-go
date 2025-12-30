@@ -7,6 +7,7 @@ import (
 )
 
 func TestIntentModuleMap(t *testing.T) {
+	t.Parallel()
 	// Verify all expected functions are mapped
 	expectedFunctions := []string{
 		// Course module
@@ -42,6 +43,7 @@ func TestIntentModuleMap(t *testing.T) {
 }
 
 func TestParamKeyMap(t *testing.T) {
+	t.Parallel()
 	// Verify parameter keys for functions that require parameters
 	testCases := []struct {
 		funcName    string
@@ -85,6 +87,7 @@ func TestParamKeyMap(t *testing.T) {
 }
 
 func TestBuildIntentFunctions(t *testing.T) {
+	t.Parallel()
 	funcs := BuildIntentFunctions()
 
 	if len(funcs) == 0 {
@@ -110,6 +113,7 @@ func TestBuildIntentFunctions(t *testing.T) {
 }
 
 func TestNewIntentParser_NilWithEmptyKey(t *testing.T) {
+	t.Parallel()
 	parser, err := newGeminiIntentParser(context.Background(), "", "")
 	if err != nil {
 		t.Errorf("Expected nil error for empty key, got: %v", err)
@@ -120,6 +124,7 @@ func TestNewIntentParser_NilWithEmptyKey(t *testing.T) {
 }
 
 func TestIntentParser_IsEnabled(t *testing.T) {
+	t.Parallel()
 	// nil parser
 	var nilParser *geminiIntentParser
 	if nilParser.IsEnabled() {
@@ -134,6 +139,7 @@ func TestIntentParser_IsEnabled(t *testing.T) {
 }
 
 func TestIntentParser_ParseNil(t *testing.T) {
+	t.Parallel()
 	var nilParser *geminiIntentParser
 	_, err := nilParser.Parse(context.Background(), "test")
 	if err == nil {

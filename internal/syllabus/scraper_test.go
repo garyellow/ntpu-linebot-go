@@ -8,6 +8,7 @@ import (
 )
 
 func TestCleanContent(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		input string
@@ -57,6 +58,7 @@ func TestCleanContent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := cleanContent(tt.input)
 			if got != tt.want {
 				t.Errorf("cleanContent(%q) = %q, want %q", tt.input, got, tt.want)
@@ -66,6 +68,7 @@ func TestCleanContent(t *testing.T) {
 }
 
 func TestParseSyllabusPage(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		html           string
@@ -314,6 +317,7 @@ func TestParseSyllabusPage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			doc, err := goquery.NewDocumentFromReader(strings.NewReader(tt.html))
 			if err != nil {
 				t.Fatalf("Failed to parse HTML: %v", err)
@@ -342,6 +346,7 @@ func TestParseSyllabusPage(t *testing.T) {
 }
 
 func TestNewScraper(t *testing.T) {
+	t.Parallel()
 	// Test that NewScraper creates a valid scraper
 	scraper := NewScraper(nil)
 	if scraper == nil {

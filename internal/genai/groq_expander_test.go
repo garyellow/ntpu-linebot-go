@@ -6,6 +6,7 @@ import (
 )
 
 func TestNewGroqQueryExpander_NilWithEmptyKey(t *testing.T) {
+	t.Parallel()
 	expander, err := newGroqQueryExpander(context.Background(), "", "")
 	if err != nil {
 		t.Errorf("newGroqQueryExpander() error = %v, want nil", err)
@@ -16,6 +17,7 @@ func TestNewGroqQueryExpander_NilWithEmptyKey(t *testing.T) {
 }
 
 func TestGroqQueryExpander_Expand_Nil(t *testing.T) {
+	t.Parallel()
 	var nilExpander *groqQueryExpander
 	result, err := nilExpander.Expand(context.Background(), "test query")
 	if err != nil {
@@ -27,6 +29,7 @@ func TestGroqQueryExpander_Expand_Nil(t *testing.T) {
 }
 
 func TestGroqQueryExpander_Expand_NilClient(t *testing.T) {
+	t.Parallel()
 	expander := &groqQueryExpander{client: nil}
 	result, err := expander.Expand(context.Background(), "test query")
 	if err != nil {
@@ -38,6 +41,7 @@ func TestGroqQueryExpander_Expand_NilClient(t *testing.T) {
 }
 
 func TestGroqQueryExpander_Provider(t *testing.T) {
+	t.Parallel()
 	expander := &groqQueryExpander{}
 	if got := expander.Provider(); got != ProviderGroq {
 		t.Errorf("Provider() = %v, want %v", got, ProviderGroq)
@@ -45,6 +49,7 @@ func TestGroqQueryExpander_Provider(t *testing.T) {
 }
 
 func TestGroqQueryExpander_Close(t *testing.T) {
+	t.Parallel()
 	// nil expander
 	var nilExpander *groqQueryExpander
 	if err := nilExpander.Close(); err != nil {

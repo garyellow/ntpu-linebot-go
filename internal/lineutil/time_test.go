@@ -6,6 +6,7 @@ import (
 )
 
 func TestFormatCacheTime(t *testing.T) {
+	t.Parallel()
 	// Get current time in Taipei timezone for test setup
 	taipeiLoc, _ := time.LoadLocation("Asia/Taipei")
 	now := time.Now().In(taipeiLoc)
@@ -44,6 +45,7 @@ func TestFormatCacheTime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := FormatCacheTime(tt.cachedAt)
 			if got != tt.want {
 				t.Errorf("FormatCacheTime(%d) = %q, want %q", tt.cachedAt, got, tt.want)
@@ -53,6 +55,7 @@ func TestFormatCacheTime(t *testing.T) {
 }
 
 func TestFormatCacheTime_Timezone(t *testing.T) {
+	t.Parallel()
 	// Test that timezone conversion works correctly
 	// Create a timestamp that's midnight UTC, which should be 08:00 in Taipei
 	utcMidnight := time.Date(2024, 11, 28, 0, 0, 0, 0, time.UTC)
@@ -75,6 +78,7 @@ func TestFormatCacheTime_Timezone(t *testing.T) {
 }
 
 func TestNewCacheTimeHint(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		cachedAt int64
@@ -94,6 +98,7 @@ func TestNewCacheTimeHint(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := NewCacheTimeHint(tt.cachedAt)
 			if (got == nil) != tt.wantNil {
 				t.Errorf("NewCacheTimeHint(%d) nil = %v, want nil = %v", tt.cachedAt, got == nil, tt.wantNil)
@@ -116,6 +121,7 @@ func TestNewCacheTimeHint(t *testing.T) {
 }
 
 func TestFormatCacheTimeFooter(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		cachedAt int64
@@ -135,6 +141,7 @@ func TestFormatCacheTimeFooter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := FormatCacheTimeFooter(tt.cachedAt)
 			if tt.wantPfx == "" {
 				if got != "" {
@@ -152,6 +159,7 @@ func TestFormatCacheTimeFooter(t *testing.T) {
 }
 
 func TestMinCachedAt(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		cachedAts []int64
@@ -191,6 +199,7 @@ func TestMinCachedAt(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := MinCachedAt(tt.cachedAts...)
 			if got != tt.want {
 				t.Errorf("MinCachedAt(%v) = %d, want %d", tt.cachedAts, got, tt.want)
@@ -200,6 +209,7 @@ func TestMinCachedAt(t *testing.T) {
 }
 
 func TestFormatCacheTime_BoundaryConditions(t *testing.T) {
+	t.Parallel()
 	taipeiLoc, _ := time.LoadLocation("Asia/Taipei")
 	now := time.Now().In(taipeiLoc)
 

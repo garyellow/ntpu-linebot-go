@@ -10,6 +10,7 @@ import (
 
 // TestFormatError tests the FormatError function
 func TestFormatError(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		title  string
@@ -38,6 +39,7 @@ func TestFormatError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := FormatError(tt.title, tt.detail)
 			if got != tt.want {
 				t.Errorf("FormatError() = %q, want %q", got, tt.want)
@@ -52,6 +54,7 @@ func TestFormatError(t *testing.T) {
 
 // TestFormatInfo tests the FormatInfo function
 func TestFormatInfo(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		title  string
@@ -74,6 +77,7 @@ func TestFormatInfo(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := FormatInfo(tt.title, tt.detail)
 			if got != tt.want {
 				t.Errorf("FormatInfo() = %q, want %q", got, tt.want)
@@ -88,6 +92,7 @@ func TestFormatInfo(t *testing.T) {
 
 // TestFormatWarning tests the FormatWarning function
 func TestFormatWarning(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		title  string
@@ -110,6 +115,7 @@ func TestFormatWarning(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := FormatWarning(tt.title, tt.detail)
 			if got != tt.want {
 				t.Errorf("FormatWarning() = %q, want %q", got, tt.want)
@@ -124,6 +130,7 @@ func TestFormatWarning(t *testing.T) {
 
 // TestFormatSuccess tests the FormatSuccess function
 func TestFormatSuccess(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		title  string
@@ -146,6 +153,7 @@ func TestFormatSuccess(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := FormatSuccess(tt.title, tt.detail)
 			if got != tt.want {
 				t.Errorf("FormatSuccess() = %q, want %q", got, tt.want)
@@ -160,6 +168,7 @@ func TestFormatSuccess(t *testing.T) {
 
 // TestFormatFunctionsConsistency tests that all format functions have consistent structure
 func TestFormatFunctionsConsistency(t *testing.T) {
+	t.Parallel()
 	title := "標題"
 	detail := "詳細內容"
 
@@ -176,6 +185,7 @@ func TestFormatFunctionsConsistency(t *testing.T) {
 
 	for _, f := range formats {
 		t.Run(f.name, func(t *testing.T) {
+			t.Parallel()
 			result := f.fn(title, detail)
 
 			// Check structure: emoji + space + title + double newline + detail
@@ -203,6 +213,7 @@ func TestFormatFunctionsConsistency(t *testing.T) {
 }
 
 func TestNewMessageAction(t *testing.T) {
+	t.Parallel()
 	label := "Click me"
 	text := "User clicked"
 
@@ -222,6 +233,7 @@ func TestNewMessageAction(t *testing.T) {
 }
 
 func TestNewPostbackAction(t *testing.T) {
+	t.Parallel()
 	label := "Confirm"
 	data := "action=confirm&id=123"
 
@@ -241,6 +253,7 @@ func TestNewPostbackAction(t *testing.T) {
 }
 
 func TestNewURIAction(t *testing.T) {
+	t.Parallel()
 	label := "Open Website"
 	uri := "https://www.ntpu.edu.tw"
 
@@ -261,6 +274,7 @@ func TestNewURIAction(t *testing.T) {
 
 // TestTruncateText tests critical LINE API constraint (5000 char limit)
 func TestTruncateText(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		text     string
@@ -274,6 +288,7 @@ func TestTruncateText(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := TruncateRunes(tt.text, tt.maxLen)
 			if result != tt.expected {
 				t.Errorf("Expected %q, got %q", tt.expected, result)
@@ -284,6 +299,7 @@ func TestTruncateText(t *testing.T) {
 
 // TestErrorMessage tests that technical errors are NOT exposed to users
 func TestErrorMessage(t *testing.T) {
+	t.Parallel()
 	err := errors.New("database connection failed")
 	sender := &messaging_api.Sender{Name: "系統小幫手", IconUrl: "https://example.com/avatar.png"}
 	msg := ErrorMessageWithSender(err, sender)
@@ -305,6 +321,7 @@ func TestErrorMessage(t *testing.T) {
 }
 
 func TestNewCarouselTemplate(t *testing.T) {
+	t.Parallel()
 	columns := []CarouselColumn{
 		{
 			Title: "Column 1",
@@ -345,6 +362,7 @@ func TestNewCarouselTemplate(t *testing.T) {
 }
 
 func TestNewButtonsTemplate(t *testing.T) {
+	t.Parallel()
 	actions := []Action{
 		NewMessageAction("Button 1", "Message 1"),
 		NewPostbackAction("Button 2", "data=123"),
@@ -376,6 +394,7 @@ func TestNewButtonsTemplate(t *testing.T) {
 }
 
 func TestNewConfirmTemplate(t *testing.T) {
+	t.Parallel()
 	yesAction := NewPostbackAction("Yes", "confirm=yes")
 	noAction := NewPostbackAction("No", "confirm=no")
 
@@ -401,6 +420,7 @@ func TestNewConfirmTemplate(t *testing.T) {
 }
 
 func TestNewQuickReply(t *testing.T) {
+	t.Parallel()
 	items := []QuickReplyItem{
 		{
 			Action: NewMessageAction("Option 1", "Message 1"),
@@ -419,6 +439,7 @@ func TestNewQuickReply(t *testing.T) {
 }
 
 func TestNewClipboardAction(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		label         string
@@ -443,6 +464,7 @@ func TestNewClipboardAction(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			action := NewClipboardAction(tt.label, tt.clipboardText)
 
 			clipAction, ok := action.(*messaging_api.ClipboardAction)
@@ -462,6 +484,7 @@ func TestNewClipboardAction(t *testing.T) {
 }
 
 func TestFormatDisplayName(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		nameCN   string
@@ -520,6 +543,7 @@ func TestFormatDisplayName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := FormatDisplayName(tt.nameCN, tt.nameEN)
 			if result != tt.expected {
 				t.Errorf("FormatDisplayName(%q, %q) = %q, want %q",
@@ -530,6 +554,7 @@ func TestFormatDisplayName(t *testing.T) {
 }
 
 func TestBuildTelURI(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		mainPhone string
@@ -570,6 +595,7 @@ func TestBuildTelURI(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := BuildTelURI(tt.mainPhone, tt.extension)
 			if result != tt.expected {
 				t.Errorf("BuildTelURI(%q, %q) = %q, want %q",
@@ -580,6 +606,7 @@ func TestBuildTelURI(t *testing.T) {
 }
 
 func TestNewTextMessageWithConsistentSender(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		text           string
@@ -608,6 +635,7 @@ func TestNewTextMessageWithConsistentSender(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			sender := &messaging_api.Sender{Name: tt.senderName, IconUrl: tt.stickerIconURL}
 			msg := NewTextMessageWithConsistentSender(tt.text, sender)
 
@@ -631,6 +659,7 @@ func TestNewTextMessageWithConsistentSender(t *testing.T) {
 }
 
 func TestFormatTeachers(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		teachers []string
@@ -689,6 +718,7 @@ func TestFormatTeachers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := FormatTeachers(tt.teachers, tt.max)
 			if result != tt.expected {
 				t.Errorf("FormatTeachers(%v, %d) = %q, want %q",
@@ -699,6 +729,7 @@ func TestFormatTeachers(t *testing.T) {
 }
 
 func TestFormatTimes(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		times    []string
@@ -757,6 +788,7 @@ func TestFormatTimes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := FormatTimes(tt.times, tt.max)
 			if result != tt.expected {
 				t.Errorf("FormatTimes(%v, %d) = %q, want %q",
@@ -783,6 +815,7 @@ func indexOf(s, substr string) int {
 
 // TestExtractCourseCode tests the course code extraction from UID strings
 func TestExtractCourseCode(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		uid      string

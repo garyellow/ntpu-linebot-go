@@ -7,6 +7,7 @@ import (
 )
 
 func TestQueryExpansionPrompt(t *testing.T) {
+	t.Parallel()
 	query := "我想學 AWS"
 	prompt := QueryExpansionPrompt(query)
 
@@ -26,6 +27,7 @@ func TestQueryExpansionPrompt(t *testing.T) {
 }
 
 func TestQueryExpanderNil(t *testing.T) {
+	t.Parallel()
 	var e *geminiQueryExpander
 	result, err := e.Expand(context.Background(), "test query")
 	if err != nil {

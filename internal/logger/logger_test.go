@@ -9,6 +9,7 @@ import (
 )
 
 func TestNew(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		level      string
@@ -48,6 +49,7 @@ func TestNew(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			log := New(tt.level)
 			if log == nil {
 				t.Fatal("New() returned nil")
@@ -61,6 +63,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestLogger_WithModule(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	log := NewWithWriter("info", &buf)
 
@@ -77,6 +80,7 @@ func TestLogger_WithModule(t *testing.T) {
 }
 
 func TestLogger_WithRequestID(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	log := NewWithWriter("info", &buf)
 
@@ -93,6 +97,7 @@ func TestLogger_WithRequestID(t *testing.T) {
 }
 
 func TestLogger_WithError(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	log := NewWithWriter("info", &buf)
 
@@ -110,6 +115,7 @@ func TestLogger_WithError(t *testing.T) {
 }
 
 func TestLogger_JSONFormat(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	log := NewWithWriter("info", &buf)
 

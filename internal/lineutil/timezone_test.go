@@ -6,6 +6,7 @@ import (
 )
 
 func TestGetTaipeiLocation(t *testing.T) {
+	t.Parallel()
 	loc := GetTaipeiLocation()
 
 	if loc == nil {
@@ -25,6 +26,7 @@ func TestGetTaipeiLocation(t *testing.T) {
 }
 
 func TestGetTaipeiLocation_ConsistentWithFormatCacheTime(t *testing.T) {
+	t.Parallel()
 	// Ensure GetTaipeiLocation returns the same timezone used by FormatCacheTime
 	loc := GetTaipeiLocation()
 
@@ -47,6 +49,7 @@ func TestGetTaipeiLocation_ConsistentWithFormatCacheTime(t *testing.T) {
 }
 
 func TestGetTaipeiLocation_UsedForScheduling(t *testing.T) {
+	t.Parallel()
 	// Test that scheduling at 3:00 AM Taiwan time works correctly
 	loc := GetTaipeiLocation()
 

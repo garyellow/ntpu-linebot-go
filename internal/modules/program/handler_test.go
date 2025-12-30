@@ -43,6 +43,7 @@ func setupTestHandler(t *testing.T) *Handler {
 
 // TestCanHandle verifies keyword pattern matching for program queries
 func TestCanHandle(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	tests := []struct {
@@ -77,6 +78,7 @@ func TestCanHandle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := h.CanHandle(tt.input)
 			if got != tt.want {
 				t.Errorf("CanHandle(%q) = %v, want %v", tt.input, got, tt.want)
@@ -87,6 +89,7 @@ func TestCanHandle(t *testing.T) {
 
 // TestHandleMessage_List verifies listing all programs
 func TestHandleMessage_List(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -113,6 +116,7 @@ func TestHandleMessage_List(t *testing.T) {
 
 // TestHandleMessage_ListSplit verifies listing splits into multiple messages when exceeding batch size
 func TestHandleMessage_ListSplit(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -155,6 +159,7 @@ func TestHandleMessage_ListSplit(t *testing.T) {
 
 // TestHandleMessage_Search verifies program search
 func TestHandleMessage_Search(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -179,6 +184,7 @@ func TestHandleMessage_Search(t *testing.T) {
 
 // TestHandleMessage_SearchEmptyTerm verifies search with empty term returns help
 func TestHandleMessage_SearchEmptyTerm(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -190,6 +196,7 @@ func TestHandleMessage_SearchEmptyTerm(t *testing.T) {
 
 // TestHandleMessage_NoMatch verifies unmatched queries return empty
 func TestHandleMessage_NoMatch(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -201,6 +208,7 @@ func TestHandleMessage_NoMatch(t *testing.T) {
 
 // TestHandlePostback_ViewCourses verifies program courses postback
 func TestHandlePostback_ViewCourses(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -214,6 +222,7 @@ func TestHandlePostback_ViewCourses(t *testing.T) {
 
 // TestHandlePostback_CourseProgramsList verifies course programs list postback
 func TestHandlePostback_CourseProgramsList(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -227,6 +236,7 @@ func TestHandlePostback_CourseProgramsList(t *testing.T) {
 
 // TestHandlePostback_InvalidAction verifies unknown postback action
 func TestHandlePostback_InvalidAction(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -240,6 +250,7 @@ func TestHandlePostback_InvalidAction(t *testing.T) {
 
 // TestHandlePostback_InvalidFormat verifies malformed postback data
 func TestHandlePostback_InvalidFormat(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -253,6 +264,7 @@ func TestHandlePostback_InvalidFormat(t *testing.T) {
 
 // TestHandlePostback_WrongModule verifies postback from different module
 func TestHandlePostback_WrongModule(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -266,6 +278,7 @@ func TestHandlePostback_WrongModule(t *testing.T) {
 
 // TestCanHandlePostback verifies postback module prefix check
 func TestCanHandlePostback(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	tests := []struct {
@@ -282,6 +295,7 @@ func TestCanHandlePostback(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := h.CanHandlePostback(tt.data)
 			if got != tt.want {
 				t.Errorf("CanHandlePostback(%q) = %v, want %v", tt.data, got, tt.want)
@@ -292,6 +306,7 @@ func TestCanHandlePostback(t *testing.T) {
 
 // TestDispatchIntent_List verifies NLU intent dispatching for list
 func TestDispatchIntent_List(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -306,6 +321,7 @@ func TestDispatchIntent_List(t *testing.T) {
 
 // TestDispatchIntent_Search verifies NLU intent dispatching for search
 func TestDispatchIntent_Search(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -321,6 +337,7 @@ func TestDispatchIntent_Search(t *testing.T) {
 
 // TestDispatchIntent_SearchMissingParam verifies search without query param
 func TestDispatchIntent_SearchMissingParam(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -340,6 +357,7 @@ func TestDispatchIntent_SearchMissingParam(t *testing.T) {
 
 // TestDispatchIntent_Courses verifies NLU intent dispatching for courses
 func TestDispatchIntent_Courses(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -355,6 +373,7 @@ func TestDispatchIntent_Courses(t *testing.T) {
 
 // TestDispatchIntent_CoursesMissingParam verifies courses without programName param
 func TestDispatchIntent_CoursesMissingParam(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -374,6 +393,7 @@ func TestDispatchIntent_CoursesMissingParam(t *testing.T) {
 
 // TestDispatchIntent_UnknownIntent verifies unknown intent handling
 func TestDispatchIntent_UnknownIntent(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -405,6 +425,7 @@ func TestDispatchIntent_UnknownIntent(t *testing.T) {
 
 // TestName verifies module name
 func TestName(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	if h.Name() != ModuleName {
 		t.Errorf("Expected name %q, got %q", ModuleName, h.Name())
@@ -413,6 +434,7 @@ func TestName(t *testing.T) {
 
 // TestPatternMatcherPriority verifies matchers are sorted by priority
 func TestPatternMatcherPriority(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	if len(h.matchers) < 2 {
@@ -430,6 +452,7 @@ func TestPatternMatcherPriority(t *testing.T) {
 
 // TestFindMatcher verifies pattern matching logic
 func TestFindMatcher(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	tests := []struct {
@@ -445,6 +468,7 @@ func TestFindMatcher(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			matcher := h.findMatcher(tt.text)
 			if (matcher == nil) != tt.wantNil {
 				t.Errorf("findMatcher(%q) nil=%v, want nil=%v", tt.text, matcher == nil, tt.wantNil)
@@ -455,6 +479,7 @@ func TestFindMatcher(t *testing.T) {
 
 // TestQuickReplyActions verifies Quick Reply helper functions
 func TestQuickReplyActions(t *testing.T) {
+	t.Parallel()
 	// Test QuickReplyProgramListAction
 	listAction := QuickReplyProgramListAction()
 	if listAction.Action == nil {
@@ -476,6 +501,7 @@ func TestQuickReplyActions(t *testing.T) {
 
 // TestDispatchIntent_ParameterValidation verifies parameter validation before execution
 func TestDispatchIntent_ParameterValidation(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -523,6 +549,7 @@ func TestDispatchIntent_ParameterValidation(t *testing.T) {
 
 // TestNewHandler_NilSemesterDetector verifies handler works without semester detector
 func TestNewHandler_NilSemesterDetector(t *testing.T) {
+	t.Parallel()
 	// Create test database
 	db, err := storage.New(context.Background(), ":memory:", 168*time.Hour)
 	if err != nil {

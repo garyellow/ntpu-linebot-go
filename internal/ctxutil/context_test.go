@@ -128,6 +128,7 @@ func TestRequestIDContext(t *testing.T) {
 }
 
 func TestContextChaining(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	// Chain multiple context values
@@ -148,7 +149,9 @@ func TestContextChaining(t *testing.T) {
 }
 
 func TestPreserveTracing(t *testing.T) {
+	t.Parallel()
 	t.Run("preserves all tracing values", func(t *testing.T) {
+		t.Parallel()
 		parentCtx := context.Background()
 		parentCtx = WithUserID(parentCtx, "user123")
 		parentCtx = WithChatID(parentCtx, "chat456")
@@ -168,6 +171,7 @@ func TestPreserveTracing(t *testing.T) {
 	})
 
 	t.Run("handles partial values", func(t *testing.T) {
+		t.Parallel()
 		partialCtx := context.Background()
 		partialCtx = WithUserID(partialCtx, "user_only")
 		detachedPartial := PreserveTracing(partialCtx)
@@ -181,6 +185,7 @@ func TestPreserveTracing(t *testing.T) {
 	})
 
 	t.Run("handles empty context", func(t *testing.T) {
+		t.Parallel()
 		emptyDetached := PreserveTracing(context.Background())
 
 		if userID := GetUserID(emptyDetached); userID != "" {
@@ -195,6 +200,7 @@ func TestPreserveTracing(t *testing.T) {
 	})
 
 	t.Run("creates independent context (cancellation)", func(t *testing.T) {
+		t.Parallel()
 		cancelCtx, cancel := context.WithCancel(WithUserID(context.Background(), "user_cancel"))
 		detachedCancel := PreserveTracing(cancelCtx)
 

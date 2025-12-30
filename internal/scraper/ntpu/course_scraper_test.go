@@ -7,6 +7,7 @@ import (
 
 // TestAllEduCodes tests if all education codes are present
 func TestAllEduCodes(t *testing.T) {
+	t.Parallel()
 	expectedCodes := []string{"U", "M", "N", "P"}
 
 	if len(allEducationCodes) != len(expectedCodes) {
@@ -29,6 +30,7 @@ func TestAllEduCodes(t *testing.T) {
 
 // TestClassroomRegex tests the classroom regex pattern
 func TestClassroomRegex(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		input   string
@@ -61,6 +63,7 @@ func TestClassroomRegex(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			match := classroomRegex.MatchString(tt.input)
 			if match != tt.matches {
 				t.Errorf("Expected match=%v for %q, got %v", tt.matches, tt.input, match)

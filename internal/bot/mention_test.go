@@ -7,6 +7,7 @@ import (
 )
 
 func TestIsBotMentioned(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		textMsg  webhook.TextMessageContent
@@ -104,6 +105,7 @@ func TestIsBotMentioned(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := isBotMentioned(tt.textMsg)
 			if result != tt.expected {
 				t.Errorf("isBotMentioned() = %v, expected %v", result, tt.expected)
@@ -113,6 +115,7 @@ func TestIsBotMentioned(t *testing.T) {
 }
 
 func TestRemoveBotMentions(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		text     string
@@ -301,6 +304,7 @@ func TestRemoveBotMentions(t *testing.T) {
 }
 
 func TestRemoveBotMentions_BoundaryConditions(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		text     string

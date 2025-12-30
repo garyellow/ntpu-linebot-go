@@ -8,6 +8,7 @@ import (
 )
 
 func TestCleanProgramName(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    string
@@ -52,6 +53,7 @@ func TestCleanProgramName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := cleanProgramName(tt.input)
 			if got != tt.expected {
 				t.Errorf("cleanProgramName() = %v, want %v", got, tt.expected)
@@ -61,6 +63,7 @@ func TestCleanProgramName(t *testing.T) {
 }
 
 func TestExtractProgramsFromPage_Uniqueness(t *testing.T) {
+	t.Parallel()
 	// Simulate HTML with a program link
 	html := `
 	<html>
@@ -120,6 +123,7 @@ func TestExtractProgramsFromPage_Uniqueness(t *testing.T) {
 }
 
 func TestPagination(t *testing.T) {
+	t.Parallel()
 	seen := make(map[string]bool)
 
 	// Test logic of `extractProgramsFromPage` for detecting "Next".
@@ -145,7 +149,9 @@ func TestPagination(t *testing.T) {
 }
 
 func TestExtractProgramsFromPage_EdgeCases(t *testing.T) {
+	t.Parallel()
 	t.Run("Empty document", func(t *testing.T) {
+		t.Parallel()
 		html := `<html><body></body></html>`
 		doc, _ := goquery.NewDocumentFromReader(strings.NewReader(html))
 		seen := make(map[string]bool)
@@ -160,6 +166,7 @@ func TestExtractProgramsFromPage_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("Skip discontinued programs", func(t *testing.T) {
+		t.Parallel()
 		html := `
 			<a href="board.php?courseID=28286&f=doc&cid=100">正常學程</a>
 			<a href="board.php?courseID=28286&f=doc&cid=101">廢止學程</a>
@@ -180,6 +187,7 @@ func TestExtractProgramsFromPage_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("Skip non-program links", func(t *testing.T) {
+		t.Parallel()
 		html := `
 			<a href="board.php?courseID=28286&f=doc&cid=200">電機系課程</a>
 			<a href="board.php?courseID=28286&f=doc&cid=201">智慧財產權學士學分學程</a>
@@ -198,6 +206,7 @@ func TestExtractProgramsFromPage_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("Handle malformed href", func(t *testing.T) {
+		t.Parallel()
 		html := `
 			<a href="">Empty href 學程</a>
 			<a>No href 學程</a>

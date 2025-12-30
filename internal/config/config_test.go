@@ -1,17 +1,14 @@
 package config
 
 import (
-	"os"
 	"testing"
 	"time"
 )
 
 func TestLoad(t *testing.T) {
 	// Set required environment variables
-	_ = os.Setenv("LINE_CHANNEL_ACCESS_TOKEN", "test_token")
-	_ = os.Setenv("LINE_CHANNEL_SECRET", "test_secret")
-	defer func() { _ = os.Unsetenv("LINE_CHANNEL_ACCESS_TOKEN") }()
-	defer func() { _ = os.Unsetenv("LINE_CHANNEL_SECRET") }()
+	t.Setenv("LINE_CHANNEL_ACCESS_TOKEN", "test_token")
+	t.Setenv("LINE_CHANNEL_SECRET", "test_secret")
 
 	cfg, err := Load()
 	if err != nil {
@@ -39,8 +36,51 @@ func TestLoad(t *testing.T) {
 
 func TestLoad_MissingCredentials(t *testing.T) {
 	// Ensure no LINE credentials are set
-	_ = os.Unsetenv("LINE_CHANNEL_ACCESS_TOKEN")
-	_ = os.Unsetenv("LINE_CHANNEL_SECRET")
+	// Note: t.Parallel() runs this in parallel with others.
+	// t.Setenv sets env vars for the test process (or test container?), but t.Parallel() implies
+	// they run concurrently.
+	// WAIT. t.Setenv in Go 1.17+ sets the env var for the *duration of the test*.
+	// However, os.Setenv affects the whole process.
+	// If tests run in parallel, one test verifying "MissingCredentials" (expecting unset)
+	// while another sets "TOKEN", they might race if they run in the same process.
+	// Go's t.Setenv handles this by NOT allowing t.Parallel() to mix with Setenv?
+	// ACTUALLY: "If a test calls Setenv and T.Parallel, Setenv panics." (Go documentation)
+	// SO I CANNOT USE t.Setenv AND t.Parallel() TOGETHER if I am modifying the same keys?
+	// Let's check docs.
+	// "TestContext.Setenv ... cannot be used with Parallel." -> This was true in older versions or specific contexts?
+	// Go 1.22+ might allow it?
+	// Checking recent docs: "You cannot call t.Setenv() on a test that has called t.Parallel()."
+	// Correct.
+	// So I CANNOT parallelize these tests if they use env vars.
+	// Unless I mock the env loader.
+	// But `Load()` calls `os.Getenv` directly?
+	// Yes.
+	// So I CANNOT add t.Parallel() to `config_test.go`.
+	// I will convert to t.Setenv for cleanup safety, but invoke t.Parallel() IS NOT ALLOWED.
+	//
+	// Wait, I already added t.Parallel() to previous files.
+	// Those files didn't use `os.Setenv`?
+	// `config_test.go` DOES.
+	// `app_test.go` did NOT use `os.Setenv`.
+	//
+	// So for `config_test.go`, I will REMOVE `t.Parallel()` and just use `t.Setenv`.
+	// Or just keep it serial.
+	// The instruction was "Audit... Applying t.Parallel()".
+	// If I can't, I skip it.
+	// I will just refactor to t.Setenv for cleanliness, but NOT add t.Parallel().
+
+	// Wait, I can try to simply optimize `config_test.go` by refactoring `t.Setenv` which is better practice.
+	// But I won't add `t.Parallel()`.
+
+	// Ensure no LINE credentials are set
+	// Since t.Setenv only affects the current test and restores afterwards, and we are running serially,
+	// we just need to ensure we don't pick up dirty state.
+	// Actually, if I use t.Setenv in TestLoad, it restores.
+	// In TestLoad_MissingCredentials, I want them UNSET.
+	// If the environment already has them (from system), this test might fail.
+	// I should explicitly Unset them.
+	t.Setenv("LINE_CHANNEL_ACCESS_TOKEN", "")
+	t.Setenv("LINE_CHANNEL_SECRET", "")
 
 	_, err := Load()
 	if err == nil {
@@ -52,6 +92,7 @@ func TestLoad_MissingCredentials(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
+	t.Parallel() // This matches pure struct validation, so it IS safe for parallel.
 	tests := []struct {
 		name        string
 		cfg         *Config
@@ -133,6 +174,7 @@ func TestValidate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := tt.cfg.Validate()
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
@@ -160,6 +202,8 @@ func contains(s, substr string) bool {
 }
 
 func TestGetDurationEnv(t *testing.T) {
+	// This helper uses os.Setenv, so it CANNOT be parallel.
+	// I will refactor it to use t.Setenv.
 	tests := []struct {
 		name         string
 		key          string
@@ -192,9 +236,13 @@ func TestGetDurationEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Cannot use t.Parallel() here because we are setting env vars in subtests
+			// which might overlap if parallel?
+			// Wait, if parent is NOT parallel, subtests CAN be parallel?
+			// No, t.Setenv documentation says "panics if t.Parallel() has been called".
+			// So I cannot use t.Parallel().
 			if tt.value != "" {
-				_ = os.Setenv(tt.key, tt.value)
-				defer func() { _ = os.Unsetenv(tt.key) }()
+				t.Setenv(tt.key, tt.value)
 			}
 
 			got := getDurationEnv(tt.key, tt.defaultValue)

@@ -61,6 +61,7 @@ func TestIsNetworkError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := IsNetworkError(tt.err); got != tt.expected {
 				t.Errorf("IsNetworkError() = %v, want %v", got, tt.expected)
 			}

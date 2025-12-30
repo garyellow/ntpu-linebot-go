@@ -8,6 +8,7 @@ import (
 )
 
 func TestNew(t *testing.T) {
+	t.Parallel()
 	l := New(10, 5)
 	if l.maxTokens != 10 {
 		t.Errorf("maxTokens = %v, want 10", l.maxTokens)
@@ -21,6 +22,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestNewPerMinute(t *testing.T) {
+	t.Parallel()
 	l := NewPerMinute(60) // 60 per minute = 1 per second
 	if l.refillRate != 1 {
 		t.Errorf("refillRate = %v, want 1", l.refillRate)
@@ -31,7 +33,9 @@ func TestNewPerMinute(t *testing.T) {
 }
 
 func TestAllow(t *testing.T) {
+	t.Parallel()
 	t.Run("allows when tokens available", func(t *testing.T) {
+		t.Parallel()
 		l := New(5, 1)
 		for i := 0; i < 5; i++ {
 			if !l.Allow() {
@@ -41,6 +45,7 @@ func TestAllow(t *testing.T) {
 	})
 
 	t.Run("denies when no tokens", func(t *testing.T) {
+		t.Parallel()
 		l := New(2, 0) // No refill
 		l.Allow()
 		l.Allow()
@@ -50,6 +55,7 @@ func TestAllow(t *testing.T) {
 	})
 
 	t.Run("refills over time", func(t *testing.T) {
+		t.Parallel()
 		l := New(1, 100) // Fast refill for testing
 		l.Allow()        // Consume the token
 
@@ -63,7 +69,9 @@ func TestAllow(t *testing.T) {
 }
 
 func TestWait(t *testing.T) {
+	t.Parallel()
 	t.Run("returns immediately when tokens available", func(t *testing.T) {
+		t.Parallel()
 		l := New(5, 1)
 		ctx := context.Background()
 
@@ -80,6 +88,7 @@ func TestWait(t *testing.T) {
 	})
 
 	t.Run("waits for token", func(t *testing.T) {
+		t.Parallel()
 		l := New(1, 50) // 50 tokens/sec = 20ms per token
 		l.Allow()       // Consume the token
 
@@ -97,6 +106,7 @@ func TestWait(t *testing.T) {
 	})
 
 	t.Run("respects context cancellation", func(t *testing.T) {
+		t.Parallel()
 		l := New(0, 0.1) // Very slow refill
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
@@ -110,6 +120,7 @@ func TestWait(t *testing.T) {
 }
 
 func TestWaitSimple(t *testing.T) {
+	t.Parallel()
 	l := New(1, 100) // 100 tokens/sec = 10ms per token
 	l.Allow()        // Consume the initial token
 
@@ -128,6 +139,7 @@ func TestWaitSimple(t *testing.T) {
 }
 
 func TestAvailable(t *testing.T) {
+	t.Parallel()
 	l := New(10, 1)
 	l.Allow()
 	l.Allow()
@@ -140,6 +152,7 @@ func TestAvailable(t *testing.T) {
 }
 
 func TestReset(t *testing.T) {
+	t.Parallel()
 	l := New(10, 1)
 	l.Allow()
 	l.Allow()
@@ -153,6 +166,7 @@ func TestReset(t *testing.T) {
 }
 
 func TestConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	l := New(100, 100)
 
 	var wg sync.WaitGroup
@@ -185,7 +199,9 @@ func TestConcurrentAccess(t *testing.T) {
 }
 
 func TestIsFull(t *testing.T) {
+	t.Parallel()
 	t.Run("full when at max capacity", func(t *testing.T) {
+		t.Parallel()
 		l := New(10, 1)
 		if !l.IsFull() {
 			t.Error("IsFull() = false for new limiter, want true")
@@ -193,6 +209,7 @@ func TestIsFull(t *testing.T) {
 	})
 
 	t.Run("not full after consuming tokens", func(t *testing.T) {
+		t.Parallel()
 		l := New(10, 0) // No refill
 		l.Allow()
 		if l.IsFull() {
@@ -201,6 +218,7 @@ func TestIsFull(t *testing.T) {
 	})
 
 	t.Run("becomes full after refill", func(t *testing.T) {
+		t.Parallel()
 		l := New(1, 100) // Fast refill
 		l.Allow()        // Consume
 

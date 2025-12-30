@@ -40,6 +40,7 @@ func setupTestHandler(t *testing.T) *Handler {
 }
 
 func TestCanHandle(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	tests := []struct {
@@ -80,6 +81,7 @@ func TestCanHandle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := h.CanHandle(tt.input)
 			if got != tt.want {
 				t.Errorf("CanHandle(%q) = %v, want %v", tt.input, got, tt.want)
@@ -89,6 +91,7 @@ func TestCanHandle(t *testing.T) {
 }
 
 func TestHandleEmergencyPhones(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	messages := h.handleEmergencyPhones()
@@ -114,6 +117,7 @@ func TestHandleEmergencyPhones(t *testing.T) {
 }
 
 func TestHandleMessage_Emergency(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -128,6 +132,7 @@ func TestHandleMessage_Contact(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping network test in short mode")
 	}
+	t.Parallel()
 
 	h := setupTestHandler(t)
 	ctx := context.Background()
@@ -144,6 +149,7 @@ func TestHandleMessage_Contact(t *testing.T) {
 // buildRegex is tested indirectly via CanHandle - no need for separate test
 
 func TestFormatContactResults_Empty(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	messages := h.formatContactResults([]storage.Contact{})
@@ -154,6 +160,7 @@ func TestFormatContactResults_Empty(t *testing.T) {
 }
 
 func TestFormatContactResults_Organizations(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	contacts := []storage.Contact{
@@ -181,12 +188,13 @@ func TestFormatContactResults_Organizations(t *testing.T) {
 	// Note: Deep inspection of Flex Message JSON is complex, but we can verify it's a valid message.
 	// For exact label verification, we rely on the implementation using the constant we successfully updated.
 	// However, to be thorough, checking the string representation or partial JSON if possible would be better
-	// but standard line-bot-sdk types don't easily serialize to string for regex check without marshalling.
+	// but standard line-bot-sdk types don't easily serialize to string for regex check without marshaling.
 	// Let's assume verifying the code change was sufficient for the label text as passing tests confirm structure.
 	_ = flexMsg
 }
 
 func TestFormatContactResults_Individuals(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	contacts := []storage.Contact{
@@ -213,6 +221,7 @@ func TestFormatContactResults_Individuals(t *testing.T) {
 }
 
 func TestFormatContactResults_LargeList(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	// Create 60 contacts to test pagination
@@ -234,6 +243,7 @@ func TestFormatContactResults_LargeList(t *testing.T) {
 }
 
 func TestHandlePostback_InvalidData(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -249,6 +259,7 @@ func TestHandlePostback_InvalidData(t *testing.T) {
 // TestDispatchIntent_ParamValidation tests parameter validation logic
 // without requiring full handler setup. Uses nil dependencies (acceptable for error paths).
 func TestDispatchIntent_ParamValidation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		intent      string
@@ -280,6 +291,7 @@ func TestDispatchIntent_ParamValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := h.DispatchIntent(context.Background(), tt.intent, tt.params)
 			if err == nil {
 				t.Error("DispatchIntent() expected error, got nil")
@@ -295,6 +307,7 @@ func TestDispatchIntent_ParamValidation(t *testing.T) {
 // TestDispatchIntent_Integration tests the full dispatch flow with real dependencies.
 // These tests verify that valid parameters correctly route to handler methods.
 func TestDispatchIntent_Integration(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -326,6 +339,7 @@ func TestDispatchIntent_Integration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			msgs, err := h.DispatchIntent(ctx, tt.intent, tt.params)
 			if err != nil {
 				t.Errorf("DispatchIntent() unexpected error: %v", err)

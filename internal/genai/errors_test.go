@@ -9,6 +9,7 @@ import (
 )
 
 func TestClassifyError(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		err      error
@@ -165,6 +166,7 @@ func TestClassifyError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := ClassifyError(tt.err)
 			if result != tt.expected {
 				t.Errorf("ClassifyError(%v) = %v, want %v", tt.err, result, tt.expected)
@@ -174,6 +176,7 @@ func TestClassifyError(t *testing.T) {
 }
 
 func TestClassifyStatusCode(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		code     int
 		expected ErrorAction
@@ -201,6 +204,7 @@ func TestClassifyStatusCode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(http.StatusText(tt.code), func(t *testing.T) {
+			t.Parallel()
 			result := classifyStatusCode(tt.code)
 			if result != tt.expected {
 				t.Errorf("classifyStatusCode(%d) = %v, want %v", tt.code, result, tt.expected)
@@ -210,6 +214,7 @@ func TestClassifyStatusCode(t *testing.T) {
 }
 
 func TestParseRetryAfter(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		headers  http.Header
@@ -260,6 +265,7 @@ func TestParseRetryAfter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := ParseRetryAfter(tt.headers)
 			if result != tt.expected {
 				t.Errorf("ParseRetryAfter() = %v, want %v", result, tt.expected)
@@ -269,7 +275,9 @@ func TestParseRetryAfter(t *testing.T) {
 }
 
 func TestLLMError(t *testing.T) {
+	t.Parallel()
 	t.Run("error with status code", func(t *testing.T) {
+		t.Parallel()
 		err := &LLMError{
 			Err:        errors.New("test error"),
 			StatusCode: 429,
@@ -287,6 +295,7 @@ func TestLLMError(t *testing.T) {
 	})
 
 	t.Run("error without status code", func(t *testing.T) {
+		t.Parallel()
 		err := &LLMError{
 			Err:      errors.New("test error"),
 			Provider: ProviderGroq,
@@ -300,6 +309,7 @@ func TestLLMError(t *testing.T) {
 }
 
 func TestErrorActionString(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		action   ErrorAction
 		expected string
@@ -312,6 +322,7 @@ func TestErrorActionString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
+			t.Parallel()
 			if got := tt.action.String(); got != tt.expected {
 				t.Errorf("ErrorAction.String() = %v, want %v", got, tt.expected)
 			}
@@ -320,7 +331,9 @@ func TestErrorActionString(t *testing.T) {
 }
 
 func TestHelperFunctions(t *testing.T) {
+	t.Parallel()
 	t.Run("IsRetryable", func(t *testing.T) {
+		t.Parallel()
 		if !IsRetryable(errors.New("service unavailable")) {
 			t.Error("should be retryable")
 		}
@@ -330,6 +343,7 @@ func TestHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("IsPermanent", func(t *testing.T) {
+		t.Parallel()
 		if !IsPermanent(errors.New("invalid api key")) {
 			t.Error("should be permanent")
 		}
@@ -339,6 +353,7 @@ func TestHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("ShouldFallback", func(t *testing.T) {
+		t.Parallel()
 		if !ShouldFallback(errors.New("quota exceeded")) {
 			t.Error("should fallback")
 		}
@@ -348,6 +363,7 @@ func TestHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("WrapError", func(t *testing.T) {
+		t.Parallel()
 		wrapped := WrapError(errors.New("test"), ProviderGemini, http.StatusTooManyRequests)
 		var llmErr *LLMError
 		if !errors.As(wrapped, &llmErr) {
@@ -362,6 +378,7 @@ func TestHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("WrapError nil", func(t *testing.T) {
+		t.Parallel()
 		if WrapError(nil, ProviderGemini, http.StatusTooManyRequests) != nil {
 			t.Error("should return nil for nil error")
 		}
