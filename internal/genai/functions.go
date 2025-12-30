@@ -105,7 +105,7 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 				Properties: map[string]*genai.Schema{
 					"department": {
 						Type:        genai.TypeString,
-						Description: "科系名稱或代碼。範例：「資工系」「85」「企管」",
+						Description: "科系代碼（如 85）或名稱（如資工系）。系統會自動辨識數字代碼或文字名稱。",
 					},
 				},
 				Required: []string{"department"},

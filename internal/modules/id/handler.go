@@ -60,10 +60,9 @@ const (
 const (
 	PriorityAllDeptCode = 1 // Exact match: "所有系代碼"
 	PriorityStudentID   = 2 // 8-9 digit numeric student ID
-	PriorityDeptCode    = 3 // Department code query (系代碼) - BEFORE DeptName
-	PriorityDeptName    = 4 // Department name query (系, 所, etc.)
-	PriorityYear        = 5 // Year query (學年)
-	PriorityStudent     = 6 // Student name/ID query (學號, 學生)
+	PriorityDepartment  = 3 // Department query (name or code) - Higher than Year
+	PriorityYear        = 4 // Year query (學年)
+	PriorityStudent     = 5 // Student name/ID query (學號, 學生)
 )
 
 // PatternHandler processes a matched pattern and returns LINE messages.
@@ -89,15 +88,10 @@ var (
 		"學號", "學生", "姓名", "學生姓名", "學生編號",
 		"student", "id", // English keywords
 	}
-	// validDepartmentCodeKeywords: MUST be checked before validDepartmentKeywords
-	// because "系代碼" contains "系"
-	validDepartmentCodeKeywords = []string{
-		"系代碼", "系所代碼", "科系代碼", "系編號", "系所編號", "科系編號",
-		"depCode", "departmentCode", // English keywords
-	}
 	validDepartmentKeywords = []string{
+		"系代碼", "系所代碼", "科系代碼", "系編號", "系所編號", "科系編號",
 		"系", "所", "系所", "科系", "系名", "系所名", "科系名", "系所名稱", "科系名稱",
-		"dep", "department", // English keywords
+		"dep", "department", "depCode", "departmentCode", // English keywords
 	}
 	validYearKeywords = []string{
 		"學年", "年份", "年度", "學年度", "入學年", "入學學年", "入學年度",
@@ -105,7 +99,6 @@ var (
 	}
 
 	studentRegex    = bot.BuildKeywordRegex(validStudentKeywords)
-	deptCodeRegex   = bot.BuildKeywordRegex(validDepartmentCodeKeywords)
 	departmentRegex = bot.BuildKeywordRegex(validDepartmentKeywords)
 	yearRegex       = bot.BuildKeywordRegex(validYearKeywords)
 	allDeptCodeText = "所有系代碼"
@@ -161,18 +154,11 @@ func (h *Handler) initializeMatchers() {
 			},
 		},
 		{
-			// Department code query (系代碼) - BEFORE DeptName
-			pattern:  deptCodeRegex,
-			priority: PriorityDeptCode,
-			handler:  h.handleDeptCodePattern,
-			name:     "DeptCode",
-		},
-		{
-			// Department name query (系, 所, etc.)
+			// Department query (name or code)
 			pattern:  departmentRegex,
-			priority: PriorityDeptName,
-			handler:  h.handleDeptNamePattern,
-			name:     "DeptName",
+			priority: PriorityDepartment,
+			handler:  h.handleDepartmentPattern,
+			name:     "Department",
 		},
 		{
 			// Year query (學年)
@@ -209,7 +195,7 @@ const (
 // Supported intents:
 //   - "search": requires "name" param, calls handleStudentNameQuery
 //   - "student_id": requires "student_id" param, calls handleStudentIDQuery
-//   - "department": requires "department" param, calls handleDepartmentNameQuery
+//   - "department": requires "department" param, calls handleUnifiedDepartmentQuery
 //
 // Returns error if intent is unknown or required parameters are missing.
 func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[string]string) ([]messaging_api.MessageInterface, error) {
@@ -243,7 +229,8 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 		if h.logger != nil {
 			h.logger.WithModule(ModuleName).Debugf("Dispatching ID intent: %s, department: %s", intent, department)
 		}
-		return h.handleDepartmentNameQuery(department), nil
+
+		return h.handleUnifiedDepartmentQuery(department), nil
 
 	default:
 		return nil, fmt.Errorf("%w: %s", domerrors.ErrUnknownIntent, intent)
@@ -331,16 +318,16 @@ func (h *Handler) handleStudentIDPattern(ctx context.Context, text string, match
 	return h.handleStudentIDQuery(ctx, text)
 }
 
-// handleDeptCodePattern handles department code query (系代碼 XX).
-func (h *Handler) handleDeptCodePattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
+// handleDepartmentPattern handles all department-related queries (name or code).
+func (h *Handler) handleDepartmentPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
 	match := matches[0] // The matched keyword
 	searchTerm := bot.ExtractSearchTerm(text, match)
 
 	if searchTerm == "" {
-		// Help message with common codes
+		// Provide guidance message
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			"🔢 查詢系代碼對應的系名\n\n請輸入系代碼：\n例如：系代碼 85、系代碼 71\n\n💡 輸入「所有系代碼」查看完整對照表",
+			"🔍 查詢系所資訊\n\n請輸入系名或系代碼：\n例如：「系 資工」或「系 85」\n\n💡 提示：輸入「所有系代碼」查看完整對照表",
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -350,29 +337,7 @@ func (h *Handler) handleDeptCodePattern(ctx context.Context, text string, matche
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	return h.handleDepartmentCodeQuery(searchTerm)
-}
-
-// handleDeptNamePattern handles department name query (系 XX).
-func (h *Handler) handleDeptNamePattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
-	match := matches[0] // The matched keyword
-	searchTerm := bot.ExtractSearchTerm(text, match)
-
-	if searchTerm == "" {
-		// Help message
-		sender := lineutil.GetSender(senderName, h.stickerManager)
-		msg := lineutil.NewTextMessageWithConsistentSender(
-			"🔍 查詢系名對應的代碼\n\n請輸入系名：\n例如：系 資工、系 法律\n\n💡 輸入「所有系代碼」查看完整對照表",
-			sender,
-		)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyDeptCodeAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
-		return []messaging_api.MessageInterface{msg}
-	}
-
-	return h.handleDepartmentNameQuery(searchTerm)
+	return h.handleUnifiedDepartmentQuery(searchTerm)
 }
 
 // handleYearPattern handles year query (學年 XXX).
@@ -621,6 +586,15 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 		lineutil.QuickReplyHelpAction(),
 	})
 	return []messaging_api.MessageInterface{msg}
+}
+
+// handleUnifiedDepartmentQuery handles both code (numeric) and name (text) queries for departments.
+// It acts as a smart router to unify the search logic.
+func (h *Handler) handleUnifiedDepartmentQuery(query string) []messaging_api.MessageInterface {
+	if stringutil.IsNumeric(query) {
+		return h.handleDepartmentCodeQuery(query)
+	}
+	return h.handleDepartmentNameQuery(query)
 }
 
 // handleDepartmentCodeQuery handles department code to name queries.

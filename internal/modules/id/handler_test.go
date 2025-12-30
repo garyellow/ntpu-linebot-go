@@ -259,8 +259,7 @@ func TestHandleMessage_DepartmentCode(t *testing.T) {
 
 	// 1. Valid department code: "系代碼 85"
 	// This verifies Priority Logic:
-	// If routed correctly (PriorityDeptCode): Finds "85" -> "資工" -> Returns result.
-	// If routed incorrectly (PriorityDeptName): Finds "代碼 85" -> Search fail -> Returns "找不到".
+	// If routed correctly (PriorityDepartment): Finds "85" -> "資工" -> Returns result.
 	msgs := h.HandleMessage(ctx, "系代碼 85")
 	if len(msgs) == 0 {
 		t.Error("Expected response for department code query")
