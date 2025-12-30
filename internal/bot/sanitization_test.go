@@ -7,6 +7,7 @@ import (
 
 // TestNormalizeWhitespace tests whitespace normalization
 func TestNormalizeWhitespace(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		input string
@@ -23,6 +24,7 @@ func TestNormalizeWhitespace(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := normalizeWhitespace(tt.input)
 			if got != tt.want {
 				t.Errorf("normalizeWhitespace(%q) = %q, want %q", tt.input, got, tt.want)
@@ -33,6 +35,7 @@ func TestNormalizeWhitespace(t *testing.T) {
 
 // TestRemovePunctuation tests punctuation removal
 func TestRemovePunctuation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		input string
@@ -73,6 +76,7 @@ func TestRemovePunctuation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := removePunctuation(tt.input)
 			if got != tt.want {
 				t.Errorf("removePunctuation(%q) = %q, want %q", tt.input, got, tt.want)
@@ -83,6 +87,7 @@ func TestRemovePunctuation(t *testing.T) {
 
 // TestSanitizationPipeline tests the combined effect of normalization + punctuation removal
 func TestSanitizationPipeline(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		input string

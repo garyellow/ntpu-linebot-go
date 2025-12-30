@@ -5,6 +5,7 @@ import (
 )
 
 func TestFormatCourseTime(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    string
@@ -69,6 +70,7 @@ func TestFormatCourseTime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := FormatCourseTime(tt.input)
 			if result != tt.expected {
 				t.Errorf("FormatCourseTime(%q) = %q, want %q", tt.input, result, tt.expected)
@@ -78,6 +80,7 @@ func TestFormatCourseTime(t *testing.T) {
 }
 
 func TestFormatCourseTimes(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    []string
@@ -107,6 +110,7 @@ func TestFormatCourseTimes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := FormatCourseTimes(tt.input)
 
 			if len(result) != len(tt.expected) {
@@ -124,6 +128,7 @@ func TestFormatCourseTimes(t *testing.T) {
 }
 
 func TestGetPeriodTime(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		period    int
@@ -170,6 +175,7 @@ func TestGetPeriodTime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			startTime, endTime := GetPeriodTime(tt.period)
 			if startTime != tt.wantStart {
 				t.Errorf("GetPeriodTime(%d) start = %q, want %q", tt.period, startTime, tt.wantStart)
@@ -182,6 +188,7 @@ func TestGetPeriodTime(t *testing.T) {
 }
 
 func TestGetPeriodRangeTime(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		startPeriod int
@@ -228,6 +235,7 @@ func TestGetPeriodRangeTime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			startTime, endTime := GetPeriodRangeTime(tt.startPeriod, tt.endPeriod)
 			if startTime != tt.wantStart {
 				t.Errorf("GetPeriodRangeTime(%d, %d) start = %q, want %q", tt.startPeriod, tt.endPeriod, startTime, tt.wantStart)

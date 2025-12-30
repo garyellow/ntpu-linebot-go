@@ -105,6 +105,7 @@ func setupTestHandler(t *testing.T) *Handler {
 
 // TestHandlerInitialization tests handler creation
 func TestHandlerInitialization(t *testing.T) {
+	t.Parallel()
 	handler := setupTestHandler(t)
 
 	if handler.channelSecret != "test_channel_secret" {
@@ -122,6 +123,7 @@ func TestHandlerInitialization(t *testing.T) {
 
 // TestHandleInvalidSignature tests webhook with invalid signature
 func TestHandleInvalidSignature(t *testing.T) {
+	t.Parallel()
 	handler := setupTestHandler(t)
 
 	gin.SetMode(gin.TestMode)
@@ -147,6 +149,7 @@ func TestHandleInvalidSignature(t *testing.T) {
 // Note: The handler doesn't explicitly check request size - LINE SDK handles this
 // during signature validation. Large requests will fail signature validation.
 func TestHandleRequestTooLarge(t *testing.T) {
+	t.Parallel()
 	handler := setupTestHandler(t)
 
 	gin.SetMode(gin.TestMode)
@@ -172,6 +175,7 @@ func TestHandleRequestTooLarge(t *testing.T) {
 
 // TestGetReplyToken tests reply token extraction logic exists
 func TestGetReplyToken(t *testing.T) {
+	t.Parallel()
 	handler := setupTestHandler(t)
 
 	// Just verify the handler has the method (detailed testing requires mock events)
@@ -182,6 +186,7 @@ func TestGetReplyToken(t *testing.T) {
 
 // TestGetChatID tests chat ID extraction logic exists
 func TestGetChatID(t *testing.T) {
+	t.Parallel()
 	handler := setupTestHandler(t)
 
 	// Just verify the handler has the method (detailed testing requires mock events)
@@ -194,6 +199,7 @@ func TestGetChatID(t *testing.T) {
 // Note: getHelpMessage is now on Processor, not Handler
 // This test verifies the handler is properly set up to use processor
 func TestGetHelpMessage(t *testing.T) {
+	t.Parallel()
 	handler := setupTestHandler(t)
 
 	if handler.processor == nil {
@@ -208,6 +214,7 @@ func TestGetHelpMessage(t *testing.T) {
 
 // TestMessageValidation tests message content validation
 func TestMessageValidation(t *testing.T) {
+	t.Parallel()
 	_ = setupTestHandler(t)
 
 	tests := []struct {
@@ -231,6 +238,7 @@ func TestMessageValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// This is a conceptual test - actual validation happens in handleMessageEvent
 			// We're just verifying the logic exists
 			text := string(make([]byte, tt.textLength))
@@ -243,6 +251,7 @@ func TestMessageValidation(t *testing.T) {
 
 // TestContextTimeout tests that handlers use context with timeout
 func TestContextTimeout(t *testing.T) {
+	t.Parallel()
 	handler := setupTestHandler(t)
 
 	// Verify handler is properly initialized
@@ -258,6 +267,7 @@ func TestContextTimeout(t *testing.T) {
 
 // TestEventProcessingLimit tests that event processing is limited
 func TestEventProcessingLimit(t *testing.T) {
+	t.Parallel()
 	// This test verifies the concept that we limit events per webhook
 	maxEvents := 100
 	testEvents := make([]any, 150)
@@ -273,6 +283,7 @@ func TestEventProcessingLimit(t *testing.T) {
 
 // TestMessageTruncation tests that messages are truncated to LINE API limits
 func TestMessageTruncation(t *testing.T) {
+	t.Parallel()
 	maxMessages := 5
 	testMessages := make([]any, 10)
 
@@ -288,6 +299,7 @@ func TestMessageTruncation(t *testing.T) {
 // ==================== Personal Chat Tests ====================
 
 func TestIsPersonalChat(t *testing.T) {
+	t.Parallel()
 	handler := setupTestHandler(t)
 
 	// We can't easily test with actual webhook.Source types without mocking
@@ -298,6 +310,7 @@ func TestIsPersonalChat(t *testing.T) {
 }
 
 func TestHandlerShutdown(t *testing.T) {
+	t.Parallel()
 	handler := setupTestHandler(t)
 
 	// Should not panic - Shutdown uses WaitGroup internally
@@ -314,6 +327,7 @@ func TestHandlerShutdown(t *testing.T) {
 
 // TestGetChatID_GroupAndRoom tests that getChatID supports group and room sources
 func TestGetChatID_SourceTypes(t *testing.T) {
+	t.Parallel()
 	// This is a conceptual test - the actual implementation uses webhook.Source types
 	// We verify the logic handles different source types
 
@@ -330,6 +344,7 @@ func TestGetChatID_SourceTypes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Verify logic pattern
 			switch tt.sourceType {
 			case "user", "group", "room":

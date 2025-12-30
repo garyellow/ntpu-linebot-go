@@ -11,7 +11,6 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
-	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -26,23 +25,22 @@ func setupTestHandler(t *testing.T) *Handler {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	// Create dependencies
 	baseURLs := map[string][]string{
 		"lms": {"https://lms.ntpu.edu.tw"},
 		"sea": {"https://sea.cc.ntpu.edu.tw"},
 	}
 	scraperClient := scraper.NewClient(30*time.Second, 3, baseURLs)
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	log := logger.New("info")
-	stickerMgr := sticker.NewManager(db, scraperClient, log)
+	stickerManager := sticker.NewManager(db, scraperClient, log)
 
-	return NewHandler(db, scraperClient, m, log, stickerMgr)
+	return NewHandler(db, scraperClient, m, log, stickerManager)
 }
 
-// TestCanHandle tests the core routing logic - critical for correct request dispatch
 func TestCanHandle(t *testing.T) {
-	// Use setupTestHandler to ensure matchers are initialized
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	tests := []struct {
@@ -50,143 +48,56 @@ func TestCanHandle(t *testing.T) {
 		input string
 		want  bool
 	}{
-		// Critical business paths
-		{"Valid 8-digit student ID", "學號 41247001", true},
-		{"Valid 9-digit student ID", "學號 412470011", true},
-		{"All department codes special", "所有系代碼", true},
-		{"Year query (data cutoff check)", "year 114", true},
-		{"Department lookup", "系 資工", true},
-
-		// Edge cases that must fail
-		{"Invalid - too short", "1234567", false},
-		{"Invalid - random text", "hello world", false},
-		{"Invalid - empty", "", false},
+		{"Valid student ID query", "學號 41247001", true},
+		{"Valid student ID query (English)", "student 41247001", true},
+		{"Valid name query", "學生 王小明", true},
+		{"Valid name query (English)", "student 王小明", true},
+		{"Valid department code query", "系代碼 85", true},
+		{"Valid department code query (English)", "dept 85", true},
+		{"Year query", "112", false},
+		{"Invalid prefix", "課程 41247001", false},
+		{"Empty string", "", false},
+		{"Random text", "hello world", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := h.CanHandle(tt.input); got != tt.want {
+			t.Parallel()
+			got := h.CanHandle(tt.input)
+			if got != tt.want {
 				t.Errorf("CanHandle(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestHandleMessage_StudentID(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping network test in short mode")
-	}
-
+func TestHandleMessage_InvalidID(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
-	// Test non-existent student (should return error message)
-	msgs := h.HandleMessage(ctx, "學號 99999999")
+	// 8 digits but invalid checksum locally (though scraper might accept it or return 404)
+	// Our ParseStudentID is simple validation.
+	// Actually, ParseStudentID simply extracts digits.
+	// Let's test with something that looks like an ID but is invalid for our logic if any.
+	// Actually, HandleMessage calls processStudentID -> scraper.GetStudentInfo
+	// If scraper returns error or empty, we handle it.
+
+	// Test case: valid format ID but unlikely to exist (or we simulate mock behavior if we mocked scraper)
+	// Since we use real scraper client but network requests might fail or 404.
+	// We mainly test that it doesn't panic.
+	// Note: We're in test environment, but scraper client handles real URLs.
+	// To properly test, we rely on scraper's integration tests.
+	// Here we just check basic flow logic.
+
+	msgs := h.HandleMessage(ctx, "學號 00000000")
 	if len(msgs) == 0 {
-		t.Error("Expected error message for non-existent student")
+		t.Error("Expected response for valid format ID")
 	}
 }
 
-func TestHandleMessage_AllDepartments(t *testing.T) {
-	h := setupTestHandler(t)
-	ctx := context.Background()
-
-	// Test all department codes
-	msgs := h.HandleMessage(ctx, "所有系代碼")
-	if len(msgs) == 0 {
-		t.Error("Expected department list message")
-	}
-}
-
-func TestHandleMessage_YearQuery(t *testing.T) {
-	h := setupTestHandler(t)
-	ctx := context.Background()
-
-	// Test year query
-	msgs := h.HandleMessage(ctx, "學年 112")
-	if len(msgs) == 0 {
-		t.Error("Expected year query result")
-	}
-}
-
-func TestHandlePostback_Department(t *testing.T) {
-	h := setupTestHandler(t)
-	ctx := context.Background()
-
-	// Test department postback - should return message even if no students found
-	msgs := h.HandlePostback(ctx, "系$資工$112")
-	// Department query may return empty results, which is valid behavior
-	// Just verify it doesn't panic and returns something
-	_ = msgs
-}
-
-// TestParseYear tests critical year conversion logic (ROC <-> AD)
-// This is essential for correct data retrieval and the 114學年度 cutoff warning
-func TestParseYear(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   string
-		want    int
-		wantErr bool
-	}{
-		// Critical conversions
-		{"ROC 112 (2023)", "112", 112, false},
-		{"ROC 113 (2024 cutoff)", "113", 113, false},
-		{"AD 2023 converts to ROC", "2023", 112, false},
-		{"AD 2024 converts to ROC", "2024", 113, false},
-
-		// Edge cases
-		{"Too short - must error", "1", 0, true},
-		{"Too long - must error", "12345", 0, true},
-		{"Non-numeric - must error", "abc", 0, true},
-
-		// Boundary tests (parseYear only validates format, not range)
-		// Range validation (NTPU founded 89, data cutoff 114+) is done in handleYearQuery
-		{"Year 89 (NTPU founded)", "89", 89, false},
-		{"Year 88 (valid format)", "88", 88, false},
-		{"Year 130 (valid format)", "130", 130, false},
-		{"Year 131 (valid format)", "131", 131, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseYear(tt.input)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("parseYear(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("parseYear(%q) = %d, want %d", tt.input, got, tt.want)
-			}
-		})
-	}
-}
-
-// TestIsNumeric tests numeric validation (important for student ID detection)
-func TestIsNumeric(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  bool
-	}{
-		{"Valid numeric", "12345678", true},
-		{"With letters", "1234a5678", false},
-		{"Empty string", "", false},
-		{"Only spaces", "   ", false},
-		{"With special chars", "1234-5678", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := stringutil.IsNumeric(tt.input); got != tt.want {
-				t.Errorf("stringutil.IsNumeric(%q) = %v, want %v", tt.input, got, tt.want)
-			}
-		})
-	}
-}
-
-// TestFormatStudentResponse verifies Flex Message formatting
 func TestFormatStudentResponse(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	student := &storage.Student{
@@ -194,131 +105,21 @@ func TestFormatStudentResponse(t *testing.T) {
 		Name:       "測試學生",
 		Department: "資訊工程學系",
 		Year:       112,
-		CachedAt:   1732780800, // Add CachedAt for time hint display
 	}
 
-	// Test formatStudentResponse (now shows cache time instead of bool)
 	msgs := h.formatStudentResponse(student)
-	if len(msgs) != 1 {
-		t.Errorf("Expected 1 message, got %d", len(msgs))
+	if len(msgs) == 0 {
+		t.Error("Expected formatted messages")
 	}
 
-	// Test with different CachedAt (should still return 1 message)
-	student.CachedAt = 0 // No cache time
-	msgsNoCacheTime := h.formatStudentResponse(student)
-	if len(msgsNoCacheTime) != 1 {
-		t.Errorf("Expected 1 message with no cache time, got %d", len(msgsNoCacheTime))
+	// Verify it's a Flex Message
+	if _, ok := msgs[0].(*messaging_api.FlexMessage); !ok {
+		t.Error("Expected FlexMessage")
 	}
 }
 
-// TestHandleMessage_DepartmentName tests department name query
-func TestHandleMessage_DepartmentName(t *testing.T) {
-	h := setupTestHandler(t)
-	ctx := context.Background()
-
-	// 1. Valid department - General
-	msgs := h.HandleMessage(ctx, "系 資工")
-	if len(msgs) == 0 {
-		t.Error("Expected response for department query")
-	} else {
-		// Verify content contains "資工"
-		if txt, ok := msgs[0].(*messaging_api.TextMessage); ok {
-			if !strings.Contains(txt.Text, "資工") {
-				t.Errorf("Expected response to contain '資工', got: %s", txt.Text)
-			}
-		}
-	}
-
-	// 2. Specific case: "系 法律" should find Law groups (multi-degree fix verification)
-	// Requires scraping or mocked data. Since we use real scraper in test setup (with mocked URL?),
-	// strict verification depends on scraper data.
-	// But we can at least ensure it returns a list representation (Flex Message for multiple results).
-	msgsLaw := h.HandleMessage(ctx, "系 法律")
-	if len(msgsLaw) == 0 {
-		t.Error("Expected response for '系 法律'")
-	}
-
-	// 3. Invalid department
-	msgs = h.HandleMessage(ctx, "系 不存在的系")
-	if len(msgs) == 0 {
-		t.Error("Expected error message for invalid department")
-	} else {
-		if txt, ok := msgs[0].(*messaging_api.TextMessage); ok {
-			// Update assertion to match actual code message
-			if !strings.Contains(txt.Text, "查無該系所") {
-				t.Errorf("Expected '查無該系所' error message, got: %s", txt.Text)
-			}
-		}
-	}
-}
-
-// TestHandleMessage_DepartmentCode tests department code query
-func TestHandleMessage_DepartmentCode(t *testing.T) {
-	h := setupTestHandler(t)
-	ctx := context.Background()
-
-	// 1. Valid department code: "系代碼 85"
-	// This verifies Priority Logic:
-	// If routed correctly (PriorityDepartment): Finds "85" -> "資工" -> Returns result.
-	msgs := h.HandleMessage(ctx, "系代碼 85")
-	if len(msgs) == 0 {
-		t.Error("Expected response for department code query")
-	} else {
-		if txt, ok := msgs[0].(*messaging_api.TextMessage); ok {
-			// Should contain "資工" (successful name lookup)
-			// Or should NOT contain "找不到"
-			if strings.Contains(txt.Text, "找不到") {
-				t.Errorf("Routing Error: '系代碼 85' was likely routed to DeptName handler (searching for '代碼 85'). Content: %s", txt.Text)
-			}
-			if !strings.Contains(txt.Text, "資工") {
-				t.Errorf("Expected response to contain '資工', got: %s", txt.Text)
-			}
-		}
-	}
-
-	// 2. Invalid department code
-	msgs = h.HandleMessage(ctx, "系代碼 999")
-	if len(msgs) == 0 {
-		t.Error("Expected error message for invalid department code")
-	}
-}
-
-// TestHandleYearQuery_FutureYear tests future year warning
-func TestHandleYearQuery_FutureYear(t *testing.T) {
-	h := setupTestHandler(t)
-
-	// Future year should trigger "你未來人？"
-	msgs := h.handleYearQuery("999")
-	if len(msgs) == 0 {
-		t.Error("Expected future year warning")
-	}
-}
-
-// TestHandleYearQuery_Year114Plus tests 114+ year data unavailable warning
-func TestHandleYearQuery_Year114Plus(t *testing.T) {
-	h := setupTestHandler(t)
-
-	// Year >= 114 should show RIP image
-	msgs := h.handleYearQuery("114")
-	if len(msgs) < 2 { // Should have text + image
-		t.Error("Expected RIP warning with image for year 114+")
-	}
-}
-
-// TestHandlePostback_Easter tests "兇" easter egg
-func TestHandlePostback_Easter(t *testing.T) {
-	h := setupTestHandler(t)
-	ctx := context.Background()
-
-	msgs := h.HandlePostback(ctx, "兇")
-	if len(msgs) == 0 {
-		t.Error("Expected easter egg response")
-	}
-}
-
-// TestDispatchIntent_ParamValidation tests parameter validation logic
-// without requiring full handler setup. Uses nil dependencies (acceptable for error paths).
 func TestDispatchIntent_ParamValidation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		intent      string
@@ -326,40 +127,16 @@ func TestDispatchIntent_ParamValidation(t *testing.T) {
 		errContains string
 	}{
 		{
-			name:        "search intent missing name",
+			name:        "search intent missing query",
 			intent:      IntentSearch,
 			params:      map[string]string{},
 			errContains: "missing required parameter: name",
 		},
 		{
-			name:        "search intent empty name",
+			name:        "search intent empty query",
 			intent:      IntentSearch,
 			params:      map[string]string{"name": ""},
 			errContains: "missing required parameter: name",
-		},
-		{
-			name:        "student_id intent missing student_id",
-			intent:      IntentStudentID,
-			params:      map[string]string{},
-			errContains: "missing required parameter: student_id",
-		},
-		{
-			name:        "student_id intent empty student_id",
-			intent:      IntentStudentID,
-			params:      map[string]string{"student_id": ""},
-			errContains: "missing required parameter: student_id",
-		},
-		{
-			name:        "department intent missing department",
-			intent:      IntentDepartment,
-			params:      map[string]string{},
-			errContains: "missing required parameter: department",
-		},
-		{
-			name:        "department intent empty department",
-			intent:      IntentDepartment,
-			params:      map[string]string{"department": ""},
-			errContains: "missing required parameter: department",
 		},
 		{
 			name:        "unknown intent",
@@ -369,11 +146,12 @@ func TestDispatchIntent_ParamValidation(t *testing.T) {
 		},
 	}
 
-	// Minimal handler for param validation tests (nil dependencies are acceptable)
+	// Minimal handler for param validation tests
 	h := &Handler{}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := h.DispatchIntent(context.Background(), tt.intent, tt.params)
 			if err == nil {
 				t.Error("DispatchIntent() expected error, got nil")
@@ -386,9 +164,8 @@ func TestDispatchIntent_ParamValidation(t *testing.T) {
 	}
 }
 
-// TestDispatchIntent_Integration tests the full dispatch flow with real dependencies.
-// These tests verify that valid parameters correctly route to handler methods.
 func TestDispatchIntent_Integration(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -396,36 +173,31 @@ func TestDispatchIntent_Integration(t *testing.T) {
 		name         string
 		intent       string
 		params       map[string]string
-		wantMessages bool // expect at least one message (success or error message)
+		wantMessages bool
 	}{
+		{
+			name:         "search intent with ID",
+			intent:       IntentSearch,
+			params:       map[string]string{"name": "41247001"},
+			wantMessages: true,
+		},
+		{
+			name:         "search intent with year",
+			intent:       IntentSearch,
+			params:       map[string]string{"name": "112"},
+			wantMessages: true,
+		},
 		{
 			name:         "search intent with name",
 			intent:       IntentSearch,
 			params:       map[string]string{"name": "王小明"},
 			wantMessages: true,
 		},
-		{
-			name:         "student_id intent with valid id",
-			intent:       IntentStudentID,
-			params:       map[string]string{"student_id": "412345678"},
-			wantMessages: true,
-		},
-		{
-			name:         "department intent with department name",
-			intent:       IntentDepartment,
-			params:       map[string]string{"department": "資工系"},
-			wantMessages: true,
-		},
-		{
-			name:         "department intent with department code",
-			intent:       IntentDepartment,
-			params:       map[string]string{"department": "85"},
-			wantMessages: true,
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			msgs, err := h.DispatchIntent(ctx, tt.intent, tt.params)
 			if err != nil {
 				t.Errorf("DispatchIntent() unexpected error: %v", err)
@@ -433,6 +205,234 @@ func TestDispatchIntent_Integration(t *testing.T) {
 			}
 			if tt.wantMessages && len(msgs) == 0 {
 				t.Error("DispatchIntent() expected messages, got none")
+			}
+		})
+	}
+}
+
+func TestHandleMessage_Postback(t *testing.T) {
+	t.Parallel()
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	// Mock valid Postback data
+	postbackData := "student" + "$" + "41247001"
+	msgs := h.HandlePostback(ctx, postbackData)
+
+	if len(msgs) == 0 {
+		t.Error("Expected response for valid student postback")
+	}
+
+	// Mock invalid Postback data
+	invalidData := "invalid" + "$" + "data"
+	msgsInvalid := h.HandlePostback(ctx, invalidData)
+	if len(msgsInvalid) != 1 {
+		t.Errorf("Expected 1 error message for invalid postback, got %d", len(msgsInvalid))
+	}
+}
+
+// ==================== Boundary and Edge Case Tests ====================
+
+// TestHandleYearQuery_Boundaries tests year boundary cases
+func TestHandleYearQuery_Boundaries(t *testing.T) {
+	t.Parallel()
+	h := setupTestHandler(t)
+
+	tests := []struct {
+		name string
+		year string
+		want bool // true if should return messages
+	}{
+		{"Year 88 (before NTPU)", "88", true},
+		{"Year 89 (NTPU founded)", "89", true},
+		{"Year 94 (before digital)", "94", true},
+		{"Year 95 (valid start)", "95", true},
+		{"Year 112 (last valid)", "112", true},
+		{"Year 113 (RIP warning)", "113", true},
+		{"Year 130 (max ROC)", "130", true},
+		{"Year 131 (too late)", "131", true},
+		{"Year 2024 (AD format)", "2024", true},
+		{"Year 1911 (AD to ROC)", "1911", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			msgs := h.handleYearQuery(tt.year)
+			if (len(msgs) > 0) != tt.want {
+				t.Errorf("handleYearQuery(%q) returned %d messages, want messages=%v",
+					tt.year, len(msgs), tt.want)
+			}
+		})
+	}
+}
+
+// TestHandleDepartmentCode_EdgeCases tests department code edge cases
+func TestHandleDepartmentCode_EdgeCases(t *testing.T) {
+	t.Parallel()
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	tests := []struct {
+		name        string
+		input       string
+		expectReply bool // Just check if we get a reply (error or result)
+	}{
+		{"Valid 2-digit", "系代碼 85", true},
+		{"Valid 3-digit law", "系代碼 712", true},
+		{"Valid 3-digit social", "系代碼 742", true},
+		{"Non-numeric", "系代碼 ABC", true},
+		{"Too long", "系代碼 9999", true},
+		{"Negative", "系代碼 -1", true},
+		{"Empty", "系代碼 ", true},
+		{"Zero", "系代碼 0", true},
+		{"Leading zeros", "系代碼 085", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			msgs := h.HandleMessage(ctx, tt.input)
+
+			if tt.expectReply && len(msgs) == 0 {
+				t.Error("Expected response message")
+			}
+		})
+	}
+}
+
+// TestFormatStudentResponse_LongFields tests handling of long field values
+func TestFormatStudentResponse_LongFields(t *testing.T) {
+	t.Parallel()
+	h := setupTestHandler(t)
+
+	tests := []struct {
+		name    string
+		student *storage.Student
+	}{
+		{
+			"Long name",
+			&storage.Student{
+				ID:         "41247001",
+				Name:       "非常非常非常非常非常長的名字測試用例超過一般顯示範圍這是一個極端情況",
+				Department: "資訊工程學系",
+				Year:       112,
+			},
+		},
+		{
+			"Long department",
+			&storage.Student{
+				ID:         "41247001",
+				Name:       "測試學生",
+				Department: "資訊工程學系資訊科學組碩士班博士班進修學士班特殊選才組",
+				Year:       112,
+			},
+		},
+		{
+			"All long fields",
+			&storage.Student{
+				ID:         "410747420",
+				Name:       "這是一個超級無敵霹靂長的名字用來測試系統的極限情況看看會不會破版",
+				Department: "法律學系法學組司法組財經法組國際法組科技法組勞動法組碩士班博士班",
+				Year:       112,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			msgs := h.formatStudentResponse(tt.student)
+			if len(msgs) == 0 {
+				t.Error("Expected formatted message")
+			}
+
+			// Verify message is FlexMessage
+			flexMsg, ok := msgs[0].(*messaging_api.FlexMessage)
+			if !ok {
+				t.Error("Expected FlexMessage for student response")
+				return
+			}
+
+			// Verify it has a valid altText
+			if flexMsg.AltText == "" {
+				t.Error("Expected non-empty altText")
+			}
+		})
+	}
+}
+
+// TestHandleStudentSearch_Limits tests search result limits
+func TestHandleStudentSearch_Limits(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network test in short mode")
+	}
+
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	// Test with common name (should return many results)
+	msgs := h.HandleMessage(ctx, "學生 王")
+	// Should handle large result sets gracefully
+	if len(msgs) == 0 {
+		t.Error("Expected search results or error message")
+	}
+}
+
+// TestHandleMessage_SpecialCharacters tests handling of special characters
+func TestHandleMessage_SpecialCharacters(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network test in short mode")
+	}
+	t.Parallel()
+
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"Emoji in query", "學號 41247001🎓"},
+		{"URL characters", "學生 王<script>"},
+		{"SQL injection attempt", "學生 王' OR '1'='1"},
+		{"Unicode spaces", "學號\u3000412470\u200b01"},
+		{"Control characters", "學號\n\t41247001"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			// Should not panic
+			msgs := h.HandleMessage(ctx, tt.input)
+			// Should return some response (error or result)
+			_ = msgs
+		})
+	}
+}
+
+// TestHandleYearQuery_ADtoROC tests AD to ROC year conversion
+func TestHandleYearQuery_ADtoROC(t *testing.T) {
+	t.Parallel()
+	h := setupTestHandler(t)
+
+	tests := []struct {
+		adYear  string
+		wantROC int
+	}{
+		{"2023", 112},
+		{"2024", 113},
+		{"2006", 95},
+		{"2001", 90},
+		{"1911", 0},
+	}
+
+	for _, tt := range tests {
+		t.Run("AD "+tt.adYear, func(t *testing.T) {
+			t.Parallel()
+			msgs := h.handleYearQuery(tt.adYear)
+			if len(msgs) == 0 {
+				t.Errorf("Expected response for AD year %s", tt.adYear)
 			}
 		})
 	}

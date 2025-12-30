@@ -8,6 +8,7 @@ import (
 // TestGetProgramByName_SemesterFilters reproduces the bug where SQL arguments are passed in wrong order
 // when semester filtering is enabled.
 func TestGetProgramByName_SemesterFilters(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
 	ctx := context.Background()
@@ -80,6 +81,7 @@ func TestGetProgramByName_SemesterFilters(t *testing.T) {
 
 // TestSearchPrograms_SemesterFilters reproduces the bug in SearchPrograms
 func TestSearchPrograms_SemesterFilters(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
 	ctx := context.Background()

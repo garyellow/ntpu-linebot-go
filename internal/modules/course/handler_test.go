@@ -42,6 +42,7 @@ func setupTestHandler(t *testing.T) *Handler {
 }
 
 func TestCanHandle(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	tests := []struct {
@@ -110,6 +111,7 @@ func TestCanHandle(t *testing.T) {
 // buildRegex is tested indirectly via CanHandle - no need for redundant test
 
 func TestUIDRegex(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input string
 		want  bool
@@ -141,6 +143,7 @@ func TestUIDRegex(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
 			got := uidRegex.MatchString(tt.input)
 			if got != tt.want {
 				t.Errorf("uidRegex.MatchString(%q) = %v, want %v", tt.input, got, tt.want)
@@ -150,6 +153,7 @@ func TestUIDRegex(t *testing.T) {
 }
 
 func TestCourseNoRegex(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input string
 		want  bool
@@ -177,6 +181,7 @@ func TestCourseNoRegex(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
 			got := courseNoRegex.MatchString(tt.input)
 			if got != tt.want {
 				t.Errorf("courseNoRegex.MatchString(%q) = %v, want %v", tt.input, got, tt.want)
@@ -207,6 +212,7 @@ func TestHandleMessage_NetworkIntegration(t *testing.T) {
 }
 
 func TestHandleMessage_EmptyKeywordOnly(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -222,6 +228,7 @@ func TestHandleMessage_EmptyKeywordOnly(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			messages := h.HandleMessage(ctx, tt.input)
 
 			// Should return help message
@@ -233,6 +240,7 @@ func TestHandleMessage_EmptyKeywordOnly(t *testing.T) {
 }
 
 func TestFormatCourseResponse(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	course := &storage.Course{
@@ -262,6 +270,7 @@ func TestFormatCourseResponse(t *testing.T) {
 }
 
 func TestFormatCourseResponse_NoDetailURL(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -290,6 +299,7 @@ func TestFormatCourseResponse_NoDetailURL(t *testing.T) {
 }
 
 func TestFormatCourseListResponse_Empty(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	messages := h.formatCourseListResponse([]storage.Course{})
@@ -300,6 +310,7 @@ func TestFormatCourseListResponse_Empty(t *testing.T) {
 }
 
 func TestFormatCourseListResponse_SingleCourse(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	courses := []storage.Course{
@@ -322,6 +333,7 @@ func TestFormatCourseListResponse_SingleCourse(t *testing.T) {
 }
 
 func TestFormatCourseListResponse_LargeList(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	// Create 60 courses to test pagination
@@ -344,6 +356,7 @@ func TestFormatCourseListResponse_LargeList(t *testing.T) {
 }
 
 func TestFormatCourseListResponse_Sorting(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	// Create courses in random order to test sorting
@@ -371,6 +384,7 @@ func TestFormatCourseListResponse_Sorting(t *testing.T) {
 }
 
 func TestHandlePostback_InvalidData(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -434,6 +448,7 @@ func TestHandlePostback_WithPrefix(t *testing.T) {
 // ==================== Smart Search Tests ====================
 
 func TestCanHandle_SmartKeywords(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	tests := []struct {
@@ -463,6 +478,7 @@ func TestCanHandle_SmartKeywords(t *testing.T) {
 }
 
 func TestCanHandle_ExtendedKeywords(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	tests := []struct {
@@ -492,6 +508,7 @@ func TestCanHandle_ExtendedKeywords(t *testing.T) {
 }
 
 func TestCanHandle_HistoricalKeywords(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	tests := []struct {
@@ -532,6 +549,7 @@ func TestCanHandle_HistoricalKeywords(t *testing.T) {
 }
 
 func TestSetBM25Index(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	// Initially nil
@@ -548,6 +566,7 @@ func TestSetBM25Index(t *testing.T) {
 // are consistent: if CanHandle returns true, HandleMessage should return messages.
 // This test prevents routing bugs where CanHandle claims to handle but HandleMessage returns nil.
 func TestHandleMessage_CanHandleConsistency(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	tests := []struct {
@@ -584,6 +603,7 @@ func TestHandleMessage_CanHandleConsistency(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Test CanHandle
 			canHandle := h.CanHandle(tt.input)
 			if canHandle != tt.canHandle {
@@ -611,6 +631,7 @@ func TestHandleMessage_CanHandleConsistency(t *testing.T) {
 // TestHandleMessage_PriorityOrder verifies that patterns are checked in the correct priority order.
 // When multiple patterns could match, the highest priority should win.
 func TestHandleMessage_PriorityOrder(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 
 	tests := []struct {
@@ -630,6 +651,7 @@ func TestHandleMessage_PriorityOrder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			msgs := h.HandleMessage(context.Background(), tt.input)
 			if len(msgs) == 0 {
 				t.Errorf("HandleMessage(%q) returned empty, expected %s handler", tt.input, tt.expectedHandler)
@@ -641,6 +663,7 @@ func TestHandleMessage_PriorityOrder(t *testing.T) {
 }
 
 func TestHandleSmartSearch_NoBM25Index(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -654,6 +677,7 @@ func TestHandleSmartSearch_NoBM25Index(t *testing.T) {
 }
 
 func TestHandleSmartSearch_EmptyQuery(t *testing.T) {
+	t.Parallel()
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
@@ -666,6 +690,7 @@ func TestHandleSmartSearch_EmptyQuery(t *testing.T) {
 }
 
 func TestGetRelevanceLabel(t *testing.T) {
+	t.Parallel()
 	// Tests for 3-tier relevance label based on relative BM25 score
 	// Based on Normal-Exponential mixture model (Arampatzis et al., 2009)
 	// Confidence >= 0.8: 最佳匹配 (Normal core), >= 0.6: 高度相關 (Mixed), < 0.6: 部分相關 (Exponential tail)
@@ -752,6 +777,7 @@ func TestGetRelevanceLabel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			label := getRelevanceLabel(tt.confidence)
 			if label.Label != tt.wantLabel {
 				t.Errorf("getRelevanceLabel(%.3f) label = %q, want %q", tt.confidence, label.Label, tt.wantLabel)
@@ -766,6 +792,7 @@ func TestGetRelevanceLabel(t *testing.T) {
 // TestDispatchIntent_ParamValidation tests parameter validation logic
 // without requiring full handler setup. Uses nil dependencies (acceptable for error paths).
 func TestDispatchIntent_ParamValidation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		intent      string
@@ -821,6 +848,7 @@ func TestDispatchIntent_ParamValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := h.DispatchIntent(context.Background(), tt.intent, tt.params)
 			if err == nil {
 				t.Error("DispatchIntent() expected error, got nil")
@@ -872,6 +900,7 @@ func TestDispatchIntent_Integration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			msgs, err := h.DispatchIntent(ctx, tt.intent, tt.params)
 			if err != nil {
 				t.Errorf("DispatchIntent() unexpected error: %v", err)

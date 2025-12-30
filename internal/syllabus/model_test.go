@@ -7,6 +7,7 @@ import (
 )
 
 func TestComputeContentHash(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		content string
@@ -31,6 +32,7 @@ func TestComputeContentHash(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			hash := ComputeContentHash(tt.content)
 			if len(hash) != tt.wantLen {
 				t.Errorf("ComputeContentHash() hash length = %d, want %d", len(hash), tt.wantLen)
@@ -40,6 +42,7 @@ func TestComputeContentHash(t *testing.T) {
 }
 
 func TestComputeContentHash_Deterministic(t *testing.T) {
+	t.Parallel()
 	content := "教學目標：本課程旨在培養學生程式設計能力"
 
 	hash1 := ComputeContentHash(content)
@@ -51,6 +54,7 @@ func TestComputeContentHash_Deterministic(t *testing.T) {
 }
 
 func TestComputeContentHash_DifferentContent(t *testing.T) {
+	t.Parallel()
 	content1 := "教學目標：學習程式設計"
 	content2 := "教學目標：學習資料結構"
 
@@ -63,6 +67,7 @@ func TestComputeContentHash_DifferentContent(t *testing.T) {
 }
 
 func TestContentNeedsUpdate(t *testing.T) {
+	t.Parallel()
 	// Test the concept of detecting content changes using hash comparison
 	content := "教學目標：學習程式設計基礎"
 	currentHash := ComputeContentHash(content)
@@ -91,6 +96,7 @@ func TestContentNeedsUpdate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			newHash := ComputeContentHash(tt.newContent)
 			needsUpdate := currentHash != newHash
 			if needsUpdate != tt.wantUpdate {
@@ -101,6 +107,7 @@ func TestContentNeedsUpdate(t *testing.T) {
 }
 
 func TestFields_IsEmpty(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		fields Fields
@@ -154,6 +161,7 @@ func TestFields_IsEmpty(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := tt.fields.IsEmpty()
 			if got != tt.want {
 				t.Errorf("Fields.IsEmpty() = %v, want %v", got, tt.want)
@@ -163,6 +171,7 @@ func TestFields_IsEmpty(t *testing.T) {
 }
 
 func TestFields_ContentForIndexing(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		fields       Fields
@@ -231,6 +240,7 @@ func TestFields_ContentForIndexing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			content := tt.fields.ContentForIndexing(tt.courseTitle)
 			isEmpty := content == ""
 
@@ -250,6 +260,7 @@ func TestFields_ContentForIndexing(t *testing.T) {
 }
 
 func TestFields_ContentForIndexing_FullContent(t *testing.T) {
+	t.Parallel()
 	// Create a very long schedule - should NOT be truncated
 	var scheduleBuilder strings.Builder
 	for i := 0; i < 30; i++ {
@@ -286,6 +297,7 @@ func TestFields_ContentForIndexing_FullContent(t *testing.T) {
 }
 
 func TestFields_ContentForIndexing_SingleDocument(t *testing.T) {
+	t.Parallel()
 	// Test that all content is combined into a single document
 	fields := Fields{
 		Objectives: "培養程式設計能力",

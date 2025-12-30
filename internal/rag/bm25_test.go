@@ -10,6 +10,7 @@ import (
 )
 
 func TestNewBM25Index(t *testing.T) {
+	// t.Parallel()
 	log := logger.New("debug")
 	idx := NewBM25Index(log)
 
@@ -23,6 +24,7 @@ func TestNewBM25Index(t *testing.T) {
 }
 
 func TestBM25Index_Initialize(t *testing.T) {
+	// t.Parallel()
 	log := logger.New("debug")
 	idx := NewBM25Index(log)
 
@@ -63,8 +65,8 @@ func TestBM25Index_Initialize(t *testing.T) {
 }
 
 func TestBM25Index_Search(t *testing.T) {
-	log := logger.New("debug")
-	idx := NewBM25Index(log)
+	t.Parallel()
+	// log and idx moved inside loop for isolation
 
 	syllabi := []*storage.Syllabus{
 		{
@@ -99,9 +101,7 @@ func TestBM25Index_Search(t *testing.T) {
 		},
 	}
 
-	if err := idx.Initialize(syllabi); err != nil {
-		t.Fatalf("Initialize() error = %v", err)
-	}
+	// Initialization moved inside loop
 
 	tests := []struct {
 		name        string
@@ -187,6 +187,13 @@ func TestBM25Index_Search(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Initialize fresh index for each test case to avoid stale state/race conditions
+			log := logger.New("debug")
+			idx := NewBM25Index(log)
+			if err := idx.Initialize(syllabi); err != nil {
+				t.Fatalf("Initialize() error = %v", err)
+			}
+			// t.Parallel() // Removed to allow isolated execution without race conditions
 			results, err := idx.Search(tt.query, 10)
 			if err != nil {
 				t.Fatalf("Search() error = %v", err)
@@ -225,6 +232,7 @@ func TestBM25Index_Search(t *testing.T) {
 }
 
 func TestBM25Index_SearchEmpty(t *testing.T) {
+	t.Parallel()
 	log := logger.New("debug")
 	idx := NewBM25Index(log)
 
@@ -244,6 +252,7 @@ func TestBM25Index_SearchEmpty(t *testing.T) {
 }
 
 func TestBM25Index_SearchEmptyQuery(t *testing.T) {
+	t.Parallel()
 	log := logger.New("debug")
 	idx := NewBM25Index(log)
 
@@ -270,6 +279,7 @@ func TestBM25Index_SearchEmptyQuery(t *testing.T) {
 }
 
 func TestTokenizeChinese(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		input string
@@ -304,6 +314,7 @@ func TestTokenizeChinese(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := tokenizeChinese(tt.input)
 
 			// Check that all expected tokens are present
@@ -322,6 +333,7 @@ func TestTokenizeChinese(t *testing.T) {
 }
 
 func TestIsCJK(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		r    rune
 		want bool
@@ -337,6 +349,7 @@ func TestIsCJK(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.r), func(t *testing.T) {
+			t.Parallel()
 			if got := isCJK(tt.r); got != tt.want {
 				t.Errorf("isCJK(%q) = %v, want %v", tt.r, got, tt.want)
 			}
@@ -345,6 +358,7 @@ func TestIsCJK(t *testing.T) {
 }
 
 func TestBM25Index_AddSyllabus(t *testing.T) {
+	// t.Parallel() // Removed for stability
 	log := logger.New("debug")
 	idx := NewBM25Index(log)
 
@@ -453,6 +467,7 @@ func TestBM25Index_AddSyllabus(t *testing.T) {
 }
 
 func TestBM25Index_AddSyllabus_Duplicate(t *testing.T) {
+	t.Parallel()
 	log := logger.New("debug")
 	idx := NewBM25Index(log)
 
@@ -484,6 +499,7 @@ func TestBM25Index_AddSyllabus_Duplicate(t *testing.T) {
 }
 
 func TestBM25Index_AddSyllabus_Nil(t *testing.T) {
+	t.Parallel()
 	log := logger.New("debug")
 	idx := NewBM25Index(log)
 
@@ -507,6 +523,7 @@ func TestBM25Index_AddSyllabus_Nil(t *testing.T) {
 // TestBM25Index_RelativeScoreFiltering tests the relative score threshold filtering behavior.
 // This ensures results significantly less relevant than the top result are filtered out.
 func TestBM25Index_RelativeScoreFiltering(t *testing.T) {
+	t.Parallel()
 	log := logger.New("debug")
 	idx := NewBM25Index(log)
 
@@ -583,6 +600,7 @@ func TestBM25Index_RelativeScoreFiltering(t *testing.T) {
 
 // TestBM25Index_TopKLimit tests that results are limited to topN.
 func TestBM25Index_TopKLimit(t *testing.T) {
+	t.Parallel()
 	log := logger.New("debug")
 	idx := NewBM25Index(log)
 
@@ -634,6 +652,7 @@ func TestBM25Index_TopKLimit(t *testing.T) {
 
 // TestBM25Index_SearchCoursesConfidence tests that SearchCourses returns correct confidence values.
 func TestBM25Index_SearchCoursesConfidence(t *testing.T) {
+	t.Parallel()
 	log := logger.New("debug")
 	idx := NewBM25Index(log)
 
@@ -709,6 +728,7 @@ func TestBM25Index_SearchCoursesConfidence(t *testing.T) {
 
 // TestBM25Index_MaxSearchResultsConstant verifies the constant is sensible.
 func TestBM25Index_MaxSearchResultsConstant(t *testing.T) {
+	t.Parallel()
 	// Verify MaxSearchResults is reasonable
 	if MaxSearchResults < 1 || MaxSearchResults > 100 {
 		t.Errorf("MaxSearchResults = %d, want value between 1 and 100", MaxSearchResults)
@@ -719,6 +739,7 @@ func TestBM25Index_MaxSearchResultsConstant(t *testing.T) {
 
 // TestGetNewestTwoSemesters tests the semester extraction logic
 func TestGetNewestTwoSemesters(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		results []BM25Result
@@ -790,6 +811,7 @@ func TestGetNewestTwoSemesters(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := getNewestTwoSemesters(tt.results)
 			// Compare maps
 			if len(got) != len(tt.want) {

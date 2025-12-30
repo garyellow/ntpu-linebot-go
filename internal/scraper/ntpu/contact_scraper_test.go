@@ -7,6 +7,7 @@ import (
 
 // TestEncodeToBig5 tests the Big5 encoding function
 func TestEncodeToBig5(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    string
@@ -48,6 +49,7 @@ func TestEncodeToBig5(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := encodeToBig5(tt.input)
 			if tt.hasError && err == nil {
 				t.Error("Expected error but got none")
@@ -72,6 +74,7 @@ func TestEncodeToBig5(t *testing.T) {
 
 // TestGenerateUID tests the UID generation function
 func TestGenerateUID(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		parts    []string
@@ -101,6 +104,7 @@ func TestGenerateUID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := generateUID(tt.parts...)
 			if result != tt.expected {
 				t.Errorf("Expected %q, got %q", tt.expected, result)

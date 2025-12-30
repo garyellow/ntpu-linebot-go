@@ -8,6 +8,7 @@ import (
 
 // TestNew verifies that all metrics are properly initialized
 func TestNew(t *testing.T) {
+	t.Parallel()
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 
@@ -52,6 +53,7 @@ func TestNew(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if !tt.check() {
 				t.Errorf("%s is nil", tt.name)
 			}
@@ -61,6 +63,7 @@ func TestNew(t *testing.T) {
 
 // TestRegistry verifies registry is accessible
 func TestRegistry(t *testing.T) {
+	t.Parallel()
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 
@@ -74,6 +77,7 @@ func TestRegistry(t *testing.T) {
 // ============================================
 
 func TestRecordWebhook(t *testing.T) {
+	t.Parallel()
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 
@@ -97,6 +101,7 @@ func TestRecordWebhook(t *testing.T) {
 // ============================================
 
 func TestRecordScraper(t *testing.T) {
+	t.Parallel()
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 
@@ -121,6 +126,7 @@ func TestRecordScraper(t *testing.T) {
 // ============================================
 
 func TestRecordCacheHit(t *testing.T) {
+	t.Parallel()
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 
@@ -131,6 +137,7 @@ func TestRecordCacheHit(t *testing.T) {
 }
 
 func TestRecordCacheMiss(t *testing.T) {
+	t.Parallel()
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 
@@ -141,6 +148,7 @@ func TestRecordCacheMiss(t *testing.T) {
 }
 
 func TestSetCacheSize(t *testing.T) {
+	t.Parallel()
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 
@@ -165,6 +173,7 @@ func TestSetCacheSize(t *testing.T) {
 // ============================================
 
 func TestRecordLLM(t *testing.T) {
+	t.Parallel()
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 
@@ -190,6 +199,7 @@ func TestRecordLLM(t *testing.T) {
 // ============================================
 
 func TestRecordSearch(t *testing.T) {
+	t.Parallel()
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 
@@ -211,6 +221,7 @@ func TestRecordSearch(t *testing.T) {
 }
 
 func TestSetIndexSize(t *testing.T) {
+	t.Parallel()
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 
@@ -223,6 +234,7 @@ func TestSetIndexSize(t *testing.T) {
 // ============================================
 
 func TestRecordRateLimiterDrop(t *testing.T) {
+	t.Parallel()
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 
@@ -231,6 +243,7 @@ func TestRecordRateLimiterDrop(t *testing.T) {
 }
 
 func TestSetRateLimiterUsers(t *testing.T) {
+	t.Parallel()
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 
@@ -243,6 +256,7 @@ func TestSetRateLimiterUsers(t *testing.T) {
 // ============================================
 
 func TestRecordJob(t *testing.T) {
+	t.Parallel()
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 
@@ -268,6 +282,7 @@ func TestRecordJob(t *testing.T) {
 // ============================================
 
 func TestRecordScraperRequest(t *testing.T) {
+	t.Parallel()
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 
@@ -277,6 +292,7 @@ func TestRecordScraperRequest(t *testing.T) {
 }
 
 func TestRecordLLMRequest(t *testing.T) {
+	t.Parallel()
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 
@@ -286,6 +302,7 @@ func TestRecordLLMRequest(t *testing.T) {
 }
 
 func TestRecordLLMFallback(t *testing.T) {
+	t.Parallel()
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 

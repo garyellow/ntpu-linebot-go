@@ -10,6 +10,7 @@ import (
 
 // TestNew_FileSystemDatabase tests database creation with file system persistence
 func TestNew_FileSystemDatabase(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir() // Automatically cleaned up after test
 	dbPath := filepath.Join(tmpDir, "test.db")
 
@@ -65,6 +66,7 @@ func TestNew_FileSystemDatabase(t *testing.T) {
 
 // TestNew_NestedDirectory tests database creation with nested directory path
 func TestNew_NestedDirectory(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "sub1", "sub2", "test.db")
 
@@ -88,6 +90,7 @@ func TestNew_NestedDirectory(t *testing.T) {
 
 // TestPing_DatabaseConnectivity tests database connectivity check
 func TestPing_DatabaseConnectivity(t *testing.T) {
+	t.Parallel()
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
 
@@ -101,6 +104,7 @@ func TestPing_DatabaseConnectivity(t *testing.T) {
 
 // TestClose_CleanShutdown tests clean database shutdown
 func TestClose_CleanShutdown(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 

@@ -6,6 +6,7 @@ import (
 
 // TestReverseMap tests if DepartmentCodes can be reversed properly
 func TestReverseMap(t *testing.T) {
+	t.Parallel()
 	reverseMap := make(map[string]string)
 	for name, code := range DepartmentCodes {
 		reverseMap[code] = name
@@ -18,6 +19,7 @@ func TestReverseMap(t *testing.T) {
 
 // TestDepartmentCodeMappings tests department name lookup
 func TestDepartmentCodeMappings(t *testing.T) {
+	t.Parallel()
 	// Test that the maps contain expected entries
 	tests := []struct {
 		name        string
@@ -35,6 +37,7 @@ func TestDepartmentCodeMappings(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			var exists bool
 			switch tt.mapToCheck {
 			case "DepartmentNames":
@@ -55,6 +58,7 @@ func TestDepartmentCodeMappings(t *testing.T) {
 
 // TestExtractYear tests the year extraction logic
 func TestExtractYear(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		studentID string
@@ -69,6 +73,7 @@ func TestExtractYear(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			year := extractYear(tt.studentID)
 			if year != tt.expected {
 				t.Errorf("Expected year %d, got %d", tt.expected, year)
@@ -79,6 +84,7 @@ func TestExtractYear(t *testing.T) {
 
 // TestDetermineDepartment tests department determination logic
 func TestDetermineDepartment(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		studentID  string
@@ -117,6 +123,7 @@ func TestDetermineDepartment(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			dept := determineDepartment(tt.studentID)
 			if dept != tt.department {
 				t.Errorf("Expected department %q, got %q", tt.department, dept)

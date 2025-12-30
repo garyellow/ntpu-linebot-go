@@ -11,6 +11,7 @@ type testItem struct {
 }
 
 func TestDeduplicate(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		items   []testItem
@@ -78,6 +79,7 @@ func TestDeduplicate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := Deduplicate(tt.items, tt.keyFunc)
 			if len(got) != len(tt.want) {
 				t.Errorf("Deduplicate() length = %d, want %d", len(got), len(tt.want))
@@ -94,6 +96,7 @@ func TestDeduplicate(t *testing.T) {
 
 // TestDeduplicatePreservesOrder ensures that deduplication preserves the original order
 func TestDeduplicatePreservesOrder(t *testing.T) {
+	t.Parallel()
 	items := []testItem{
 		{ID: "3", Name: "C"},
 		{ID: "1", Name: "A"},

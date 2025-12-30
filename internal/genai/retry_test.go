@@ -8,6 +8,7 @@ import (
 )
 
 func TestCalculateBackoff(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		attempt int
@@ -69,6 +70,7 @@ func TestCalculateBackoff(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Run multiple times to verify randomness
 			for i := 0; i < 10; i++ {
 				result := CalculateBackoff(tt.attempt, tt.initial, tt.max)
@@ -82,7 +84,9 @@ func TestCalculateBackoff(t *testing.T) {
 }
 
 func TestSleep(t *testing.T) {
+	t.Parallel()
 	t.Run("normal sleep", func(t *testing.T) {
+		t.Parallel()
 		ctx := context.Background()
 		start := time.Now()
 		err := Sleep(ctx, 50*time.Millisecond)
@@ -97,6 +101,7 @@ func TestSleep(t *testing.T) {
 	})
 
 	t.Run("zero duration", func(t *testing.T) {
+		t.Parallel()
 		ctx := context.Background()
 		err := Sleep(ctx, 0)
 		if err != nil {
@@ -105,6 +110,7 @@ func TestSleep(t *testing.T) {
 	})
 
 	t.Run("negative duration", func(t *testing.T) {
+		t.Parallel()
 		ctx := context.Background()
 		err := Sleep(ctx, -time.Second)
 		if err != nil {
@@ -113,6 +119,7 @@ func TestSleep(t *testing.T) {
 	})
 
 	t.Run("context cancellation", func(t *testing.T) {
+		t.Parallel()
 		ctx, cancel := context.WithCancel(context.Background())
 
 		// Cancel immediately
@@ -125,6 +132,7 @@ func TestSleep(t *testing.T) {
 	})
 
 	t.Run("context timeout", func(t *testing.T) {
+		t.Parallel()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 		defer cancel()
 
@@ -136,7 +144,9 @@ func TestSleep(t *testing.T) {
 }
 
 func TestWithRetry(t *testing.T) {
+	t.Parallel()
 	t.Run("success on first attempt", func(t *testing.T) {
+		t.Parallel()
 		cfg := RetryConfig{
 			MaxAttempts:  3,
 			InitialDelay: 10 * time.Millisecond,
@@ -158,6 +168,7 @@ func TestWithRetry(t *testing.T) {
 	})
 
 	t.Run("success after retry", func(t *testing.T) {
+		t.Parallel()
 		cfg := RetryConfig{
 			MaxAttempts:  3,
 			InitialDelay: 10 * time.Millisecond,
@@ -182,6 +193,7 @@ func TestWithRetry(t *testing.T) {
 	})
 
 	t.Run("permanent error stops retry", func(t *testing.T) {
+		t.Parallel()
 		cfg := RetryConfig{
 			MaxAttempts:  3,
 			InitialDelay: 10 * time.Millisecond,
@@ -203,6 +215,7 @@ func TestWithRetry(t *testing.T) {
 	})
 
 	t.Run("exhausted retries", func(t *testing.T) {
+		t.Parallel()
 		cfg := RetryConfig{
 			MaxAttempts:  2,
 			InitialDelay: 10 * time.Millisecond,
@@ -224,6 +237,7 @@ func TestWithRetry(t *testing.T) {
 	})
 
 	t.Run("context cancellation", func(t *testing.T) {
+		t.Parallel()
 		cfg := RetryConfig{
 			MaxAttempts:  5,
 			InitialDelay: time.Hour,
@@ -244,7 +258,9 @@ func TestWithRetry(t *testing.T) {
 }
 
 func TestWithRetryAndMetrics(t *testing.T) {
+	t.Parallel()
 	t.Run("calls onRetry callback", func(t *testing.T) {
+		t.Parallel()
 		cfg := RetryConfig{
 			MaxAttempts:  3,
 			InitialDelay: 10 * time.Millisecond,
@@ -275,6 +291,7 @@ func TestWithRetryAndMetrics(t *testing.T) {
 	})
 
 	t.Run("nil callback is safe", func(t *testing.T) {
+		t.Parallel()
 		cfg := RetryConfig{
 			MaxAttempts:  2,
 			InitialDelay: 10 * time.Millisecond,
@@ -289,7 +306,9 @@ func TestWithRetryAndMetrics(t *testing.T) {
 }
 
 func TestRemainingBudget(t *testing.T) {
+	t.Parallel()
 	t.Run("no deadline", func(t *testing.T) {
+		t.Parallel()
 		ctx := context.Background()
 		budget := RemainingBudget(ctx)
 		if budget != 0 {
@@ -298,6 +317,7 @@ func TestRemainingBudget(t *testing.T) {
 	})
 
 	t.Run("with deadline", func(t *testing.T) {
+		t.Parallel()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 		defer cancel()
 
@@ -308,6 +328,7 @@ func TestRemainingBudget(t *testing.T) {
 	})
 
 	t.Run("expired deadline", func(t *testing.T) {
+		t.Parallel()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
 		time.Sleep(time.Millisecond) // Ensure deadline passes
 		defer cancel()
@@ -320,7 +341,9 @@ func TestRemainingBudget(t *testing.T) {
 }
 
 func TestHasSufficientBudget(t *testing.T) {
+	t.Parallel()
 	t.Run("no deadline has unlimited budget", func(t *testing.T) {
+		t.Parallel()
 		ctx := context.Background()
 		if !HasSufficientBudget(ctx, time.Hour) {
 			t.Error("no deadline should have unlimited budget")
@@ -328,6 +351,7 @@ func TestHasSufficientBudget(t *testing.T) {
 	})
 
 	t.Run("sufficient budget", func(t *testing.T) {
+		t.Parallel()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 		defer cancel()
 
@@ -337,6 +361,7 @@ func TestHasSufficientBudget(t *testing.T) {
 	})
 
 	t.Run("insufficient budget", func(t *testing.T) {
+		t.Parallel()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
 

@@ -5,6 +5,7 @@ import (
 )
 
 func TestBuildKeywordRegex(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		keywords []string
@@ -69,6 +70,7 @@ func TestBuildKeywordRegex(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			regex := BuildKeywordRegex(tt.keywords)
 			got := regex.FindString(tt.input)
 			if got != tt.expected {
@@ -80,6 +82,7 @@ func TestBuildKeywordRegex(t *testing.T) {
 }
 
 func TestBuildKeywordRegex_EmptyKeywordsPanics(t *testing.T) {
+	t.Parallel()
 	defer func() {
 		if r := recover(); r == nil {
 			t.Errorf("BuildKeywordRegex([]string{}) should panic, but did not")
@@ -89,6 +92,7 @@ func TestBuildKeywordRegex_EmptyKeywordsPanics(t *testing.T) {
 }
 
 func TestExtractSearchTerm(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		text     string
@@ -159,6 +163,7 @@ func TestExtractSearchTerm(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := ExtractSearchTerm(tt.text, tt.keyword)
 			if got != tt.expected {
 				t.Errorf("ExtractSearchTerm(%q, %q) = %q, want %q",
@@ -169,6 +174,7 @@ func TestExtractSearchTerm(t *testing.T) {
 }
 
 func TestContainsAllRunes(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		s        string
@@ -195,6 +201,7 @@ func TestContainsAllRunes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := ContainsAllRunes(tt.s, tt.chars)
 			if got != tt.expected {
 				t.Errorf("ContainsAllRunes(%q, %q) = %v, want %v",

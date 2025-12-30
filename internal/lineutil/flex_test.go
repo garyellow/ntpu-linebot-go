@@ -9,6 +9,7 @@ import (
 
 // TestTruncateRunes tests UTF-8 safe rune truncation
 func TestTruncateRunes(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    string
@@ -30,6 +31,7 @@ func TestTruncateRunes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := TruncateRunes(tt.input, tt.maxRunes)
 			if result != tt.expected {
 				t.Errorf("TruncateRunes(%q, %d) = %q, want %q",
@@ -50,7 +52,9 @@ func TestTruncateRunes(t *testing.T) {
 
 // TestFlexBubbleComponents tests Flex Message component creation
 func TestFlexBubbleComponents(t *testing.T) {
+	t.Parallel()
 	t.Run("Full bubble", func(t *testing.T) {
+		t.Parallel()
 		header := NewFlexBox("vertical", NewFlexText("Header").FlexText)
 		hero := NewFlexBox("vertical", NewFlexText("Hero").FlexText).FlexBox
 		body := NewFlexBox("vertical", NewFlexText("Body").FlexText)
@@ -73,6 +77,7 @@ func TestFlexBubbleComponents(t *testing.T) {
 	})
 
 	t.Run("Minimal bubble (no header/footer)", func(t *testing.T) {
+		t.Parallel()
 		hero := NewFlexBox("vertical", NewFlexText("Hero").FlexText).FlexBox
 		body := NewFlexBox("vertical", NewFlexText("Body").FlexText)
 
@@ -95,6 +100,7 @@ func TestFlexBubbleComponents(t *testing.T) {
 
 // TestFlexTextChaining tests method chaining for FlexText
 func TestFlexTextChaining(t *testing.T) {
+	t.Parallel()
 	text := NewFlexText("Test").
 		WithWeight("bold").
 		WithSize("xl").
@@ -127,6 +133,7 @@ func TestFlexTextChaining(t *testing.T) {
 
 // TestFlexTextOverflowProtection tests integer overflow protection for int32 conversion
 func TestFlexTextOverflowProtection(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		flex     int
@@ -143,6 +150,7 @@ func TestFlexTextOverflowProtection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			text := NewFlexText("Test").
 				WithFlex(tt.flex).
 				WithMaxLines(tt.maxLines)
@@ -159,6 +167,7 @@ func TestFlexTextOverflowProtection(t *testing.T) {
 
 // TestFlexButtonChaining tests method chaining for FlexButton
 func TestFlexButtonChaining(t *testing.T) {
+	t.Parallel()
 	action := NewMessageAction("Test", "test")
 	button := NewFlexButton(action).
 		WithStyle("primary").
@@ -179,6 +188,7 @@ func TestFlexButtonChaining(t *testing.T) {
 
 // TestFlexBoxChaining tests method chaining for FlexBox
 func TestFlexBoxChaining(t *testing.T) {
+	t.Parallel()
 	box := NewFlexBox("vertical", NewFlexText("Test").FlexText).
 		WithSpacing("sm").
 		WithMargin("md").
@@ -205,6 +215,7 @@ func TestFlexBoxChaining(t *testing.T) {
 
 // TestNewColoredHeader tests colored header creation for carousel cards
 func TestNewColoredHeader(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		info          ColoredHeaderInfo
@@ -246,6 +257,7 @@ func TestNewColoredHeader(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			header := NewColoredHeader(tt.info)
 
 			// Check layout
@@ -280,6 +292,7 @@ func TestNewColoredHeader(t *testing.T) {
 
 // TestNewBodyLabel tests body label creation for carousel cards
 func TestNewBodyLabel(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		info          BodyLabelInfo
@@ -325,6 +338,7 @@ func TestNewBodyLabel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			label := NewBodyLabel(tt.info)
 
 			// Check layout (horizontal wrapper)
@@ -354,6 +368,7 @@ func TestNewBodyLabel(t *testing.T) {
 
 // TestFlexSeparator tests separator creation and chaining
 func TestFlexSeparator(t *testing.T) {
+	t.Parallel()
 	sep := NewFlexSeparator().WithMargin("md")
 
 	if sep.Margin != "md" {
@@ -381,6 +396,7 @@ func BenchmarkTruncateRunes(b *testing.B) {
 
 // TestNewInfoRow tests the standardized info row creation
 func TestNewInfoRow(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		emoji      string
@@ -434,6 +450,7 @@ func TestNewInfoRow(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			row := NewInfoRow(tt.emoji, tt.label, tt.value, tt.style)
 
 			// Check it's a vertical box
@@ -451,6 +468,7 @@ func TestNewInfoRow(t *testing.T) {
 
 // TestNewInfoRowWithMargin tests the convenience wrapper with margin
 func TestNewInfoRowWithMargin(t *testing.T) {
+	t.Parallel()
 	result := NewInfoRowWithMargin("🆔", "學號", "41247001", BoldInfoRowStyle(), "lg")
 
 	// Should not be nil
@@ -461,7 +479,9 @@ func TestNewInfoRowWithMargin(t *testing.T) {
 
 // TestInfoRowStyles tests the predefined styles
 func TestInfoRowStyles(t *testing.T) {
+	t.Parallel()
 	t.Run("DefaultInfoRowStyle", func(t *testing.T) {
+		t.Parallel()
 		style := DefaultInfoRowStyle()
 		if style.ValueSize != "sm" {
 			t.Errorf("Expected ValueSize 'sm', got %s", style.ValueSize)
@@ -479,6 +499,7 @@ func TestInfoRowStyles(t *testing.T) {
 	})
 
 	t.Run("BoldInfoRowStyle", func(t *testing.T) {
+		t.Parallel()
 		style := BoldInfoRowStyle()
 		if style.ValueSize != "md" {
 			t.Errorf("Expected ValueSize 'md', got %s", style.ValueSize)
@@ -506,6 +527,7 @@ func BenchmarkNewInfoRow(b *testing.B) {
 
 // TestNewButtonRow tests the button row creation for footer layouts
 func TestNewButtonRow(t *testing.T) {
+	t.Parallel()
 	action := NewMessageAction("Test", "test")
 
 	tests := []struct {
@@ -558,6 +580,7 @@ func TestNewButtonRow(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			row := NewButtonRow(tt.buttons...)
 
 			// Check layout is horizontal
@@ -580,6 +603,7 @@ func TestNewButtonRow(t *testing.T) {
 
 // TestNewButtonFooter tests the multi-row button footer creation
 func TestNewButtonFooter(t *testing.T) {
+	t.Parallel()
 	action := NewMessageAction("Test", "test")
 	primaryBtn := NewFlexButton(action).WithStyle("primary").WithHeight("sm")
 	secondaryBtn := NewFlexButton(action).WithStyle("secondary").WithHeight("sm")
@@ -641,6 +665,7 @@ func TestNewButtonFooter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			footer := NewButtonFooter(tt.rows...)
 
 			// Check layout is vertical
@@ -663,6 +688,7 @@ func TestNewButtonFooter(t *testing.T) {
 
 // TestButtonRowFlexDistribution tests that buttons get equal flex distribution
 func TestButtonRowFlexDistribution(t *testing.T) {
+	t.Parallel()
 	action := NewMessageAction("Test", "test")
 	btn1 := NewFlexButton(action).WithStyle("primary")
 	btn2 := NewFlexButton(action).WithStyle("secondary")
@@ -686,6 +712,7 @@ func TestButtonRowFlexDistribution(t *testing.T) {
 
 // TestNewFlexCarousel tests carousel creation
 func TestNewFlexCarousel(t *testing.T) {
+	t.Parallel()
 	// Create test bubbles
 	bubbles := make([]messaging_api.FlexBubble, 3)
 	for i := range bubbles {
@@ -701,6 +728,7 @@ func TestNewFlexCarousel(t *testing.T) {
 
 // TestBuildCarouselMessages tests automatic splitting of bubbles into multiple messages
 func TestBuildCarouselMessages(t *testing.T) {
+	t.Parallel()
 	// Helper to create test bubbles
 	createBubbles := func(count int) []messaging_api.FlexBubble {
 		bubbles := make([]messaging_api.FlexBubble, count)
@@ -744,6 +772,7 @@ func TestBuildCarouselMessages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			bubbles := createBubbles(tt.bubbleCount)
 			messages := BuildCarouselMessages("測試", bubbles, nil)
 
@@ -756,6 +785,7 @@ func TestBuildCarouselMessages(t *testing.T) {
 
 // TestBuildCarouselMessagesWithSender tests that sender is applied correctly
 func TestBuildCarouselMessagesWithSender(t *testing.T) {
+	t.Parallel()
 	bubbles := make([]messaging_api.FlexBubble, 5)
 	for i := range bubbles {
 		bubbles[i] = messaging_api.FlexBubble{}

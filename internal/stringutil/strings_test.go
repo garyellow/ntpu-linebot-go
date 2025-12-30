@@ -3,6 +3,7 @@ package stringutil
 import "testing"
 
 func TestIsNumeric(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		input string
@@ -19,6 +20,7 @@ func TestIsNumeric(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := IsNumeric(tt.input)
 			if got != tt.want {
 				t.Errorf("IsNumeric(%q) = %v, want %v", tt.input, got, tt.want)
@@ -28,6 +30,7 @@ func TestIsNumeric(t *testing.T) {
 }
 
 func TestContainsAllRunes(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		s        string
@@ -54,6 +57,7 @@ func TestContainsAllRunes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := ContainsAllRunes(tt.s, tt.chars)
 			if got != tt.expected {
 				t.Errorf("ContainsAllRunes(%q, %q) = %v, want %v",

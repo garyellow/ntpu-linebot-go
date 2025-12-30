@@ -9,6 +9,7 @@ import (
 
 // TestGetSemestersToSearchLive tests with current date (for verification only)
 func TestGetSemestersToSearchLive(t *testing.T) {
+	t.Parallel()
 	years, terms := getSemestersToSearch()
 
 	// Now returns 2 semesters (default for user queries)
@@ -29,6 +30,7 @@ func TestGetSemestersToSearchLive(t *testing.T) {
 
 // TestGetExtendedSemesters tests extended search (2 historical semesters, 3rd and 4th)
 func TestGetExtendedSemesters(t *testing.T) {
+	t.Parallel()
 	years, terms := getExtendedSemesters()
 
 	// Extended search returns 2 historical semesters (3rd and 4th)
@@ -45,6 +47,7 @@ func TestGetExtendedSemesters(t *testing.T) {
 
 // TestRecentSemestersForDate tests the 2-semester retrieval
 func TestRecentSemestersForDate(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		year     int
@@ -82,6 +85,7 @@ func TestRecentSemestersForDate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			testDate := time.Date(tt.year, time.Month(tt.month), 15, 0, 0, 0, 0, time.Local)
 			years, terms := getRecentSemestersForDate(testDate)
 
@@ -102,6 +106,7 @@ func TestRecentSemestersForDate(t *testing.T) {
 
 // TestSemesterDetectionLogic tests the semester detection logic for course queries
 func TestSemesterDetectionLogic(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		year     int // Western year
@@ -199,6 +204,7 @@ func TestSemesterDetectionLogic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Create a time object for the test case
 			testDate := time.Date(tt.year, time.Month(tt.month), 15, 0, 0, 0, 0, time.Local)
 
@@ -225,6 +231,7 @@ func TestSemesterDetectionLogic(t *testing.T) {
 
 // TestGenerateSemestersBackward tests the helper function
 func TestGenerateSemestersBackward(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		startYear int
@@ -263,6 +270,7 @@ func TestGenerateSemestersBackward(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			years, terms := generateSemestersBackward(tt.startYear, tt.startTerm, tt.count)
 
 			if len(years) != tt.count || len(terms) != tt.count {
@@ -282,7 +290,9 @@ func TestGenerateSemestersBackward(t *testing.T) {
 
 // TestSemesterDetector tests the intelligent semester detection
 func TestSemesterDetector(t *testing.T) {
+	t.Parallel()
 	t.Run("DetectActiveSemesters with data in newest semester", func(t *testing.T) {
+		t.Parallel()
 		// Mock count function that returns 1000 courses for all semesters
 		mockCount := func(ctx context.Context, year, term int) (int, error) {
 			return 1000, nil
@@ -298,6 +308,7 @@ func TestSemesterDetector(t *testing.T) {
 	})
 
 	t.Run("DetectActiveSemesters with no data in newest semester", func(t *testing.T) {
+		t.Parallel()
 		// Mock count function that returns 0 for newest semester
 		callCount := 0
 		mockCount := func(ctx context.Context, year, term int) (int, error) {
@@ -327,6 +338,7 @@ func TestSemesterDetector(t *testing.T) {
 	})
 
 	t.Run("DetectActiveSemesters with nil count function", func(t *testing.T) {
+		t.Parallel()
 		detector := NewSemesterDetector(nil)
 		years, terms := detector.DetectActiveSemesters(context.Background())
 
@@ -344,7 +356,9 @@ func TestSemesterDetector(t *testing.T) {
 
 // TestDetectWarmupSemesters tests the warmup semester detection
 func TestDetectWarmupSemesters(t *testing.T) {
+	t.Parallel()
 	t.Run("With data available", func(t *testing.T) {
+		t.Parallel()
 		mockCount := func(ctx context.Context, year, term int) (int, error) {
 			return 1000, nil
 		}
@@ -368,6 +382,7 @@ func TestDetectWarmupSemesters(t *testing.T) {
 	})
 
 	t.Run("With no data in newest semester", func(t *testing.T) {
+		t.Parallel()
 		mockCount := func(ctx context.Context, year, term int) (int, error) {
 			return 0, nil // No data
 		}
@@ -381,6 +396,7 @@ func TestDetectWarmupSemesters(t *testing.T) {
 	})
 
 	t.Run("Term 2 scenario - has term 1 data only", func(t *testing.T) {
+		t.Parallel()
 		// Simulate February (term 2): term 2 has no data yet, but term 1 exists
 		mockCount := func(ctx context.Context, year, term int) (int, error) {
 			if term == 1 {
@@ -401,6 +417,7 @@ func TestDetectWarmupSemesters(t *testing.T) {
 	})
 
 	t.Run("Error handling", func(t *testing.T) {
+		t.Parallel()
 		mockCount := func(ctx context.Context, year, term int) (int, error) {
 			return 0, errors.New("database error")
 		}
@@ -415,6 +432,7 @@ func TestDetectWarmupSemesters(t *testing.T) {
 	})
 
 	t.Run("Calendar-based detection with data", func(t *testing.T) {
+		t.Parallel()
 		// Returns data for all requested semesters
 		mockCount := func(ctx context.Context, year, term int) (int, error) {
 			// Mock returns data for any recent semester
@@ -442,6 +460,7 @@ func TestDetectWarmupSemesters(t *testing.T) {
 
 // TestCurrentMonth tests with actual current time (for debugging purposes)
 func TestCurrentMonth(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	currentYear := now.Year() - 1911
 	currentMonth := int(now.Month())
@@ -459,7 +478,9 @@ func TestCurrentMonth(t *testing.T) {
 
 // TestSemesterDetectorDataDriven tests the data-driven semester detection methods
 func TestSemesterDetectorDataDriven(t *testing.T) {
+	t.Parallel()
 	t.Run("GetRecentSemesters returns cached data", func(t *testing.T) {
+		t.Parallel()
 		mockCount := func(ctx context.Context, year, term int) (int, error) {
 			return 1000, nil
 		}
@@ -481,6 +502,7 @@ func TestSemesterDetectorDataDriven(t *testing.T) {
 	})
 
 	t.Run("GetExtendedSemesters returns semesters 3-4", func(t *testing.T) {
+		t.Parallel()
 		mockCount := func(ctx context.Context, year, term int) (int, error) {
 			return 1000, nil
 		}
@@ -504,6 +526,7 @@ func TestSemesterDetectorDataDriven(t *testing.T) {
 	})
 
 	t.Run("HasData returns false before refresh", func(t *testing.T) {
+		t.Parallel()
 		detector := NewSemesterDetector(nil)
 		if detector.HasData() {
 			t.Error("Expected HasData to return false before RefreshSemesters")
@@ -511,6 +534,7 @@ func TestSemesterDetectorDataDriven(t *testing.T) {
 	})
 
 	t.Run("HasData returns true after refresh", func(t *testing.T) {
+		t.Parallel()
 		mockCount := func(ctx context.Context, year, term int) (int, error) {
 			return 1000, nil
 		}
@@ -523,6 +547,7 @@ func TestSemesterDetectorDataDriven(t *testing.T) {
 	})
 
 	t.Run("GetAllSemesters returns 4 semesters", func(t *testing.T) {
+		t.Parallel()
 		mockCount := func(ctx context.Context, year, term int) (int, error) {
 			return 1000, nil
 		}
@@ -550,6 +575,7 @@ func TestSemesterDetectorDataDriven(t *testing.T) {
 	})
 
 	t.Run("RefreshSemesters uses data availability", func(t *testing.T) {
+		t.Parallel()
 		callCount := 0
 		mockCount := func(ctx context.Context, year, term int) (int, error) {
 			callCount++
@@ -575,6 +601,7 @@ func TestSemesterDetectorDataDriven(t *testing.T) {
 	})
 
 	t.Run("DetectWarmupSemesters also caches data", func(t *testing.T) {
+		t.Parallel()
 		mockCount := func(ctx context.Context, year, term int) (int, error) {
 			return 1000, nil
 		}

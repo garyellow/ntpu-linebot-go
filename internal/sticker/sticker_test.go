@@ -28,6 +28,7 @@ func setupTestDB(t *testing.T) (*storage.DB, func()) {
 }
 
 func TestNewManager(t *testing.T) {
+	t.Parallel()
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -41,6 +42,7 @@ func TestNewManager(t *testing.T) {
 }
 
 func TestGetRandomStickerWithFallback(t *testing.T) {
+	t.Parallel()
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -55,6 +57,7 @@ func TestGetRandomStickerWithFallback(t *testing.T) {
 }
 
 func TestGetRandomStickerWithLoadedStickers(t *testing.T) {
+	t.Parallel()
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -93,6 +96,7 @@ func TestGetRandomStickerWithLoadedStickers(t *testing.T) {
 }
 
 func TestLoadStickersFromDatabase(t *testing.T) {
+	t.Parallel()
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -121,6 +125,7 @@ func TestLoadStickersFromDatabase(t *testing.T) {
 }
 
 func TestGenerateFallbackStickers(t *testing.T) {
+	t.Parallel()
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -144,6 +149,7 @@ func TestGenerateFallbackStickers(t *testing.T) {
 // Integration tests should be run separately, not as part of standard unit test suite.
 
 func TestGetStats(t *testing.T) {
+	t.Parallel()
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 

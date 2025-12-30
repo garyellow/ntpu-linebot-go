@@ -41,6 +41,7 @@ func setupTestApp(t *testing.T) *Application {
 }
 
 func TestLivenessCheckHealthy(t *testing.T) {
+	t.Parallel()
 	app := setupTestApp(t)
 	defer func() { _ = app.db.Close() }()
 
@@ -69,6 +70,7 @@ func TestLivenessCheckHealthy(t *testing.T) {
 }
 
 func TestLivenessCheckAlwaysSucceeds(t *testing.T) {
+	t.Parallel()
 	app := setupTestApp(t)
 
 	_ = app.db.Close()
@@ -87,6 +89,7 @@ func TestLivenessCheckAlwaysSucceeds(t *testing.T) {
 }
 
 func TestReadinessCheckHealthy(t *testing.T) {
+	t.Parallel()
 	app := setupTestApp(t)
 	defer func() { _ = app.db.Close() }()
 
@@ -128,6 +131,7 @@ func TestReadinessCheckHealthy(t *testing.T) {
 
 // TestReadinessCheckDatabaseFailure verifies /readyz returns 503 when database ping fails
 func TestReadinessCheckDatabaseFailure(t *testing.T) {
+	t.Parallel()
 	app := setupTestApp(t)
 
 	// Close database to simulate failure
@@ -164,6 +168,7 @@ func TestReadinessCheckDatabaseFailure(t *testing.T) {
 
 // TestReadinessCheckContextTimeout verifies context timeout is respected
 func TestReadinessCheckContextTimeout(t *testing.T) {
+	t.Parallel()
 	app := setupTestApp(t)
 	defer func() { _ = app.db.Close() }()
 
@@ -199,6 +204,7 @@ func TestReadinessCheckContextTimeout(t *testing.T) {
 
 // TestReadinessCheckCacheStats verifies cache statistics are correctly populated
 func TestReadinessCheckCacheStats(t *testing.T) {
+	t.Parallel()
 	app := setupTestApp(t)
 	defer func() { _ = app.db.Close() }()
 	ctx := context.Background()
@@ -248,6 +254,7 @@ func TestReadinessCheckCacheStats(t *testing.T) {
 
 // TestGetCacheStats verifies getCacheStats handles errors gracefully
 func TestGetCacheStats(t *testing.T) {
+	t.Parallel()
 	app := setupTestApp(t)
 	defer func() { _ = app.db.Close() }()
 	ctx := context.Background()
@@ -275,6 +282,7 @@ func TestGetCacheStats(t *testing.T) {
 
 // TestGetCacheStatsWithDatabaseError verifies getCacheStats logs errors but continues
 func TestGetCacheStatsWithDatabaseError(t *testing.T) {
+	t.Parallel()
 	app := setupTestApp(t)
 
 	// Close database to simulate failure
@@ -298,6 +306,7 @@ func TestGetCacheStatsWithDatabaseError(t *testing.T) {
 
 // TestGetFeatures verifies feature flags are correctly reported
 func TestGetFeatures(t *testing.T) {
+	t.Parallel()
 	app := setupTestApp(t)
 	defer func() { _ = app.db.Close() }()
 

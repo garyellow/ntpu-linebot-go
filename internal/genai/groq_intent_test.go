@@ -7,6 +7,7 @@ import (
 )
 
 func TestNewGroqIntentParser_NilWithEmptyKey(t *testing.T) {
+	t.Parallel()
 	parser, err := newGroqIntentParser(context.Background(), "", "")
 	if err != nil {
 		t.Errorf("newGroqIntentParser() error = %v, want nil", err)
@@ -17,6 +18,7 @@ func TestNewGroqIntentParser_NilWithEmptyKey(t *testing.T) {
 }
 
 func TestGroqIntentParser_IsEnabled(t *testing.T) {
+	t.Parallel()
 	// nil parser
 	var nilParser *groqIntentParser
 	if nilParser.IsEnabled() {
@@ -31,6 +33,7 @@ func TestGroqIntentParser_IsEnabled(t *testing.T) {
 }
 
 func TestGroqIntentParser_ParseNil(t *testing.T) {
+	t.Parallel()
 	var nilParser *groqIntentParser
 	_, err := nilParser.Parse(context.Background(), "test")
 	if err == nil {
@@ -39,6 +42,7 @@ func TestGroqIntentParser_ParseNil(t *testing.T) {
 }
 
 func TestGroqIntentParser_Provider(t *testing.T) {
+	t.Parallel()
 	parser := &groqIntentParser{}
 	if got := parser.Provider(); got != ProviderGroq {
 		t.Errorf("Provider() = %v, want %v", got, ProviderGroq)
@@ -46,6 +50,7 @@ func TestGroqIntentParser_Provider(t *testing.T) {
 }
 
 func TestGroqIntentParser_Close(t *testing.T) {
+	t.Parallel()
 	// nil parser
 	var nilParser *groqIntentParser
 	if err := nilParser.Close(); err != nil {
@@ -60,6 +65,7 @@ func TestGroqIntentParser_Close(t *testing.T) {
 }
 
 func TestBuildGroqTools(t *testing.T) {
+	t.Parallel()
 	tools := buildGroqTools()
 
 	if len(tools) == 0 {
@@ -84,6 +90,7 @@ func TestBuildGroqTools(t *testing.T) {
 }
 
 func TestBuildGroqTools_LowercaseTypes(t *testing.T) {
+	t.Parallel()
 	tools := buildGroqTools()
 
 	// Groq API requires lowercase JSON Schema types ("string" not "STRING")

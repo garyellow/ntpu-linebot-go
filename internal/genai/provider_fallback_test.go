@@ -69,6 +69,7 @@ func (m *mockQueryExpander) Close() error {
 }
 
 func TestFallbackIntentParser_Parse_PrimarySuccess(t *testing.T) {
+	t.Parallel()
 	primary := &mockIntentParser{
 		parseFunc: func(_ context.Context, _ string) (*ParseResult, error) {
 			return &ParseResult{Module: "test", Intent: "search"}, nil
@@ -89,6 +90,7 @@ func TestFallbackIntentParser_Parse_PrimarySuccess(t *testing.T) {
 }
 
 func TestFallbackIntentParser_Parse_Fallback(t *testing.T) {
+	t.Parallel()
 	primaryCalls := 0
 	primary := &mockIntentParser{
 		parseFunc: func(_ context.Context, _ string) (*ParseResult, error) {
@@ -129,6 +131,7 @@ func TestFallbackIntentParser_Parse_Fallback(t *testing.T) {
 }
 
 func TestFallbackIntentParser_Parse_PermanentError(t *testing.T) {
+	t.Parallel()
 	primary := &mockIntentParser{
 		parseFunc: func(_ context.Context, _ string) (*ParseResult, error) {
 			return nil, errors.New("invalid api key") // permanent error
@@ -159,6 +162,7 @@ func TestFallbackIntentParser_Parse_PermanentError(t *testing.T) {
 }
 
 func TestFallbackIntentParser_Parse_NilParser(t *testing.T) {
+	t.Parallel()
 	var parser *FallbackIntentParser
 	_, err := parser.Parse(context.Background(), "test")
 	if err == nil {
@@ -173,6 +177,7 @@ func TestFallbackIntentParser_Parse_NilParser(t *testing.T) {
 }
 
 func TestFallbackIntentParser_IsEnabled(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		parser   *FallbackIntentParser
@@ -210,6 +215,7 @@ func TestFallbackIntentParser_IsEnabled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := tt.parser.IsEnabled(); got != tt.expected {
 				t.Errorf("IsEnabled() = %v, want %v", got, tt.expected)
 			}
@@ -218,6 +224,7 @@ func TestFallbackIntentParser_IsEnabled(t *testing.T) {
 }
 
 func TestFallbackIntentParser_Close(t *testing.T) {
+	t.Parallel()
 	primary := &mockIntentParser{provider: ProviderGemini}
 	fallback := &mockIntentParser{provider: ProviderGroq}
 
@@ -236,6 +243,7 @@ func TestFallbackIntentParser_Close(t *testing.T) {
 }
 
 func TestFallbackIntentParser_Provider(t *testing.T) {
+	t.Parallel()
 	primary := &mockIntentParser{provider: ProviderGemini}
 	parser := NewFallbackIntentParser(primary, nil, DefaultRetryConfig())
 
@@ -245,6 +253,7 @@ func TestFallbackIntentParser_Provider(t *testing.T) {
 }
 
 func TestFallbackQueryExpander_Expand_PrimarySuccess(t *testing.T) {
+	t.Parallel()
 	primary := &mockQueryExpander{
 		expandFunc: func(_ context.Context, query string) (string, error) {
 			return query + " expanded", nil
@@ -264,6 +273,7 @@ func TestFallbackQueryExpander_Expand_PrimarySuccess(t *testing.T) {
 }
 
 func TestFallbackQueryExpander_Expand_GracefulDegradation(t *testing.T) {
+	t.Parallel()
 	primary := &mockQueryExpander{
 		expandFunc: func(_ context.Context, _ string) (string, error) {
 			return "", errors.New("service unavailable")
@@ -297,6 +307,7 @@ func TestFallbackQueryExpander_Expand_GracefulDegradation(t *testing.T) {
 }
 
 func TestFallbackQueryExpander_Expand_NilExpander(t *testing.T) {
+	t.Parallel()
 	var expander *FallbackQueryExpander
 	result, err := expander.Expand(context.Background(), "test")
 	if err != nil {
@@ -308,6 +319,7 @@ func TestFallbackQueryExpander_Expand_NilExpander(t *testing.T) {
 }
 
 func TestFallbackQueryExpander_Close(t *testing.T) {
+	t.Parallel()
 	primary := &mockQueryExpander{provider: ProviderGemini}
 	fallback := &mockQueryExpander{provider: ProviderGroq}
 
@@ -326,6 +338,7 @@ func TestFallbackQueryExpander_Close(t *testing.T) {
 }
 
 func TestFallbackQueryExpander_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	primary := &mockQueryExpander{
 		expandFunc: func(ctx context.Context, query string) (string, error) {
 			select {

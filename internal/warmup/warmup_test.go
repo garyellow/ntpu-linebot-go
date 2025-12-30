@@ -6,6 +6,7 @@ import (
 
 // TestStats tests the Stats struct atomic operations
 func TestStats(t *testing.T) {
+	t.Parallel()
 	stats := &Stats{}
 
 	// Test initial values are zero
@@ -37,6 +38,7 @@ func TestStats(t *testing.T) {
 
 // TestStatsConcurrent tests concurrent access to Stats
 func TestStatsConcurrent(t *testing.T) {
+	t.Parallel()
 	stats := &Stats{}
 	const goroutines = 100
 	const incrementsPerGoroutine = 1000
@@ -72,6 +74,7 @@ func TestStatsConcurrent(t *testing.T) {
 
 // TestOptions tests the Options struct
 func TestOptions(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		opts      Options
@@ -138,6 +141,7 @@ func TestOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if tt.opts.HasLLMKey != tt.hasLLMKey {
 				t.Errorf("HasLLMKey mismatch: got %v, want %v", tt.opts.HasLLMKey, tt.hasLLMKey)
 			}
