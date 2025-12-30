@@ -175,6 +175,24 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 				Required: []string{"query"},
 			},
 		},
+
+		// ============================================
+		// Direct Reply (for non-query responses)
+		// ============================================
+		{
+			Name:        "direct_reply",
+			Description: "直接回覆使用者。當訊息不屬於任何查詢功能（閒聊、問候、感謝、離題詢問），或需要澄清使用者意圖時使用。",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"message": {
+						Type:        genai.TypeString,
+						Description: "要傳送給使用者的回覆內容。",
+					},
+				},
+				Required: []string{"message"},
+			},
+		},
 	}
 }
 
@@ -193,6 +211,7 @@ var IntentModuleMap = map[string][2]string{
 	"help":              {"help", ""},
 	"program_list":      {"program", "list"},
 	"program_search":    {"program", "search"},
+	"direct_reply":      {"direct_reply", ""},
 }
 
 // ParamKeyMap maps function names to their primary parameter key.
@@ -206,5 +225,6 @@ var ParamKeyMap = map[string]string{
 	"id_department":  "department",
 	"contact_search": "query",
 	"program_search": "query",
+	"direct_reply":   "message",
 	// contact_emergency, program_list and help have no parameters
 }

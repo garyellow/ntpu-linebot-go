@@ -101,13 +101,14 @@ func buildGroqTools() []tools.Tool {
 	return result
 }
 
-// Parse analyzes the user input and returns a parsed intent or clarification text.
+// Parse analyzes the user input and returns a parsed intent.
+// The model uses required mode (forces function calling, including direct_reply for non-query responses).
 func (p *groqIntentParser) Parse(ctx context.Context, text string) (*ParseResult, error) {
 	if p == nil {
 		return nil, errors.New("intent parser is nil")
 	}
 
-	// Build chat completion request with tools
+	// Build chat completion request with tools in required mode (forces function calling)
 	req := groq.ChatCompletionRequest{
 		Model: p.model,
 		Messages: []groq.ChatCompletionMessage{
@@ -121,8 +122,8 @@ func (p *groqIntentParser) Parse(ctx context.Context, text string) (*ParseResult
 			},
 		},
 		Tools:       p.tools,
-		ToolChoice:  "auto", // Let the model decide
-		Temperature: 0.1,    // Low temperature for consistent classification
+		ToolChoice:  "required", // Force function calling
+		Temperature: 0.1,        // Low temperature for consistent classification
 		MaxTokens:   256,
 	}
 
@@ -172,19 +173,14 @@ func (p *groqIntentParser) parseResult(resp *groq.ChatCompletionResponse) (*Pars
 
 	choice := resp.Choices[0]
 
-	// Check for tool calls (function calling)
+	// Check for tool calls (required mode forces function calling)
 	if len(choice.Message.ToolCalls) > 0 {
 		return p.parseToolCall(&choice.Message.ToolCalls[0])
 	}
 
-	// Check for text response (clarification)
-	if choice.Message.Content != "" {
-		return &ParseResult{
-			ClarificationText: choice.Message.Content,
-		}, nil
-	}
-
-	return nil, errors.New("no tool call or text in response")
+	// In required mode, model should always return a tool call
+	// If we get here, something unexpected happened
+	return nil, errors.New("no tool call in response (expected with required mode)")
 }
 
 // parseToolCall extracts intent and parameters from a Groq tool call.

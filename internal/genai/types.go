@@ -25,8 +25,9 @@ func (p Provider) String() string {
 
 // IntentParser defines the interface for NLU intent parsing.
 // Implementations include Gemini and Groq providers.
+// Uses forced function calling mode (ANY/required) to ensure consistent responses.
 type IntentParser interface {
-	// Parse analyzes user input and returns a parsed intent or clarification text.
+	// Parse analyzes user input and returns a parsed intent (always a function call).
 	Parse(ctx context.Context, text string) (*ParseResult, error)
 	// IsEnabled returns true if the parser is properly initialized.
 	IsEnabled() bool
@@ -49,7 +50,7 @@ type QueryExpander interface {
 
 // ParseResult represents the result of intent parsing.
 type ParseResult struct {
-	// Module is the target module (course, id, contact, help)
+	// Module is the target module (course, id, contact, help, direct_reply)
 	Module string
 
 	// Intent is the specific intent within the module
@@ -57,10 +58,6 @@ type ParseResult struct {
 
 	// Params contains the extracted parameters
 	Params map[string]string
-
-	// ClarificationText is set when the model returns text instead of a function call
-	// This usually means the model needs more information or the query is out of scope
-	ClarificationText string
 
 	// FunctionName is the raw function name from the model (for debugging)
 	FunctionName string

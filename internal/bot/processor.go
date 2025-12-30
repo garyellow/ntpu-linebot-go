@@ -335,6 +335,7 @@ func (p *Processor) handleUnmatchedMessage(ctx context.Context, source webhook.S
 }
 
 // handleWithNLU processes the message using NLU intent parsing.
+// With forced function calling (ANY/required mode), the model always returns a function call.
 func (p *Processor) handleWithNLU(ctx context.Context, text string, source webhook.SourceInterface, chatID string) ([]messaging_api.MessageInterface, error) {
 	// Check LLM rate limit before making API call
 	if allowed, rateLimitMsg := p.checkLLMRateLimit(source, chatID); !allowed {
@@ -354,16 +355,6 @@ func (p *Processor) handleWithNLU(ctx context.Context, text string, source webho
 		return p.getHelpMessage(FallbackNLUFailed), nil
 	}
 
-	if result.ClarificationText != "" {
-		p.logger.WithField("clarification", result.ClarificationText).Debug("NLU returned clarification")
-
-		sender := lineutil.GetSender("北大小幫手", p.stickerManager)
-		msg := lineutil.NewTextMessageWithConsistentSender(result.ClarificationText, sender)
-		// Add Quick Reply to guide user for clarification responses
-		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNavCompact())
-		return []messaging_api.MessageInterface{msg}, nil
-	}
-
 	p.logger.WithField("module", result.Module).
 		WithField("intent", result.Intent).
 		WithField("params", result.Params).
@@ -377,6 +368,19 @@ func (p *Processor) handleWithNLU(ctx context.Context, text string, source webho
 func (p *Processor) dispatchIntent(ctx context.Context, result *genai.ParseResult) ([]messaging_api.MessageInterface, error) {
 	if result.Module == "help" {
 		return p.getDetailedInstructionMessages(), nil
+	}
+
+	// Handle direct_reply from NLU (used for greetings, clarifications, off-topic queries)
+	if result.Module == "direct_reply" {
+		message, ok := result.Params["message"]
+		if !ok || message == "" {
+			p.logger.Warn("direct_reply called without message parameter")
+			return p.getHelpMessage(FallbackGeneric), nil
+		}
+		sender := lineutil.GetSender("北大小幫手", p.stickerManager)
+		msg := lineutil.NewTextMessageWithConsistentSender(message, sender)
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNavCompact())
+		return []messaging_api.MessageInterface{msg}, nil
 	}
 
 	handler := p.registry.GetHandler(result.Module)

@@ -25,6 +25,8 @@ func TestIntentModuleMap(t *testing.T) {
 		"program_search",
 		// Help
 		"help",
+		// Direct reply
+		"direct_reply",
 	}
 
 	for _, funcName := range expectedFunctions {
@@ -62,6 +64,8 @@ func TestParamKeyMap(t *testing.T) {
 		{"program_search", "query", true},
 		// Help
 		{"help", "", false}, // No parameters
+		// Direct reply
+		{"direct_reply", "message", true},
 	}
 
 	for _, tc := range testCases {

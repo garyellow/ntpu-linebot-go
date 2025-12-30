@@ -58,7 +58,8 @@ internal/genai/
 
 ## NLU Intent Parser
 
-使用 Gemini Function Calling (AUTO mode) 解析使用者自然語言意圖。
+使用 Gemini Function Calling (ANY mode) 和 Groq (required mode) 解析使用者自然語言意圖。
+強制 function calling 確保穩定性，透過 `direct_reply` function 處理閒聊、澄清等非查詢情境。
 
 ## Intent Parser (意圖解析)
 
@@ -76,8 +77,8 @@ internal/genai/
 | `contact_emergency` | contact | 緊急電話 |
 | `program_list` | program | 列出所有學程 |
 | `program_search` | program | 搜尋學程 |
-| `program_courses` | program | 查詢學程課程（必修/選修）|
 | `help` | help | 使用說明 |
+| `direct_reply` | direct_reply | 直接回覆（閒聊、澄清、離題詢問）|
 
 ### 使用方式
 

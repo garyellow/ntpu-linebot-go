@@ -52,19 +52,24 @@ func newGeminiIntentParser(ctx context.Context, apiKey, model string) (*geminiIn
 	}, nil
 }
 
-// Parse analyzes the user input and returns a parsed intent or clarification text.
-// The model uses AUTO mode (default), allowing it to either call a function or return text.
+// Parse analyzes the user input and returns a parsed intent.
+// The model uses ANY mode, requiring it to always call a function (including direct_reply for non-query responses).
 func (p *geminiIntentParser) Parse(ctx context.Context, text string) (*ParseResult, error) {
 	if p == nil {
 		return nil, errors.New("intent parser is nil")
 	}
 
-	// Configure generation with tools (AUTO mode is default)
+	// Configure generation with tools in ANY mode (forces function calling)
 	config := &genai.GenerateContentConfig{
 		Tools:             p.tools,
 		SystemInstruction: genai.NewContentFromText(p.systemInst, genai.RoleUser),
-		Temperature:       genai.Ptr[float32](0.1), // Low temperature for consistent classification
-		MaxOutputTokens:   256,                     // Intent parsing doesn't need long responses
+		ToolConfig: &genai.ToolConfig{
+			FunctionCallingConfig: &genai.FunctionCallingConfig{
+				Mode: genai.FunctionCallingConfigModeAny, // Force function calling
+			},
+		},
+		Temperature:     genai.Ptr[float32](0.1), // Low temperature for consistent classification
+		MaxOutputTokens: 256,                     // Intent parsing doesn't need long responses
 	}
 
 	// Generate content with timing
@@ -121,22 +126,16 @@ func (p *geminiIntentParser) parseResult(result *genai.GenerateContentResponse) 
 		return nil, errors.New("no content in response")
 	}
 
-	// Check each part for function call or text
+	// Check each part for function call (ANY mode forces function calling)
 	for _, part := range candidate.Content.Parts {
-		// Check for function call
 		if part.FunctionCall != nil {
 			return p.parseFunctionCall(part.FunctionCall)
 		}
-
-		// Check for text response (clarification)
-		if part.Text != "" {
-			return &ParseResult{
-				ClarificationText: part.Text,
-			}, nil
-		}
 	}
 
-	return nil, errors.New("no function call or text in response")
+	// In ANY mode, model should always return a function call
+	// If we get here, something unexpected happened
+	return nil, errors.New("no function call in response (expected with ANY mode)")
 }
 
 // parseFunctionCall extracts intent and parameters from a function call.
