@@ -50,16 +50,20 @@ type QueryExpander interface {
 
 // ParseResult represents the result of intent parsing.
 type ParseResult struct {
-	// Module is the target module (course, id, contact, help, direct_reply)
+	// Module is the target module.
+	// Valid values: course, id, contact, program, help, direct_reply
 	Module string
 
-	// Intent is the specific intent within the module
+	// Intent is the specific intent within the module.
+	// Examples: search, smart, uid (course module); search, student_id, department (id module)
 	Intent string
 
-	// Params contains the extracted parameters
+	// Params contains the extracted parameters.
+	// Key is the parameter name (e.g., "keyword", "query", "message").
 	Params map[string]string
 
-	// FunctionName is the raw function name from the model (for debugging)
+	// FunctionName is the raw function name from the model (for debugging).
+	// Format: {module}_{intent} (e.g., "course_search", "direct_reply")
 	FunctionName string
 }
 

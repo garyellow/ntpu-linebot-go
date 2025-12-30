@@ -12,16 +12,26 @@
 // IMPORTANT: Function declarations use genai.Type* constants (e.g., genai.TypeString = "STRING").
 // When converting to other provider formats (e.g., Groq), ensure types are lowercased to match
 // JSON Schema spec ("string" not "STRING"). See buildGroqTools() in groq_intent.go for example.
+//
+// Module Order (consistent across all files):
+// 1. Course   - 課程查詢
+// 2. ID       - 學生查詢
+// 3. Contact  - 聯絡資訊
+// 4. Program  - 學程查詢
+// 5. Help     - 使用說明
+// 6. Direct   - 直接回覆
 package genai
 
 import "google.golang.org/genai"
 
 // BuildIntentFunctions returns the function declarations for NLU intent parsing.
 // These functions represent the available intents the parser can recognize.
+//
+// Total: 12 functions across 6 modules
 func BuildIntentFunctions() []*genai.FunctionDeclaration {
 	return []*genai.FunctionDeclaration{
 		// ============================================
-		// Course Module
+		// 1. Course Module (課程查詢)
 		// ============================================
 		{
 			Name:        "course_search",
@@ -67,7 +77,7 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 		},
 
 		// ============================================
-		// ID Module
+		// 2. ID Module (學生查詢)
 		// ============================================
 		{
 			Name:        "id_search",
@@ -113,7 +123,7 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 		},
 
 		// ============================================
-		// Contact Module
+		// 3. Contact Module (聯絡資訊)
 		// ============================================
 		{
 			Name:        "contact_search",
@@ -139,19 +149,7 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 		},
 
 		// ============================================
-		// Help
-		// ============================================
-		{
-			Name:        "help",
-			Description: "顯示機器人使用說明與功能介紹。",
-			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: map[string]*genai.Schema{},
-			},
-		},
-
-		// ============================================
-		// Program Module
+		// 4. Program Module (學程查詢)
 		// ============================================
 		{
 			Name:        "program_list",
@@ -177,7 +175,19 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 		},
 
 		// ============================================
-		// Direct Reply (for non-query responses)
+		// 5. Help (使用說明)
+		// ============================================
+		{
+			Name:        "help",
+			Description: "顯示機器人使用說明與功能介紹。",
+			Parameters: &genai.Schema{
+				Type:       genai.TypeObject,
+				Properties: map[string]*genai.Schema{},
+			},
+		},
+
+		// ============================================
+		// 6. Direct Reply (直接回覆)
 		// ============================================
 		{
 			Name:        "direct_reply",
@@ -199,32 +209,47 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 // IntentModuleMap maps function names to module and intent names.
 // Key: function name (from FunctionDeclaration.Name)
 // Value: [module, intent] pair
+//
+// Order: Course → ID → Contact → Program → Help → Direct
 var IntentModuleMap = map[string][2]string{
-	"course_search":     {"course", "search"},
-	"course_smart":      {"course", "smart"},
-	"course_uid":        {"course", "uid"},
-	"id_search":         {"id", "search"},
-	"id_student_id":     {"id", "student_id"},
-	"id_department":     {"id", "department"},
+	// Course Module
+	"course_search": {"course", "search"},
+	"course_smart":  {"course", "smart"},
+	"course_uid":    {"course", "uid"},
+	// ID Module
+	"id_search":     {"id", "search"},
+	"id_student_id": {"id", "student_id"},
+	"id_department": {"id", "department"},
+	// Contact Module
 	"contact_search":    {"contact", "search"},
 	"contact_emergency": {"contact", "emergency"},
-	"help":              {"help", ""},
-	"program_list":      {"program", "list"},
-	"program_search":    {"program", "search"},
-	"direct_reply":      {"direct_reply", ""},
+	// Program Module
+	"program_list":   {"program", "list"},
+	"program_search": {"program", "search"},
+	// Help
+	"help": {"help", ""},
+	// Direct Reply
+	"direct_reply": {"direct_reply", ""},
 }
 
 // ParamKeyMap maps function names to their primary parameter key.
 // This is used to extract the parameter value from the function call args.
+// Functions without parameters (contact_emergency, program_list, help) are not listed.
+//
+// Order: Course → ID → Contact → Program → Direct
 var ParamKeyMap = map[string]string{
-	"course_search":  "keyword",
-	"course_smart":   "query",
-	"course_uid":     "uid",
-	"id_search":      "name",
-	"id_student_id":  "student_id",
-	"id_department":  "department",
+	// Course Module
+	"course_search": "keyword",
+	"course_smart":  "query",
+	"course_uid":    "uid",
+	// ID Module
+	"id_search":     "name",
+	"id_student_id": "student_id",
+	"id_department": "department",
+	// Contact Module
 	"contact_search": "query",
+	// Program Module
 	"program_search": "query",
-	"direct_reply":   "message",
-	// contact_emergency, program_list and help have no parameters
+	// Direct Reply
+	"direct_reply": "message",
 }
