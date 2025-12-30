@@ -1,9 +1,13 @@
 // Package genai provides integration with LLM APIs (Gemini and Groq).
 // This file contains function declarations for the NLU intent parser.
 //
-// Design Principles (Gemini/Groq):
+// Design Principles (Gemini/Groq - Best Practices 2025):
 // - functions.go: WHAT the function does (descriptions + parameter formats)
 // - prompts.go: WHEN/HOW to use (decision trees, trigger conditions)
+//
+// This is intentional "Prompt-Primary" design where detailed decision logic lives in
+// IntentParserSystemPrompt. Function descriptions here are kept concise but MUST include
+// critical parameter extraction rules (e.g., what to remove, what to preserve).
 //
 // IMPORTANT: Function declarations use genai.Type* constants (e.g., genai.TypeString = "STRING").
 // When converting to other provider formats (e.g., Groq), ensure types are lowercased to match
@@ -119,7 +123,7 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 				Properties: map[string]*genai.Schema{
 					"query": {
 						Type:        genai.TypeString,
-						Description: "單位或人員名稱（非查詢句）。範例：「資工系」「圖書館」「王教授」",
+						Description: "單位或人員名稱。只提取名稱本身，移除「辦公室」「電話」「分機」「email」「怎麼聯絡」等查詢詞。範例：「資工系的電話」→「資工系」。",
 					},
 				},
 				Required: []string{"query"},
@@ -179,7 +183,7 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 				Properties: map[string]*genai.Schema{
 					"programName": {
 						Type:        genai.TypeString,
-						Description: "學程名稱關鍵字。範例：「智財」「永續」",
+						Description: "學程名稱關鍵字。只提取名稱，移除「有什麼課」「課程」「要修什麼」等查詢詞。範例：「智財學程有什麼課」→「智財」。",
 					},
 				},
 				Required: []string{"programName"},
