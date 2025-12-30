@@ -127,13 +127,13 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 		// ============================================
 		{
 			Name:        "contact_search",
-			Description: "查詢校內單位或人員聯絡方式。只提取名稱，移除「辦公室」「電話」等詞。",
+			Description: "查詢校內單位或人員聯絡方式。",
 			Parameters: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
 					"query": {
 						Type:        genai.TypeString,
-						Description: "單位或人員名稱。注意：只提取名稱本身，必須移除「辦公室」「電話」「分機」「email」「怎麼聯絡」「在哪」等查詢詞。範例：「資工系的電話」→「資工系」。",
+						Description: "單位或人員名稱。只提取名稱本身，移除「辦公室」「電話」「分機」「email」「怎麼聯絡」「在哪」等查詢詞。範例：「資工系的電話」→「資工系」。",
 					},
 				},
 				Required: []string{"query"},

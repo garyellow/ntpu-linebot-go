@@ -124,7 +124,7 @@ func (p *groqIntentParser) Parse(ctx context.Context, text string) (*ParseResult
 		Tools:       p.tools,
 		ToolChoice:  "required", // Force function calling
 		Temperature: 0.1,        // Low temperature for consistent classification
-		MaxTokens:   256,
+		MaxTokens:   512,        // Sufficient for direct_reply messages with clarification options
 	}
 
 	// Execute request with timing
