@@ -132,7 +132,7 @@ func MinCachedAt(cachedAts ...int64) int64 {
 // NewDataRangeHint creates a standardized hint about ID data availability.
 // Returns a Flex Text showing data range.
 //
-// This provides transparency about data limitations following UX best practices.
+// This provides transparency about data limitations.
 func NewDataRangeHint() *FlexText {
 	return NewFlexText("📊 資料範圍：94-113 學年度").
 		WithSize("xxs").

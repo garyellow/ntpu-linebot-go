@@ -43,7 +43,7 @@ func NewTextMessageWithConsistentSender(text string, sender *messaging_api.Sende
 // Common Error Message Helpers
 // ================================================
 //
-// Error messages follow UX best practices:
+// Error messages:
 //   1. Acknowledge the problem (not blame user)
 //   2. Explain what happened briefly
 //   3. Provide actionable next steps

@@ -137,7 +137,7 @@ func TestHandleInvalidSignature(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	// Handler returns 400 with no body for invalid signature (LINE best practice)
+	// Handler returns 400 with no body for invalid signature
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("Expected status 400, got %d", w.Code)
 	}

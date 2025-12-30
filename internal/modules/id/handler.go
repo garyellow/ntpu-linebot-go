@@ -995,7 +995,7 @@ func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_ap
 		body.AddComponent(hint.FlexText)
 	}
 
-	// Add data source hint (transparency about data limitations - UX best practice)
+	// Add data source hint (transparency about data limitations)
 	if dataHint := lineutil.NewDataRangeHint(); dataHint != nil {
 		body.AddComponent(dataHint.FlexText)
 	}

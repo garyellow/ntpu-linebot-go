@@ -22,7 +22,7 @@ groups:
           summary: "NTPU LINE Bot service is down"
           description: "Service has been unreachable for more than 2 minutes."
 
-      # Webhook latency (LINE best practice: < 2s response)
+      # Webhook latency (< 2s response)
       - alert: WebhookLatencyHigh
         expr: histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le)) > 2
         for: 5m

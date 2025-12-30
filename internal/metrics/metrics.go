@@ -129,7 +129,7 @@ func New(registry *prometheus.Registry) *Metrics {
 				Name: "ntpu_webhook_duration_seconds",
 				Help: "Webhook processing duration in seconds",
 				// Buckets aligned with LINE API expectations:
-				// < 2s: excellent (LINE best practice)
+				// < 2s: excellent
 				// 2-5s: acceptable
 				// > 5s: degraded experience
 				Buckets: []float64{0.1, 0.25, 0.5, 1, 2, 5, 10, 30},

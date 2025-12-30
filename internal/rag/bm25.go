@@ -17,7 +17,7 @@ import (
 
 // BM25 Configuration Constants
 //
-// Best Practices for BM25 Score Filtering:
+// BM25 Score Filtering:
 // - DO NOT use fixed global score thresholds (scores are not comparable across queries)
 // - Use rank cutoff (Top-K) as primary filtering method
 // - Use relative score (score / maxScore) for result classification
@@ -47,7 +47,7 @@ type SearchResult struct {
 // BM25Index provides keyword-based search using BM25 algorithm.
 // Combined with LLM query expansion, provides effective course retrieval.
 //
-// Single Document Strategy (BM25 Best Practice):
+// Single Document Strategy (BM25):
 // - Each course = 1 document (not chunked like embedding models)
 // - BM25's length normalization (b=0.75) handles document length differences
 // - More accurate IDF calculation with 1:1 course-to-document mapping
@@ -93,7 +93,7 @@ func NewBM25Index(log *logger.Logger) *BM25Index {
 }
 
 // Initialize builds the BM25 index from syllabi
-// Each syllabus becomes a single document (no chunking - BM25 best practice)
+// Each syllabus becomes a single document (no chunking)
 func (idx *BM25Index) Initialize(syllabi []*storage.Syllabus) error {
 	if idx == nil {
 		return nil
