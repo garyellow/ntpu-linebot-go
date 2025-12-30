@@ -9,14 +9,22 @@ import (
 func TestIntentModuleMap(t *testing.T) {
 	// Verify all expected functions are mapped
 	expectedFunctions := []string{
+		// Course module
 		"course_search",
 		"course_smart",
 		"course_uid",
+		// ID module
 		"id_search",
 		"id_student_id",
 		"id_department",
+		// Contact module
 		"contact_search",
 		"contact_emergency",
+		// Program module
+		"program_list",
+		"program_search",
+		"program_courses",
+		// Help
 		"help",
 	}
 
@@ -39,15 +47,23 @@ func TestParamKeyMap(t *testing.T) {
 		expectedKey string
 		shouldExist bool
 	}{
+		// Course module
 		{"course_search", "keyword", true},
 		{"course_smart", "query", true},
 		{"course_uid", "uid", true},
+		// ID module
 		{"id_search", "name", true},
 		{"id_student_id", "student_id", true},
 		{"id_department", "department", true},
+		// Contact module
 		{"contact_search", "query", true},
 		{"contact_emergency", "", false}, // No parameters
-		{"help", "", false},              // No parameters
+		// Program module
+		{"program_list", "", false}, // No parameters
+		{"program_search", "query", true},
+		{"program_courses", "programName", true},
+		// Help
+		{"help", "", false}, // No parameters
 	}
 
 	for _, tc := range testCases {

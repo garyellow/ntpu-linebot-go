@@ -189,6 +189,6 @@ func (p *geminiIntentParser) Close() error {
 	if p == nil {
 		return nil
 	}
-	// Future: Add client.Close() when SDK supports it
+	// Note: genai.Client does not require explicit cleanup in current SDK version
 	return nil
 }

@@ -67,13 +67,13 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 		// ============================================
 		{
 			Name:        "id_search",
-			Description: "依姓名搜尋學生資訊。限 94-113 學年度資料。",
+			Description: "依姓名搜尋學生資訊。支援完整姓名或部分姓名模糊搜尋。",
 			Parameters: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
 					"name": {
 						Type:        genai.TypeString,
-						Description: "學生姓名（全名或部分）。範例：「王小明」「小明」",
+						Description: "學生姓名，全名或部分皆可。例如「王小明」或「小明」",
 					},
 				},
 				Required: []string{"name"},
@@ -81,13 +81,13 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 		},
 		{
 			Name:        "id_student_id",
-			Description: "依學號查詢學生資訊。限 94-113 學年度資料。",
+			Description: "依學號查詢學生資訊。",
 			Parameters: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
 					"student_id": {
 						Type:        genai.TypeString,
-						Description: "學號。格式：8-9 位數字。範例：「412345678」",
+						Description: "學號，8-9 位數字。例如「412345678」",
 					},
 				},
 				Required: []string{"student_id"},
