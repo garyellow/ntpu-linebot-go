@@ -482,9 +482,13 @@ func (h *Handler) handleProgramCourses(ctx context.Context, programName string) 
 		return []messaging_api.MessageInterface{msg}
 	}
 
+	// 1. If no courses found for exact name, return specific message immediately
+	// Do NOT attempt fuzzy search or auto-correction to avoid incorrect program matching
+	// e.g., Searching "大數據" should NOT auto-match to "大數據分析學程" without explicit user selection
 	if len(programCourses) == 0 {
+		h.metrics.RecordCacheMiss(ModuleName)
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("📭 「%s」在近 2 學期沒有課程資料\n\n💡 該學程可能在本學期未開設相關課程。", programName),
+			fmt.Sprintf("📭 「%s」在近 2 學期沒有課程資料\n\n💡 可能原因：\n• 該學程可能在本學期未開設相關課程\n• 學程名稱可能有誤，請嘗試「學程列表」查看正確名稱", programName),
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply(QuickReplyProgramNav())

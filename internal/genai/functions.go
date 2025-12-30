@@ -175,20 +175,6 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 				Required: []string{"query"},
 			},
 		},
-		{
-			Name:        "program_courses",
-			Description: "查詢學程的必修與選修課程。",
-			Parameters: &genai.Schema{
-				Type: genai.TypeObject,
-				Properties: map[string]*genai.Schema{
-					"programName": {
-						Type:        genai.TypeString,
-						Description: "學程名稱關鍵字。只提取名稱，移除「有什麼課」「課程」「要修什麼」等查詢詞。範例：「智財學程有什麼課」→「智財」。",
-					},
-				},
-				Required: []string{"programName"},
-			},
-		},
 	}
 }
 
@@ -207,20 +193,18 @@ var IntentModuleMap = map[string][2]string{
 	"help":              {"help", ""},
 	"program_list":      {"program", "list"},
 	"program_search":    {"program", "search"},
-	"program_courses":   {"program", "courses"},
 }
 
 // ParamKeyMap maps function names to their primary parameter key.
 // This is used to extract the parameter value from the function call args.
 var ParamKeyMap = map[string]string{
-	"course_search":   "keyword",
-	"course_smart":    "query",
-	"course_uid":      "uid",
-	"id_search":       "name",
-	"id_student_id":   "student_id",
-	"id_department":   "department",
-	"contact_search":  "query",
-	"program_search":  "query",
-	"program_courses": "programName",
+	"course_search":  "keyword",
+	"course_smart":   "query",
+	"course_uid":     "uid",
+	"id_search":      "name",
+	"id_student_id":  "student_id",
+	"id_department":  "department",
+	"contact_search": "query",
+	"program_search": "query",
 	// contact_emergency, program_list and help have no parameters
 }

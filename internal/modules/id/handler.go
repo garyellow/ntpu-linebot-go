@@ -391,9 +391,10 @@ func (h *Handler) handleYearPattern(ctx context.Context, text string, matches []
 		sender,
 	)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		{Action: lineutil.NewMessageAction("📅 查詢 112 學年度", "學年 112")},
-		{Action: lineutil.NewMessageAction("📅 查詢 111 學年度", "學年 111")},
-		{Action: lineutil.NewMessageAction("📅 查詢 110 學年度", "學年 110")},
+		// Use IDDataYearEnd from config to ensure we don't suggest years that have no data
+		{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", config.IDDataYearEnd), fmt.Sprintf("學年 %d", config.IDDataYearEnd))},
+		{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", config.IDDataYearEnd-1), fmt.Sprintf("學年 %d", config.IDDataYearEnd-1))},
+		{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", config.IDDataYearEnd-2), fmt.Sprintf("學年 %d", config.IDDataYearEnd-2))},
 	})
 	return []messaging_api.MessageInterface{msg}
 }
@@ -688,7 +689,7 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 	if err != nil {
 		msg := lineutil.NewTextMessageWithConsistentSender("📅 年份格式不正確\n\n請輸入 2-4 位數字\n例如：112 或 2023", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("📅 查詢 112 學年度", "學年 112")},
+			{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", config.IDDataYearEnd), fmt.Sprintf("學年 %d", config.IDDataYearEnd))},
 			lineutil.QuickReplyHelpAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
@@ -713,8 +714,8 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 		imageURL := "https://raw.githubusercontent.com/garyellow/ntpu-linebot-go/main/assets/rip.png"
 		msg := lineutil.NewTextMessageWithConsistentSender(config.IDYear114PlusMessage, sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("📅 查詢 113 學年度", "學年 113")},
-			{Action: lineutil.NewMessageAction("📅 查詢 112 學年度", "學年 112")},
+			{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", config.IDDataYearEnd), fmt.Sprintf("學年 %d", config.IDDataYearEnd))},
+			{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", config.IDDataYearEnd-1), fmt.Sprintf("學年 %d", config.IDDataYearEnd-1))},
 			lineutil.QuickReplyStudentAction(),
 			lineutil.QuickReplyHelpAction(),
 		})
