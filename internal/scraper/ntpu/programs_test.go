@@ -92,13 +92,8 @@ func TestExtractProgramsFromPage_Uniqueness(t *testing.T) {
 		t.Errorf("Expected category 'Category A', got '%s'", resultsA[0].Category)
 	}
 
-	// Reset seen map to simulate extracting from a different folder context
-	// In reality, 'seen' avoids duplicates WITHIN the same crawl if CIDs match.
-	// However, different categories usually imply different folders, and thus different CIDs if the links differ.
-	// If the CIDs are identical, they are the same underlying resource.
-	// If the CIDs are different but names are same, we need to ensure they are distinct.
-
-	// Let's simulate a second document with a different CID but same raw name
+	// Simulate a second document with different CID but same program name.
+	// Using same 'seen' map tests that different CIDs are treated as distinct entries.
 	html2 := `
 	<html>
 		<body>

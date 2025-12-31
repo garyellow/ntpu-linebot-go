@@ -14,13 +14,13 @@ import (
 // Returns the SQL condition string (e.g., "(c.year = ? AND c.term = ?) OR ..."),
 // the placeholder values as args, and whether any conditions were built.
 // Always uses "c" as table alias for courses table.
-func buildSemesterConditions(years, terms []int) (conditions string, args []interface{}, ok bool) {
+func buildSemesterConditions(years, terms []int) (conditions string, args []any, ok bool) {
 	if len(years) == 0 || len(years) != len(terms) {
 		return "", nil, false
 	}
 
 	parts := make([]string, 0, len(years))
-	args = make([]interface{}, 0, len(years)*2)
+	args = make([]any, 0, len(years)*2)
 	for i := range years {
 		parts = append(parts, "(c.year = ? AND c.term = ?)")
 		args = append(args, years[i], terms[i])
@@ -358,7 +358,7 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, term
 			WHERE p.name LIKE ? ESCAPE '\'
 			GROUP BY p.name, p.category
 			ORDER BY p.name`
-		args = []interface{}{"%" + sanitized + "%"}
+		args = []any{"%" + sanitized + "%"}
 	}
 
 	rows, err := db.reader.QueryContext(ctx, query, args...)

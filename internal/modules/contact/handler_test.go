@@ -185,12 +185,10 @@ func TestFormatContactResults_Organizations(t *testing.T) {
 	if !ok {
 		t.Fatal("Expected FlexMessage")
 	}
-	// Note: Deep inspection of Flex Message JSON is complex, but we can verify it's a valid message.
-	// For exact label verification, we rely on the implementation using the constant we successfully updated.
-	// However, to be thorough, checking the string representation or partial JSON if possible would be better
-	// but standard line-bot-sdk types don't easily serialize to string for regex check without marshaling.
-	// Let's assume verifying the code change was sufficient for the label text as passing tests confirm structure.
-	_ = flexMsg
+	// Verify it's a valid FlexMessage with non-empty altText (deep label inspection omitted).
+	if flexMsg.AltText == "" {
+		t.Error("Expected non-empty altText")
+	}
 }
 
 func TestFormatContactResults_Individuals(t *testing.T) {

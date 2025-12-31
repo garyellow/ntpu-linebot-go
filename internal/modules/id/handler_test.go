@@ -76,19 +76,8 @@ func TestHandleMessage_InvalidID(t *testing.T) {
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
-	// 8 digits but invalid checksum locally (though scraper might accept it or return 404)
-	// Our ParseStudentID is simple validation.
-	// Actually, ParseStudentID simply extracts digits.
-	// Let's test with something that looks like an ID but is invalid for our logic if any.
-	// Actually, HandleMessage calls processStudentID -> scraper.GetStudentInfo
-	// If scraper returns error or empty, we handle it.
-
-	// Test case: valid format ID but unlikely to exist (or we simulate mock behavior if we mocked scraper)
-	// Since we use real scraper client but network requests might fail or 404.
-	// We mainly test that it doesn't panic.
-	// Note: We're in test environment, but scraper client handles real URLs.
-	// To properly test, we rely on scraper's integration tests.
-	// Here we just check basic flow logic.
+	// Test with valid format ID that likely doesn't exist.
+	// Verifies handler returns a response without panicking.
 
 	msgs := h.HandleMessage(ctx, "學號 00000000")
 	if len(msgs) == 0 {
