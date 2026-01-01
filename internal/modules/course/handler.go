@@ -1563,19 +1563,17 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 		firstInfoRow := lineutil.NewInfoRow("📅", "開課學期", semesterText, lineutil.DefaultInfoRowStyle())
 		body.AddComponent(firstInfoRow.FlexBox)
 
-		// 第二列：授課教師
+		// 第二列：授課教師 - use shrink-to-fit for maximum content display
 		if len(course.Teachers) > 0 {
-			// Display teachers with truncation if too many (max 5, then "等 N 人")
-			carouselTeachers := lineutil.FormatTeachers(course.Teachers, 5)
-			body.AddInfoRow("👨‍🏫", "授課教師", carouselTeachers, lineutil.DefaultInfoRowStyle())
+			teacherNames := strings.Join(course.Teachers, "、")
+			body.AddInfoRow("👨‍🏫", "授課教師", teacherNames, lineutil.CarouselInfoRowStyle())
 		}
 
-		// 第三列：上課時間 - 轉換節次為實際時間
+		// 第三列：上課時間 - use shrink-to-fit for maximum content display
 		if len(course.Times) > 0 {
-			// Format times with actual time ranges, then truncate if too many (max 4, then "等 N 節")
 			formattedTimes := lineutil.FormatCourseTimes(course.Times)
-			carouselTimes := lineutil.FormatTimes(formattedTimes, 4)
-			body.AddInfoRow("⏰", "上課時間", carouselTimes, lineutil.DefaultInfoRowStyle())
+			timeStr := strings.Join(formattedTimes, "、")
+			body.AddInfoRow("⏰", "上課時間", timeStr, lineutil.CarouselInfoRowStyle())
 		}
 
 		// Footer with "View Detail" button - displayText shows course title
@@ -1935,17 +1933,17 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 	// Note: Semester info is already in the header text message, so we don't repeat it here
 	body.AddComponent(lineutil.NewBodyLabel(labelInfo).FlexBox)
 
-	// 授課教師
+	// 授課教師 - use shrink-to-fit for maximum content display
 	if len(course.Teachers) > 0 {
-		carouselTeachers := lineutil.FormatTeachers(course.Teachers, 5)
-		body.AddInfoRow("👨‍🏫", "授課教師", carouselTeachers, lineutil.DefaultInfoRowStyle())
+		teacherNames := strings.Join(course.Teachers, "、")
+		body.AddInfoRow("👨‍🏫", "授課教師", teacherNames, lineutil.CarouselInfoRowStyle())
 	}
 
-	// 上課時間
+	// 上課時間 - use shrink-to-fit for maximum content display
 	if len(course.Times) > 0 {
 		formattedTimes := lineutil.FormatCourseTimes(course.Times)
-		carouselTimes := lineutil.FormatTimes(formattedTimes, 4)
-		body.AddInfoRow("⏰", "上課時間", carouselTimes, lineutil.DefaultInfoRowStyle())
+		timeStr := strings.Join(formattedTimes, "、")
+		body.AddInfoRow("⏰", "上課時間", timeStr, lineutil.CarouselInfoRowStyle())
 	}
 
 	// Footer with "View Detail" button

@@ -431,17 +431,17 @@ func (h *Handler) buildProgramCourseBubble(pc storage.ProgramCourse, isRequired 
 	firstInfoRow := lineutil.NewInfoRow("📅", "開課學期", semesterText, lineutil.DefaultInfoRowStyle())
 	body.AddComponent(firstInfoRow.FlexBox)
 
-	// Teacher info
+	// Teacher info - use shrink-to-fit for maximum content display in carousel
 	if len(pc.Course.Teachers) > 0 {
 		teacherNames := strings.Join(pc.Course.Teachers, "、")
-		body.AddInfoRow("👨‍🏫", "授課教師", teacherNames, lineutil.DefaultInfoRowStyle())
+		body.AddInfoRow("👨‍🏫", "授課教師", teacherNames, lineutil.CarouselInfoRowStyle())
 	}
 
-	// Time info
+	// Time info - use shrink-to-fit for maximum content display in carousel
 	if len(pc.Course.Times) > 0 {
 		formattedTimes := lineutil.FormatCourseTimes(pc.Course.Times)
 		timeStr := strings.Join(formattedTimes, "、")
-		body.AddInfoRow("⏰", "上課時間", timeStr, lineutil.DefaultInfoRowStyle())
+		body.AddInfoRow("⏰", "上課時間", timeStr, lineutil.CarouselInfoRowStyle())
 	}
 
 	// Note: Location info is omitted for program course bubbles to keep display compact
