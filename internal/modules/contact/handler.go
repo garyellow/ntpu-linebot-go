@@ -368,6 +368,7 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 		OriginalContentUrl: imageURL,
 		PreviewImageUrl:    imageURL,
 	}
+	imgMsg.Sender = sender
 	imgMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 		lineutil.QuickReplyContactAction(),
 		lineutil.QuickReplyHelpAction(),
