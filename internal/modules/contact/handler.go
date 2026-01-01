@@ -287,9 +287,11 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 			valColor = color
 		}
 		labelWithIcon := icon + " " + label
+		// Use shrink-to-fit to prevent text truncation on long labels like "24H緊急行政電話"
+		// Flex ratio 5:3 gives label more space; adjustMode shrinks text if still too long
 		return lineutil.NewFlexBox("baseline",
-			lineutil.NewFlexText(labelWithIcon).WithColor(lineutil.ColorLabel).WithSize("sm").WithFlex(3).FlexText,
-			lineutil.NewFlexText(value).WithWrap(true).WithColor(valColor).WithSize("sm").WithWeight("bold").WithFlex(4).WithAlign("end").FlexText,
+			lineutil.NewFlexText(labelWithIcon).WithColor(lineutil.ColorLabel).WithSize("sm").WithFlex(5).WithAdjustMode("shrink-to-fit").FlexText,
+			lineutil.NewFlexText(value).WithColor(valColor).WithSize("sm").WithWeight("bold").WithFlex(3).WithAlign("end").FlexText,
 		).FlexBox
 	}
 
@@ -360,13 +362,18 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 	msg := lineutil.NewFlexMessage("緊急聯絡電話", bubble.FlexBubble)
 	msg.Sender = sender
 
-	// Add Quick Reply for related actions after viewing emergency phones
-	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+	// Add emergency image at the end with Quick Reply (must be on last message)
+	imageURL := "https://raw.githubusercontent.com/garyellow/ntpu-linebot-go/main/assets/emergency.png"
+	imgMsg := &messaging_api.ImageMessage{
+		OriginalContentUrl: imageURL,
+		PreviewImageUrl:    imageURL,
+	}
+	imgMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 		lineutil.QuickReplyContactAction(),
 		lineutil.QuickReplyHelpAction(),
 	})
 
-	return []messaging_api.MessageInterface{msg}
+	return []messaging_api.MessageInterface{msg, imgMsg}
 }
 
 // handleContactSearch handles contact search queries with a multi-tier search strategy:
@@ -733,29 +740,29 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 			// Add type label as first row
 			body.AddComponent(lineutil.NewBodyLabel(bodyLabel).FlexBox)
 
-			// Add Title if available (previously in Hero subtitle) - no separator after label
+			// Add Title if available (previously in Hero subtitle) - use shrink-to-fit for variable length
 			if c.Title != "" && c.Type != "organization" {
-				titleRow := lineutil.NewInfoRow("🔖", "職稱", c.Title, lineutil.DefaultInfoRowStyle())
+				titleRow := lineutil.NewInfoRow("🔖", "職稱", c.Title, lineutil.CarouselInfoRowStyle())
 				body.AddComponent(titleRow.FlexBox)
 			}
 
-			// Organization / Superior - first row (no separator)
+			// Organization / Superior - use shrink-to-fit for variable length org names
 			if c.Type == "organization" && c.Superior != "" {
-				body.AddInfoRow("🏢", "上級單位", c.Superior, lineutil.DefaultInfoRowStyle())
+				body.AddInfoRow("🏢", "上級單位", c.Superior, lineutil.CarouselInfoRowStyle())
 			} else if c.Organization != "" {
-				body.AddInfoRow("🏢", "所屬單位", c.Organization, lineutil.DefaultInfoRowStyle())
+				body.AddInfoRow("🏢", "所屬單位", c.Organization, lineutil.CarouselInfoRowStyle())
 			}
 
-			// Contact Info - Display full phone OR just extension
+			// Contact Info - Display full phone OR just extension (important, keep bold)
 			if c.Phone != "" {
 				body.AddInfoRow("📞", "聯絡電話", c.Phone, lineutil.BoldInfoRowStyle())
 			} else if c.Extension != "" {
 				body.AddInfoRow("☎️", "分機號碼", c.Extension, lineutil.BoldInfoRowStyle())
 			}
 
-			// Contact Info - Location and Email
-			body.AddInfoRowIf("📍", "辦公位置", c.Location, lineutil.DefaultInfoRowStyle())
-			body.AddInfoRowIf("✉️", "電子郵件", c.Email, lineutil.DefaultInfoRowStyle())
+			// Contact Info - Location and Email (variable length, use shrink-to-fit)
+			body.AddInfoRowIf("📍", "辦公位置", c.Location, lineutil.CarouselInfoRowStyle())
+			body.AddInfoRowIf("✉️", "電子郵件", c.Email, lineutil.CarouselInfoRowStyle())
 
 			// Add cache time hint (unobtrusive, right-aligned)
 			if hint := lineutil.NewCacheTimeHint(c.CachedAt); hint != nil {

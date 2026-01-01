@@ -385,12 +385,14 @@ type InfoRowStyle struct {
 	ValueSize   string // Value text size: "xs", "sm", "md" (default: "sm")
 	ValueWeight string // Value text weight: "regular", "bold" (default: "regular")
 	ValueColor  string // Value text color (default: ColorText)
-	Wrap        bool   // Whether to wrap long text (default: true)
+	Wrap        bool   // Whether to wrap long text (default: false)
+	AdjustMode  string // "shrink-to-fit" for auto font shrinking, or "" for none
+	MaxLines    int    // Max lines (0 = no limit)
 }
 
 // DefaultInfoRowStyle returns the standard info row style
-// Note: Wrap is false by default for carousel cards (compact display)
-// Use WithWrap(true) if you need text wrapping for detail pages
+// Note: Wrap is false by default for compact display
+// Use CarouselInfoRowStyle() for optimal carousel card display
 func DefaultInfoRowStyle() InfoRowStyle {
 	return InfoRowStyle{
 		ValueSize:   "sm",
@@ -410,6 +412,21 @@ func BoldInfoRowStyle() InfoRowStyle {
 	}
 }
 
+// CarouselInfoRowStyle returns style optimized for carousel cards:
+// - shrink-to-fit: Auto-shrink font to fit content in available space
+// - maxLines: 1 (single line, no wrap)
+// This allows maximum content display without wrapping
+func CarouselInfoRowStyle() InfoRowStyle {
+	return InfoRowStyle{
+		ValueSize:   "sm",
+		ValueWeight: "regular",
+		ValueColor:  ColorText,
+		Wrap:        false,
+		AdjustMode:  "shrink-to-fit",
+		MaxLines:    1,
+	}
+}
+
 // NewInfoRow creates a vertical info row with icon + label on top, value below
 // This is a standardized pattern used across all modules for Flex Message body content
 //
@@ -424,6 +441,7 @@ func BoldInfoRowStyle() InfoRowStyle {
 //
 //	NewInfoRow("👨‍🏫", "授課教師", "王教授、李教授", DefaultInfoRowStyle())
 //	NewInfoRow("☎️", "分機號碼", "12345", BoldInfoRowStyle())
+//	NewInfoRow("⏰", "上課時間", longTimeString, CarouselInfoRowStyle()) // shrink-to-fit
 func NewInfoRow(emoji, label, value string, style InfoRowStyle) *FlexBox {
 	valueText := NewFlexText(value).WithColor(style.ValueColor).WithSize(style.ValueSize).WithMargin("sm")
 	if style.ValueWeight == "bold" {
@@ -431,6 +449,12 @@ func NewInfoRow(emoji, label, value string, style InfoRowStyle) *FlexBox {
 	}
 	if style.Wrap {
 		valueText = valueText.WithWrap(true).WithLineSpacing(SpacingXS)
+	}
+	if style.AdjustMode != "" {
+		valueText = valueText.WithAdjustMode(style.AdjustMode)
+	}
+	if style.MaxLines > 0 {
+		valueText = valueText.WithMaxLines(style.MaxLines)
 	}
 
 	return NewFlexBox("vertical",

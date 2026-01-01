@@ -115,7 +115,7 @@ var (
 
 	// validExtendedSearchKeywords: extended time range, semesters 3-4.
 	validExtendedSearchKeywords = []string{
-		"更多學期", "歷史課程",
+		"更多學期", "更多課程", "歷史課程",
 	}
 
 	courseRegex            = bot.BuildKeywordRegex(validCourseKeywords)
@@ -989,15 +989,14 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 
 	msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
 
-	// Build quick reply items
-	quickReplyItems := []lineutil.QuickReplyItem{
-		lineutil.QuickReplyCourseAction(),
-	}
+	// Build quick reply items (consistent order as search results)
+	var quickReplyItems []lineutil.QuickReplyItem
 
-	// Only add "More Semesters" option for regular (non-extended) search
+	// Add "更多" button FIRST for visibility (only for non-extended search)
 	if !extended {
-		quickReplyItems = append(quickReplyItems, lineutil.QuickReplyMoreSemestersAction(searchTerm))
+		quickReplyItems = append(quickReplyItems, lineutil.QuickReplyMoreCoursesCompact(searchTerm))
 	}
+	quickReplyItems = append(quickReplyItems, lineutil.QuickReplyCourseAction())
 
 	if h.bm25Index != nil && h.bm25Index.IsEnabled() {
 		quickReplyItems = append(quickReplyItems,
@@ -1564,19 +1563,17 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 		firstInfoRow := lineutil.NewInfoRow("📅", "開課學期", semesterText, lineutil.DefaultInfoRowStyle())
 		body.AddComponent(firstInfoRow.FlexBox)
 
-		// 第二列：授課教師
+		// 第二列：授課教師 - use shrink-to-fit for maximum content display
 		if len(course.Teachers) > 0 {
-			// Display teachers with truncation if too many (max 5, then "等 N 人")
-			carouselTeachers := lineutil.FormatTeachers(course.Teachers, 5)
-			body.AddInfoRow("👨‍🏫", "授課教師", carouselTeachers, lineutil.DefaultInfoRowStyle())
+			teacherNames := strings.Join(course.Teachers, "、")
+			body.AddInfoRow("👨‍🏫", "授課教師", teacherNames, lineutil.CarouselInfoRowStyle())
 		}
 
-		// 第三列：上課時間 - 轉換節次為實際時間
+		// 第三列：上課時間 - use shrink-to-fit for maximum content display
 		if len(course.Times) > 0 {
-			// Format times with actual time ranges, then truncate if too many (max 4, then "等 N 節")
 			formattedTimes := lineutil.FormatCourseTimes(course.Times)
-			carouselTimes := lineutil.FormatTimes(formattedTimes, 4)
-			body.AddInfoRow("⏰", "上課時間", carouselTimes, lineutil.DefaultInfoRowStyle())
+			timeStr := strings.Join(formattedTimes, "、")
+			body.AddInfoRow("⏰", "上課時間", timeStr, lineutil.CarouselInfoRowStyle())
 		}
 
 		// Footer with "View Detail" button - displayText shows course title
@@ -1635,16 +1632,15 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 	}
 
 	// Build Quick Reply items based on context
-	quickReplyItems := []lineutil.QuickReplyItem{
-		lineutil.QuickReplyCourseAction(),
+	var quickReplyItems []lineutil.QuickReplyItem
+
+	// Add "更多" (More) button FIRST for visibility when search keyword exists
+	// Uses compact label "📅 更多" for cleaner UX, but outputs "更多學期 {keyword}"
+	if !isExtendedSearch && searchKeyword != "" {
+		quickReplyItems = append(quickReplyItems, lineutil.QuickReplyMoreCoursesCompact(searchKeyword))
 	}
 
-	// Add "More Semesters" option if:
-	// 1. Not already an extended search
-	// 2. Have a search keyword to pass along
-	if !isExtendedSearch && searchKeyword != "" {
-		quickReplyItems = append(quickReplyItems, lineutil.QuickReplyMoreSemestersAction(searchKeyword))
-	}
+	quickReplyItems = append(quickReplyItems, lineutil.QuickReplyCourseAction())
 
 	// Add smart search option if enabled
 	if h.bm25Index != nil && h.bm25Index.IsEnabled() {
@@ -1937,17 +1933,17 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 	// Note: Semester info is already in the header text message, so we don't repeat it here
 	body.AddComponent(lineutil.NewBodyLabel(labelInfo).FlexBox)
 
-	// 授課教師
+	// 授課教師 - use shrink-to-fit for maximum content display
 	if len(course.Teachers) > 0 {
-		carouselTeachers := lineutil.FormatTeachers(course.Teachers, 5)
-		body.AddInfoRow("👨‍🏫", "授課教師", carouselTeachers, lineutil.DefaultInfoRowStyle())
+		teacherNames := strings.Join(course.Teachers, "、")
+		body.AddInfoRow("👨‍🏫", "授課教師", teacherNames, lineutil.CarouselInfoRowStyle())
 	}
 
-	// 上課時間
+	// 上課時間 - use shrink-to-fit for maximum content display
 	if len(course.Times) > 0 {
 		formattedTimes := lineutil.FormatCourseTimes(course.Times)
-		carouselTimes := lineutil.FormatTimes(formattedTimes, 4)
-		body.AddInfoRow("⏰", "上課時間", carouselTimes, lineutil.DefaultInfoRowStyle())
+		timeStr := strings.Join(formattedTimes, "、")
+		body.AddInfoRow("⏰", "上課時間", timeStr, lineutil.CarouselInfoRowStyle())
 	}
 
 	// Footer with "View Detail" button
