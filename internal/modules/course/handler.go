@@ -1894,7 +1894,8 @@ func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []
 		}
 
 		// Create header text message for this semester
-		semLabel := lineutil.FormatSemesterShort(sem.Year, sem.Term)
+		// Use human-friendly format: "113 學年度 下學期" instead of "113-2"
+		semLabel := lineutil.FormatSemester(sem.Year, sem.Term)
 		headerText := fmt.Sprintf("📚 %s 相關課程", semLabel)
 		headerMsg := lineutil.NewTextMessageWithConsistentSender(headerText, sender)
 		messages = append(messages, headerMsg)
@@ -1933,12 +1934,8 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 	body := lineutil.NewBodyContentBuilder()
 
 	// First row is relevance label (🎯最佳匹配/✨高度相關/📋部分相關)
+	// Note: Semester info is already in the header text message, so we don't repeat it here
 	body.AddComponent(lineutil.NewBodyLabel(labelInfo).FlexBox)
-
-	// 學期資訊 - first info row (no separator so it flows directly after the label)
-	semesterText := lineutil.FormatSemester(course.Year, course.Term)
-	firstInfoRow := lineutil.NewInfoRow("📅", "開課學期", semesterText, lineutil.DefaultInfoRowStyle())
-	body.AddComponent(firstInfoRow.FlexBox)
 
 	// 授課教師
 	if len(course.Teachers) > 0 {

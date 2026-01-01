@@ -366,18 +366,23 @@ registry.Register(programHandler) // 學程查詢
 
 ### 2. 智慧搜尋架構（可選）
 
-**BM25 + Query Expansion 流程**:
-1. **Warmup**: 課程列表 → 抓取大綱 → 存入 SQLite + 建立 BM25 索引
-2. **查詢**: 輸入 → Query Expansion (LLM) → BM25 Search → Confidence Scoring
+**BM25 + Query Expansion + Per-Semester Indexing**:
+1. **Warmup**: 課程列表 → 抓取大綱 → 存入 SQLite + 建立 Per-Semester BM25 索引
+2. **查詢**: 輸入 → Query Expansion (LLM) → Per-Semester Search → Confidence Scoring
+
+**Per-Semester Indexing 優勢**:
+- 每學期有獨立的 BM25 engine 和 IDF 計算
+- 課程相關度只與同學期課程比較，不受其他學期影響
+- 每學期公平取 Top-10（總共最多 20 門課）
 
 **特性**:
 - **Query Expansion**: LLM 擴展同義詞、縮寫
 - **BM25**: 中文 unigram 分詞，精確關鍵字匹配
-- **Confidence**: 相對分數 (score / maxScore)，0-1 範圍
+- **Confidence**: 每學期獨立計算相對分數 (score / maxScore)
 
 **關鍵概念**:
 - BM25 輸出無界分數，不可跨查詢比較
-- 信心分數使用相對分數 (score / maxScore)，非向量相似度
+- 信心分數使用相對分數，每學期的最佳結果 = 1.0
 - 分數分佈遵循 Normal-Exponential 混合模型（學術標準）
 
 **啟用條件**:
@@ -388,7 +393,7 @@ registry.Register(programHandler) // 學程查詢
 **關鍵實作**:
 - `internal/genai/gemini_expander.go`: Query Expansion（Gemini）
 - `internal/genai/groq_expander.go`: Query Expansion（Groq）
-- `internal/rag/bm25.go`: BM25Index（記憶體索引）
+- `internal/rag/bm25.go`: BM25Index（Per-Semester 記憶體索引）
 - `internal/syllabus/`: 課程大綱擷取與 hash 計算
 
 **效能優化**:
