@@ -687,16 +687,19 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 	if year >= config.IDDataCutoffYear {
 		imageURL := "https://raw.githubusercontent.com/garyellow/ntpu-linebot-go/main/assets/rip.png"
 		msg := lineutil.NewTextMessageWithConsistentSender(config.IDYear114PlusMessage, sender)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+
+		// Quick Reply must be on last message (image)
+		imgMsg := &messaging_api.ImageMessage{
+			OriginalContentUrl: imageURL,
+			PreviewImageUrl:    imageURL,
+		}
+		imgMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", config.IDDataYearEnd), fmt.Sprintf("學年 %d", config.IDDataYearEnd))},
 			{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", config.IDDataYearEnd-1), fmt.Sprintf("學年 %d", config.IDDataYearEnd-1))},
 			lineutil.QuickReplyStudentAction(),
 			lineutil.QuickReplyHelpAction(),
 		})
-		return []messaging_api.MessageInterface{
-			msg,
-			lineutil.NewImageMessage(imageURL, imageURL),
-		}
+		return []messaging_api.MessageInterface{msg, imgMsg}
 	}
 
 	// 3. Check if year is before NTPU was founded

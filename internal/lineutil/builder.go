@@ -760,5 +760,7 @@ func AddQuickReplyToMessages(messages []messaging_api.MessageInterface, items ..
 		m.QuickReply = qr
 	case *messaging_api.TemplateMessage:
 		m.QuickReply = qr
+	case *messaging_api.ImageMessage:
+		m.QuickReply = qr
 	}
 }
