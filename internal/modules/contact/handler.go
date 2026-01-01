@@ -360,13 +360,18 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 	msg := lineutil.NewFlexMessage("緊急聯絡電話", bubble.FlexBubble)
 	msg.Sender = sender
 
-	// Add Quick Reply for related actions after viewing emergency phones
-	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+	// Add emergency image at the end with Quick Reply (must be on last message)
+	imageURL := "https://raw.githubusercontent.com/garyellow/ntpu-linebot-go/main/assets/emergency.png"
+	imgMsg := &messaging_api.ImageMessage{
+		OriginalContentUrl: imageURL,
+		PreviewImageUrl:    imageURL,
+	}
+	imgMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 		lineutil.QuickReplyContactAction(),
 		lineutil.QuickReplyHelpAction(),
 	})
 
-	return []messaging_api.MessageInterface{msg}
+	return []messaging_api.MessageInterface{msg, imgMsg}
 }
 
 // handleContactSearch handles contact search queries with a multi-tier search strategy:
