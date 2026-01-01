@@ -8,25 +8,54 @@ Retrieval-Augmented Generation (RAG) 模組，提供課程智慧搜尋功能。
 
 - **BM25Index**: BM25 關鍵字搜尋索引 (中文分詞優化)
 - **Query Expansion**: LLM 擴展查詢詞彙（同義詞、縮寫、翻譯）
-- **Relative Confidence**: 基於相對 BM25 分數的信心度 (score / maxScore)
-- **Newest Semester Filter**: 智慧搜尋僅返回最新學期課程（data-driven）
+- **Per-Semester Indexing**: 每學期獨立索引，獨立計算 IDF 和信心度
+- **Newest 2 Semesters**: 搜尋僅返回最新 2 學期課程
 
 ## 架構
 
 ```
+Per-Semester Index Architecture:
+┌─────────────────────────────────────────────────────────────┐
+│ BM25Index                                                    │
+├─────────────────────────────────────────────────────────────┤
+│ semesterIndexes:                                             │
+│   ├── 114-1 → semesterIndex (獨立 BM25 engine, 獨立 IDF)    │
+│   ├── 113-2 → semesterIndex (獨立 BM25 engine, 獨立 IDF)    │
+│   └── 113-1 → semesterIndex (獨立 BM25 engine, 獨立 IDF)    │
+│                                                              │
+│ allSemesters: [114-1, 113-2, 113-1] (排序後，最新在前)       │
+└─────────────────────────────────────────────────────────────┘
+
 Search Flow:
   使用者查詢 → Query Expansion (LLM 擴展)
       ↓
   ┌──────────────────────────────────┐
-  │ BM25 Search (expanded keywords)  │
-  │ - 中文 Unigram 分詞              │
-  │ - IDF 加權                       │
-  │ - 僅最新學期過濾                 │
-  │ - 相對信心分數 (score/maxScore) │
+  │ 選擇最新 2 學期                   │
+  │ (從 allSemesters 取前 2 個)       │
   └──────────────────────────────────┘
       ↓
-  去重合併 → 排序結果
+  ┌──────────────────────────────────┐
+  │ 114-1 搜尋 → 取 Top-10           │  ← 獨立 IDF
+  │ 計算信心度 (best = 1.0)          │
+  └──────────────────────────────────┘
+      ↓
+  ┌──────────────────────────────────┐
+  │ 113-2 搜尋 → 取 Top-10           │  ← 獨立 IDF
+  │ 計算信心度 (best = 1.0)          │
+  └──────────────────────────────────┘
+      ↓
+  合併結果（最多 20 門課）
 ```
+
+### 為什麼 Per-Semester Indexing？
+
+| 舊架構（單一索引） | 新架構（Per-Semester） |
+|------------------|----------------------|
+| 所有學期共用 IDF | 每學期獨立 IDF |
+| 「雲端」重要性受所有學期影響 | 「雲端」重要性只與同學期課程比較 |
+| 大學期可能佔據所有結果 | 每學期公平取 Top-10 |
+
+**核心優勢**：課程相關度只與同學期課程比較，不受其他學期影響。
 
 ### BM25 實作
 
@@ -38,10 +67,8 @@ Search Flow:
 - **中文分詞**：CJK 字元使用 Unigram（單字元），非 CJK 保持完整詞彙
 - **大小寫不敏感**：所有 token 轉為小寫
 - **線程安全**：使用 `sync.RWMutex` 保護索引操作
-- **學期過濾**：SearchCourses() 自動過濾至最新學期（data-driven）
 
 ## 為什麼不用 Embedding?
-
 
 | 考量 | BM25 + Query Expansion | Embedding (Vector) |
 |------|------------------------|-------------------|
@@ -68,10 +95,10 @@ BM25 輸出無界分數，不同查詢間無法比較。我們使用**相對分�
 
 **為什麼這樣設計？**
 
-1. **相對分數**：使用 `score / maxScore` 計算，同一查詢內可比較（Azure、Elasticsearch 官方建議）
-2. **無過濾門檻**：不預先過濾結果，交由 UI 層分類顯示
+1. **相對分數**：使用 `score / maxScore` 計算，同學期內可比較（Azure、Elasticsearch 官方建議）
+2. **Per-Semester 計算**：每學期獨立計算，每學期的最佳結果 = 1.0
 3. **三層分類**：0.8、0.6 分界點基於 Normal-Exponential 混合模型（Arampatzis et al., 2009）
-4. **Top-K 優先**：主要使用 Top-10 截斷，相對分數僅用於結果分類
+4. **Per-Semester Top-K**：每學期獨立取 Top-10，確保兩學期公平展示
 5. **不使用 log**：BM25 的 IDF 已包含 log 轉換，無需額外處理
 
 ### 內部計算
@@ -79,25 +106,25 @@ BM25 輸出無界分數，不同查詢間無法比較。我們使用**相對分�
 ```go
 // 相對分數計算（學術最佳實踐）
 confidence = score / maxScore
-// 第一名永遠是 1.0
+// 每學期的第一名永遠是 1.0
 
 // 分類閾值（基於 Normal-Exponential 混合模型）
 // >= 0.8: 最佳匹配 (Normal 分佈核心)
 // >= 0.6: 高度相關 (混合區域)
 // < 0.6: 部分相關 (Exponential 尾部)
 
-// Top-K 截斷（主要過濾方法）
-MaxSearchResults = 10
+// Per-Semester Top-K 策略
+MaxSearchResults = 10  // 每學期最多 10 門課，總共最多 20 門
 ```
 
 **學術依據**：
 - BM25 分數遵循 Normal-Exponential 混合分佈（相關文件=Normal，非相關=Exponential）
 - 相對閾值優於絕對閾值（Arampatzis et al., 2009）
-- Top-K 是 BM25 的標準過濾方法（Azure AI Search、Elasticsearch 推薦）
+- Per-Semester indexing 確保 IDF 反映「在這個學期中該 term 的重要性」
 
-## 索引策略：Single Document (BM25 最佳實踐)
+## 索引策略：Single Document + Per-Semester
 
-每門課程 = 一個文檔，不做 chunking。
+每門課程 = 一個文檔，每個學期 = 一個獨立索引。
 
 ### 為什麼不像 Embedding 那樣分 Chunk？
 
@@ -123,10 +150,9 @@ Week 2: AWS Academy
 
 **設計原則**:
 - 單一文檔策略：每門課程合併所有欄位成一個文檔
+- 每學期獨立索引：IDF 只反映該學期的 term 分佈
 - BM25 長度正規化 (b=0.75) 自動處理不同長度的文檔
 - 課程名稱前綴提供上下文，改善短查詢的匹配
-- 無需去重邏輯：1 UID = 1 document
-- 使用 show_info=all 格式，所有欄位已包含中英文合併內容
 
 ## 使用
 
@@ -134,14 +160,14 @@ Week 2: AWS Academy
 // 初始化 BM25 索引
 bm25Index := rag.NewBM25Index(logger)
 
-// 載入資料
+// 載入資料（自動按學期分組）
 syllabi, _ := db.GetAllSyllabi(ctx)
 bm25Index.Initialize(syllabi)
 
-// 搜尋課程
+// 搜尋課程（返回最新 2 學期，各取 Top-10）
 results, err := bm25Index.SearchCourses(ctx, "雲端運算 AWS", 10)
 for _, r := range results {
-    fmt.Printf("%s (%.0f%% 信心)\n", r.Title, r.Confidence*100)
+    fmt.Printf("[%d-%d] %s (%.0f%% 信心)\n", r.Year, r.Term, r.Title, r.Confidence*100)
 }
 
 // 配合 Query Expansion
@@ -156,8 +182,8 @@ results, _ = bm25Index.SearchCourses(ctx, expanded, 10)
 ## 儲存
 
 - BM25 索引: 記憶體中，每次啟動時從 SQLite 重建
-- 1 UID = 1 Document（單一文檔策略）
-- 啟動時自動從 syllabi 表載入資料
+- Per-Semester: 每個學期有獨立的 BM25 engine
+- 啟動時自動從 syllabi 表載入並按學期分組
 
 ## 依賴
 

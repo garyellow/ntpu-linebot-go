@@ -1,5 +1,5 @@
-// Package rag provides Retrieval-Augmented Generation functionality.
-// Uses BM25 keyword search with LLM-based query expansion for course retrieval.
+// Package rag provides Retrieval-Augmented Generation capabilities
+// using BM25 keyword search with LLM query expansion.
 package rag
 
 import (
@@ -15,50 +15,51 @@ import (
 	"github.com/iwilltry42/bm25-go/bm25"
 )
 
-// BM25 Configuration Constants
-//
-// BM25 Score Filtering:
-// - DO NOT use fixed global score thresholds (scores are not comparable across queries)
-// - Use rank cutoff (Top-K) as primary filtering method
-// - Use relative score (score / maxScore) for result classification
-//
-// References:
-// - Azure AI Search: No min_score support for BM25, recommends semantic reranking
-// - Elasticsearch: Recommends size limit over min_score for BM25
-// - OpenSearch: Supports min_score but officially recommends Top-K
-// - Academic research: Relative thresholds work better than absolute thresholds
+// MaxSearchResults is the maximum number of results to return per semester.
+// Each semester independently gets up to this many results.
 const (
-	// MaxSearchResults is the maximum number of results to return.
-	// Top-K is the primary filtering method for BM25 searches.
 	MaxSearchResults = 10
 )
 
 // SearchResult represents a search result with confidence score.
-// Confidence is derived from relative BM25 score (score / maxScore).
+// Confidence is derived from relative BM25 score within the same semester.
 type SearchResult struct {
 	UID        string   // Course UID
 	Title      string   // Course title
 	Teachers   []string // Course teachers
 	Year       int      // Academic year
 	Term       int      // Semester
-	Confidence float32  // Relative score (0-1), score / maxScore
+	Confidence float32  // Relative score (0-1), score / maxScore within same semester
+}
+
+// SemesterKey uniquely identifies a semester for indexing.
+type SemesterKey struct {
+	Year int
+	Term int
+}
+
+// semesterIndex holds BM25 index for a single semester.
+// Each semester has its own IDF calculation, ensuring independent relevance scoring.
+type semesterIndex struct {
+	engine   *bm25.BM25Okapi    // BM25 engine for this semester only
+	corpus   []string           // Document strings for this semester
+	uidList  []string           // UID at each index
+	metadata map[string]docMeta // UID -> metadata
 }
 
 // BM25Index provides keyword-based search using BM25 algorithm.
-// Combined with LLM query expansion, provides effective course retrieval.
+// Uses per-semester indexing strategy for independent relevance scoring.
 //
-// Single Document Strategy (BM25):
-// - Each course = 1 document (not chunked like embedding models)
-// - BM25's length normalization (b=0.75) handles document length differences
-// - More accurate IDF calculation with 1:1 course-to-document mapping
-// - Simpler architecture: no deduplication logic needed
+// Per-Semester Index Strategy:
+//   - Each semester has its own BM25 engine with independent IDF calculation
+//   - Term importance is calculated relative to courses in the same semester
+//   - A term common in semester A but rare in semester B will have different weights
+//   - Ensures fair ranking within each semester without cross-semester influence
 //
 // Uses github.com/iwilltry42/bm25-go library (maintained by k3d-io/k3d maintainer)
 type BM25Index struct {
-	engine   *bm25.BM25Okapi    // External BM25 implementation
-	corpus   []string           // Original document strings (for GetTopN)
-	uidList  []string           // UID at each index
-	metadata map[string]docMeta // UID -> metadata
+	semesterIndexes map[SemesterKey]*semesterIndex // Per-semester BM25 indexes
+	allSemesters    []SemesterKey                  // All semesters sorted (newest first)
 
 	logger      *logger.Logger
 	mu          sync.RWMutex
@@ -73,7 +74,7 @@ type docMeta struct {
 	Term     int
 }
 
-// BM25Result represents a BM25 search result
+// BM25Result represents a BM25 search result (internal use)
 type BM25Result struct {
 	UID      string
 	Title    string
@@ -87,13 +88,13 @@ type BM25Result struct {
 // NewBM25Index creates a new BM25 index
 func NewBM25Index(log *logger.Logger) *BM25Index {
 	return &BM25Index{
-		metadata: make(map[string]docMeta),
-		logger:   log,
+		semesterIndexes: make(map[SemesterKey]*semesterIndex),
+		logger:          log,
 	}
 }
 
-// Initialize builds the BM25 index from syllabi
-// Each syllabus becomes a single document (no chunking)
+// Initialize builds per-semester BM25 indexes from syllabi.
+// Each semester gets its own index with independent IDF calculation.
 func (idx *BM25Index) Initialize(syllabi []*storage.Syllabus) error {
 	if idx == nil {
 		return nil
@@ -108,53 +109,81 @@ func (idx *BM25Index) Initialize(syllabi []*storage.Syllabus) error {
 	}
 
 	// Reset index data
-	idx.corpus = nil
-	idx.uidList = nil
-	idx.metadata = make(map[string]docMeta)
+	idx.semesterIndexes = make(map[SemesterKey]*semesterIndex)
+	idx.allSemesters = nil
 
+	// Step 1: Group syllabi by semester
+	semesterGroups := make(map[SemesterKey][]*storage.Syllabus)
 	for _, syl := range syllabi {
-		// Store metadata
-		idx.metadata[syl.UID] = docMeta{
-			Title:    syl.Title,
-			Teachers: syl.Teachers,
-			Year:     syl.Year,
-			Term:     syl.Term,
-		}
-
-		// Create single document from all fields
-		fields := &syllabus.Fields{
-			Objectives: syl.Objectives,
-			Outline:    syl.Outline,
-			Schedule:   syl.Schedule,
-		}
-		content := fields.ContentForIndexing(syl.Title)
-
-		if strings.TrimSpace(content) == "" {
-			continue
-		}
-
-		idx.corpus = append(idx.corpus, content)
-		idx.uidList = append(idx.uidList, syl.UID)
+		key := SemesterKey{Year: syl.Year, Term: syl.Term}
+		semesterGroups[key] = append(semesterGroups[key], syl)
 	}
 
-	// Build BM25 engine with external library
-	if len(idx.corpus) > 0 {
-		var err error
-		idx.engine, err = bm25.NewBM25Okapi(idx.corpus, tokenizeChinese, 1.5, 0.75, nil)
-		if err != nil {
-			return err
+	// Step 2: Collect and sort all semesters (newest first)
+	for key := range semesterGroups {
+		idx.allSemesters = append(idx.allSemesters, key)
+	}
+	slices.SortFunc(idx.allSemesters, func(a, b SemesterKey) int {
+		if a.Year != b.Year {
+			return b.Year - a.Year // Descending by year
+		}
+		return b.Term - a.Term // Descending by term
+	})
+
+	// Step 3: Build independent index for each semester
+	totalCourses := 0
+	for sem, syllabiInSem := range semesterGroups {
+		semIdx := &semesterIndex{
+			metadata: make(map[string]docMeta),
+		}
+
+		for _, syl := range syllabiInSem {
+			// Store metadata
+			semIdx.metadata[syl.UID] = docMeta{
+				Title:    syl.Title,
+				Teachers: syl.Teachers,
+				Year:     syl.Year,
+				Term:     syl.Term,
+			}
+
+			// Create single document from all fields
+			fields := &syllabus.Fields{
+				Objectives: syl.Objectives,
+				Outline:    syl.Outline,
+				Schedule:   syl.Schedule,
+			}
+			content := fields.ContentForIndexing(syl.Title)
+
+			if strings.TrimSpace(content) == "" {
+				continue
+			}
+
+			semIdx.corpus = append(semIdx.corpus, content)
+			semIdx.uidList = append(semIdx.uidList, syl.UID)
+		}
+
+		// Build BM25 engine for this semester (independent IDF)
+		if len(semIdx.corpus) > 0 {
+			var err error
+			semIdx.engine, err = bm25.NewBM25Okapi(semIdx.corpus, tokenizeChinese, 1.5, 0.75, nil)
+			if err != nil {
+				return err
+			}
+			idx.semesterIndexes[sem] = semIdx
+			totalCourses += len(semIdx.corpus)
 		}
 	}
 
 	idx.initialized = true
-	idx.logger.WithField("courses", len(idx.corpus)).Info("BM25 index initialized")
+	idx.logger.WithField("courses", totalCourses).
+		WithField("semesters", len(idx.semesterIndexes)).
+		Info("BM25 index initialized (per-semester)")
 	return nil
 }
 
 // RebuildFromDB reloads all syllabi from the database and rebuilds the index.
 // This is called during warmup after new syllabi are saved to ensure
 // the index contains complete syllabus content (not just metadata).
-// BM25 requires all documents for IDF calculation, so full rebuild is necessary.
 func (idx *BM25Index) RebuildFromDB(ctx context.Context, db *storage.DB) error {
 	if idx == nil {
 		return nil
@@ -170,34 +199,34 @@ func (idx *BM25Index) RebuildFromDB(ctx context.Context, db *storage.DB) error {
 	return idx.Initialize(syllabi)
 }
 
-// Search performs BM25 keyword search
-// Returns results sorted by BM25 score (descending)
-// With single document strategy, no deduplication is needed (1 course = 1 document)
-func (idx *BM25Index) Search(query string, topN int) ([]BM25Result, error) {
-	if idx == nil || !idx.initialized || len(idx.corpus) == 0 || idx.engine == nil {
-		return nil, nil
+// getNewestTwoSemesters returns the newest 2 semesters from the index.
+func (idx *BM25Index) getNewestTwoSemesters() []SemesterKey {
+	if len(idx.allSemesters) == 0 {
+		return nil
 	}
+	count := min(2, len(idx.allSemesters))
+	return idx.allSemesters[:count]
+}
 
-	if strings.TrimSpace(query) == "" {
-		return nil, nil
+// searchSemester performs BM25 search on a specific semester's index.
+func (semIdx *semesterIndex) search(query string, topN int) []BM25Result {
+	if semIdx == nil || semIdx.engine == nil || len(semIdx.corpus) == 0 {
+		return nil
 	}
-
-	idx.mu.RLock()
-	defer idx.mu.RUnlock()
 
 	// Tokenize query
 	queryTokens := tokenizeChinese(query)
 	if len(queryTokens) == 0 {
-		return nil, nil
+		return nil
 	}
 
-	// Get scores from external library
-	scores, err := idx.engine.GetScores(queryTokens)
+	// Get scores from BM25 engine
+	scores, err := semIdx.engine.GetScores(queryTokens)
 	if err != nil {
-		return nil, err
+		return nil
 	}
 
-	// Collect and sort results (filter scores > 0 OR negative but not zero)
+	// Collect and sort results
 	type scoredDoc struct {
 		docID int
 		score float64
@@ -205,14 +234,12 @@ func (idx *BM25Index) Search(query string, topN int) ([]BM25Result, error) {
 	var scoredDocs []scoredDoc
 
 	for docID, score := range scores {
-		// Include all non-zero scores (positive or negative)
-		// Negative scores can occur when term appears in all documents (IDF edge case)
 		if score != 0 {
 			scoredDocs = append(scoredDocs, scoredDoc{docID: docID, score: score})
 		}
 	}
 
-	// Sort by score descending using O(n log n) algorithm
+	// Sort by score descending
 	slices.SortFunc(scoredDocs, func(a, b scoredDoc) int {
 		if a.score > b.score {
 			return -1
@@ -223,8 +250,7 @@ func (idx *BM25Index) Search(query string, topN int) ([]BM25Result, error) {
 		return 0
 	})
 
-	// Limit results by Top-K (primary filtering method)
-	// No relative score filtering - let UI layer classify results instead
+	// Limit results by Top-K
 	if topN > 0 && len(scoredDocs) > topN {
 		scoredDocs = scoredDocs[:topN]
 	}
@@ -232,11 +258,11 @@ func (idx *BM25Index) Search(query string, topN int) ([]BM25Result, error) {
 	// Convert to results
 	results := make([]BM25Result, 0, len(scoredDocs))
 	for rank, sd := range scoredDocs {
-		if sd.docID >= len(idx.uidList) {
+		if sd.docID >= len(semIdx.uidList) {
 			continue
 		}
-		uid := idx.uidList[sd.docID]
-		meta := idx.metadata[uid]
+		uid := semIdx.uidList[sd.docID]
+		meta := semIdx.metadata[uid]
 		results = append(results, BM25Result{
 			UID:      uid,
 			Title:    meta.Title,
@@ -248,100 +274,69 @@ func (idx *BM25Index) Search(query string, topN int) ([]BM25Result, error) {
 		})
 	}
 
-	return results, nil
+	return results
 }
 
-// semesterPair represents a year-term combination for semester filtering.
-type semesterPair struct {
-	Year int
-	Term int
-}
-
-// getNewestTwoSemesters returns the newest 2 semesters from BM25 results (data-driven).
-// Returns a set of semester pairs for efficient lookup.
-// Compares year first (higher is newer), then term (2 > 1).
-func getNewestTwoSemesters(results []BM25Result) map[semesterPair]bool {
-	if len(results) == 0 {
-		return nil
-	}
-
-	// Collect all unique semesters
-	semesters := make(map[semesterPair]bool)
-	for _, r := range results {
-		semesters[semesterPair{Year: r.Year, Term: r.Term}] = true
-	}
-
-	// Convert to slice for sorting
-	semList := make([]semesterPair, 0, len(semesters))
-	for sem := range semesters {
-		semList = append(semList, sem)
-	}
-
-	// Sort by year descending, then term descending (newest first)
-	slices.SortFunc(semList, func(a, b semesterPair) int {
-		if a.Year != b.Year {
-			return b.Year - a.Year // Descending
-		}
-		return b.Term - a.Term // Descending
-	})
-
-	// Take top 2 semesters
-	result := make(map[semesterPair]bool)
-	for i := range min(2, len(semList)) {
-		result[semList[i]] = true
-	}
-
-	return result
-}
-
-// SearchCourses performs BM25 search and returns results from newest 2 semesters.
-// This ensures smart search shows current and recent course offerings.
-// Confidence is calculated as relative score within filtered results.
+// SearchCourses performs BM25 search on the newest 2 semesters independently.
+// Each semester gets its own Top-K results with confidence calculated relative to
+// that semester's best match. This ensures fair representation of both semesters.
+//
+// Per-Semester Independent Search:
+//   - Finds the newest 2 semesters in the index
+//   - Searches each semester's index independently
+//   - Each semester gets up to topN results
+//   - Confidence is calculated within each semester (best match = 1.0)
+//   - Results from both semesters are combined and returned
 func (idx *BM25Index) SearchCourses(_ context.Context, query string, topN int) ([]SearchResult, error) {
-	bm25Results, err := idx.Search(query, topN)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(bm25Results) == 0 {
+	if idx == nil || !idx.initialized || len(idx.semesterIndexes) == 0 {
 		return nil, nil
 	}
 
-	// Filter to newest 2 semesters (data-driven)
-	newestSemesters := getNewestTwoSemesters(bm25Results)
-	var filteredResults []BM25Result
-	for _, r := range bm25Results {
-		if newestSemesters[semesterPair{Year: r.Year, Term: r.Term}] {
-			filteredResults = append(filteredResults, r)
-		}
-	}
-
-	if len(filteredResults) == 0 {
+	if strings.TrimSpace(query) == "" {
 		return nil, nil
 	}
 
-	// Find max score within filtered results for confidence calculation
-	// For negative scores: "max" means closest to zero (least negative)
-	// For positive scores: "max" means highest value
-	maxScore := filteredResults[0].Score
-	for _, r := range filteredResults[1:] {
-		// For positive scores: higher is better
-		// For negative scores: less negative (closer to 0) is better
-		if (maxScore >= 0 && r.Score > maxScore) || (maxScore < 0 && r.Score > maxScore) {
-			maxScore = r.Score
-		}
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+
+	// Get newest 2 semesters
+	newestTwo := idx.getNewestTwoSemesters()
+	if len(newestTwo) == 0 {
+		return nil, nil
 	}
 
-	// Calculate relative confidence within filtered results
-	results := make([]SearchResult, len(filteredResults))
-	for i, r := range filteredResults {
-		results[i] = SearchResult{
-			UID:        r.UID,
-			Title:      r.Title,
-			Teachers:   r.Teachers,
-			Year:       r.Year,
-			Term:       r.Term,
-			Confidence: computeRelativeConfidence(r.Score, maxScore),
+	// Search each semester independently
+	var results []SearchResult
+	for _, sem := range newestTwo {
+		semIdx := idx.semesterIndexes[sem]
+		if semIdx == nil {
+			continue
+		}
+
+		// Search this semester's index
+		semResults := semIdx.search(query, topN)
+		if len(semResults) == 0 {
+			continue
+		}
+
+		// Find max score within this semester for confidence calculation
+		maxScore := semResults[0].Score
+		for _, r := range semResults[1:] {
+			if (maxScore >= 0 && r.Score > maxScore) || (maxScore < 0 && r.Score > maxScore) {
+				maxScore = r.Score
+			}
+		}
+
+		// Calculate relative confidence within this semester
+		for _, r := range semResults {
+			results = append(results, SearchResult{
+				UID:        r.UID,
+				Title:      r.Title,
+				Teachers:   r.Teachers,
+				Year:       r.Year,
+				Term:       r.Term,
+				Confidence: computeRelativeConfidence(r.Score, maxScore),
+			})
 		}
 	}
 
@@ -356,28 +351,19 @@ func (idx *BM25Index) SearchCourses(_ context.Context, query string, topN int) (
 //   - Non-relevant documents: Exponential distribution at low scores
 //   - This "Normal-Exponential mixture model" is the standard for BM25
 //
-// Why NOT use log transformation:
-//   - BM25's IDF already contains log: log((N-n+0.5)/(n+0.5)+1)
-//   - Log is for normalizing long-tail distributions, but Top-K is in Gaussian region
-//   - Log on negative scores (IDF edge case) causes mathematical issues
-//
 // Why use relative score (score/maxScore):
-//   - Absolute thresholds are not comparable across queries (Azure, Elasticsearch recommendation)
+//   - Absolute thresholds are not comparable across queries
 //   - Relative thresholds work better than absolute ones (academic consensus)
-//   - Top-K + relative score is the industry standard approach
+//   - With per-semester indexing, confidence is relative within the same semester
 //
 // Formula: score / maxScore
-//   - First result always has confidence = 1.0
-//   - Other results are relative to the best match
+//   - Best result in each semester always has confidence = 1.0
+//   - Other results are relative to the best match in the same semester
 //
 // Classification thresholds (in handler):
 //   - >= 0.8: "最佳匹配" (Best Match) - Normal distribution core
 //   - >= 0.6: "高度相關" (Highly Relevant) - Mixed region
 //   - < 0.6: "部分相關" (Partially Relevant) - Exponential tail
-//
-// Note: BM25 can return negative scores when terms appear in all documents (IDF edge case).
-// For negative scores, we calculate relative confidence using absolute values,
-// where the "least negative" (closest to 0) score gets confidence 1.0.
 func computeRelativeConfidence(score, maxScore float64) float32 {
 	// Handle zero or invalid maxScore
 	if maxScore == 0 {
@@ -394,8 +380,6 @@ func computeRelativeConfidence(score, maxScore float64) float32 {
 	}
 
 	// Both negative: inverse case (less negative = higher confidence)
-	// e.g., score=-7.68, maxScore=-7.68 → confidence=1.0
-	//       score=-8.21, maxScore=-7.68 → confidence=7.68/8.21=0.93
 	if maxScore < 0 && score < 0 {
 		confidence := maxScore / score // Note: inverted division for negative scores
 		if confidence > 1.0 {
@@ -411,8 +395,8 @@ func computeRelativeConfidence(score, maxScore float64) float32 {
 	return 0
 }
 
-// AddSyllabus adds a single syllabus to the index.
-// Note: BM25 requires full IDF recalculation, so this rebuilds the engine.
+// AddSyllabus adds a single syllabus to the appropriate semester index.
+// Note: BM25 requires full IDF recalculation, so this rebuilds the semester's engine.
 // For batch additions, prefer collecting all syllabi and calling Initialize().
 func (idx *BM25Index) AddSyllabus(syl *storage.Syllabus) error {
 	if idx == nil || syl == nil {
@@ -422,14 +406,33 @@ func (idx *BM25Index) AddSyllabus(syl *storage.Syllabus) error {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 
+	sem := SemesterKey{Year: syl.Year, Term: syl.Term}
+
+	// Get or create semester index
+	semIdx := idx.semesterIndexes[sem]
+	if semIdx == nil {
+		semIdx = &semesterIndex{
+			metadata: make(map[string]docMeta),
+		}
+		idx.semesterIndexes[sem] = semIdx
+
+		// Add to allSemesters if new
+		idx.allSemesters = append(idx.allSemesters, sem)
+		slices.SortFunc(idx.allSemesters, func(a, b SemesterKey) int {
+			if a.Year != b.Year {
+				return b.Year - a.Year
+			}
+			return b.Term - a.Term
+		})
+	}
+
 	// Check if syllabus already exists (by UID)
-	if _, exists := idx.metadata[syl.UID]; exists {
-		// Already in index, skip (update not supported)
+	if _, exists := semIdx.metadata[syl.UID]; exists {
 		return nil
 	}
 
 	// Add new syllabus metadata
-	idx.metadata[syl.UID] = docMeta{
+	semIdx.metadata[syl.UID] = docMeta{
 		Title:    syl.Title,
 		Teachers: syl.Teachers,
 		Year:     syl.Year,
@@ -449,19 +452,21 @@ func (idx *BM25Index) AddSyllabus(syl *storage.Syllabus) error {
 	}
 
 	// Add to corpus
-	idx.corpus = append(idx.corpus, content)
-	idx.uidList = append(idx.uidList, syl.UID)
+	semIdx.corpus = append(semIdx.corpus, content)
+	semIdx.uidList = append(semIdx.uidList, syl.UID)
 
-	// Rebuild BM25 engine (required for IDF recalculation)
+	// Rebuild BM25 engine for this semester (required for IDF recalculation)
 	var err error
-	idx.engine, err = bm25.NewBM25Okapi(idx.corpus, tokenizeChinese, 1.5, 0.75, nil)
+	semIdx.engine, err = bm25.NewBM25Okapi(semIdx.corpus, tokenizeChinese, 1.5, 0.75, nil)
 	if err != nil {
 		return err
 	}
 
 	idx.initialized = true
 
-	idx.logger.WithField("uid", syl.UID).Debug("Added syllabus to BM25 index")
+	idx.logger.WithField("uid", syl.UID).
+		WithField("semester", sem).
+		Debug("Added syllabus to BM25 index")
 	return nil
 }
 
@@ -472,18 +477,21 @@ func (idx *BM25Index) IsEnabled() bool {
 	}
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	return idx.initialized && len(idx.corpus) > 0
+	return idx.initialized && len(idx.semesterIndexes) > 0
 }
 
-// Count returns the number of courses (documents) in the index
-// With single document strategy, this equals the number of syllabi indexed
+// Count returns the total number of courses (documents) across all semesters
 func (idx *BM25Index) Count() int {
 	if idx == nil {
 		return 0
 	}
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	return len(idx.corpus)
+	total := 0
+	for _, semIdx := range idx.semesterIndexes {
+		total += len(semIdx.corpus)
+	}
+	return total
 }
 
 // tokenizeChinese performs tokenization optimized for Chinese text
