@@ -115,7 +115,7 @@ var (
 
 	// validExtendedSearchKeywords: extended time range, semesters 3-4.
 	validExtendedSearchKeywords = []string{
-		"更多學期", "歷史課程",
+		"更多學期", "更多課程", "歷史課程",
 	}
 
 	courseRegex            = bot.BuildKeywordRegex(validCourseKeywords)
@@ -989,15 +989,14 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 
 	msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
 
-	// Build quick reply items
-	quickReplyItems := []lineutil.QuickReplyItem{
-		lineutil.QuickReplyCourseAction(),
-	}
+	// Build quick reply items (consistent order as search results)
+	var quickReplyItems []lineutil.QuickReplyItem
 
-	// Only add "More Semesters" option for regular (non-extended) search
+	// Add "更多" button FIRST for visibility (only for non-extended search)
 	if !extended {
-		quickReplyItems = append(quickReplyItems, lineutil.QuickReplyMoreSemestersAction(searchTerm))
+		quickReplyItems = append(quickReplyItems, lineutil.QuickReplyMoreCoursesCompact(searchTerm))
 	}
+	quickReplyItems = append(quickReplyItems, lineutil.QuickReplyCourseAction())
 
 	if h.bm25Index != nil && h.bm25Index.IsEnabled() {
 		quickReplyItems = append(quickReplyItems,
@@ -1635,16 +1634,15 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 	}
 
 	// Build Quick Reply items based on context
-	quickReplyItems := []lineutil.QuickReplyItem{
-		lineutil.QuickReplyCourseAction(),
+	var quickReplyItems []lineutil.QuickReplyItem
+
+	// Add "更多" (More) button FIRST for visibility when search keyword exists
+	// Uses compact label "📅 更多" for cleaner UX, but outputs "更多學期 {keyword}"
+	if !isExtendedSearch && searchKeyword != "" {
+		quickReplyItems = append(quickReplyItems, lineutil.QuickReplyMoreCoursesCompact(searchKeyword))
 	}
 
-	// Add "More Semesters" option if:
-	// 1. Not already an extended search
-	// 2. Have a search keyword to pass along
-	if !isExtendedSearch && searchKeyword != "" {
-		quickReplyItems = append(quickReplyItems, lineutil.QuickReplyMoreSemestersAction(searchKeyword))
-	}
+	quickReplyItems = append(quickReplyItems, lineutil.QuickReplyCourseAction())
 
 	// Add smart search option if enabled
 	if h.bm25Index != nil && h.bm25Index.IsEnabled() {

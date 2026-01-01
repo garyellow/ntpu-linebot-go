@@ -486,15 +486,19 @@ func TestCanHandle_ExtendedKeywords(t *testing.T) {
 		input string
 		want  bool
 	}{
-		// Extended search keywords (更多學期)
+		// Extended search keywords (更多學期/更多課程)
 		{"更多學期 keyword", "更多學期 雲端", true},
 		{"更多學期 with whitespace", "更多學期 微積分", true},
+		{"更多課程 keyword", "更多課程 雲端", true},
+		{"更多課程 with whitespace", "更多課程 微積分", true},
 		{"歷史課程 keyword", "歷史課程 資料庫", true},
 		{"更多學期 alone", "更多學期", true},
+		{"更多課程 alone", "更多課程", true},
 		{"歷史課程 alone", "歷史課程", true},
 
 		// Should not match if not at start
 		{"更多學期 not at start", "查詢更多學期", false},
+		{"更多課程 not at start", "查詢更多課程", false},
 	}
 
 	for _, tt := range tests {

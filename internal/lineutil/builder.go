@@ -631,14 +631,15 @@ func QuickReplyProgramListAction() QuickReplyItem {
 	return QuickReplyItem{Action: NewMessageAction("🎓 學程列表", "學程列表")}
 }
 
-// QuickReplyMoreSemestersAction returns a "更多學期" quick reply item for searching older courses.
+// QuickReplyMoreCoursesCompact returns a compact "更多" quick reply item for course search results.
+// This provides a cleaner UX with a short label "📅 更多" while the message output
+// remains "更多學期 {keyword}" for consistent behavior.
 // Parameters:
 //   - keyword: The search keyword to preserve when expanding search range
 //
 // Returns a quick reply that triggers extended semester search (4 semesters)
-func QuickReplyMoreSemestersAction(keyword string) QuickReplyItem {
-	// Trigger extended search with consistent terminology
-	return QuickReplyItem{Action: NewMessageAction("📅 更多學期", "更多學期 "+keyword)}
+func QuickReplyMoreCoursesCompact(keyword string) QuickReplyItem {
+	return QuickReplyItem{Action: NewMessageAction("📅 更多", "更多學期 "+keyword)}
 }
 
 // ================================================
