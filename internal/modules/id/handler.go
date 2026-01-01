@@ -693,6 +693,7 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 			OriginalContentUrl: imageURL,
 			PreviewImageUrl:    imageURL,
 		}
+		imgMsg.Sender = sender
 		imgMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", config.IDDataYearEnd), fmt.Sprintf("學年 %d", config.IDDataYearEnd))},
 			{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", config.IDDataYearEnd-1), fmt.Sprintf("學年 %d", config.IDDataYearEnd-1))},
