@@ -319,13 +319,8 @@ func (idx *BM25Index) SearchCourses(_ context.Context, query string, topN int) (
 			continue
 		}
 
-		// Find max score within this semester for confidence calculation
+		// Best result is first since search() returns sorted by score descending
 		maxScore := semResults[0].Score
-		for _, r := range semResults[1:] {
-			if (maxScore >= 0 && r.Score > maxScore) || (maxScore < 0 && r.Score > maxScore) {
-				maxScore = r.Score
-			}
-		}
 
 		// Calculate relative confidence within this semester
 		for _, r := range semResults {
