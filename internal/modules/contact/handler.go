@@ -287,9 +287,11 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 			valColor = color
 		}
 		labelWithIcon := icon + " " + label
+		// Use shrink-to-fit to prevent text truncation on long labels like "24H緊急行政電話"
+		// Flex ratio 5:3 gives label more space; adjustMode shrinks text if still too long
 		return lineutil.NewFlexBox("baseline",
-			lineutil.NewFlexText(labelWithIcon).WithColor(lineutil.ColorLabel).WithSize("sm").WithFlex(3).FlexText,
-			lineutil.NewFlexText(value).WithWrap(true).WithColor(valColor).WithSize("sm").WithWeight("bold").WithFlex(4).WithAlign("end").FlexText,
+			lineutil.NewFlexText(labelWithIcon).WithColor(lineutil.ColorLabel).WithSize("sm").WithFlex(5).WithAdjustMode("shrink-to-fit").FlexText,
+			lineutil.NewFlexText(value).WithColor(valColor).WithSize("sm").WithWeight("bold").WithFlex(3).WithAlign("end").FlexText,
 		).FlexBox
 	}
 
