@@ -642,6 +642,12 @@ func QuickReplyMoreCoursesCompact(keyword string) QuickReplyItem {
 	return QuickReplyItem{Action: NewMessageAction("📅 更多", "更多學期 "+keyword)}
 }
 
+// QuickReplyFeedbackAction returns a "回報" quick reply item with GitHub issues link.
+// Uses URI action to open GitHub issues page in LINE's in-app browser.
+func QuickReplyFeedbackAction() QuickReplyItem {
+	return QuickReplyItem{Action: NewURIAction("💬 回報", "https://github.com/garyellow/ntpu-linebot-go/issues/new/choose")}
+}
+
 // ================================================
 // Quick Reply Presets (Standardized combinations for consistent UX)
 // ================================================
@@ -652,7 +658,7 @@ func QuickReplyMoreCoursesCompact(keyword string) QuickReplyItem {
 
 // QuickReplyMainNav returns the main navigation quick reply items.
 // Use this for welcome messages, help messages, and general navigation.
-// Order: 📚 課程 → 🎯 學程 → 🎓 學號 → 📞 聯絡 → 🚨 緊急 → 📖 說明
+// Order: 📚 課程 → 🎯 學程 → 🎓 學號 → 📞 聯絡 → 🚨 緊急 → 📖 說明 → 💬 回報
 func QuickReplyMainNav() []QuickReplyItem {
 	return []QuickReplyItem{
 		QuickReplyCourseAction(),
@@ -661,12 +667,13 @@ func QuickReplyMainNav() []QuickReplyItem {
 		QuickReplyContactAction(),
 		QuickReplyEmergencyAction(),
 		QuickReplyHelpAction(),
+		QuickReplyFeedbackAction(),
 	}
 }
 
 // QuickReplyMainNavCompact returns compact main navigation (without emergency).
 // Use this for general error recovery or when space is limited.
-// Order: 📚 課程 → 🎯 學程 → 🎓 學號 → 📞 聯絡 → 📖 說明
+// Order: 📚 課程 → 🎯 學程 → 🎓 學號 → 📞 聯絡 → 📖 說明 → 💬 回報
 func QuickReplyMainNavCompact() []QuickReplyItem {
 	return []QuickReplyItem{
 		QuickReplyCourseAction(),
@@ -674,12 +681,13 @@ func QuickReplyMainNavCompact() []QuickReplyItem {
 		QuickReplyStudentAction(),
 		QuickReplyContactAction(),
 		QuickReplyHelpAction(),
+		QuickReplyFeedbackAction(),
 	}
 }
 
 // QuickReplyMainFeatures returns main features without help (for use in instruction messages).
 // Use this when the message itself is help/instruction content.
-// Order: 📚 課程 → 🎯 學程 → 🎓 學號 → 📞 聯絡 → 🚨 緊急
+// Order: 📚 課程 → 🎯 學程 → 🎓 學號 → 📞 聯絡 → 🚨 緊急 → 💬 回報
 func QuickReplyMainFeatures() []QuickReplyItem {
 	return []QuickReplyItem{
 		QuickReplyCourseAction(),
@@ -687,6 +695,7 @@ func QuickReplyMainFeatures() []QuickReplyItem {
 		QuickReplyStudentAction(),
 		QuickReplyContactAction(),
 		QuickReplyEmergencyAction(),
+		QuickReplyFeedbackAction(),
 	}
 }
 

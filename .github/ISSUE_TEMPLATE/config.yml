@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 使用說明
+    url: https://github.com/garyellow/ntpu-linebot-go#-使用教學
+    about: 查看機器人使用教學
+  - name: 💬 加入好友
+    url: https://lin.ee/QiMmPBv
+    about: 直接在 LINE 中使用機器人
