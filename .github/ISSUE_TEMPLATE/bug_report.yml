@@ -2,7 +2,6 @@ name: 🐛 Bug 回報
 description: 回報機器人的錯誤或非預期行為
 title: "[Bug] "
 labels: ["bug"]
-assignees: ["Copilot"]
 body:
   - type: markdown
     attributes:
