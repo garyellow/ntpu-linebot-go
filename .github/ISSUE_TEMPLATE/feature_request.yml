@@ -2,6 +2,7 @@ name: ✨ 功能建議
 description: 提出新功能或改進建議
 title: "[Feature] "
 labels: ["enhancement"]
+assignees: ["Copilot"]
 body:
   - type: markdown
     attributes:
@@ -41,5 +42,13 @@ body:
     attributes:
       label: 其他替代方案（選填）
       description: 您是否考慮過其他解決方式？
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 其他資訊
+      description: 任何其他相關資訊
     validations:
       required: false
