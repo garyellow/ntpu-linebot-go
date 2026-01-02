@@ -2,6 +2,7 @@ name: 🐛 Bug 回報
 description: 回報機器人的錯誤或非預期行為
 title: "[Bug] "
 labels: ["bug"]
+assignees: ["Copilot"]
 body:
   - type: markdown
     attributes:
@@ -41,7 +42,7 @@ body:
   - type: textarea
     id: screenshots
     attributes:
-      label: 截圖（如有）
+      label: 截圖（選填）
       description: 如果可以的話，請附上截圖幫助我們理解問題
       placeholder: 拖曳圖片到這裡上傳，或貼上圖片
     validations:
