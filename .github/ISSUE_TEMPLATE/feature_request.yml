@@ -1,0 +1,45 @@
+name: ✨ 功能建議
+description: 提出新功能或改進建議
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感謝您提出建議！您的想法對我們很重要。
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: 功能概述
+      description: 請簡單描述您想要的功能
+      placeholder: 希望可以查詢教室空堂時間
+    validations:
+      required: true
+
+  - type: textarea
+    id: usecase
+    attributes:
+      label: 使用情境
+      description: 這個功能可以幫助您解決什麼問題？
+      placeholder: |
+        想找空教室自習時，不知道哪些教室是空的...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: 建議的解決方案（選填）
+      description: 如果您有想法，歡迎分享！
+      placeholder: 可以輸入「空教室」來查詢...
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 其他替代方案（選填）
+      description: 您是否考慮過其他解決方式？
+    validations:
+      required: false

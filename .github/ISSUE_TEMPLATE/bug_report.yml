@@ -1,0 +1,69 @@
+name: 🐛 Bug 回報
+description: 回報機器人的錯誤或非預期行為
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感謝您花時間回報問題！請盡量填寫以下資訊，幫助我們更快定位問題。
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 問題描述
+      description: 請簡單描述遇到的問題
+      placeholder: 當我輸入「課程 微積分」時，機器人沒有回應...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 重現步驟
+      description: 請列出重現問題的步驟
+      placeholder: |
+        1. 開啟 LINE 對話
+        2. 輸入「...」
+        3. 發生...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行為
+      description: 您預期應該發生什麼？
+      placeholder: 應該顯示微積分相關課程列表
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 截圖（如有）
+      description: 如果可以的話，請附上截圖幫助我們理解問題
+      placeholder: 拖曳圖片到這裡上傳，或貼上圖片
+    validations:
+      required: false
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 使用平台
+      description: 您使用哪個平台？
+      options:
+        - iOS (iPhone/iPad)
+        - Android
+        - LINE 桌面版 (Windows/macOS)
+        - 不確定
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 其他資訊
+      description: 任何其他相關資訊
+    validations:
+      required: false
