@@ -127,17 +127,17 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 
 	llmLimiter := ratelimit.NewKeyedLimiter(ratelimit.KeyedConfig{
 		Name:          "llm",
-		Burst:         cfg.Bot.LLMBurstTokens,
-		RefillRate:    cfg.Bot.LLMRefillPerHour / 3600.0, // Convert hourly to per-second
-		DailyLimit:    cfg.Bot.LLMDailyLimit,
+		Burst:         cfg.Bot.LLMRateBurst,
+		RefillRate:    cfg.Bot.LLMRateRefill / 3600.0, // Convert hourly to per-second
+		DailyLimit:    cfg.Bot.LLMRateDaily,
 		CleanupPeriod: config.RateLimiterCleanupInterval,
 		Metrics:       m,
 		MetricType:    ratelimit.MetricTypeLLM,
 	})
 	userLimiter := ratelimit.NewKeyedLimiter(ratelimit.KeyedConfig{
 		Name:          "user",
-		Burst:         cfg.Bot.UserRateLimitBurst,
-		RefillRate:    cfg.Bot.UserRateLimitRefillPerSec,
+		Burst:         cfg.Bot.UserRateBurst,
+		RefillRate:    cfg.Bot.UserRateRefill,
 		CleanupPeriod: config.RateLimiterCleanupInterval,
 		Metrics:       m,
 		MetricType:    ratelimit.MetricTypeUser,

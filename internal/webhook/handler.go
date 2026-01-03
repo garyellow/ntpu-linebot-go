@@ -70,7 +70,7 @@ func NewHandler(cfg HandlerConfig) (*Handler, error) {
 		minReplyTokenLength: cfg.BotConfig.MinReplyTokenLength,
 	}
 
-	h.rateLimiter = ratelimit.New(cfg.BotConfig.GlobalRateLimitRPS, cfg.BotConfig.GlobalRateLimitRPS)
+	h.rateLimiter = ratelimit.New(cfg.BotConfig.GlobalRateRPS, cfg.BotConfig.GlobalRateRPS)
 
 	return h, nil
 }

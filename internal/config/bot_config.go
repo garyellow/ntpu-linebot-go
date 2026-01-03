@@ -28,29 +28,29 @@ func (c *BotConfig) Validate() error {
 		return fmt.Errorf("max events per webhook must be positive, got %d", c.MaxEventsPerWebhook)
 	}
 
-	if c.UserRateLimitBurst <= 0 {
-		return fmt.Errorf("user rate limit burst must be positive, got %f", c.UserRateLimitBurst)
+	if c.UserRateBurst <= 0 {
+		return fmt.Errorf("user rate burst must be positive, got %f", c.UserRateBurst)
 	}
 
-	if c.UserRateLimitRefillPerSec <= 0 {
-		return fmt.Errorf("user rate limit refill per second must be positive, got %f", c.UserRateLimitRefillPerSec)
+	if c.UserRateRefill <= 0 {
+		return fmt.Errorf("user rate refill must be positive, got %f", c.UserRateRefill)
 	}
 
-	if c.LLMBurstTokens <= 0 {
-		return fmt.Errorf("LLM burst tokens must be positive, got %f", c.LLMBurstTokens)
+	if c.LLMRateBurst <= 0 {
+		return fmt.Errorf("LLM rate burst must be positive, got %f", c.LLMRateBurst)
 	}
 
-	if c.LLMRefillPerHour <= 0 {
-		return fmt.Errorf("LLM refill per hour must be positive, got %f", c.LLMRefillPerHour)
+	if c.LLMRateRefill <= 0 {
+		return fmt.Errorf("LLM rate refill must be positive, got %f", c.LLMRateRefill)
 	}
 
-	// LLMDailyLimit can be 0 (disabled)
-	if c.LLMDailyLimit < 0 {
-		return fmt.Errorf("LLM daily limit must be non-negative, got %d", c.LLMDailyLimit)
+	// LLMRateDaily can be 0 (disabled)
+	if c.LLMRateDaily < 0 {
+		return fmt.Errorf("LLM rate daily must be non-negative, got %d", c.LLMRateDaily)
 	}
 
-	if c.GlobalRateLimitRPS <= 0 {
-		return fmt.Errorf("global rate limit RPS must be positive, got %f", c.GlobalRateLimitRPS)
+	if c.GlobalRateRPS <= 0 {
+		return fmt.Errorf("global rate RPS must be positive, got %f", c.GlobalRateRPS)
 	}
 
 	if c.MaxCoursesPerSearch < 1 {

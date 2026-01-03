@@ -189,7 +189,7 @@ X-Line-Signature: {signature}
 - 處理超時: 60 秒
 - Global rate limit: 100 rps
 - Per-user rate limit: 15 tokens, 1 token/10s refill (Token Bucket)
-- LLM rate limit: 40 burst, 20/hr refill, 100/day cap
+- LLM rate limit: 60 burst, 30/hr refill, 150/day cap
 
 ---
 
@@ -449,7 +449,7 @@ LINE Webhook **必須**使用 HTTPS：
 
 **LLM Level (Multi-Layer)**:
 ```
-40 burst, 20/hr refill, 100/day sliding window cap
+60 burst, 30/hr refill, 150/day sliding window cap
 ```
 
 超過限制時請求會被靜默丟棄。
