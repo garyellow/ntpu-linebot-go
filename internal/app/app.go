@@ -140,6 +140,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		RefillRate:    cfg.Bot.UserRateLimitRefillPerSec,
 		CleanupPeriod: config.RateLimiterCleanupInterval,
 		Metrics:       m,
+		MetricType:    ratelimit.MetricTypeUser,
 	})
 
 	idHandler := id.NewHandler(db, scraperClient, m, log, stickerMgr)

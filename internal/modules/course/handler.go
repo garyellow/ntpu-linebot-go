@@ -1659,7 +1659,7 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 	// Append warning message at the end if results were truncated
 	if truncated {
 		warningMsg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("⚠️ 搜尋結果超過 %d 門課程，僅顯示前 %d 門\n\n建議使用更精確的搜尋條件以縮小範圍", originalCount, MaxCoursesPerSearch),
+			fmt.Sprintf("⚠️ 搜尋結果有 %d 門課程，僅顯示前 %d 門\n\n建議使用更精確的搜尋條件以縮小範圍", originalCount, MaxCoursesPerSearch),
 			sender,
 		)
 		messages = append(messages, warningMsg)

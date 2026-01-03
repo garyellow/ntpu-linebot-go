@@ -82,6 +82,7 @@ func setupTestHandler(t *testing.T) *Handler {
 		DailyLimit:    botCfg.LLMDailyLimit,
 		CleanupPeriod: 5 * time.Minute,
 		Metrics:       m,
+		MetricType:    ratelimit.MetricTypeLLM,
 	})
 	userLimiter := ratelimit.NewKeyedLimiter(ratelimit.KeyedConfig{
 		Name:          "user",
@@ -89,6 +90,7 @@ func setupTestHandler(t *testing.T) *Handler {
 		RefillRate:    botCfg.UserRateLimitRefillPerSec,
 		CleanupPeriod: 5 * time.Minute,
 		Metrics:       m,
+		MetricType:    ratelimit.MetricTypeUser,
 	})
 
 	processor := bot.NewProcessor(bot.ProcessorConfig{

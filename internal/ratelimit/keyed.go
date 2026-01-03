@@ -85,18 +85,20 @@ func NewKeyedLimiter(cfg KeyedConfig) *KeyedLimiter {
 		stopCh:  make(chan struct{}),
 	}
 
+	if kl.config.CleanupPeriod <= 0 {
+		kl.config.CleanupPeriod = time.Minute
+	}
+
 	// Setup metrics callbacks
 	if cfg.Metrics != nil {
 		kl.onDrop = func() {
 			cfg.Metrics.RecordRateLimiterDrop(cfg.Name)
 		}
 		kl.onUpdate = func(count int) {
-			kl.onUpdate = func(count int) {
-				if cfg.MetricType == MetricTypeLLM {
-					cfg.Metrics.SetLLMRateLimiterUsers(count)
-				} else {
-					cfg.Metrics.SetRateLimiterUsers(count)
-				}
+			if cfg.MetricType == MetricTypeLLM {
+				cfg.Metrics.SetLLMRateLimiterUsers(count)
+			} else {
+				cfg.Metrics.SetRateLimiterUsers(count)
 			}
 		}
 	}
@@ -234,7 +236,7 @@ func (kl *KeyedLimiter) cleanupLoop() {
 				if shouldDelete && entry.daily != nil {
 					// If daily limit exists, also check if it has reset (no usage in window)
 					// GetRemaining returning maxRequests means 0 usage in weighted window
-					shouldDelete = entry.daily.GetRemaining() == entry.daily.maxRequests
+					shouldDelete = entry.daily.GetRemaining() == kl.config.DailyLimit
 				}
 
 				if shouldDelete {

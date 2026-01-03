@@ -116,9 +116,10 @@ func TestKeyedLimiter_ThreadSafety(t *testing.T) {
 func TestKeyedLimiter_GetAvailable(t *testing.T) {
 	t.Parallel()
 	cfg := KeyedConfig{
-		Name:       "avail",
-		Burst:      10,
-		RefillRate: 1,
+		Name:          "avail",
+		Burst:         10,
+		RefillRate:    1,
+		CleanupPeriod: time.Hour,
 	}
 	kl := NewKeyedLimiter(cfg)
 	defer kl.Stop()
@@ -138,10 +139,11 @@ func TestKeyedLimiter_GetAvailable(t *testing.T) {
 func TestKeyedLimiter_GetDailyRemaining(t *testing.T) {
 	t.Parallel()
 	cfg := KeyedConfig{
-		Name:       "daily",
-		Burst:      10,
-		RefillRate: 1,
-		DailyLimit: 5,
+		Name:          "daily",
+		Burst:         10,
+		RefillRate:    1,
+		DailyLimit:    5,
+		CleanupPeriod: time.Hour,
 	}
 	kl := NewKeyedLimiter(cfg)
 	defer kl.Stop()
@@ -157,7 +159,7 @@ func TestKeyedLimiter_GetDailyRemaining(t *testing.T) {
 	}
 
 	// Disabled daily
-	cfg2 := KeyedConfig{Name: "nodaily", Burst: 10}
+	cfg2 := KeyedConfig{Name: "nodaily", Burst: 10, CleanupPeriod: time.Hour}
 	kl2 := NewKeyedLimiter(cfg2)
 	defer kl2.Stop()
 	if r := kl2.GetDailyRemaining("u1"); r != -1 {
