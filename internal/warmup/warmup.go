@@ -14,7 +14,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -651,21 +650,16 @@ processLoop:
 			}
 
 			offset += batchLoadSize
-			// Explicitly nil out courses to help GC
 		}
-		// Force GC after each semester to release memory
-		runtime.GC()
 	}
 
 	// Save remaining syllabi
 	if len(newSyllabi) > 0 {
 		if err := db.SaveSyllabusBatch(ctx, newSyllabi); err != nil {
 			log.WithError(err).Error("Failed to save final syllabi batch")
+			errorCount += len(newSyllabi)
 		}
 	}
-
-	// Final GC to release memory before BM25 index rebuild
-	runtime.GC()
 
 	// Rebuild BM25 index from database (includes all syllabi with full content)
 	if bm25Index != nil {

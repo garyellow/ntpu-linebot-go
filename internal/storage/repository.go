@@ -149,12 +149,12 @@ func (db *DB) SearchStudentsByName(ctx context.Context, name string) (*StudentSe
 	// Add LIKE clause for each character to match "contains all characters" (order independent)
 	// "王明" -> LIKE '%王%' AND LIKE '%明%'
 	// This matches "王小明" and "明王" (if that makes sense for names)
-	var querySb151 strings.Builder
+	var whereClauses strings.Builder
 	for _, r := range runes {
-		querySb151.WriteString(` AND name LIKE ? ESCAPE '\'`)
+		whereClauses.WriteString(` AND name LIKE ? ESCAPE '\'`)
 		args = append(args, "%"+sanitizeSearchTerm(string(r))+"%")
 	}
-	query += querySb151.String()
+	query += whereClauses.String()
 
 	// Add ordering and limit
 	query += ` ORDER BY year DESC, id DESC LIMIT 401` // Fetch 401 to check if we hit limit (though UI limits to 400)
@@ -194,7 +194,8 @@ func (db *DB) SearchStudentsByName(ctx context.Context, name string) (*StudentSe
 			"operation", "SearchStudentsByName",
 			"duration_ms", duration.Milliseconds(),
 			"search_term", name,
-			"result_count", len(matchedStudents))
+			"result_count", len(matchedStudents),
+			"total_count", totalCount)
 	}
 
 	return &StudentSearchResult{
@@ -518,13 +519,13 @@ func (db *DB) SearchContactsFuzzy(ctx context.Context, term string) ([]Contact, 
 		FROM contacts WHERE cached_at > ?`
 	args := []interface{}{ttlTimestamp}
 
-	var querySb518 strings.Builder
+	var whereClauses strings.Builder
 	for _, r := range runes {
 		pattern := "%" + sanitizeSearchTerm(string(r)) + "%"
-		querySb518.WriteString(` AND (name LIKE ? ESCAPE '\' OR title LIKE ? ESCAPE '\' OR organization LIKE ? ESCAPE '\' OR superior LIKE ? ESCAPE '\')`)
+		whereClauses.WriteString(` AND (name LIKE ? ESCAPE '\' OR title LIKE ? ESCAPE '\' OR organization LIKE ? ESCAPE '\' OR superior LIKE ? ESCAPE '\')`)
 		args = append(args, pattern, pattern, pattern, pattern)
 	}
-	query += querySb518.String()
+	query += whereClauses.String()
 
 	query += ` ORDER BY type, name LIMIT 500`
 

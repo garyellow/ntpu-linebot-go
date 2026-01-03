@@ -4,7 +4,6 @@ package rag
 
 import (
 	"context"
-	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -103,7 +102,7 @@ func NewBM25Index(log *logger.Logger) *BM25Index {
 // 1. Fetch distinct semesters first
 // 2. Iterate and load one semester at a time
 // 3. Build index for that semester
-// 4. Drop reference to loaded syllabi (corpus) to allow GC before next semester
+// 4. Local syllabi slice goes out of scope, allowing Go's GC to reclaim memory naturally
 //
 // This ensures we never hold the entire database text in memory at once.
 func (idx *BM25Index) Initialize(ctx context.Context, db *storage.DB) error {
@@ -158,9 +157,6 @@ func (idx *BM25Index) Initialize(ctx context.Context, db *storage.DB) error {
 			idx.allSemesters = append(idx.allSemesters, key)
 			totalCourses += count
 		}
-
-		// Force GC after loading each semester to keep memory footprint low
-		runtime.GC()
 	}
 
 	// Sort semesters (newest first)
@@ -217,9 +213,9 @@ func (idx *BM25Index) buildSemesterIndex(syllabi []*storage.Syllabus) (*semester
 		return nil, 0, nil
 	}
 
-	// Build BM25 engine for this semester (independent IDF)
-	// NewBM25Okapi calculates term frequencies and params, it does NOT need the corpus afterwards.
-	// (Assuming standard library behavior, or verify valid results in tests)
+	// Build BM25 engine for this semester (independent IDF).
+	// NewBM25Okapi consumes the corpus to build its internal index; after this point we only
+	// access document content through the engine, not via the original corpus slice.
 	engine, err := bm25.NewBM25Okapi(corpus, tokenizeChinese, 1.5, 0.75, nil)
 	if err != nil {
 		return nil, 0, err
