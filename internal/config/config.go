@@ -65,15 +65,15 @@ type BotConfig struct {
 	WebhookTimeout time.Duration // Timeout for webhook bot processing (see config/timeouts.go)
 
 	// Rate Limits (Token Bucket Algorithm)
-	UserRateLimitBurst        float64 // Maximum burst tokens per user (default: 15)
-	UserRateLimitRefillPerSec float64 // Tokens refilled per second (default: 0.1 = 1 per 10s)
+	UserRateBurst  float64 // Maximum burst tokens per user (default: 15)
+	UserRateRefill float64 // Tokens refilled per second (default: 0.1 = 1 per 10s)
 
 	// LLM Rate Limits (Multi-Layer: Hourly + Daily)
-	LLMBurstTokens   float64 // Maximum burst tokens for LLM (default: 40)
-	LLMRefillPerHour float64 // LLM tokens refilled per hour (default: 20)
-	LLMDailyLimit    int     // Maximum LLM requests per day (default: 100, 0 = disabled)
+	LLMRateBurst  float64 // Maximum burst tokens for LLM (default: 60)
+	LLMRateRefill float64 // LLM tokens refilled per hour (default: 30)
+	LLMRateDaily  int     // Maximum LLM requests per day (default: 150, 0 = disabled)
 
-	GlobalRateLimitRPS float64 // Global rate limit in requests per second (default: 100)
+	GlobalRateRPS float64 // Global rate limit in requests per second (default: 100)
 
 	// LINE API Constraints
 	MaxMessagesPerReply int // Maximum messages per reply (LINE API limit: 5)
@@ -150,19 +150,19 @@ func Load() (*Config, error) {
 
 		// Bot Configuration
 		Bot: BotConfig{
-			WebhookTimeout:            getDurationEnv("WEBHOOK_TIMEOUT", WebhookProcessing),
-			UserRateLimitBurst:        getFloatEnv("USER_RATE_LIMIT_BURST", 15.0),
-			UserRateLimitRefillPerSec: getFloatEnv("USER_RATE_LIMIT_REFILL_PER_SEC", 0.1), // 1 per 10s
-			LLMBurstTokens:            getFloatEnv("LLM_BURST_TOKENS", 40.0),
-			LLMRefillPerHour:          getFloatEnv("LLM_REFILL_PER_HOUR", 20.0),
-			LLMDailyLimit:             getIntEnv("LLM_DAILY_LIMIT", 100),
-			GlobalRateLimitRPS:        getFloatEnv("GLOBAL_RATE_LIMIT_RPS", 100.0),
-			MaxMessagesPerReply:       LINEMaxMessagesPerReply,
-			MaxEventsPerWebhook:       100,
-			MinReplyTokenLength:       10,
-			MaxMessageLength:          LINEMaxTextMessageLength,
-			MaxPostbackDataSize:       LINEMaxPostbackDataLength,
-			MaxCoursesPerSearch:       40,
+			WebhookTimeout:      getDurationEnv("WEBHOOK_TIMEOUT", WebhookProcessing),
+			UserRateBurst:       getFloatEnv("USER_RATE_BURST", 15.0),
+			UserRateRefill:      getFloatEnv("USER_RATE_REFILL", 0.1), // 1 per 10s
+			LLMRateBurst:        getFloatEnv("LLM_RATE_BURST", 60.0),
+			LLMRateRefill:       getFloatEnv("LLM_RATE_REFILL", 30.0),
+			LLMRateDaily:        getIntEnv("LLM_RATE_DAILY", 150),
+			GlobalRateRPS:       getFloatEnv("GLOBAL_RATE_RPS", 100.0),
+			MaxMessagesPerReply: LINEMaxMessagesPerReply,
+			MaxEventsPerWebhook: 100,
+			MinReplyTokenLength: 10,
+			MaxMessageLength:    LINEMaxTextMessageLength,
+			MaxPostbackDataSize: LINEMaxPostbackDataLength,
+			MaxCoursesPerSearch: 40,
 
 			MaxStudentsPerSearch: 400,
 			MaxContactsPerSearch: 100,
