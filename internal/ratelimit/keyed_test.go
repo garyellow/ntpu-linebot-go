@@ -5,16 +5,7 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
-	"github.com/prometheus/client_golang/prometheus"
 )
-
-// mockMetrics creates a test Metrics instance
-func mockMetrics() *metrics.Metrics {
-	reg := prometheus.NewRegistry()
-	return metrics.New(reg)
-}
 
 func TestKeyedLimiter_Basic(t *testing.T) {
 	t.Parallel()
