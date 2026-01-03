@@ -98,15 +98,15 @@ LINE Webhook → Gin Handler
 
 **Contact Module**:
 - Emergency phones, multilingual keywords, Flex Message cards
-- **2-tier parallel search**: SQL LIKE + fuzzy `ContainsAllRunes()`, merged and deduplicated
+- **2-tier SQL search**: SQL LIKE (name, title) + SQL Fuzzy `SearchContactsFuzzy()` (name, title, organization, superior)
+- **Memory efficient**: Both searches use SQL-level character matching, no full-table loading
 - **Sorting**: Organizations by hierarchy, individuals by match count
 
 **ID Module**:
-- **Character-set matching**: Application-layer search with `stringutil.ContainsAllRunes()`
+- **SQL character-set matching**: Dynamic LIKE clauses for each character (memory efficient)
 - Supports non-contiguous character matching: "王明" and "明王" both match "王小明"
 - Returns `StudentSearchResult{Students: []Student, TotalCount: int}` structure
 - Displays "found X total, showing first 400" when results exceed limit
-- No SQL LIKE - pure application-layer filtering for maximum flexibility
 
 **Program Module**:
 - **Pattern-Action Table**: Priority-sorted matchers (lower number = higher priority)

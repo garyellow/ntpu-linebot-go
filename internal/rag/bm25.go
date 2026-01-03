@@ -159,9 +159,6 @@ func (idx *BM25Index) Initialize(ctx context.Context, db *storage.DB) error {
 			totalCourses += count
 		}
 
-		// explicit nil to help GC (though loop scope helps too)
-		syllabi = nil
-
 		// Force GC after loading each semester to keep memory footprint low
 		runtime.GC()
 	}
@@ -189,7 +186,7 @@ func (idx *BM25Index) buildSemesterIndex(syllabi []*storage.Syllabus) (*semester
 	semIdx := &semesterIndex{
 		metadata: make(map[string]docMeta),
 	}
-	var corpus []string
+	corpus := make([]string, 0, len(syllabi))
 
 	for _, syl := range syllabi {
 		// Store metadata

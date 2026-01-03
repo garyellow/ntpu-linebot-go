@@ -631,7 +631,7 @@ processLoop:
 						log.WithError(err).Error("Failed to save syllabi batch")
 						errorCount += len(newSyllabi)
 					}
-					newSyllabi = nil                                         // Clear slice
+
 					newSyllabi = make([]*storage.Syllabus, 0, saveBatchSize) // pre-allocate
 				}
 
@@ -652,7 +652,6 @@ processLoop:
 
 			offset += batchLoadSize
 			// Explicitly nil out courses to help GC
-			courses = nil
 		}
 		// Force GC after each semester to release memory
 		runtime.GC()
@@ -662,12 +661,10 @@ processLoop:
 	if len(newSyllabi) > 0 {
 		if err := db.SaveSyllabusBatch(ctx, newSyllabi); err != nil {
 			log.WithError(err).Error("Failed to save final syllabi batch")
-			// Don't error out, just log
 		}
-		newSyllabi = nil
 	}
 
-	// Final GC
+	// Final GC to release memory before BM25 index rebuild
 	runtime.GC()
 
 	// Rebuild BM25 index from database (includes all syllabi with full content)
