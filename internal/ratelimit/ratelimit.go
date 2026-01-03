@@ -78,7 +78,8 @@ func (l *Limiter) refill() {
 
 // Allow checks if a request is allowed based on rate limit.
 // Returns true if allowed (token consumed), false otherwise.
-// This method is non-blocking.
+// This method is non-blocking. Note: This consumes a token.
+// Use Check() + Consume() for atomic multi-layer checks.
 func (l *Limiter) Allow() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -91,6 +92,28 @@ func (l *Limiter) Allow() bool {
 	}
 
 	return false
+}
+
+// Check returns true if a request would be allowed (without consuming).
+// Use this with Consume() for atomic multi-layer rate limiting.
+func (l *Limiter) Check() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	l.refill()
+	return l.tokens >= 1.0
+}
+
+// Consume decrements a token (assumes Check() already passed).
+// Call this after all rate limit checks pass.
+func (l *Limiter) Consume() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	l.refill()
+	if l.tokens >= 1.0 {
+		l.tokens -= 1.0
+	}
 }
 
 // Wait blocks until a token is available or the context is canceled.

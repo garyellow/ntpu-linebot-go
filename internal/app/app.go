@@ -49,8 +49,8 @@ type Application struct {
 	bm25Index      *rag.BM25Index
 	intentParser   genai.IntentParser  // Interface type for multi-provider support
 	queryExpander  genai.QueryExpander // Interface type for multi-provider support
-	llmRateLimiter *ratelimit.LLMRateLimiter
-	userLimiter    *ratelimit.UserRateLimiter
+	llmLimiter     *ratelimit.KeyedLimiter
+	userLimiter    *ratelimit.KeyedLimiter
 	courseHandler  *course.Handler // For refreshing semester data after warmup
 	wg             sync.WaitGroup  // Track background goroutines for graceful shutdown
 }
@@ -125,11 +125,24 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		}
 	}
 
-	llmRateLimiter := ratelimit.NewLLMRateLimiter(cfg.Bot.LLMRateLimitPerHour, config.RateLimiterCleanupInterval, m)
-	userLimiter := ratelimit.NewUserRateLimiter(cfg.Bot.UserRateLimitBurst, cfg.Bot.UserRateLimitRefillPerSec, config.RateLimiterCleanupInterval, m)
+	llmLimiter := ratelimit.NewKeyedLimiter(ratelimit.KeyedConfig{
+		Name:          "llm",
+		Burst:         cfg.Bot.LLMBurstTokens,
+		RefillRate:    cfg.Bot.LLMRefillPerHour / 3600.0, // Convert hourly to per-second
+		DailyLimit:    cfg.Bot.LLMDailyLimit,
+		CleanupPeriod: config.RateLimiterCleanupInterval,
+		Metrics:       m,
+	})
+	userLimiter := ratelimit.NewKeyedLimiter(ratelimit.KeyedConfig{
+		Name:          "user",
+		Burst:         cfg.Bot.UserRateLimitBurst,
+		RefillRate:    cfg.Bot.UserRateLimitRefillPerSec,
+		CleanupPeriod: config.RateLimiterCleanupInterval,
+		Metrics:       m,
+	})
 
 	idHandler := id.NewHandler(db, scraperClient, m, log, stickerMgr)
-	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerMgr, bm25Index, queryExpander, llmRateLimiter)
+	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerMgr, bm25Index, queryExpander, llmLimiter)
 	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerMgr, cfg.Bot.MaxContactsPerSearch)
 	programHandler := program.NewHandler(db, m, log, stickerMgr, courseHandler.GetSemesterDetector())
 
@@ -142,7 +155,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	processor := bot.NewProcessor(bot.ProcessorConfig{
 		Registry:       botRegistry,
 		IntentParser:   intentParser,
-		LLMRateLimiter: llmRateLimiter,
+		LLMLimiter:     llmLimiter,
 		UserLimiter:    userLimiter,
 		StickerManager: stickerMgr,
 		Logger:         log,
@@ -181,7 +194,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		bm25Index:      bm25Index,
 		intentParser:   intentParser,
 		queryExpander:  queryExpander,
-		llmRateLimiter: llmRateLimiter,
+		llmLimiter:     llmLimiter,
 		userLimiter:    userLimiter,
 		courseHandler:  courseHandler,
 	}
@@ -423,8 +436,8 @@ func (a *Application) shutdown() error {
 		a.logger.WithError(err).WithField("component", "database").Error("Component close error")
 	}
 
-	if a.llmRateLimiter != nil {
-		a.llmRateLimiter.Stop()
+	if a.llmLimiter != nil {
+		a.llmLimiter.Stop()
 	}
 	if a.userLimiter != nil {
 		a.userLimiter.Stop()

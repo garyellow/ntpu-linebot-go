@@ -36,8 +36,17 @@ func (c *BotConfig) Validate() error {
 		return fmt.Errorf("user rate limit refill per second must be positive, got %f", c.UserRateLimitRefillPerSec)
 	}
 
-	if c.LLMRateLimitPerHour <= 0 {
-		return fmt.Errorf("LLM rate limit must be positive, got %f", c.LLMRateLimitPerHour)
+	if c.LLMBurstTokens <= 0 {
+		return fmt.Errorf("LLM burst tokens must be positive, got %f", c.LLMBurstTokens)
+	}
+
+	if c.LLMRefillPerHour <= 0 {
+		return fmt.Errorf("LLM refill per hour must be positive, got %f", c.LLMRefillPerHour)
+	}
+
+	// LLMDailyLimit can be 0 (disabled)
+	if c.LLMDailyLimit < 0 {
+		return fmt.Errorf("LLM daily limit must be non-negative, got %d", c.LLMDailyLimit)
 	}
 
 	if c.GlobalRateLimitRPS <= 0 {

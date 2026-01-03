@@ -860,7 +860,7 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 	// Append warning message at the end if results were truncated
 	if truncated {
 		warningMsg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("⚠️ 搜尋結果達到上限 %d 筆\n\n可能有更多結果未顯示，建議使用更精確的關鍵字搜尋", h.maxContactsLimit),
+			fmt.Sprintf("⚠️ 搜尋結果達到上限 %d 筆\n可能有更多結果未顯示，建議使用更精確的關鍵字搜尋", h.maxContactsLimit),
 			sender,
 		)
 		messages = append(messages, warningMsg)
