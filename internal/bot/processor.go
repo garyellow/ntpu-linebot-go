@@ -1130,15 +1130,6 @@ func (p *Processor) buildLLMRateLimitFlexMessage(sender *messaging_api.Sender) *
 			WithColor(lineutil.ColorText).
 			WithMargin("md").FlexText,
 
-		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
-
-		// Alternative options header
-		lineutil.NewFlexText("💡 配額重置前僅能使用關鍵字查詢").
-			WithSize("sm").
-			WithWeight("bold").
-			WithColor(lineutil.ColorText).
-			WithMargin("md").FlexText,
-
 		// Alternative options list
 		lineutil.NewFlexBox("horizontal",
 			lineutil.NewFlexText("•").WithSize("xs").WithColor(lineutil.ColorSubtext).WithFlex(0).FlexText,
