@@ -43,7 +43,7 @@ type Handler struct {
 	stickerManager   *sticker.Manager
 	bm25Index        *rag.BM25Index
 	queryExpander    genai.QueryExpander // Interface for multi-provider support
-	llmRateLimiter   *ratelimit.LLMRateLimiter
+	llmRateLimiter   *ratelimit.KeyedLimiter
 	semesterDetector *SemesterDetector // Data-driven semester detection
 
 	// matchers contains all pattern-handler pairs sorted by priority.
@@ -142,7 +142,7 @@ func NewHandler(
 	stickerManager *sticker.Manager,
 	bm25Index *rag.BM25Index,
 	queryExpander genai.QueryExpander, // Interface for multi-provider support
-	llmRateLimiter *ratelimit.LLMRateLimiter,
+	llmRateLimiter *ratelimit.KeyedLimiter,
 ) *Handler {
 	// Create semester detector with database count function
 	semesterDetector := NewSemesterDetector(db.CountCoursesBySemester)
@@ -874,7 +874,10 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 	if len(courses) > 0 {
 		h.metrics.RecordCacheHit(ModuleName)
 		log.Infof("Found %d courses in cache for search term: %s", len(courses), searchTerm)
-		return h.formatCourseListResponseWithOptions(courses, searchTerm, extended)
+		return h.formatCourseListResponseWithOptions(courses, FormatOptions{
+			SearchKeyword:    searchTerm,
+			IsExtendedSearch: extended,
+		})
 	}
 
 	// Step 3: Cache miss - Try scraping
@@ -960,7 +963,10 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 		for i, c := range foundCourses {
 			courses[i] = *c
 		}
-		return h.formatCourseListResponseWithOptions(courses, searchTerm, extended)
+		return h.formatCourseListResponseWithOptions(courses, FormatOptions{
+			SearchKeyword:    searchTerm,
+			IsExtendedSearch: extended,
+		})
 	}
 
 	// No results found even after scraping
@@ -1090,7 +1096,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 			if len(courses) > MaxCoursesPerSearch {
 				courses = courses[:MaxCoursesPerSearch]
 			}
-			return h.formatCourseListResponse(courses)
+			return h.formatCourseListResponseForHistorical(courses)
 		}
 		// Cache miss for recent year: fall through to historical search/scraper path.
 		// Data will be saved to the appropriate table (courses for recent, historical_courses for old)
@@ -1133,7 +1139,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 		if len(courses) > MaxCoursesPerSearch {
 			courses = courses[:MaxCoursesPerSearch]
 		}
-		return h.formatCourseListResponse(courses)
+		return h.formatCourseListResponseForHistorical(courses)
 	}
 
 	// Cache miss - scrape from historical course system
@@ -1206,7 +1212,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 		for i, c := range scrapedCourses {
 			courses[i] = *c
 		}
-		return h.formatCourseListResponse(courses)
+		return h.formatCourseListResponseForHistorical(courses)
 	}
 
 	// No results found
@@ -1494,19 +1500,31 @@ func extractUniqueSemesters(courses []storage.Course) []lineutil.SemesterPair {
 	return semesters
 }
 
+// FormatOptions configures course list formatting behavior.
+type FormatOptions struct {
+	SearchKeyword    string // Original search keyword (for "more semesters" Quick Reply)
+	IsExtendedSearch bool   // True if this is already an extended (4-semester) search
+	IsHistorical     bool   // True for historical queries (uses semester text as label instead of "最新學期")
+}
+
 // formatCourseListResponse formats a list of courses as LINE messages with semester labels.
 // Courses are sorted by semester (newest first) and each bubble shows a label indicating
 // whether it's from the newest semester in data, previous semester, or older.
 func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging_api.MessageInterface {
-	return h.formatCourseListResponseWithOptions(courses, "", false)
+	return h.formatCourseListResponseWithOptions(courses, FormatOptions{})
+}
+
+// formatCourseListResponseForHistorical formats courses with semester-only labels.
+// Used for historical course searches where relative labels ("最新學期") are misleading.
+func (h *Handler) formatCourseListResponseForHistorical(courses []storage.Course) []messaging_api.MessageInterface {
+	return h.formatCourseListResponseWithOptions(courses, FormatOptions{IsHistorical: true})
 }
 
 // formatCourseListResponseWithOptions formats courses with extended options.
 // Parameters:
 //   - courses: List of courses to display
-//   - searchKeyword: Original search keyword (for "more semesters" Quick Reply)
-//   - isExtendedSearch: True if this is already an extended (4-semester) search
-func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, searchKeyword string, isExtendedSearch bool) []messaging_api.MessageInterface {
+//   - opts: Formatting options (search keyword, extended/historical flags)
+func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, opts FormatOptions) []messaging_api.MessageInterface {
 	if len(courses) == 0 {
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender("🔍 查無課程資料", sender)
@@ -1542,8 +1560,22 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 	// Create bubbles for carousel (LINE API limit: max 10 bubbles per Flex Carousel)
 	bubbles := make([]messaging_api.FlexBubble, 0, len(courses))
 	for _, course := range courses {
-		// Get semester label info based on data position
-		labelInfo := lineutil.GetSemesterLabel(course.Year, course.Term, dataSemesters)
+		// Get label info based on mode:
+		// - Historical mode: Use semester text directly as label (e.g., "📅 113 學年度 下學期")
+		// - Regular mode: Use relative labels (最新學期/上個學期/過去學期)
+		var labelInfo lineutil.BodyLabelInfo
+		if opts.IsHistorical {
+			// Historical: show explicit semester (no "開課學期" info row needed)
+			semesterText := lineutil.FormatSemester(course.Year, course.Term)
+			labelInfo = lineutil.BodyLabelInfo{
+				Emoji: "📅",
+				Label: semesterText,
+				Color: lineutil.ColorHeaderHistorical, // Use historical color for all
+			}
+		} else {
+			// Regular: use relative labels based on data position
+			labelInfo = lineutil.GetSemesterLabel(course.Year, course.Term, dataSemesters)
+		}
 
 		// Colored header with course title
 		heroTitle := lineutil.FormatCourseTitleWithUID(course.Title, course.UID)
@@ -1558,10 +1590,12 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 		// First row is semester label
 		body.AddComponent(lineutil.NewBodyLabel(labelInfo).FlexBox)
 
-		// 學期資訊 - first info row (no separator so it flows directly after the label)
-		semesterText := lineutil.FormatSemester(course.Year, course.Term)
-		firstInfoRow := lineutil.NewInfoRow("📅", "開課學期", semesterText, lineutil.DefaultInfoRowStyle())
-		body.AddComponent(firstInfoRow.FlexBox)
+		// For regular mode, add semester info row; for historical mode, skip (already in label)
+		if !opts.IsHistorical {
+			semesterText := lineutil.FormatSemester(course.Year, course.Term)
+			firstInfoRow := lineutil.NewInfoRow("📅", "開課學期", semesterText, lineutil.DefaultInfoRowStyle())
+			body.AddComponent(firstInfoRow.FlexBox)
+		}
 
 		// 第二列：授課教師 - use shrink-to-fit for maximum content display
 		if len(course.Teachers) > 0 {
@@ -1625,7 +1659,7 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 	// Append warning message at the end if results were truncated
 	if truncated {
 		warningMsg := lineutil.NewTextMessageWithConsistentSender(
-			fmt.Sprintf("⚠️ 搜尋結果超過 %d 門課程，僅顯示前 %d 門\n\n建議使用更精確的搜尋條件以縮小範圍", originalCount, MaxCoursesPerSearch),
+			fmt.Sprintf("⚠️ 搜尋結果共 %d 門課程，僅顯示前 %d 門\n建議使用更精確的搜尋條件以縮小範圍", originalCount, MaxCoursesPerSearch),
 			sender,
 		)
 		messages = append(messages, warningMsg)
@@ -1636,8 +1670,8 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 
 	// Add "更多" (More) button FIRST for visibility when search keyword exists
 	// Uses compact label "📅 更多" for cleaner UX, but outputs "更多學期 {keyword}"
-	if !isExtendedSearch && searchKeyword != "" {
-		quickReplyItems = append(quickReplyItems, lineutil.QuickReplyMoreCoursesCompact(searchKeyword))
+	if !opts.IsExtendedSearch && opts.SearchKeyword != "" {
+		quickReplyItems = append(quickReplyItems, lineutil.QuickReplyMoreCoursesCompact(opts.SearchKeyword))
 	}
 
 	quickReplyItems = append(quickReplyItems, lineutil.QuickReplyCourseAction())
@@ -1645,9 +1679,9 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 	// Add smart search option if enabled
 	if h.bm25Index != nil && h.bm25Index.IsEnabled() {
 		// Preserve original keyword (if any) so users can switch to smart search seamlessly.
-		if searchKeyword != "" {
+		if opts.SearchKeyword != "" {
 			quickReplyItems = append(quickReplyItems,
-				lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("🔮 找課", "找課 "+searchKeyword)},
+				lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("🔮 找課", "找課 "+opts.SearchKeyword)},
 			)
 		} else {
 			quickReplyItems = append(quickReplyItems, lineutil.QuickReplySmartSearchAction())

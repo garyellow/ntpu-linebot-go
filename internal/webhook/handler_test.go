@@ -56,9 +56,11 @@ func setupTestHandler(t *testing.T) *Handler {
 
 	botCfg := config.BotConfig{
 		WebhookTimeout:            30 * time.Second,
-		UserRateLimitBurst:        6.0,
-		UserRateLimitRefillPerSec: 1.0 / 5.0,
-		LLMRateLimitPerHour:       50.0,
+		UserRateLimitBurst:        15.0,
+		UserRateLimitRefillPerSec: 0.1,
+		LLMBurstTokens:            40.0,
+		LLMRefillPerHour:          20.0,
+		LLMDailyLimit:             100,
 		GlobalRateLimitRPS:        100.0,
 		MaxMessagesPerReply:       5,
 		MaxEventsPerWebhook:       100,
@@ -73,13 +75,28 @@ func setupTestHandler(t *testing.T) *Handler {
 		ValidYearEnd:         112,
 	}
 
-	llmRateLimiter := ratelimit.NewLLMRateLimiter(botCfg.LLMRateLimitPerHour, 5*time.Minute, m)
-	userLimiter := ratelimit.NewUserRateLimiter(botCfg.UserRateLimitBurst, botCfg.UserRateLimitRefillPerSec, 5*time.Minute, m)
+	llmLimiter := ratelimit.NewKeyedLimiter(ratelimit.KeyedConfig{
+		Name:          "llm",
+		Burst:         botCfg.LLMBurstTokens,
+		RefillRate:    botCfg.LLMRefillPerHour / 3600.0,
+		DailyLimit:    botCfg.LLMDailyLimit,
+		CleanupPeriod: 5 * time.Minute,
+		Metrics:       m,
+		MetricType:    ratelimit.MetricTypeLLM,
+	})
+	userLimiter := ratelimit.NewKeyedLimiter(ratelimit.KeyedConfig{
+		Name:          "user",
+		Burst:         botCfg.UserRateLimitBurst,
+		RefillRate:    botCfg.UserRateLimitRefillPerSec,
+		CleanupPeriod: 5 * time.Minute,
+		Metrics:       m,
+		MetricType:    ratelimit.MetricTypeUser,
+	})
 
 	processor := bot.NewProcessor(bot.ProcessorConfig{
 		Registry:       botRegistry,
 		IntentParser:   nil,
-		LLMRateLimiter: llmRateLimiter,
+		LLMLimiter:     llmLimiter,
 		UserLimiter:    userLimiter,
 		StickerManager: stickerManager,
 		Logger:         log,

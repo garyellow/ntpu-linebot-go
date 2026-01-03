@@ -23,7 +23,7 @@ NTPU LineBot 是一個為國立臺北大學設計的 LINE 聊天機器人，提�
 │  │  Gin HTTP Server (Port 10000)                             │  │
 │  │  • Signature Validation                                   │  │
 │  │  • Request Size Limiting (1MB)                            │  │
-│  │  • Rate Limiting (100 rps global, 6 tokens/user)          │  │
+│  │  • Rate Limiting (100 rps global, 15 tokens/user)         │  │
 │  │  • Context Timeout (60s)                                  │  │
 │  └───────────────────────────────────────────────────────────┘  │
 └────────────────────────────┬────────────────────────────────────┘
@@ -263,7 +263,8 @@ User Query → Bot Module → Repository Layer
 
 2. **Webhook Level（API 層）**
    - Global: 100 rps
-   - Per-User: 6 tokens, refill 1 token/5s
+   - Per-User: 15 tokens, refill 1 token/10s
+   - LLM: 40 burst, 20/hr refill, 100/day cap
    - 防止濫用
 
 ### 3. Strategy Pattern（策略模式）
@@ -491,7 +492,8 @@ func sanitizeSearchTerm(term string) string {
 ### 3. Rate Limiting（防 DDoS）
 
 - Global Rate Limit: 100 rps
-- Per-User Rate Limit: 6 tokens, 1 token/5s refill (Token Bucket)
+- Per-User Rate Limit: 15 tokens, 1 token/10s refill (Token Bucket)
+- LLM Rate Limit: 40 burst, 20/hr refill, 100/day sliding window
 - 超過限制靜默丟棄請求
 
 ### 4. 輸入驗證

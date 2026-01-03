@@ -28,23 +28,22 @@ var helpKeywords = []string{"使用說明", "help"}
 type Processor struct {
 	registry       *Registry
 	intentParser   genai.IntentParser // Interface for multi-provider support
-	llmLimiter     *ratelimit.LLMRateLimiter
-	userLimiter    *ratelimit.UserRateLimiter
+	llmLimiter     *ratelimit.KeyedLimiter
+	userLimiter    *ratelimit.KeyedLimiter
 	stickerManager *sticker.Manager
 	logger         *logger.Logger
 	metrics        *metrics.Metrics
 
 	// Configuration
-	webhookTimeout      time.Duration
-	llmRateLimitPerHour float64
+	webhookTimeout time.Duration
 }
 
 // ProcessorConfig holds configuration for creating a new Processor.
 type ProcessorConfig struct {
 	Registry       *Registry
 	IntentParser   genai.IntentParser // Interface for multi-provider support
-	LLMRateLimiter *ratelimit.LLMRateLimiter
-	UserLimiter    *ratelimit.UserRateLimiter
+	LLMLimiter     *ratelimit.KeyedLimiter
+	UserLimiter    *ratelimit.KeyedLimiter
 	StickerManager *sticker.Manager
 	Logger         *logger.Logger
 	Metrics        *metrics.Metrics
@@ -59,15 +58,14 @@ func (p *Processor) isNLUEnabled() bool {
 // NewProcessor creates a new event processor.
 func NewProcessor(cfg ProcessorConfig) *Processor {
 	return &Processor{
-		registry:            cfg.Registry,
-		intentParser:        cfg.IntentParser,
-		llmLimiter:          cfg.LLMRateLimiter,
-		userLimiter:         cfg.UserLimiter,
-		stickerManager:      cfg.StickerManager,
-		logger:              cfg.Logger,
-		metrics:             cfg.Metrics,
-		webhookTimeout:      cfg.BotConfig.WebhookTimeout,
-		llmRateLimitPerHour: cfg.BotConfig.LLMRateLimitPerHour,
+		registry:       cfg.Registry,
+		intentParser:   cfg.IntentParser,
+		llmLimiter:     cfg.LLMLimiter,
+		userLimiter:    cfg.UserLimiter,
+		stickerManager: cfg.StickerManager,
+		logger:         cfg.Logger,
+		metrics:        cfg.Metrics,
+		webhookTimeout: cfg.BotConfig.WebhookTimeout,
 	}
 }
 
@@ -421,7 +419,7 @@ func (p *Processor) checkUserRateLimit(source webhook.SourceInterface, chatID st
 	if IsPersonalChat(source) {
 		sender := lineutil.GetSender("北大小幫手", p.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			"⏳ 訊息過於頻繁，請稍後再試\n\n💡 稍等幾秒後即可繼續使用",
+			"⏳ 訊息過於頻繁，請稍後再試\n💡 稍等幾秒後即可繼續使用",
 			sender,
 		)
 		// Add Quick Reply to guide user when rate limit expires
@@ -449,14 +447,8 @@ func (p *Processor) checkLLMRateLimit(source webhook.SourceInterface, chatID str
 	p.logger.WithField("chat_id", logChatID).Warn("LLM rate limit exceeded")
 
 	if IsPersonalChat(source) {
-		available := p.llmLimiter.GetAvailable(chatID)
-		resetMinutes := int((p.llmRateLimitPerHour - available) * 3600 / p.llmRateLimitPerHour / 60)
-		if resetMinutes < 1 {
-			resetMinutes = 1
-		}
-
 		sender := lineutil.GetSender("北大小幫手", p.stickerManager)
-		msg := p.buildLLMRateLimitFlexMessage(int(p.llmRateLimitPerHour), resetMinutes, sender)
+		msg := p.buildLLMRateLimitFlexMessage(sender)
 
 		return false, []messaging_api.MessageInterface{
 			msg,
@@ -1105,7 +1097,7 @@ func (p *Processor) buildDataSourceFlexMessage(sender *messaging_api.Sender) mes
 
 // buildLLMRateLimitFlexMessage creates a Flex Message for LLM rate limit notification.
 // It displays quota status, reset time, and alternative keyword options.
-func (p *Processor) buildLLMRateLimitFlexMessage(quotaPerHour int, resetMinutes int, sender *messaging_api.Sender) *messaging_api.FlexMessage {
+func (p *Processor) buildLLMRateLimitFlexMessage(sender *messaging_api.Sender) *messaging_api.FlexMessage {
 	// Hero section - warning style
 	hero := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexText("⏳ AI 功能配額已達上限").
@@ -1117,26 +1109,17 @@ func (p *Processor) buildLLMRateLimitFlexMessage(quotaPerHour int, resetMinutes 
 		WithPaddingAll("lg").
 		WithPaddingBottom("md")
 
-	// Body section - quota info and alternatives
+	// Body section - simplified message and alternatives
 	body := lineutil.NewFlexBox("vertical",
-		// Quota status
+		// Simple status
 		lineutil.NewFlexBox("horizontal",
 			lineutil.NewFlexText("📊").WithSize("sm").WithFlex(0).FlexText,
-			lineutil.NewFlexText(fmt.Sprintf("本小時配額：%d 次（已達上限）", quotaPerHour)).
+			lineutil.NewFlexText("目前配額已達上限，請稍後再試").
 				WithSize("sm").
 				WithColor(lineutil.ColorText).
 				WithMargin("sm").
 				WithWrap(true).FlexText,
 		).FlexBox,
-
-		// Reset time
-		lineutil.NewFlexBox("horizontal",
-			lineutil.NewFlexText("⏰").WithSize("sm").WithFlex(0).FlexText,
-			lineutil.NewFlexText(fmt.Sprintf("約 %d 分鐘後重置", resetMinutes)).
-				WithSize("sm").
-				WithColor(lineutil.ColorText).
-				WithMargin("sm").FlexText,
-		).WithMargin("sm").FlexBox,
 
 		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
 
