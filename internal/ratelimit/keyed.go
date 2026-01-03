@@ -230,6 +230,9 @@ func (kl *KeyedLimiter) cleanupLoop() {
 		case <-ticker.C:
 			kl.mu.Lock()
 			for key, entry := range kl.entries {
+				// Lock entry to prevent race with Allow()
+				entry.mu.Lock()
+
 				// Remove if token bucket is full (inactive)
 				// modifying logic to also check daily limit if enabled
 				shouldDelete := entry.limiter.IsFull()
@@ -238,6 +241,8 @@ func (kl *KeyedLimiter) cleanupLoop() {
 					// GetRemaining returning maxRequests means 0 usage in weighted window
 					shouldDelete = entry.daily.GetRemaining() == kl.config.DailyLimit
 				}
+
+				entry.mu.Unlock()
 
 				if shouldDelete {
 					delete(kl.entries, key)
