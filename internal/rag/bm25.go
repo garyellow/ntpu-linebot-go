@@ -42,8 +42,7 @@ type SemesterKey struct {
 // Each semester has its own IDF calculation, ensuring independent relevance scoring.
 type semesterIndex struct {
 	engine   *bm25.BM25Okapi    // BM25 engine for this semester only
-	corpus   []string           // Document strings for this semester
-	uidList  []string           // UID at each index
+	uidList  []string           // UID at each index (Corresponds to engine internal doc IDs)
 	metadata map[string]docMeta // UID -> metadata
 }
 
@@ -55,6 +54,10 @@ type semesterIndex struct {
 //   - Term importance is calculated relative to courses in the same semester
 //   - A term common in semester A but rare in semester B will have different weights
 //   - Ensures fair ranking within each semester without cross-semester influence
+//
+// Optimization Notes:
+//   - Does NOT store raw text corpus in memory (significant savings)
+//   - Loads syllabi semester-by-semester during initialization to minimize peak memory
 //
 // Uses github.com/iwilltry42/bm25-go library (maintained by k3d-io/k3d maintainer)
 type BM25Index struct {
@@ -93,9 +96,16 @@ func NewBM25Index(log *logger.Logger) *BM25Index {
 	}
 }
 
-// Initialize builds per-semester BM25 indexes from syllabi.
-// Each semester gets its own index with independent IDF calculation.
-func (idx *BM25Index) Initialize(syllabi []*storage.Syllabus) error {
+// Initialize builds BM25 indexes from the database.
+//
+// Memory Optimization Strategy:
+// 1. Fetch distinct semesters first
+// 2. Iterate and load one semester at a time
+// 3. Build index for that semester
+// 4. Local syllabi slice goes out of scope, allowing Go's GC to reclaim memory naturally
+//
+// This ensures we never hold the entire database text in memory at once.
+func (idx *BM25Index) Initialize(ctx context.Context, db *storage.DB) error {
 	if idx == nil {
 		return nil
 	}
@@ -103,26 +113,53 @@ func (idx *BM25Index) Initialize(syllabi []*storage.Syllabus) error {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 
-	if len(syllabi) == 0 {
-		idx.initialized = true
-		return nil
-	}
-
 	// Reset index data
 	idx.semesterIndexes = make(map[SemesterKey]*semesterIndex)
 	idx.allSemesters = nil
 
-	// Step 1: Group syllabi by semester
-	semesterGroups := make(map[SemesterKey][]*storage.Syllabus)
-	for _, syl := range syllabi {
-		key := SemesterKey{Year: syl.Year, Term: syl.Term}
-		semesterGroups[key] = append(semesterGroups[key], syl)
+	// Step 1: Get all semesters that have data
+	semesters, err := db.GetDistinctSemesters(ctx)
+	if err != nil {
+		return err
 	}
 
-	// Step 2: Collect and sort all semesters (newest first)
-	for key := range semesterGroups {
-		idx.allSemesters = append(idx.allSemesters, key)
+	if len(semesters) == 0 {
+		idx.initialized = true
+		return nil
 	}
+
+	totalCourses := 0
+
+	// Step 2: Chunked loading - process one semester at a time
+	for _, sem := range semesters {
+		key := SemesterKey{Year: sem.Year, Term: sem.Term}
+
+		// Load syllabi ONLY for this semester
+		syllabi, err := db.GetSyllabiByYearTerm(ctx, sem.Year, sem.Term)
+		if err != nil {
+			idx.logger.WithError(err).WithField("year", sem.Year).WithField("term", sem.Term).Warn("Failed to load syllabi for semester")
+			continue
+		}
+
+		if len(syllabi) == 0 {
+			continue
+		}
+
+		// Initialize index for this semester
+		semIdx, count, err := idx.buildSemesterIndex(syllabi)
+		if err != nil {
+			idx.logger.WithError(err).WithField("year", sem.Year).WithField("term", sem.Term).Warn("Failed to build index for semester")
+			continue
+		}
+
+		if count > 0 {
+			idx.semesterIndexes[key] = semIdx
+			idx.allSemesters = append(idx.allSemesters, key)
+			totalCourses += count
+		}
+	}
+
+	// Sort semesters (newest first)
 	slices.SortFunc(idx.allSemesters, func(a, b SemesterKey) int {
 		if a.Year != b.Year {
 			return b.Year - a.Year // Descending by year
@@ -130,73 +167,69 @@ func (idx *BM25Index) Initialize(syllabi []*storage.Syllabus) error {
 		return b.Term - a.Term // Descending by term
 	})
 
-	// Step 3: Build independent index for each semester
-	totalCourses := 0
-	for sem, syllabiInSem := range semesterGroups {
-		semIdx := &semesterIndex{
-			metadata: make(map[string]docMeta),
-		}
-
-		for _, syl := range syllabiInSem {
-			// Store metadata
-			semIdx.metadata[syl.UID] = docMeta{
-				Title:    syl.Title,
-				Teachers: syl.Teachers,
-				Year:     syl.Year,
-				Term:     syl.Term,
-			}
-
-			// Create single document from all fields
-			fields := &syllabus.Fields{
-				Objectives: syl.Objectives,
-				Outline:    syl.Outline,
-				Schedule:   syl.Schedule,
-			}
-			content := fields.ContentForIndexing(syl.Title)
-
-			if strings.TrimSpace(content) == "" {
-				continue
-			}
-
-			semIdx.corpus = append(semIdx.corpus, content)
-			semIdx.uidList = append(semIdx.uidList, syl.UID)
-		}
-
-		// Build BM25 engine for this semester (independent IDF)
-		if len(semIdx.corpus) > 0 {
-			var err error
-			semIdx.engine, err = bm25.NewBM25Okapi(semIdx.corpus, tokenizeChinese, 1.5, 0.75, nil)
-			if err != nil {
-				return err
-			}
-			idx.semesterIndexes[sem] = semIdx
-			totalCourses += len(semIdx.corpus)
-		}
-	}
-
 	idx.initialized = true
 	idx.logger.WithField("courses", totalCourses).
 		WithField("semesters", len(idx.semesterIndexes)).
-		Info("BM25 index initialized (per-semester)")
+		Info("BM25 index initialized (memory optimized)")
+
 	return nil
 }
 
-// RebuildFromDB reloads all syllabi from the database and rebuilds the index.
-// This is called during warmup after new syllabi are saved to ensure
-// the index contains complete syllabus content (not just metadata).
-func (idx *BM25Index) RebuildFromDB(ctx context.Context, db *storage.DB) error {
-	if idx == nil {
-		return nil
+// buildSemesterIndex creates a semesterIndex from a slice of syllabi.
+// Returns the index, document count, and error.
+// The provided syllabi slice is NOT retained.
+func (idx *BM25Index) buildSemesterIndex(syllabi []*storage.Syllabus) (*semesterIndex, int, error) {
+	semIdx := &semesterIndex{
+		metadata: make(map[string]docMeta),
+	}
+	corpus := make([]string, 0, len(syllabi))
+
+	for _, syl := range syllabi {
+		// Store metadata
+		semIdx.metadata[syl.UID] = docMeta{
+			Title:    syl.Title,
+			Teachers: syl.Teachers,
+			Year:     syl.Year,
+			Term:     syl.Term,
+		}
+
+		// Create single document from all fields
+		fields := &syllabus.Fields{
+			Objectives: syl.Objectives,
+			Outline:    syl.Outline,
+			Schedule:   syl.Schedule,
+		}
+		content := fields.ContentForIndexing(syl.Title)
+
+		if strings.TrimSpace(content) == "" {
+			continue
+		}
+
+		corpus = append(corpus, content)
+		semIdx.uidList = append(semIdx.uidList, syl.UID)
 	}
 
-	// Load all syllabi from database (includes full content)
-	syllabi, err := db.GetAllSyllabi(ctx)
+	if len(corpus) == 0 {
+		return nil, 0, nil
+	}
+
+	// Build BM25 engine for this semester (independent IDF).
+	// NewBM25Okapi consumes the corpus to build its internal index; after this point we only
+	// access document content through the engine, not via the original corpus slice.
+	engine, err := bm25.NewBM25Okapi(corpus, tokenizeChinese, 1.5, 0.75, nil)
 	if err != nil {
-		return err
+		return nil, 0, err
 	}
+	semIdx.engine = engine
 
-	// Reinitialize index with complete data
-	return idx.Initialize(syllabi)
+	return semIdx, len(corpus), nil
+}
+
+// RebuildFromDB is deprecated and now alias to Initialize.
+// Kept for interface compatibility if needed, but signature changed.
+// TODO: Update callers to use Initialize(ctx, db) directly.
+func (idx *BM25Index) RebuildFromDB(ctx context.Context, db *storage.DB) error {
+	return idx.Initialize(ctx, db)
 }
 
 // getNewestTwoSemesters returns the newest 2 semesters from the index.
@@ -210,7 +243,7 @@ func (idx *BM25Index) getNewestTwoSemesters() []SemesterKey {
 
 // searchSemester performs BM25 search on a specific semester's index.
 func (semIdx *semesterIndex) search(query string, topN int) []BM25Result {
-	if semIdx == nil || semIdx.engine == nil || len(semIdx.corpus) == 0 {
+	if semIdx == nil || semIdx.engine == nil {
 		return nil
 	}
 
@@ -355,10 +388,10 @@ func (idx *BM25Index) SearchCourses(_ context.Context, query string, topN int) (
 //   - Best result in each semester always has confidence = 1.0
 //   - Other results are relative to the best match in the same semester
 //
-// Classification thresholds (in handler):
-//   - >= 0.8: "最佳匹配" (Best Match) - Normal distribution core
-//   - >= 0.6: "高度相關" (Highly Relevant) - Mixed region
-//   - < 0.6: "部分相關" (Partially Relevant) - Exponential tail
+// Classification thresholds (defined in handler):
+//   - Confidence >= 0.8: "最佳匹配" (Best Match) - Top 20% relative score range
+//   - Confidence >= 0.6: "高度相關" (Highly Relevant) - Top 40% relative score range
+//   - Confidence < 0.6: "部分相關" (Partially Relevant) - Remaining results
 func computeRelativeConfidence(score, maxScore float64) float32 {
 	// Handle zero or invalid maxScore
 	if maxScore == 0 {
@@ -390,81 +423,6 @@ func computeRelativeConfidence(score, maxScore float64) float32 {
 	return 0
 }
 
-// AddSyllabus adds a single syllabus to the appropriate semester index.
-// Note: BM25 requires full IDF recalculation, so this rebuilds the semester's engine.
-// For batch additions, prefer collecting all syllabi and calling Initialize().
-func (idx *BM25Index) AddSyllabus(syl *storage.Syllabus) error {
-	if idx == nil || syl == nil {
-		return nil
-	}
-
-	idx.mu.Lock()
-	defer idx.mu.Unlock()
-
-	sem := SemesterKey{Year: syl.Year, Term: syl.Term}
-
-	// Get or create semester index
-	semIdx := idx.semesterIndexes[sem]
-	if semIdx == nil {
-		semIdx = &semesterIndex{
-			metadata: make(map[string]docMeta),
-		}
-		idx.semesterIndexes[sem] = semIdx
-
-		// Add to allSemesters if new
-		idx.allSemesters = append(idx.allSemesters, sem)
-		slices.SortFunc(idx.allSemesters, func(a, b SemesterKey) int {
-			if a.Year != b.Year {
-				return b.Year - a.Year
-			}
-			return b.Term - a.Term
-		})
-	}
-
-	// Check if syllabus already exists (by UID)
-	if _, exists := semIdx.metadata[syl.UID]; exists {
-		return nil
-	}
-
-	// Add new syllabus metadata
-	semIdx.metadata[syl.UID] = docMeta{
-		Title:    syl.Title,
-		Teachers: syl.Teachers,
-		Year:     syl.Year,
-		Term:     syl.Term,
-	}
-
-	// Create single document from all fields
-	fields := &syllabus.Fields{
-		Objectives: syl.Objectives,
-		Outline:    syl.Outline,
-		Schedule:   syl.Schedule,
-	}
-	content := fields.ContentForIndexing(syl.Title)
-
-	if strings.TrimSpace(content) == "" {
-		return nil
-	}
-
-	// Add to corpus
-	semIdx.corpus = append(semIdx.corpus, content)
-	semIdx.uidList = append(semIdx.uidList, syl.UID)
-
-	// Rebuild BM25 engine for this semester (required for IDF recalculation)
-	var err error
-	semIdx.engine, err = bm25.NewBM25Okapi(semIdx.corpus, tokenizeChinese, 1.5, 0.75, nil)
-	if err != nil {
-		return err
-	}
-
-	idx.initialized = true
-
-	idx.logger.WithField("uid", syl.UID).
-		WithField("semester", sem).
-		Debug("Added syllabus to BM25 index")
-	return nil
-}
-
 // IsEnabled returns true if the index is initialized
 func (idx *BM25Index) IsEnabled() bool {
 	if idx == nil {
@@ -484,7 +442,7 @@ func (idx *BM25Index) Count() int {
 	defer idx.mu.RUnlock()
 	total := 0
 	for _, semIdx := range idx.semesterIndexes {
-		total += len(semIdx.corpus)
+		total += len(semIdx.uidList)
 	}
 	return total
 }

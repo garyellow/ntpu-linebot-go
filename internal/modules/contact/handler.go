@@ -20,7 +20,6 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/sliceutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
-	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
@@ -401,7 +400,7 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 //
 // Performance notes:
 //   - SQL LIKE is indexed and fast; most queries resolve here
-//   - Fuzzy matching loads all contacts; runs in parallel for complete results
+//   - SQL fuzzy search uses dynamic LIKE clauses for character-set matching (memory efficient)
 //   - Search variants only affect scraping, not cache lookups
 func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(ModuleName)
@@ -422,24 +421,12 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	}
 	contacts = append(contacts, sqlContacts...)
 
-	// Step 2: ALWAYS try fuzzy character-set matching to find additional results
-	// This catches cases like "資工系" -> "資訊工程學系" that SQL LIKE misses
-	// Also searches more fields: name, title, organization, superior
-	allContacts, err := h.db.GetAllContacts(ctx)
-	if err == nil && len(allContacts) > 0 {
-		for _, c := range allContacts {
-			// Fuzzy character-set matching: check if all runes in searchTerm exist in target
-			// Search Priority:
-			// 1. Name: Covers Person Name ("王大明") and Organization Name ("資訊工程學系")
-			// 2. Organization: Covers the department/unit a person belongs to ("資工系" finds members)
-			// 3. Title/Superior: Supplementary info
-			if stringutil.ContainsAllRunes(c.Name, searchTerm) ||
-				stringutil.ContainsAllRunes(c.Title, searchTerm) ||
-				stringutil.ContainsAllRunes(c.Organization, searchTerm) ||
-				stringutil.ContainsAllRunes(c.Superior, searchTerm) {
-				contacts = append(contacts, c)
-			}
-		}
+	// Step 2: SQL-based fuzzy character-set matching (memory efficient)
+	// Uses dynamic LIKE clauses instead of loading all contacts into memory
+	// Searches more fields: name, title, organization, superior
+	fuzzyContacts, err := h.db.SearchContactsFuzzy(ctx, searchTerm)
+	if err == nil && len(fuzzyContacts) > 0 {
+		contacts = append(contacts, fuzzyContacts...)
 	}
 
 	// Deduplicate results by UID (SQL LIKE and fuzzy may find overlapping results)

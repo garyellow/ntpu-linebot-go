@@ -87,19 +87,9 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	scraperClient := scraper.NewClient(cfg.ScraperTimeout, cfg.ScraperMaxRetries, cfg.ScraperBaseURLs)
 	stickerMgr := sticker.NewManager(db, scraperClient, log)
 
-	syllabi, err := db.GetAllSyllabi(ctx)
-	if err != nil {
-		log.WithError(err).Warn("Failed to load syllabi for BM25")
-		syllabi = nil
-	}
-
 	bm25Index := rag.NewBM25Index(log)
-	if len(syllabi) > 0 {
-		if err := bm25Index.Initialize(syllabi); err != nil {
-			log.WithError(err).Warn("BM25 initialization failed")
-		} else {
-			log.WithField("doc_count", bm25Index.Count()).Info("BM25 index initialized")
-		}
+	if err := bm25Index.Initialize(ctx, db); err != nil {
+		log.WithError(err).Warn("BM25 initialization failed")
 	}
 
 	var intentParser genai.IntentParser

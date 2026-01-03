@@ -7,10 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
-	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
 )
 
 // SaveStudent inserts or updates a student record
@@ -122,40 +122,59 @@ func (db *DB) GetStudentByID(ctx context.Context, id string) (*Student, error) {
 	return &student, nil
 }
 
-// SearchStudentsByName searches students by partial name match.
-// Returns both the total count and limited results (up to 400 students).
-// Student data never expires; it is updated only when the cache is rebuilt (typically on startup).
+// SearchStudentsByName searches students by partial name match using SQL filtering.
+// optimization: Uses dynamic LIKE clauses for character-set matching to avoid loading all students into memory.
+// Returns both the total count (up to limit) and results.
 func (db *DB) SearchStudentsByName(ctx context.Context, name string) (*StudentSearchResult, error) {
 	if len(name) > 100 {
 		return nil, errors.New("search term too long")
 	}
 
 	start := time.Now()
+	runes := []rune(name)
+	if len(runes) == 0 {
+		return &StudentSearchResult{Students: []Student{}, TotalCount: 0}, nil
+	}
 
-	// Load all students from the cache table (ordered by year and id); performance is monitored via slow-query logging below.
-	query := `SELECT id, name, department, year, cached_at FROM students ORDER BY year DESC, id DESC`
-	rows, err := db.reader.QueryContext(ctx, query)
+	// limit matching characters to prevent excessive SQL generation for very long strings
+	if len(runes) > 10 {
+		runes = runes[:10]
+	}
+
+	// Build dynamic query
+	// Base query
+	query := `SELECT id, name, department, year, cached_at FROM students WHERE 1=1`
+	args := make([]interface{}, 0, len(runes))
+
+	// Add LIKE clause for each character to match "contains all characters" (order independent)
+	// "王明" -> LIKE '%王%' AND LIKE '%明%'
+	// This matches "王小明" and "明王" (if that makes sense for names)
+	var whereClauses strings.Builder
+	for _, r := range runes {
+		whereClauses.WriteString(` AND name LIKE ? ESCAPE '\'`)
+		args = append(args, "%"+sanitizeSearchTerm(string(r))+"%")
+	}
+	query += whereClauses.String()
+
+	// Add ordering and limit
+	query += ` ORDER BY year DESC, id DESC LIMIT 401` // Fetch 401 to check if we hit limit (though UI limits to 400)
+
+	rows, err := db.reader.QueryContext(ctx, query, args...)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to get students",
+		slog.ErrorContext(ctx, "failed to search students",
 			"search_term", name,
 			"error", err)
 		return nil, fmt.Errorf("query students: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	// Filter students using character-set matching (supports non-contiguous chars)
-	// This allows "王明" to match "王小明"
 	matchedStudents := make([]Student, 0, 400)
 	for rows.Next() {
 		var student Student
 		if err := rows.Scan(&student.ID, &student.Name, &student.Department, &student.Year, &student.CachedAt); err != nil {
 			return nil, fmt.Errorf("scan student: %w", err)
 		}
-
-		// Check if student name contains all characters from search term
-		if stringutil.ContainsAllRunes(student.Name, name) {
-			matchedStudents = append(matchedStudents, student)
-		}
+		matchedStudents = append(matchedStudents, student)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -164,7 +183,7 @@ func (db *DB) SearchStudentsByName(ctx context.Context, name string) (*StudentSe
 
 	totalCount := len(matchedStudents)
 
-	// Limit results to first 400 students
+	// If we fetched more than 400, cap it
 	if len(matchedStudents) > 400 {
 		matchedStudents = matchedStudents[:400]
 	}
@@ -175,14 +194,34 @@ func (db *DB) SearchStudentsByName(ctx context.Context, name string) (*StudentSe
 			"operation", "SearchStudentsByName",
 			"duration_ms", duration.Milliseconds(),
 			"search_term", name,
-			"total_count", totalCount,
-			"result_count", len(matchedStudents))
+			"result_count", len(matchedStudents),
+			"total_count", totalCount)
 	}
 
 	return &StudentSearchResult{
 		Students:   matchedStudents,
 		TotalCount: totalCount,
 	}, nil
+}
+
+// GetCoursesByYearTermPaginated retrieves courses by year and term with pagination.
+// Only returns non-expired cache entries based on configured TTL.
+func (db *DB) GetCoursesByYearTermPaginated(ctx context.Context, year, term, limit, offset int) ([]Course, error) {
+	// Add TTL filter to prevent returning stale data
+	ttlTimestamp := db.getTTLTimestamp()
+	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at
+              FROM courses
+              WHERE year = ? AND term = ? AND cached_at > ?
+              ORDER BY uid ASC
+              LIMIT ? OFFSET ?`
+
+	rows, err := db.reader.QueryContext(ctx, query, year, term, ttlTimestamp, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get courses paginated: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	return scanCourses(rows)
 }
 
 // GetStudentsByDepartment retrieves students by year and department.
@@ -219,37 +258,6 @@ func (db *DB) CountStudents(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("failed to count students: %w", err)
 	}
 	return count, nil
-}
-
-// GetAllStudents retrieves all students from cache.
-// Used for fuzzy character-set matching when SQL LIKE doesn't find results.
-// Student data never expires; it is updated only when the cache is rebuilt (typically on startup).
-// NOTE: For best performance, ensure an index on (year, id) exists in the students table.
-func (db *DB) GetAllStudents(ctx context.Context) ([]Student, error) {
-	// Get up to 3000 most recent students ordered by year and ID
-	query := `SELECT id, name, department, year, cached_at
-		FROM students ORDER BY year DESC, id DESC LIMIT 3000`
-
-	rows, err := db.reader.QueryContext(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get all students: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var students []Student
-	for rows.Next() {
-		var student Student
-		if err := rows.Scan(&student.ID, &student.Name, &student.Department, &student.Year, &student.CachedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan student row: %w", err)
-		}
-		students = append(students, student)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating student rows: %w", err)
-	}
-
-	return students, nil
 }
 
 // ContactRepository provides CRUD operations for contacts table
@@ -483,18 +491,47 @@ func (db *DB) GetContactsByOrganization(ctx context.Context, org string) ([]Cont
 	return contacts, nil
 }
 
-// GetAllContacts retrieves all non-expired contacts from cache
-// Used for fuzzy character-set matching when SQL LIKE doesn't find results
-// Only returns non-expired cache entries based on configured TTL
-func (db *DB) GetAllContacts(ctx context.Context) ([]Contact, error) {
+// SearchContactsFuzzy searches contacts using SQL-level character-set matching.
+// Optimization: Uses dynamic LIKE clauses for character matching instead of loading all contacts.
+// Searches in: name, title, organization, superior fields.
+// Each character in the search term must appear in at least one of the searched fields.
+// Only returns non-expired cache entries based on configured TTL (max 500 results).
+func (db *DB) SearchContactsFuzzy(ctx context.Context, term string) ([]Contact, error) {
+	if len(term) > 100 {
+		return nil, errors.New("search term too long")
+	}
+
+	runes := []rune(term)
+	if len(runes) == 0 {
+		return []Contact{}, nil
+	}
+
+	// Limit matching characters to prevent excessive SQL generation
+	if len(runes) > 10 {
+		runes = runes[:10]
+	}
+
 	ttlTimestamp := db.getTTLTimestamp()
 
+	// Build dynamic query with LIKE clauses for each character
+	// Each character must appear in at least one of the searchable fields
 	query := `SELECT uid, type, name, name_en, title, organization, extension, phone, email, website, location, superior, cached_at
-		FROM contacts WHERE cached_at > ? ORDER BY type, name`
+		FROM contacts WHERE cached_at > ?`
+	args := []interface{}{ttlTimestamp}
 
-	rows, err := db.reader.QueryContext(ctx, query, ttlTimestamp)
+	var whereClauses strings.Builder
+	for _, r := range runes {
+		pattern := "%" + sanitizeSearchTerm(string(r)) + "%"
+		whereClauses.WriteString(` AND (name LIKE ? ESCAPE '\' OR title LIKE ? ESCAPE '\' OR organization LIKE ? ESCAPE '\' OR superior LIKE ? ESCAPE '\')`)
+		args = append(args, pattern, pattern, pattern, pattern)
+	}
+	query += whereClauses.String()
+
+	query += ` ORDER BY type, name LIMIT 500`
+
+	rows, err := db.reader.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get all contacts: %w", err)
+		return nil, fmt.Errorf("failed to fuzzy search contacts: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -518,6 +555,10 @@ func (db *DB) GetAllContacts(ctx context.Context) ([]Contact, error) {
 		contact.Superior = superior.String
 
 		contacts = append(contacts, contact)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows error: %w", err)
 	}
 
 	return contacts, nil
@@ -1432,6 +1473,33 @@ func (db *DB) GetAllSyllabi(ctx context.Context) ([]*Syllabus, error) {
 	}
 
 	return syllabi, rows.Err()
+}
+
+// GetDistinctSemesters retrieves all distinct semesters (year, term pairs) from the syllabi table.
+// Used for chunked loading of the BM25 index to reduce memory usage.
+func (db *DB) GetDistinctSemesters(ctx context.Context) ([]struct{ Year, Term int }, error) {
+	query := `SELECT DISTINCT year, term FROM syllabi ORDER BY year DESC, term DESC`
+
+	rows, err := db.reader.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get distinct semesters from syllabi: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var semesters []struct{ Year, Term int }
+	for rows.Next() {
+		var s struct{ Year, Term int }
+		if err := rows.Scan(&s.Year, &s.Term); err != nil {
+			return nil, fmt.Errorf("failed to scan semester: %w", err)
+		}
+		semesters = append(semesters, s)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows error: %w", err)
+	}
+
+	return semesters, nil
 }
 
 // GetSyllabiByYearTerm retrieves all syllabi for a specific year and term

@@ -277,6 +277,46 @@ func TestSearchContactsByName(t *testing.T) {
 	}
 }
 
+// TestSearchContactsFuzzy tests SQL-based character-set matching for contacts
+func TestSearchContactsFuzzy(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+	ctx := context.Background()
+
+	contacts := []*Contact{
+		{UID: "c1", Type: "individual", Name: "陳大華", Organization: "資訊工程學系"},
+		{UID: "c2", Type: "individual", Name: "王小明", Organization: "電機系"},
+		{UID: "c3", Type: "organization", Name: "資訊工程學系", Organization: "工學院"},
+		{UID: "c4", Type: "individual", Name: "李教授", Title: "系主任", Organization: "資工系"},
+	}
+
+	for _, c := range contacts {
+		if err := db.SaveContact(ctx, c); err != nil {
+			t.Fatalf("SaveContact failed: %v", err)
+		}
+	}
+
+	// Test character-set matching: "資工" should match "資訊工程學系"
+	results, err := db.SearchContactsFuzzy(ctx, "資工")
+	if err != nil {
+		t.Fatalf("SearchContactsFuzzy failed: %v", err)
+	}
+
+	// Should match: c1 (org contains 資 and 工), c3 (name contains 資 and 工), c4 (org contains 資工)
+	if len(results) < 3 {
+		t.Errorf("Expected at least 3 contacts matching '資工', got %d", len(results))
+	}
+
+	// Test empty search term
+	results, err = db.SearchContactsFuzzy(ctx, "")
+	if err != nil {
+		t.Fatalf("SearchContactsFuzzy with empty term failed: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("Expected 0 contacts for empty search, got %d", len(results))
+	}
+}
+
 // TestCourseArrayHandling tests JSON array serialization (critical for course data)
 func TestCourseArrayHandling(t *testing.T) {
 	db := setupTestDB(t)
@@ -497,76 +537,6 @@ func TestStickerDataNeverExpires(t *testing.T) {
 	count, _ := db.CountStickers(ctx)
 	if count != 2 {
 		t.Errorf("Expected 2 stickers (stickers never expire), got %d", count)
-	}
-}
-
-// TestGetAllContacts tests retrieving all contacts with TTL filtering
-func TestGetAllContacts(t *testing.T) {
-	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
-	ctx := context.Background()
-
-	// Insert fresh contacts
-	freshContacts := []*Contact{
-		{UID: "c1", Type: "individual", Name: "陳大華", Organization: "資訊工程學系"},
-		{UID: "c2", Type: "individual", Name: "陳小明", Organization: "電機工程學系"},
-		{UID: "c3", Type: "organization", Name: "資訊工程學系", Superior: "電機資訊學院"},
-	}
-	for _, c := range freshContacts {
-		if err := db.SaveContact(ctx, c); err != nil {
-			t.Fatalf("SaveContact failed: %v", err)
-		}
-	}
-
-	// Insert expired contact (manually set cached_at to 8 days ago)
-	query := `INSERT INTO contacts (uid, type, name, organization, cached_at) VALUES (?, ?, ?, ?, ?)`
-	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.writer.ExecContext(ctx, query, "c_old", "individual", "舊聯絡人", "舊單位", oldTime)
-	if err != nil {
-		t.Fatalf("Manual insert failed: %v", err)
-	}
-
-	// Get all contacts - should only return non-expired ones
-	contacts, err := db.GetAllContacts(ctx)
-	if err != nil {
-		t.Fatalf("GetAllContacts failed: %v", err)
-	}
-
-	// Should return 3 fresh contacts, not the expired one
-	if len(contacts) != 3 {
-		t.Errorf("Expected 3 contacts, got %d", len(contacts))
-	}
-
-	// Verify ordering (by type, name)
-	// organization should come after individual alphabetically
-	foundOrg := false
-	for _, c := range contacts {
-		if c.Type == "organization" {
-			foundOrg = true
-			if c.Name != "資訊工程學系" {
-				t.Errorf("Expected organization name '資訊工程學系', got '%s'", c.Name)
-			}
-		}
-	}
-	if !foundOrg {
-		t.Error("Expected to find organization contact")
-	}
-}
-
-// TestGetAllContactsLimit tests the LIMIT 1000 constraint
-func TestGetAllContactsLimit(t *testing.T) {
-	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
-	ctx := context.Background()
-
-	// This test verifies the query structure without inserting 1000+ records
-	// Just verify the method works with empty database
-	contacts, err := db.GetAllContacts(ctx)
-	if err != nil {
-		t.Fatalf("GetAllContacts failed on empty database: %v", err)
-	}
-	if len(contacts) != 0 {
-		t.Errorf("Expected 0 contacts on empty database, got %d", len(contacts))
 	}
 }
 
