@@ -4,6 +4,7 @@ package rag
 
 import (
 	"context"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -160,6 +161,9 @@ func (idx *BM25Index) Initialize(ctx context.Context, db *storage.DB) error {
 
 		// explicit nil to help GC (though loop scope helps too)
 		syllabi = nil
+
+		// Force GC after loading each semester to keep memory footprint low
+		runtime.GC()
 	}
 
 	// Sort semesters (newest first)

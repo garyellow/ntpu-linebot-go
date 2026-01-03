@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -543,6 +544,7 @@ func warmupSyllabusModule(ctx context.Context, db *storage.DB, client *scraper.C
 	// Process courses and extract syllabi
 	var newSyllabi []*storage.Syllabus
 	var updatedCount, skippedCount, errorCount int
+	const batchSize = 50 // Save to DB every 50 syllabi to save memory
 
 processLoop:
 	for i, course := range courses {
@@ -608,6 +610,16 @@ processLoop:
 		newSyllabi = append(newSyllabi, syl)
 		updatedCount++
 
+		// Save batch if size reached
+		if len(newSyllabi) >= batchSize {
+			if err := db.SaveSyllabusBatch(ctx, newSyllabi); err != nil {
+				log.WithError(err).Error("Failed to save syllabi batch")
+				// Continue to try next batch, but this batch is lost/failed
+				errorCount += len(newSyllabi)
+			}
+			newSyllabi = nil // Release memory (clear slice)
+		}
+
 		// Report progress every 5% or at completion for consistent visibility
 		progressInterval := max(len(courses)/20, 1) // ~5% intervals, minimum 1
 		if i > 0 && i%progressInterval == 0 {
@@ -624,13 +636,17 @@ processLoop:
 		}
 	}
 
-	// Save syllabi to database
+	// Save remaining syllabi
 	if len(newSyllabi) > 0 {
 		if err := db.SaveSyllabusBatch(ctx, newSyllabi); err != nil {
-			log.WithError(err).Error("Failed to save syllabi batch")
-			return fmt.Errorf("failed to save syllabi: %w", err)
+			log.WithError(err).Error("Failed to save final syllabi batch")
+			return fmt.Errorf("failed to save final syllabi: %w", err)
 		}
+		newSyllabi = nil // Release memory
 	}
+
+	// Force GC after heavy scraping and saving
+	runtime.GC()
 
 	// Rebuild BM25 index from database (includes all syllabi with full content)
 	// This is done after saving to ensure database is the source of truth
@@ -641,7 +657,7 @@ processLoop:
 		}
 	}
 
-	stats.Syllabi.Add(int64(len(newSyllabi)))
+	stats.Syllabi.Add(int64(updatedCount))
 
 	log.WithField("new", updatedCount).
 		WithField("skipped", skippedCount).
