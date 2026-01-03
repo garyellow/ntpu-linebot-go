@@ -17,23 +17,25 @@ func TestDefaultLLMConfig(t *testing.T) {
 		t.Errorf("FallbackProvider = %v, want %v", cfg.FallbackProvider, ProviderGroq)
 	}
 
-	// Check Gemini defaults
-	if cfg.Gemini.IntentModel != DefaultGeminiIntentModel {
-		t.Errorf("Gemini.IntentModel = %v, want %v", cfg.Gemini.IntentModel, DefaultGeminiIntentModel)
+	// Check Gemini defaults (now using slice-based model chains)
+	if len(cfg.Gemini.IntentModels) != len(DefaultGeminiIntentModels) {
+		t.Errorf("Gemini.IntentModels length = %v, want %v", len(cfg.Gemini.IntentModels), len(DefaultGeminiIntentModels))
 	}
-	if cfg.Gemini.IntentFallbackModel != DefaultGeminiIntentFallbackModel {
-		t.Errorf("Gemini.IntentFallbackModel = %v, want %v", cfg.Gemini.IntentFallbackModel, DefaultGeminiIntentFallbackModel)
+	for i, model := range cfg.Gemini.IntentModels {
+		if model != DefaultGeminiIntentModels[i] {
+			t.Errorf("Gemini.IntentModels[%d] = %v, want %v", i, model, DefaultGeminiIntentModels[i])
+		}
 	}
-	if cfg.Gemini.ExpanderModel != DefaultGeminiExpanderModel {
-		t.Errorf("Gemini.ExpanderModel = %v, want %v", cfg.Gemini.ExpanderModel, DefaultGeminiExpanderModel)
+	if len(cfg.Gemini.ExpanderModels) != len(DefaultGeminiExpanderModels) {
+		t.Errorf("Gemini.ExpanderModels length = %v, want %v", len(cfg.Gemini.ExpanderModels), len(DefaultGeminiExpanderModels))
 	}
 
 	// Check Groq defaults
-	if cfg.Groq.IntentModel != DefaultGroqIntentModel {
-		t.Errorf("Groq.IntentModel = %v, want %v", cfg.Groq.IntentModel, DefaultGroqIntentModel)
+	if len(cfg.Groq.IntentModels) != len(DefaultGroqIntentModels) {
+		t.Errorf("Groq.IntentModels length = %v, want %v", len(cfg.Groq.IntentModels), len(DefaultGroqIntentModels))
 	}
-	if cfg.Groq.IntentFallbackModel != DefaultGroqIntentFallbackModel {
-		t.Errorf("Groq.IntentFallbackModel = %v, want %v", cfg.Groq.IntentFallbackModel, DefaultGroqIntentFallbackModel)
+	if len(cfg.Groq.ExpanderModels) != len(DefaultGroqExpanderModels) {
+		t.Errorf("Groq.ExpanderModels length = %v, want %v", len(cfg.Groq.ExpanderModels), len(DefaultGroqExpanderModels))
 	}
 
 	// Check retry config defaults

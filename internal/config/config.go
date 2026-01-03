@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -26,14 +27,11 @@ type Config struct {
 	GroqAPIKey   string // Groq API key (alternative LLM provider)
 
 	// LLM Model Configuration (optional, defaults apply if empty)
-	GeminiIntentModel           string // Primary Gemini model for intent parsing
-	GeminiIntentFallbackModel   string // Fallback Gemini model for intent parsing
-	GeminiExpanderModel         string // Primary Gemini model for query expansion
-	GeminiExpanderFallbackModel string // Fallback Gemini model for query expansion
-	GroqIntentModel             string // Primary Groq model for intent parsing
-	GroqIntentFallbackModel     string // Fallback Groq model for intent parsing
-	GroqExpanderModel           string // Primary Groq model for query expansion
-	GroqExpanderFallbackModel   string // Fallback Groq model for query expansion
+	// Each slice contains models in fallback order: first is primary, rest are fallbacks
+	GeminiIntentModels   []string // Gemini models for intent parsing (comma-separated fallback chain)
+	GeminiExpanderModels []string // Gemini models for query expansion (comma-separated fallback chain)
+	GroqIntentModels     []string // Groq models for intent parsing (comma-separated fallback chain)
+	GroqExpanderModels   []string // Groq models for query expansion (comma-separated fallback chain)
 
 	// LLM Provider Configuration
 	LLMPrimaryProvider  string // Primary LLM provider: "gemini" or "groq" (default: "gemini")
@@ -109,14 +107,11 @@ func Load() (*Config, error) {
 		GroqAPIKey:   getEnv("GROQ_API_KEY", ""),
 
 		// LLM Model Configuration (empty = use defaults from genai package)
-		GeminiIntentModel:           getEnv("GEMINI_INTENT_MODEL", ""),
-		GeminiIntentFallbackModel:   getEnv("GEMINI_INTENT_FALLBACK_MODEL", ""),
-		GeminiExpanderModel:         getEnv("GEMINI_EXPANDER_MODEL", ""),
-		GeminiExpanderFallbackModel: getEnv("GEMINI_EXPANDER_FALLBACK_MODEL", ""),
-		GroqIntentModel:             getEnv("GROQ_INTENT_MODEL", ""),
-		GroqIntentFallbackModel:     getEnv("GROQ_INTENT_FALLBACK_MODEL", ""),
-		GroqExpanderModel:           getEnv("GROQ_EXPANDER_MODEL", ""),
-		GroqExpanderFallbackModel:   getEnv("GROQ_EXPANDER_FALLBACK_MODEL", ""),
+		// Comma-separated list: first is primary, rest are fallbacks
+		GeminiIntentModels:   getModelsEnv("GEMINI_INTENT_MODELS"),
+		GeminiExpanderModels: getModelsEnv("GEMINI_EXPANDER_MODELS"),
+		GroqIntentModels:     getModelsEnv("GROQ_INTENT_MODELS"),
+		GroqExpanderModels:   getModelsEnv("GROQ_EXPANDER_MODELS"),
 
 		// LLM Provider Configuration
 		LLMPrimaryProvider:  getEnv("LLM_PRIMARY_PROVIDER", "gemini"),
@@ -255,6 +250,27 @@ func getFloatEnv(key string, defaultValue float64) float64 {
 		}
 	}
 	return defaultValue
+}
+
+// getModelsEnv parses comma-separated model list from environment variable.
+// Returns nil if the environment variable is not set or empty.
+// Leading/trailing whitespace is trimmed from each model name.
+func getModelsEnv(key string) []string {
+	value := os.Getenv(key)
+	if value == "" {
+		return nil
+	}
+	models := strings.Split(value, ",")
+	result := make([]string, 0, len(models))
+	for _, m := range models {
+		if trimmed := strings.TrimSpace(m); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
 // getDefaultDataDir returns platform-specific default data directory

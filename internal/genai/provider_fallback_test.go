@@ -78,7 +78,7 @@ func TestFallbackIntentParser_Parse_PrimarySuccess(t *testing.T) {
 		enabled:  true,
 	}
 
-	parser := NewFallbackIntentParser(primary, nil, DefaultRetryConfig())
+	parser := NewFallbackIntentParser(DefaultRetryConfig(), primary, nil)
 
 	result, err := parser.Parse(context.Background(), "test query")
 	if err != nil {
@@ -115,7 +115,7 @@ func TestFallbackIntentParser_Parse_Fallback(t *testing.T) {
 		MaxDelay:     10 * time.Millisecond,
 	}
 
-	parser := NewFallbackIntentParser(primary, fallback, cfg)
+	parser := NewFallbackIntentParser(cfg, primary, fallback)
 
 	result, err := parser.Parse(context.Background(), "test query")
 	if err != nil {
@@ -150,7 +150,7 @@ func TestFallbackIntentParser_Parse_PermanentError(t *testing.T) {
 		enabled:  true,
 	}
 
-	parser := NewFallbackIntentParser(primary, fallback, DefaultRetryConfig())
+	parser := NewFallbackIntentParser(DefaultRetryConfig(), primary, fallback)
 
 	_, err := parser.Parse(context.Background(), "test query")
 	if err == nil {
@@ -172,7 +172,7 @@ func TestFallbackIntentParser_Parse_NilParser(t *testing.T) {
 	parser = &FallbackIntentParser{}
 	_, err = parser.Parse(context.Background(), "test")
 	if err == nil {
-		t.Error("Parse() should return error when primary is nil")
+		t.Error("Parse() should return error when parsers is empty")
 	}
 }
 
@@ -196,18 +196,17 @@ func TestFallbackIntentParser_IsEnabled(t *testing.T) {
 		{
 			name: "primary enabled",
 			parser: NewFallbackIntentParser(
-				&mockIntentParser{enabled: true, provider: ProviderGemini},
-				nil,
 				DefaultRetryConfig(),
+				&mockIntentParser{enabled: true, provider: ProviderGemini},
 			),
 			expected: true,
 		},
 		{
 			name: "only fallback enabled",
 			parser: NewFallbackIntentParser(
+				DefaultRetryConfig(),
 				&mockIntentParser{enabled: false, provider: ProviderGemini},
 				&mockIntentParser{enabled: true, provider: ProviderGroq},
-				DefaultRetryConfig(),
 			),
 			expected: true,
 		},
@@ -228,7 +227,7 @@ func TestFallbackIntentParser_Close(t *testing.T) {
 	primary := &mockIntentParser{provider: ProviderGemini}
 	fallback := &mockIntentParser{provider: ProviderGroq}
 
-	parser := NewFallbackIntentParser(primary, fallback, DefaultRetryConfig())
+	parser := NewFallbackIntentParser(DefaultRetryConfig(), primary, fallback)
 	err := parser.Close()
 
 	if err != nil {
@@ -245,7 +244,7 @@ func TestFallbackIntentParser_Close(t *testing.T) {
 func TestFallbackIntentParser_Provider(t *testing.T) {
 	t.Parallel()
 	primary := &mockIntentParser{provider: ProviderGemini}
-	parser := NewFallbackIntentParser(primary, nil, DefaultRetryConfig())
+	parser := NewFallbackIntentParser(DefaultRetryConfig(), primary, nil)
 
 	if got := parser.Provider(); got != ProviderGemini {
 		t.Errorf("Provider() = %v, want %v", got, ProviderGemini)
@@ -261,7 +260,7 @@ func TestFallbackQueryExpander_Expand_PrimarySuccess(t *testing.T) {
 		provider: ProviderGemini,
 	}
 
-	expander := NewFallbackQueryExpander(primary, nil, DefaultRetryConfig())
+	expander := NewFallbackQueryExpander(DefaultRetryConfig(), primary, nil)
 
 	result, err := expander.Expand(context.Background(), "test")
 	if err != nil {
@@ -294,7 +293,7 @@ func TestFallbackQueryExpander_Expand_GracefulDegradation(t *testing.T) {
 		MaxDelay:     10 * time.Millisecond,
 	}
 
-	expander := NewFallbackQueryExpander(primary, fallback, cfg)
+	expander := NewFallbackQueryExpander(cfg, primary, fallback)
 
 	// Should return original query on complete failure (graceful degradation)
 	result, err := expander.Expand(context.Background(), "original")
@@ -323,7 +322,7 @@ func TestFallbackQueryExpander_Close(t *testing.T) {
 	primary := &mockQueryExpander{provider: ProviderGemini}
 	fallback := &mockQueryExpander{provider: ProviderGroq}
 
-	expander := NewFallbackQueryExpander(primary, fallback, DefaultRetryConfig())
+	expander := NewFallbackQueryExpander(DefaultRetryConfig(), primary, fallback)
 	err := expander.Close()
 
 	if err != nil {
@@ -357,7 +356,7 @@ func TestFallbackQueryExpander_ContextCancellation(t *testing.T) {
 		MaxDelay:     time.Hour,
 	}
 
-	expander := NewFallbackQueryExpander(primary, nil, cfg)
+	expander := NewFallbackQueryExpander(cfg, primary, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately

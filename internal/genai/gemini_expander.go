@@ -28,7 +28,7 @@ func newGeminiQueryExpander(ctx context.Context, apiKey, model string) (*geminiQ
 	}
 
 	if model == "" {
-		model = DefaultGeminiExpanderModel
+		model = DefaultGeminiExpanderModels[0]
 	}
 
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{

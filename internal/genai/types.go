@@ -88,17 +88,13 @@ type ProviderConfig struct {
 	// APIKey is the API key for the provider.
 	APIKey string
 
-	// IntentModel is the model name for intent parsing.
-	IntentModel string
+	// IntentModels is the ordered list of models for intent parsing.
+	// First model is primary, rest are fallbacks tried in order.
+	IntentModels []string
 
-	// IntentFallbackModel is the fallback model for intent parsing.
-	IntentFallbackModel string
-
-	// ExpanderModel is the model name for query expansion.
-	ExpanderModel string
-
-	// ExpanderFallbackModel is the fallback model for query expansion.
-	ExpanderFallbackModel string
+	// ExpanderModels is the ordered list of models for query expansion.
+	// First model is primary, rest are fallbacks tried in order.
+	ExpanderModels []string
 }
 
 // LLMConfig holds configuration for all LLM providers.
@@ -121,34 +117,30 @@ type LLMConfig struct {
 	RetryConfig RetryConfig
 }
 
-// Default model constants
-const (
-	// DefaultGeminiIntentModel is the default model for Gemini intent parsing.
+// Default model configurations.
+// First element is primary model, subsequent elements are fallbacks.
+var (
+	// DefaultGeminiIntentModels is the default model chain for Gemini intent parsing.
 	// gemini-2.5-flash offers excellent function calling with fast inference.
-	DefaultGeminiIntentModel = "gemini-2.5-flash"
-	// DefaultGeminiIntentFallbackModel is the fallback model for Gemini intent parsing.
-	// gemini-2.5-flash-lite provides faster, cost-efficient function calling.
-	DefaultGeminiIntentFallbackModel = "gemini-2.5-flash-lite"
-	// DefaultGeminiExpanderModel is the default model for Gemini query expansion.
-	DefaultGeminiExpanderModel = "gemini-2.5-flash"
-	// DefaultGeminiExpanderFallbackModel is the fallback model for Gemini query expansion.
-	// gemini-2.5-flash-lite provides faster, cost-efficient text generation.
-	DefaultGeminiExpanderFallbackModel = "gemini-2.5-flash-lite"
+	// gemini-2.5-flash-lite provides faster, cost-efficient fallback.
+	DefaultGeminiIntentModels = []string{"gemini-2.5-flash", "gemini-2.5-flash-lite"}
 
-	// DefaultGroqIntentModel is the default model for Groq intent parsing.
-	// Llama 4 Maverick (Preview) offers excellent function calling and intent classification with fast inference (~900 TPS).
-	DefaultGroqIntentModel = "meta-llama/llama-4-maverick-17b-128e-instruct"
-	// DefaultGroqIntentFallbackModel is the fallback model for Groq intent parsing.
-	// llama-3.3-70b-versatile is Production-grade and provides reliable fallback with strong accuracy.
-	DefaultGroqIntentFallbackModel = "llama-3.3-70b-versatile"
-	// DefaultGroqExpanderModel is the default model for Groq query expansion.
+	// DefaultGeminiExpanderModels is the default model chain for Gemini query expansion.
+	DefaultGeminiExpanderModels = []string{"gemini-2.5-flash", "gemini-2.5-flash-lite"}
+
+	// DefaultGroqIntentModels is the default model chain for Groq intent parsing.
+	// Llama 4 Maverick (Preview) offers excellent function calling with fast inference (~900 TPS).
+	// llama-3.3-70b-versatile is Production-grade fallback with strong accuracy.
+	DefaultGroqIntentModels = []string{"meta-llama/llama-4-maverick-17b-128e-instruct", "llama-3.3-70b-versatile"}
+
+	// DefaultGroqExpanderModels is the default model chain for Groq query expansion.
 	// Llama 4 Scout (Preview) offers efficient query expansion with fast inference (~750 TPS).
-	DefaultGroqExpanderModel = "meta-llama/llama-4-scout-17b-16e-instruct"
-	// DefaultGroqExpanderFallbackModel is the fallback model for Groq query expansion.
-	// llama-3.1-8b-instant is Production-grade and provides fast, cost-efficient fallback.
-	DefaultGroqExpanderFallbackModel = "llama-3.1-8b-instant"
+	// llama-3.1-8b-instant is Production-grade fallback.
+	DefaultGroqExpanderModels = []string{"meta-llama/llama-4-scout-17b-16e-instruct", "llama-3.1-8b-instant"}
+)
 
-	// Retry configuration defaults
+// Retry configuration defaults
+const (
 	DefaultMaxRetryAttempts  = 2
 	DefaultInitialRetryDelay = 500 * time.Millisecond
 	DefaultMaxRetryDelay     = 3 * time.Second

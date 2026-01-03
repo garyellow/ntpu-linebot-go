@@ -231,29 +231,18 @@ func buildLLMConfig(cfg *config.Config) genai.LLMConfig {
 	llmCfg.Gemini.APIKey = cfg.GeminiAPIKey
 	llmCfg.Groq.APIKey = cfg.GroqAPIKey
 
-	if cfg.GeminiIntentModel != "" {
-		llmCfg.Gemini.IntentModel = cfg.GeminiIntentModel
+	// Override model chains if provided in config (supports comma-separated lists)
+	if len(cfg.GeminiIntentModels) > 0 {
+		llmCfg.Gemini.IntentModels = cfg.GeminiIntentModels
 	}
-	if cfg.GeminiIntentFallbackModel != "" {
-		llmCfg.Gemini.IntentFallbackModel = cfg.GeminiIntentFallbackModel
+	if len(cfg.GeminiExpanderModels) > 0 {
+		llmCfg.Gemini.ExpanderModels = cfg.GeminiExpanderModels
 	}
-	if cfg.GeminiExpanderModel != "" {
-		llmCfg.Gemini.ExpanderModel = cfg.GeminiExpanderModel
+	if len(cfg.GroqIntentModels) > 0 {
+		llmCfg.Groq.IntentModels = cfg.GroqIntentModels
 	}
-	if cfg.GeminiExpanderFallbackModel != "" {
-		llmCfg.Gemini.ExpanderFallbackModel = cfg.GeminiExpanderFallbackModel
-	}
-	if cfg.GroqIntentModel != "" {
-		llmCfg.Groq.IntentModel = cfg.GroqIntentModel
-	}
-	if cfg.GroqIntentFallbackModel != "" {
-		llmCfg.Groq.IntentFallbackModel = cfg.GroqIntentFallbackModel
-	}
-	if cfg.GroqExpanderModel != "" {
-		llmCfg.Groq.ExpanderModel = cfg.GroqExpanderModel
-	}
-	if cfg.GroqExpanderFallbackModel != "" {
-		llmCfg.Groq.ExpanderFallbackModel = cfg.GroqExpanderFallbackModel
+	if len(cfg.GroqExpanderModels) > 0 {
+		llmCfg.Groq.ExpanderModels = cfg.GroqExpanderModels
 	}
 
 	if cfg.LLMPrimaryProvider == "groq" {
