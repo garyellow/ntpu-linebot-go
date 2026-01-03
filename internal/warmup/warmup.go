@@ -496,6 +496,7 @@ func formatSemesters(semesters []course.Semester) string {
 // ONLY processes courses from the most recent 2 semesters (with cached data)
 // Uses content hash for incremental updates - only re-scrapes changed syllabi
 // Other semesters are not processed to reduce scraping load
+// Optimization: Processes courses in batches to reduce peak memory usage
 func warmupSyllabusModule(ctx context.Context, db *storage.DB, client *scraper.Client, bm25Index *rag.BM25Index, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
 	startTime := time.Now()
 	defer func() {
@@ -517,143 +518,162 @@ func warmupSyllabusModule(ctx context.Context, db *storage.DB, client *scraper.C
 		return nil
 	}
 
-	log.WithField("semesters", len(semesters)).Info("Found recent semesters for syllabus warmup")
-
-	// Collect courses from the most recent 2 semesters only
-	var courses []storage.Course
+	// Calculate total courses for progress tracking
+	var totalCourses int
 	for _, sem := range semesters {
-		semCourses, err := db.GetCoursesByYearTerm(ctx, sem.Year, sem.Term)
+		count, err := db.CountCoursesBySemester(ctx, sem.Year, sem.Term)
 		if err != nil {
-			log.WithError(err).WithField("year", sem.Year).WithField("term", sem.Term).Warn("Failed to get courses for semester")
+			log.WithError(err).WithField("year", sem.Year).WithField("term", sem.Term).Warn("Failed to count courses")
 			continue
 		}
-		courses = append(courses, semCourses...)
-		log.WithField("year", sem.Year).WithField("term", sem.Term).WithField("count", len(semCourses)).Info("Loaded courses for semester")
+		totalCourses += count
 	}
 
-	if len(courses) == 0 {
-		log.Info("No courses found in recent semesters for syllabus warmup")
+	log.WithField("semesters", len(semesters)).
+		WithField("total_courses", totalCourses).
+		Info("Found recent semesters for syllabus warmup")
+
+	if totalCourses == 0 {
 		return nil
 	}
-
-	log.WithField("total_courses", len(courses)).Info("Processing syllabi for courses from recent 2 semesters")
 
 	// Create syllabus scraper
 	syllabusScraper := syllabus.NewScraper(client)
 
-	// Process courses and extract syllabi
+	var updatedCount, skippedCount, errorCount, processedCount int
+	const batchLoadSize = 100 // Load 100 courses from DB at a time
+	const saveBatchSize = 50  // Save to DB every 50 syllabi
+
+	// Buffer for batched saves
 	var newSyllabi []*storage.Syllabus
-	var updatedCount, skippedCount, errorCount int
-	const batchSize = 50 // Save to DB every 50 syllabi to save memory
 
 processLoop:
-	for i, course := range courses {
-		select {
-		case <-ctx.Done():
-			log.WithField("processed", i).WithField("total", len(courses)).
-				Info("Syllabus warmup interrupted")
-			break processLoop
-		default:
-		}
-
-		// Skip courses without detail URL
-		if course.DetailURL == "" {
-			skippedCount++
-			continue
-		}
-
-		// Scrape syllabus content
-		fields, err := syllabusScraper.ScrapeSyllabus(ctx, &course)
-		if err != nil {
-			log.WithError(err).WithField("uid", course.UID).Debug("Failed to scrape syllabus")
-			errorCount++
-			continue
-		}
-
-		// Skip empty syllabi
-		if fields.IsEmpty() {
-			skippedCount++
-			continue
-		}
-
-		// Compute content hash from syllabus content fields for change detection
-		// Note: Course title is stored separately and not included in hash to avoid
-		// unnecessary re-indexing when only the title changes (content remains same)
-		contentForHash := fields.Objectives + "\n" + fields.Outline + "\n" + fields.Schedule
-		contentHash := syllabus.ComputeContentHash(contentForHash)
-
-		// Check if content has changed (incremental update)
-		existingHash, err := db.GetSyllabusContentHash(ctx, course.UID)
-		if err != nil {
-			log.WithError(err).WithField("uid", course.UID).Debug("Failed to get existing hash")
-		}
-
-		if existingHash == contentHash {
-			// Content unchanged, skip
-			skippedCount++
-			continue
-		}
-
-		// Create syllabus record with unified content fields
-		syl := &storage.Syllabus{
-			UID:         course.UID,
-			Year:        course.Year,
-			Term:        course.Term,
-			Title:       course.Title,
-			Teachers:    course.Teachers,
-			Objectives:  fields.Objectives,
-			Outline:     fields.Outline,
-			Schedule:    fields.Schedule,
-			ContentHash: contentHash,
-		}
-
-		newSyllabi = append(newSyllabi, syl)
-		updatedCount++
-
-		// Save batch if size reached
-		if len(newSyllabi) >= batchSize {
-			if err := db.SaveSyllabusBatch(ctx, newSyllabi); err != nil {
-				log.WithError(err).Error("Failed to save syllabi batch")
-				// Continue to try next batch, but this batch is lost/failed
-				errorCount += len(newSyllabi)
+	for _, sem := range semesters {
+		offset := 0
+		for {
+			select {
+			case <-ctx.Done():
+				log.WithField("processed", processedCount).
+					Info("Syllabus warmup interrupted")
+				break processLoop
+			default:
 			}
-			newSyllabi = nil // Release memory (clear slice)
-		}
 
-		// Report progress every 5% or at completion for consistent visibility
-		progressInterval := max(len(courses)/20, 1) // ~5% intervals, minimum 1
-		if i > 0 && i%progressInterval == 0 {
-			elapsed := time.Since(startTime)
-			avgTimePerCourse := elapsed / time.Duration(i)
-			estimatedRemaining := avgTimePerCourse * time.Duration(len(courses)-i)
-			log.WithField("progress", fmt.Sprintf("%d/%d (%.0f%%)", i, len(courses), float64(i)*100/float64(len(courses)))).
-				WithField("updated", updatedCount).
-				WithField("skipped", skippedCount).
-				WithField("errors", errorCount).
-				WithField("elapsed_min", int(elapsed.Minutes())).
-				WithField("est_remaining_min", int(estimatedRemaining.Minutes())).
-				Info("Syllabus warmup progress")
+			// Load batch of courses
+			courses, err := db.GetCoursesByYearTermPaginated(ctx, sem.Year, sem.Term, batchLoadSize, offset)
+			if err != nil {
+				log.WithError(err).WithField("year", sem.Year).WithField("term", sem.Term).Error("Failed to load course batch")
+				break // Skip this semester on error
+			}
+
+			if len(courses) == 0 {
+				break // End of semester
+			}
+
+			// Process current batch
+			for _, course := range courses {
+				processedCount++
+
+				// Skip courses without detail URL
+				if course.DetailURL == "" {
+					skippedCount++
+					continue
+				}
+
+				// Scrape syllabus content
+				fields, err := syllabusScraper.ScrapeSyllabus(ctx, &course)
+				if err != nil {
+					log.WithError(err).WithField("uid", course.UID).Debug("Failed to scrape syllabus")
+					errorCount++
+					continue
+				}
+
+				// Skip empty syllabi
+				if fields.IsEmpty() {
+					skippedCount++
+					continue
+				}
+
+				// Compute content hash
+				contentForHash := fields.Objectives + "\n" + fields.Outline + "\n" + fields.Schedule
+				contentHash := syllabus.ComputeContentHash(contentForHash)
+
+				// Check if content has changed
+				existingHash, err := db.GetSyllabusContentHash(ctx, course.UID)
+				if err != nil {
+					log.WithError(err).WithField("uid", course.UID).Debug("Failed to get existing hash")
+				}
+
+				if existingHash == contentHash {
+					skippedCount++
+					continue
+				}
+
+				// Create syllabus record
+				syl := &storage.Syllabus{
+					UID:         course.UID,
+					Year:        course.Year,
+					Term:        course.Term,
+					Title:       course.Title,
+					Teachers:    course.Teachers,
+					Objectives:  fields.Objectives,
+					Outline:     fields.Outline,
+					Schedule:    fields.Schedule,
+					ContentHash: contentHash,
+				}
+
+				newSyllabi = append(newSyllabi, syl)
+				updatedCount++
+
+				// Save batch if size reached
+				if len(newSyllabi) >= saveBatchSize {
+					if err := db.SaveSyllabusBatch(ctx, newSyllabi); err != nil {
+						log.WithError(err).Error("Failed to save syllabi batch")
+						errorCount += len(newSyllabi)
+					}
+					newSyllabi = nil                                         // Clear slice
+					newSyllabi = make([]*storage.Syllabus, 0, saveBatchSize) // pre-allocate
+				}
+
+				// Report progress
+				progressInterval := max(totalCourses/20, 1)
+				if processedCount%progressInterval == 0 {
+					elapsed := time.Since(startTime)
+					avgTimePerCourse := elapsed / time.Duration(processedCount)
+					estimatedRemaining := avgTimePerCourse * time.Duration(totalCourses-processedCount)
+					log.WithField("progress", fmt.Sprintf("%d/%d (%.0f%%)", processedCount, totalCourses, float64(processedCount)*100/float64(totalCourses))).
+						WithField("updated", updatedCount).
+						WithField("skipped", skippedCount).
+						WithField("errors", errorCount).
+						WithField("est_remaining_min", int(estimatedRemaining.Minutes())).
+						Info("Syllabus warmup progress")
+				}
+			}
+
+			offset += batchLoadSize
+			// Explicitly nil out courses to help GC
+			courses = nil
 		}
+		// Force GC after each semester to release memory
+		runtime.GC()
 	}
 
 	// Save remaining syllabi
 	if len(newSyllabi) > 0 {
 		if err := db.SaveSyllabusBatch(ctx, newSyllabi); err != nil {
 			log.WithError(err).Error("Failed to save final syllabi batch")
-			return fmt.Errorf("failed to save final syllabi: %w", err)
+			// Don't error out, just log
 		}
-		newSyllabi = nil // Release memory
+		newSyllabi = nil
 	}
 
-	// Force GC after heavy scraping and saving
+	// Final GC
 	runtime.GC()
 
 	// Rebuild BM25 index from database (includes all syllabi with full content)
-	// This is done after saving to ensure database is the source of truth
 	if bm25Index != nil {
 		if err := bm25Index.RebuildFromDB(ctx, db); err != nil {
 			log.WithError(err).Warn("Failed to rebuild BM25 index")
-			// Don't fail the whole warmup for index errors
 		}
 	}
 
@@ -662,7 +682,7 @@ processLoop:
 	log.WithField("new", updatedCount).
 		WithField("skipped", skippedCount).
 		WithField("errors", errorCount).
-		WithField("total_indexed", len(newSyllabi)).
+		WithField("total_scanned", processedCount).
 		Info("Syllabus module warmup complete")
 
 	return nil

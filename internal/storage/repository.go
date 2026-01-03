@@ -10,7 +10,6 @@ import (
 	"time"
 
 	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
-	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
 )
 
 // SaveStudent inserts or updates a student record
@@ -122,40 +121,57 @@ func (db *DB) GetStudentByID(ctx context.Context, id string) (*Student, error) {
 	return &student, nil
 }
 
-// SearchStudentsByName searches students by partial name match.
-// Returns both the total count and limited results (up to 400 students).
-// Student data never expires; it is updated only when the cache is rebuilt (typically on startup).
+// SearchStudentsByName searches students by partial name match using SQL filtering.
+// optimization: Uses dynamic LIKE clauses for character-set matching to avoid loading all students into memory.
+// Returns both the total count (up to limit) and results.
 func (db *DB) SearchStudentsByName(ctx context.Context, name string) (*StudentSearchResult, error) {
 	if len(name) > 100 {
 		return nil, errors.New("search term too long")
 	}
 
 	start := time.Now()
+	runes := []rune(name)
+	if len(runes) == 0 {
+		return &StudentSearchResult{Students: []Student{}, TotalCount: 0}, nil
+	}
 
-	// Load all students from the cache table (ordered by year and id); performance is monitored via slow-query logging below.
-	query := `SELECT id, name, department, year, cached_at FROM students ORDER BY year DESC, id DESC`
-	rows, err := db.reader.QueryContext(ctx, query)
+	// limit matching characters to prevent excessive SQL generation for very long strings
+	if len(runes) > 10 {
+		runes = runes[:10]
+	}
+
+	// Build dynamic query
+	// Base query
+	query := `SELECT id, name, department, year, cached_at FROM students WHERE 1=1`
+	args := make([]interface{}, 0, len(runes))
+
+	// Add LIKE clause for each character to match "contains all characters" (order independent)
+	// "王明" -> LIKE '%王%' AND LIKE '%明%'
+	// This matches "王小明" and "明王" (if that makes sense for names)
+	for _, r := range runes {
+		query += ` AND name LIKE ? ESCAPE '\'`
+		args = append(args, "%"+sanitizeSearchTerm(string(r))+"%")
+	}
+
+	// Add ordering and limit
+	query += ` ORDER BY year DESC, id DESC LIMIT 401` // Fetch 401 to check if we hit limit (though UI limits to 400)
+
+	rows, err := db.reader.QueryContext(ctx, query, args...)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to get students",
+		slog.ErrorContext(ctx, "failed to search students",
 			"search_term", name,
 			"error", err)
 		return nil, fmt.Errorf("query students: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	// Filter students using character-set matching (supports non-contiguous chars)
-	// This allows "王明" to match "王小明"
 	matchedStudents := make([]Student, 0, 400)
 	for rows.Next() {
 		var student Student
 		if err := rows.Scan(&student.ID, &student.Name, &student.Department, &student.Year, &student.CachedAt); err != nil {
 			return nil, fmt.Errorf("scan student: %w", err)
 		}
-
-		// Check if student name contains all characters from search term
-		if stringutil.ContainsAllRunes(student.Name, name) {
-			matchedStudents = append(matchedStudents, student)
-		}
+		matchedStudents = append(matchedStudents, student)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -164,7 +180,7 @@ func (db *DB) SearchStudentsByName(ctx context.Context, name string) (*StudentSe
 
 	totalCount := len(matchedStudents)
 
-	// Limit results to first 400 students
+	// If we fetched more than 400, cap it
 	if len(matchedStudents) > 400 {
 		matchedStudents = matchedStudents[:400]
 	}
@@ -175,7 +191,6 @@ func (db *DB) SearchStudentsByName(ctx context.Context, name string) (*StudentSe
 			"operation", "SearchStudentsByName",
 			"duration_ms", duration.Milliseconds(),
 			"search_term", name,
-			"total_count", totalCount,
 			"result_count", len(matchedStudents))
 	}
 
@@ -183,6 +198,26 @@ func (db *DB) SearchStudentsByName(ctx context.Context, name string) (*StudentSe
 		Students:   matchedStudents,
 		TotalCount: totalCount,
 	}, nil
+}
+
+// GetCoursesByYearTermPaginated retrieves courses by year and term with pagination.
+// Only returns non-expired cache entries based on configured TTL.
+func (db *DB) GetCoursesByYearTermPaginated(ctx context.Context, year, term, limit, offset int) ([]Course, error) {
+	// Add TTL filter to prevent returning stale data
+	ttlTimestamp := db.getTTLTimestamp()
+	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at
+              FROM courses
+              WHERE year = ? AND term = ? AND cached_at > ?
+              ORDER BY uid ASC
+              LIMIT ? OFFSET ?`
+
+	rows, err := db.reader.QueryContext(ctx, query, year, term, ttlTimestamp, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get courses paginated: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	return scanCourses(rows)
 }
 
 // GetStudentsByDepartment retrieves students by year and department.
