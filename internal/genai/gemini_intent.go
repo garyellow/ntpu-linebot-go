@@ -29,7 +29,7 @@ func newGeminiIntentParser(ctx context.Context, apiKey, model string) (*geminiIn
 	}
 
 	if model == "" {
-		model = DefaultGeminiIntentModel
+		model = DefaultGeminiIntentModels[0]
 	}
 
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{

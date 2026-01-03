@@ -32,7 +32,7 @@ func newGroqIntentParser(_ context.Context, apiKey, model string) (*groqIntentPa
 	}
 
 	if model == "" {
-		model = DefaultGroqIntentModel
+		model = DefaultGroqIntentModels[0]
 	}
 
 	client, err := groq.NewClient(apiKey)

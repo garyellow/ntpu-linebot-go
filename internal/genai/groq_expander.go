@@ -28,7 +28,7 @@ func newGroqQueryExpander(_ context.Context, apiKey, model string) (*groqQueryEx
 	}
 
 	if model == "" {
-		model = DefaultGroqExpanderModel
+		model = DefaultGroqExpanderModels[0]
 	}
 
 	client, err := groq.NewClient(apiKey)

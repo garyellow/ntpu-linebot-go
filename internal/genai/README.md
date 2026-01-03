@@ -10,12 +10,12 @@
 
 ## 支援的 LLM 提供者
 
-| 提供者 | 用途 | 主要模型 | 備援模型 | 特色 |
-|--------|------|---------|---------|------|
-| **Gemini** | Intent | `gemini-2.5-flash` | `gemini-2.5-flash-lite` | 高品質、多模態 |
-| **Gemini** | Expander | `gemini-2.5-flash` | `gemini-2.5-flash-lite` | 高品質、多模態 |
-| **Groq** | Intent | `llama-4-maverick-17b-128e-instruct` | `llama-3.3-70b-versatile` | 極速推論 (~900 TPS) |
-| **Groq** | Expander | `llama-4-scout-17b-16e-instruct` | `llama-3.1-8b-instant` | 極速推論 (~750 TPS) |
+| 提供者 | 用途 | 預設模型鏈（逗號分隔 fallback）| 特色 |
+|--------|------|-------------------------------|------|
+| **Gemini** | Intent | `gemini-2.5-flash, gemini-2.5-flash-lite` | 高品質、多模態 |
+| **Gemini** | Expander | `gemini-2.5-flash, gemini-2.5-flash-lite` | 高品質、多模態 |
+| **Groq** | Intent | `llama-4-maverick-17b-128e-instruct, llama-3.3-70b-versatile` | 極速推論 (~900 TPS) |
+| **Groq** | Expander | `llama-4-scout-17b-16e-instruct, llama-3.1-8b-instant` | 極速推論 (~750 TPS) |
 
 ## 檔案結構
 
@@ -201,16 +201,17 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 
 #### Model Configuration
 
+模型配置使用逗號分隔的 fallback chain 格式。第一個模型為主要模型，其餘為備援模型（依序嘗試）。
+
 | 變數名稱 | 預設值 | 說明 |
 |---------|--------|------|
-| `GEMINI_INTENT_MODEL` | gemini-2.5-flash | Gemini 意圖解析模型 |
-| `GEMINI_INTENT_FALLBACK_MODEL` | gemini-2.5-flash-lite | Gemini 意圖解析備援模型 |
-| `GEMINI_EXPANDER_MODEL` | gemini-2.5-flash | Gemini 查詢擴展模型 |
-| `GEMINI_EXPANDER_FALLBACK_MODEL` | gemini-2.5-flash-lite | Gemini 查詢擴展備援模型 |
-| `GROQ_INTENT_MODEL` | meta-llama/llama-4-maverick-17b-128e-instruct | Groq 意圖解析模型 (Preview) |
-| `GROQ_INTENT_FALLBACK_MODEL` | llama-3.3-70b-versatile | Groq 意圖解析備援模型 (Production) |
-| `GROQ_EXPANDER_MODEL` | meta-llama/llama-4-scout-17b-16e-instruct | Groq 查詢擴展模型 (Preview) |
-| `GROQ_EXPANDER_FALLBACK_MODEL` | llama-3.1-8b-instant | Groq 查詢擴展備援模型 (Production) |
+| `GEMINI_INTENT_MODELS` | gemini-2.5-flash,gemini-2.5-flash-lite | Gemini 意圖解析模型鏈 |
+| `GEMINI_EXPANDER_MODELS` | gemini-2.5-flash,gemini-2.5-flash-lite | Gemini 查詢擴展模型鏈 |
+| `GROQ_INTENT_MODELS` | llama-4-maverick...,llama-3.3-70b-versatile | Groq 意圖解析模型鏈 |
+| `GROQ_EXPANDER_MODELS` | llama-4-scout...,llama-3.1-8b-instant | Groq 查詢擴展模型鏈 |
+
+> **💡 提示**：可添加更多 fallback 模型，例如：
+> `GEMINI_INTENT_MODELS=gemini-2.5-flash,gemini-2.5-flash-lite,gemini-2.0-flash`
 
 #### Rate Limiting
 

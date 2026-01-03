@@ -13,80 +13,89 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 )
 
-// FallbackIntentParser wraps a primary and fallback IntentParser.
-// It implements three-layer fallback:
-// 1. Model retry with backoff (same provider)
-// 2. Provider fallback (primary → fallback provider)
-// 3. Graceful degradation (return nil result)
+// FallbackIntentParser wraps a list of IntentParsers.
+// It implements multi-layer fallback:
+// 1. Model retry with backoff (same model)
+// 2. Sequential fallback through the provided list of models/providers
+// 3. Graceful degradation (return error if all fail)
 type FallbackIntentParser struct {
-	primary     IntentParser
-	fallback    IntentParser
+	parsers     []IntentParser
 	retryConfig RetryConfig
 }
 
 // NewFallbackIntentParser creates a new fallback-enabled intent parser.
-// If fallback is nil, only retry logic is applied to the primary provider.
-func NewFallbackIntentParser(primary, fallback IntentParser, cfg RetryConfig) *FallbackIntentParser {
+// It tries parsers in the order they are provided.
+func NewFallbackIntentParser(cfg RetryConfig, parsers ...IntentParser) *FallbackIntentParser {
+	// Filter out nil parsers
+	activeParsers := make([]IntentParser, 0, len(parsers))
+	for _, p := range parsers {
+		if p != nil {
+			activeParsers = append(activeParsers, p)
+		}
+	}
 	return &FallbackIntentParser{
-		primary:     primary,
-		fallback:    fallback,
+		parsers:     activeParsers,
 		retryConfig: cfg,
 	}
 }
 
-// Parse tries the primary parser first with retry, then falls back if needed.
+// Parse tries the parsers in order with retry, then falls back if needed.
 func (f *FallbackIntentParser) Parse(ctx context.Context, text string) (*ParseResult, error) {
-	if f == nil || f.primary == nil {
+	if f == nil || len(f.parsers) == 0 {
 		return nil, errors.New("intent parser not configured")
 	}
 
-	start := time.Now()
-	provider := f.primary.Provider()
+	totalStart := time.Now()
+	var lastErr error
 
-	// Try primary with retry
-	result, err := f.parseWithRetry(ctx, f.primary, text)
-	if err == nil {
-		recordIntentSuccess(provider, start)
-		return result, nil
+	for i, parser := range f.parsers {
+		start := time.Now()
+		provider := parser.Provider()
+
+		// Try current parser with retry
+		result, err := f.parseWithRetry(ctx, parser, text)
+		if err == nil {
+			recordIntentSuccess(provider, start)
+			// Only record provider-level fallback when the provider actually changes.
+			// This avoids misleading metrics like Gemini→Gemini when falling back between
+			// multiple models of the same provider.
+			if i > 0 {
+				prevProvider := f.parsers[i-1].Provider()
+				if prevProvider != provider {
+					recordFallback(prevProvider, provider, "nlu", time.Since(totalStart))
+				}
+			}
+			return result, nil
+		}
+
+		lastErr = err
+		action := ClassifyError(err)
+
+		slog.WarnContext(ctx, "intent parser failed",
+			"provider", provider,
+			"index", i,
+			"error", err,
+			"action", action,
+			"duration", time.Since(start))
+
+		// If error is not recoverable or no more fallbacks, record error and stop
+		if action == ActionFail || i == len(f.parsers)-1 {
+			recordIntentError(provider, err)
+			if i == len(f.parsers)-1 && len(f.parsers) > 1 {
+				return nil, fmt.Errorf("all %d parsers failed, last error: %w", len(f.parsers), lastErr)
+			}
+			return nil, lastErr
+		}
+
+		// Falling back to next parser
+		slog.InfoContext(ctx, "falling back to next intent parser",
+			"from_index", i,
+			"from_provider", provider,
+			"to_index", i+1,
+			"to_provider", f.parsers[i+1].Provider())
 	}
 
-	// Check if we should fallback
-	action := ClassifyError(err)
-	slog.WarnContext(ctx, "primary intent parser failed",
-		"provider", provider,
-		"error", err,
-		"action", action,
-		"duration", time.Since(start))
-
-	// If error is not recoverable or no fallback, return error
-	if action == ActionFail || f.fallback == nil {
-		recordIntentError(provider, err)
-		return nil, err
-	}
-
-	// Try fallback provider
-	slog.InfoContext(ctx, "falling back to secondary provider",
-		"from", provider,
-		"to", f.fallback.Provider())
-
-	fallbackStart := time.Now()
-	fallbackProvider := f.fallback.Provider()
-
-	result, err = f.parseWithRetry(ctx, f.fallback, text)
-	if err == nil {
-		recordIntentSuccess(fallbackProvider, fallbackStart)
-		recordFallback(provider, fallbackProvider, "nlu", time.Since(start))
-		return result, nil
-	}
-
-	// Both providers failed
-	recordIntentError(fallbackProvider, err)
-	slog.ErrorContext(ctx, "all intent parsers failed",
-		"primary", provider,
-		"fallback", fallbackProvider,
-		"error", err)
-
-	return nil, fmt.Errorf("all providers failed: %w", err)
+	return nil, fmt.Errorf("all intent parsers failed: %w", lastErr)
 }
 
 // parseWithRetry attempts parsing with retry logic.
@@ -147,33 +156,34 @@ func (f *FallbackIntentParser) IsEnabled() bool {
 	if f == nil {
 		return false
 	}
-	return (f.primary != nil && f.primary.IsEnabled()) ||
-		(f.fallback != nil && f.fallback.IsEnabled())
+	for _, p := range f.parsers {
+		if p != nil && p.IsEnabled() {
+			return true
+		}
+	}
+	return false
 }
 
-// Provider returns the primary provider type.
+// Provider returns the provider type of the current/first parser.
 func (f *FallbackIntentParser) Provider() Provider {
-	if f == nil || f.primary == nil {
+	if f == nil || len(f.parsers) == 0 {
 		return ""
 	}
-	return f.primary.Provider()
+	return f.parsers[0].Provider()
 }
 
-// Close closes both parsers.
+// Close closes all parsers.
 func (f *FallbackIntentParser) Close() error {
 	if f == nil {
 		return nil
 	}
 
 	var errs []error
-	if f.primary != nil {
-		if err := f.primary.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if f.fallback != nil {
-		if err := f.fallback.Close(); err != nil {
-			errs = append(errs, err)
+	for _, p := range f.parsers {
+		if p != nil {
+			if err := p.Close(); err != nil {
+				errs = append(errs, err)
+			}
 		}
 	}
 
@@ -183,75 +193,76 @@ func (f *FallbackIntentParser) Close() error {
 	return nil
 }
 
-// FallbackQueryExpander wraps a primary and fallback QueryExpander.
+// FallbackQueryExpander wraps a list of QueryExpanders.
 type FallbackQueryExpander struct {
-	primary     QueryExpander
-	fallback    QueryExpander
+	expanders   []QueryExpander
 	retryConfig RetryConfig
 }
 
 // NewFallbackQueryExpander creates a new fallback-enabled query expander.
-func NewFallbackQueryExpander(primary, fallback QueryExpander, cfg RetryConfig) *FallbackQueryExpander {
+func NewFallbackQueryExpander(cfg RetryConfig, expanders ...QueryExpander) *FallbackQueryExpander {
+	activeExpanders := make([]QueryExpander, 0, len(expanders))
+	for _, e := range expanders {
+		if e != nil {
+			activeExpanders = append(activeExpanders, e)
+		}
+	}
 	return &FallbackQueryExpander{
-		primary:     primary,
-		fallback:    fallback,
+		expanders:   activeExpanders,
 		retryConfig: cfg,
 	}
 }
 
-// Expand tries the primary expander first with retry, then falls back if needed.
+// Expand tries the expanders in order with retry, then falls back if needed.
 // On complete failure, returns the original query (graceful degradation).
 func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (string, error) {
-	if f == nil || f.primary == nil {
+	if f == nil || len(f.expanders) == 0 {
 		return query, nil // Graceful degradation
 	}
 
-	start := time.Now()
-	provider := f.primary.Provider()
+	totalStart := time.Now()
 
-	// Try primary with retry
-	result, err := f.expandWithRetry(ctx, f.primary, query)
-	if err == nil {
-		recordExpanderSuccess(provider, start)
-		return result, nil
+	for i, expander := range f.expanders {
+		start := time.Now()
+		provider := expander.Provider()
+
+		// Try current expander with retry
+		result, err := f.expandWithRetry(ctx, expander, query)
+		if err == nil {
+			recordExpanderSuccess(provider, start)
+			// Only record provider-level fallback when the provider actually changes
+			if i > 0 {
+				prevProvider := f.expanders[i-1].Provider()
+				if prevProvider != provider {
+					recordFallback(prevProvider, provider, "expander", time.Since(totalStart))
+				}
+			}
+			return result, nil
+		}
+
+		// Check if we should fallback
+		action := ClassifyError(err)
+		slog.WarnContext(ctx, "query expander failed",
+			"provider", provider,
+			"index", i,
+			"error", err,
+			"action", action,
+			"duration", time.Since(start))
+
+		// If error is not recoverable or no more fallbacks, degrade gracefully
+		if action == ActionFail || i == len(f.expanders)-1 {
+			recordExpanderError(provider, err)
+			// Graceful degradation: return original query
+			return query, nil
+		}
+
+		// Falling back to next expander
+		slog.InfoContext(ctx, "falling back to next query expander",
+			"from_index", i,
+			"from_provider", provider,
+			"to_index", i+1,
+			"to_provider", f.expanders[i+1].Provider())
 	}
-
-	// Check if we should fallback
-	action := ClassifyError(err)
-	slog.WarnContext(ctx, "primary query expander failed",
-		"provider", provider,
-		"error", err,
-		"action", action,
-		"duration", time.Since(start))
-
-	// If error is not recoverable or no fallback, degrade gracefully
-	if action == ActionFail || f.fallback == nil {
-		recordExpanderError(provider, err)
-		// Graceful degradation: return original query
-		return query, nil
-	}
-
-	// Try fallback provider
-	slog.InfoContext(ctx, "falling back to secondary expander",
-		"from", provider,
-		"to", f.fallback.Provider())
-
-	fallbackStart := time.Now()
-	fallbackProvider := f.fallback.Provider()
-
-	result, err = f.expandWithRetry(ctx, f.fallback, query)
-	if err == nil {
-		recordExpanderSuccess(fallbackProvider, fallbackStart)
-		recordFallback(provider, fallbackProvider, "expander", time.Since(start))
-		return result, nil
-	}
-
-	// Both providers failed - graceful degradation
-	recordExpanderError(fallbackProvider, err)
-	slog.WarnContext(ctx, "all expanders failed, using original query",
-		"primary", provider,
-		"fallback", fallbackProvider,
-		"query", query)
 
 	return query, nil // Always return original query on failure
 }
@@ -306,29 +317,26 @@ func (f *FallbackQueryExpander) expandWithRetry(ctx context.Context, expander Qu
 	return query, lastErr
 }
 
-// Provider returns the primary provider type.
+// Provider returns the provider type of the current/first expander.
 func (f *FallbackQueryExpander) Provider() Provider {
-	if f == nil || f.primary == nil {
+	if f == nil || len(f.expanders) == 0 {
 		return ""
 	}
-	return f.primary.Provider()
+	return f.expanders[0].Provider()
 }
 
-// Close closes both expanders.
+// Close closes all expanders.
 func (f *FallbackQueryExpander) Close() error {
 	if f == nil {
 		return nil
 	}
 
 	var errs []error
-	if f.primary != nil {
-		if err := f.primary.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if f.fallback != nil {
-		if err := f.fallback.Close(); err != nil {
-			errs = append(errs, err)
+	for _, e := range f.expanders {
+		if e != nil {
+			if err := e.Close(); err != nil {
+				errs = append(errs, err)
+			}
 		}
 	}
 
@@ -339,6 +347,7 @@ func (f *FallbackQueryExpander) Close() error {
 }
 
 // Helper functions for metrics recording
+// (keeping these as they were)
 
 func recordIntentSuccess(provider Provider, start time.Time) {
 	if metrics.LLMTotal == nil || metrics.LLMDuration == nil {
@@ -392,14 +401,11 @@ func recordFallback(fromProvider, toProvider Provider, operation string, totalDu
 	}
 }
 
-// classifyErrorType maps error to a metric status label.
-// Provides fine-grained error classification for better observability.
 func classifyErrorType(err error) string {
 	if err == nil {
 		return "success"
 	}
 
-	// Check for context errors first
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "timeout"
 	}
@@ -407,7 +413,6 @@ func classifyErrorType(err error) string {
 		return "canceled"
 	}
 
-	// Check for wrapped LLMError with status code
 	var llmErr *LLMError
 	if errors.As(err, &llmErr) {
 		switch {
@@ -422,7 +427,6 @@ func classifyErrorType(err error) string {
 		}
 	}
 
-	// Fall back to action-based classification
 	action := ClassifyError(err)
 	switch action {
 	case ActionFallback:
