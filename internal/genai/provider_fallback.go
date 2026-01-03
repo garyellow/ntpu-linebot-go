@@ -56,10 +56,14 @@ func (f *FallbackIntentParser) Parse(ctx context.Context, text string) (*ParseRe
 		result, err := f.parseWithRetry(ctx, parser, text)
 		if err == nil {
 			recordIntentSuccess(provider, start)
-			// If this wasn't the first parser, record the fallback
+			// Only record provider-level fallback when the provider actually changes.
+			// This avoids misleading metrics like Gemini→Gemini when falling back between
+			// multiple models of the same provider.
 			if i > 0 {
 				prevProvider := f.parsers[i-1].Provider()
-				recordFallback(prevProvider, provider, "nlu", time.Since(totalStart))
+				if prevProvider != provider {
+					recordFallback(prevProvider, provider, "nlu", time.Since(totalStart))
+				}
 			}
 			return result, nil
 		}
@@ -78,7 +82,7 @@ func (f *FallbackIntentParser) Parse(ctx context.Context, text string) (*ParseRe
 		if action == ActionFail || i == len(f.parsers)-1 {
 			recordIntentError(provider, err)
 			if i == len(f.parsers)-1 && len(f.parsers) > 1 {
-				return nil, fmt.Errorf("all %d providers failed, last error: %w", len(f.parsers), lastErr)
+				return nil, fmt.Errorf("all %d parsers failed, last error: %w", len(f.parsers), lastErr)
 			}
 			return nil, lastErr
 		}
@@ -226,10 +230,12 @@ func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (strin
 		result, err := f.expandWithRetry(ctx, expander, query)
 		if err == nil {
 			recordExpanderSuccess(provider, start)
-			// If this wasn't the first expander, record the fallback
+			// Only record provider-level fallback when the provider actually changes
 			if i > 0 {
 				prevProvider := f.expanders[i-1].Provider()
-				recordFallback(prevProvider, provider, "expander", time.Since(totalStart))
+				if prevProvider != provider {
+					recordFallback(prevProvider, provider, "expander", time.Since(totalStart))
+				}
 			}
 			return result, nil
 		}
