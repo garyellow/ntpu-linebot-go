@@ -2021,9 +2021,9 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 //   - Relative thresholds work better than absolute ones
 //
 // Categories (based on confidence = score / maxScore):
-//   - Confidence >= 0.8: "最佳匹配" (Best Match) - Normal distribution core
-//   - Confidence >= 0.6: "高度相關" (Highly Relevant) - Mixed region
-//   - Confidence < 0.6: "部分相關" (Partially Relevant) - Exponential tail
+//   - Confidence >= 0.8: "最佳匹配" (Best Match) - Top 20% relative score range
+//   - Confidence >= 0.6: "高度相關" (Highly Relevant) - Top 40% relative score range
+//   - Confidence < 0.6: "部分相關" (Partially Relevant) - Remaining results
 func getRelevanceLabel(confidence float32) lineutil.BodyLabelInfo {
 	if confidence >= 0.8 {
 		// Deep teal - strongest relevance, deep and distinct

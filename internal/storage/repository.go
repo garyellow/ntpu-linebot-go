@@ -1434,6 +1434,33 @@ func (db *DB) GetAllSyllabi(ctx context.Context) ([]*Syllabus, error) {
 	return syllabi, rows.Err()
 }
 
+// GetDistinctSemesters retrieves all distinct semesters (year, term pairs) from the syllabi table.
+// Used for chunked loading of the BM25 index to reduce memory usage.
+func (db *DB) GetDistinctSemesters(ctx context.Context) ([]struct{ Year, Term int }, error) {
+	query := `SELECT DISTINCT year, term FROM syllabi ORDER BY year DESC, term DESC`
+
+	rows, err := db.reader.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get distinct semesters from syllabi: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var semesters []struct{ Year, Term int }
+	for rows.Next() {
+		var s struct{ Year, Term int }
+		if err := rows.Scan(&s.Year, &s.Term); err != nil {
+			return nil, fmt.Errorf("failed to scan semester: %w", err)
+		}
+		semesters = append(semesters, s)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows error: %w", err)
+	}
+
+	return semesters, nil
+}
+
 // GetSyllabiByYearTerm retrieves all syllabi for a specific year and term
 func (db *DB) GetSyllabiByYearTerm(ctx context.Context, year, term int) ([]*Syllabus, error) {
 	query := `SELECT uid, year, term, title, teachers, objectives, outline, schedule, content_hash, cached_at FROM syllabi WHERE year = ? AND term = ?`
