@@ -8,10 +8,23 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 )
 
+// MetricType defines the type of rate limiter for metrics reporting.
+type MetricType int
+
+const (
+	// MetricTypeUser reports to ntpu_rate_limiter_users
+	MetricTypeUser MetricType = iota
+	// MetricTypeLLM reports to ntpu_llm_rate_limiter_users
+	MetricTypeLLM
+)
+
 // KeyedConfig configures a KeyedLimiter instance.
 type KeyedConfig struct {
 	// Name identifies this limiter for metrics (e.g., "user", "llm")
 	Name string
+
+	// MetricType specifies which metric gauge to update
+	MetricType MetricType
 
 	// Token bucket settings
 	Burst      float64 // Maximum tokens (burst capacity)
@@ -32,7 +45,7 @@ type KeyedConfig struct {
 // It creates a separate rate limiter for each key and automatically
 // cleans up inactive limiters.
 //
-// Supports optional daily limits via DailyCounter.
+// Supports optional daily limits via SlidingWindowCounter.
 type KeyedLimiter struct {
 	mu       sync.RWMutex
 	entries  map[string]*keyedEntry
@@ -78,10 +91,12 @@ func NewKeyedLimiter(cfg KeyedConfig) *KeyedLimiter {
 			cfg.Metrics.RecordRateLimiterDrop(cfg.Name)
 		}
 		kl.onUpdate = func(count int) {
-			if cfg.Name == "llm" {
-				cfg.Metrics.SetLLMRateLimiterUsers(count)
-			} else {
-				cfg.Metrics.SetRateLimiterUsers(count)
+			kl.onUpdate = func(count int) {
+				if cfg.MetricType == MetricTypeLLM {
+					cfg.Metrics.SetLLMRateLimiterUsers(count)
+				} else {
+					cfg.Metrics.SetRateLimiterUsers(count)
+				}
 			}
 		}
 	}
@@ -214,7 +229,15 @@ func (kl *KeyedLimiter) cleanupLoop() {
 			kl.mu.Lock()
 			for key, entry := range kl.entries {
 				// Remove if token bucket is full (inactive)
-				if entry.limiter.IsFull() {
+				// modifying logic to also check daily limit if enabled
+				shouldDelete := entry.limiter.IsFull()
+				if shouldDelete && entry.daily != nil {
+					// If daily limit exists, also check if it has reset (no usage in window)
+					// GetRemaining returning maxRequests means 0 usage in weighted window
+					shouldDelete = entry.daily.GetRemaining() == entry.daily.maxRequests
+				}
+
+				if shouldDelete {
 					delete(kl.entries, key)
 				}
 			}

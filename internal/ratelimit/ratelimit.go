@@ -96,6 +96,10 @@ func (l *Limiter) Allow() bool {
 
 // Check returns true if a request would be allowed (without consuming).
 // Use this with Consume() for atomic multi-layer rate limiting.
+//
+// WARNING: This method is NOT thread-safe for atomic check-then-consume operations
+// by itself. The caller MUST hold an external lock that covers both Check()
+// and Consume() to prevent race conditions (TOCTOU).
 func (l *Limiter) Check() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -106,6 +110,10 @@ func (l *Limiter) Check() bool {
 
 // Consume decrements a token (assumes Check() already passed).
 // Call this after all rate limit checks pass.
+//
+// WARNING: This method is NOT thread-safe for atomic check-then-consume operations
+// by itself. The caller MUST hold an external lock that covers both Check()
+// and Consume() to prevent race conditions (TOCTOU).
 func (l *Limiter) Consume() {
 	l.mu.Lock()
 	defer l.mu.Unlock()

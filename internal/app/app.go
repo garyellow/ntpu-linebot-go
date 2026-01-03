@@ -132,6 +132,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		DailyLimit:    cfg.Bot.LLMDailyLimit,
 		CleanupPeriod: config.RateLimiterCleanupInterval,
 		Metrics:       m,
+		MetricType:    ratelimit.MetricTypeLLM,
 	})
 	userLimiter := ratelimit.NewKeyedLimiter(ratelimit.KeyedConfig{
 		Name:          "user",
