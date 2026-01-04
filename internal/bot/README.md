@@ -77,9 +77,10 @@ return handler.HandleMessage(ctx, rawText)
 - **Sender 名稱**：學號小幫手
 
 ### contact/ - 聯絡資訊
-- **關鍵字**：聯繫、聯絡、電話、分機、緊急
+- **關鍵字**：聯繫、聯絡、電話、分機、緊急、找老師、找教授、老師、教師、教授
 - **功能**：
   - 單位/人員搜尋（2-tier 並行搜尋）
+  - 教師聯絡資訊查詢
   - 緊急聯絡電話（三峽/臺北校區）
   - 組織成員查詢
 - **搜尋策略**：SQL LIKE (name, title) + 模糊 ContainsAllRunes (name, title, organization, superior)
@@ -87,12 +88,12 @@ return handler.HandleMessage(ctx, rawText)
 - **Sender 名稱**：聯繫小幫手
 
 ### course/ - 課程查詢
-- **關鍵字**：課程、課、教師、老師（統一查詢）
+- **關鍵字**：課程、課
 - **智慧關鍵字**：找課、找課程、搜課（直接觸發智慧搜尋）
 - **功能**：
   - 課程名稱搜尋（最多 40 門）
   - 課程編號查詢（UID 格式）
-  - 統一查詢（2-tier 並行搜尋：同時搜尋課程名稱和教師姓名）
+  - 統一查詢（2-tier 並行搜尋）
   - 歷史課程查詢（`課程 {年度} {關鍵字}`）
   - 智慧搜尋（BM25 + Query Expansion 智慧匹配，需設定 `GEMINI_API_KEY` 或 `GROQ_API_KEY` 以啟用 Query Expansion）
 - **搜尋策略**：

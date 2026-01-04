@@ -85,12 +85,13 @@ type PatternMatcher struct {
 // Keyword definitions for bot.BuildKeywordRegex (case-insensitive, ^-anchored).
 var (
 	validStudentKeywords = []string{
-		"學號", "學生", "姓名", "學生姓名", "學生編號",
+		"學號", "學生", "姓名",
 		"student", "id", // English keywords
 	}
 	validDepartmentKeywords = []string{
 		"系代碼", "系所代碼", "科系代碼", "系編號", "系所編號", "科系編號",
-		"系", "所", "系所", "科系", "系名", "系所名", "科系名", "系所名稱", "科系名稱",
+		"系所", "科系", "系名", "系所名", "科系名", "系所名稱", "科系名稱",
+		"系", "所", // standalone, highly natural department keywords (rely on matcher priority to reduce false positives)
 		"dep", "department", "depCode", "departmentCode", // English keywords
 	}
 	validYearKeywords = []string{
@@ -327,7 +328,7 @@ func (h *Handler) handleDepartmentPattern(ctx context.Context, text string, matc
 		// Provide guidance message
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			"🔍 查詢系所資訊\n\n請輸入系名或系代碼：\n例如：「系 資工」或「系 85」\n\n💡 提示：輸入「所有系代碼」查看完整對照表",
+			"🔍 查詢系所資訊\n\n請輸入系名或系代碼：\n例如：「系 資工」或「系代碼 85」\n\n💡 提示：輸入「所有系代碼」查看完整對照表",
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{

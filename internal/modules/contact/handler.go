@@ -96,12 +96,16 @@ var (
 	validContactKeywords = []string{
 		// 繁體中文主要關鍵字
 		"聯繫", "聯絡", "聯繫方式", "聯絡方式",
-		// 簡體/異體字變體
+		// 簡體/異體字變體（常用）
 		"連繫", "連絡",
+		// 中文教師關鍵字（優先具體詞彙）
+		"找老師", "找教授", "找教師",
+		"老師", "教師", "教授",
 		// 具體查詢類型
 		"電話", "分機", "email", "信箱",
-		// English keywords
-		"touch", "contact", "connect",
+		// English keywords (common only)
+		"contact",
+		"teacher", "professor", "prof",
 	}
 
 	contactRegex = bot.BuildKeywordRegex(validContactKeywords)
@@ -793,7 +797,15 @@ func (h *Handler) formatContactResultsWithSearch(ctx context.Context, contacts [
 				matchingCourses, err := h.db.SearchCoursesByTeacher(ctx, c.Name)
 				if err == nil && len(matchingCourses) > 0 {
 					// Add 授課課程 button
-					displayText := lineutil.FormatLabel("搜尋近期課程", c.Name, 40)
+					// DisplayText: 搜尋 {Name} 近期課程
+					displayText := "搜尋 " + c.Name + " 近期課程"
+					if len([]rune(displayText)) > 40 {
+						// Truncate name if too long to fit in 40 chars total
+						// Static chars: "搜尋 " (3) + " 近期課程" (5) = 8
+						// Max name length: 40 - 8 = 32
+						safeName := lineutil.TruncateRunes(c.Name, 32)
+						displayText = "搜尋 " + safeName + " 近期課程"
+					}
 					row0Buttons = append(row0Buttons,
 						lineutil.NewFlexButton(
 							lineutil.NewPostbackActionWithDisplayText("📚 授課課程", displayText, fmt.Sprintf("course:授課課程%s%s", bot.PostbackSplitChar, c.Name)),

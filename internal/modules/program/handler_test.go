@@ -3,6 +3,7 @@ package program
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -21,8 +22,11 @@ import (
 func setupTestHandler(t *testing.T) *Handler {
 	t.Helper()
 
-	// Create test database
-	db, err := storage.New(context.Background(), ":memory:", 168*time.Hour)
+	// Use a unique temp file database for each test to avoid shared memory conflicts
+	// when running t.Parallel() tests. The temp directory is automatically cleaned up.
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	db, err := storage.New(context.Background(), dbPath, 168*time.Hour)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
@@ -53,9 +57,7 @@ func TestCanHandle(t *testing.T) {
 	}{
 		// List program keywords (at start, case-insensitive)
 		{"List - 學程列表", "學程列表", true},
-		{"List - 學程清單", "學程清單", true},
 		{"List - 所有學程", "所有學程", true},
-		{"List - 全部學程", "全部學程", true},
 		{"List - English program list", "program list", true},
 		{"List - English programs", "programs", true},
 
@@ -550,8 +552,10 @@ func TestDispatchIntent_ParameterValidation(t *testing.T) {
 // TestNewHandler_NilSemesterDetector verifies handler works without semester detector
 func TestNewHandler_NilSemesterDetector(t *testing.T) {
 	t.Parallel()
-	// Create test database
-	db, err := storage.New(context.Background(), ":memory:", 168*time.Hour)
+	// Use a unique temp file database for each test to avoid shared memory conflicts
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	db, err := storage.New(context.Background(), dbPath, 168*time.Hour)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}

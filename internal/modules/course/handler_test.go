@@ -3,6 +3,7 @@ package course
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -21,8 +22,11 @@ import (
 func setupTestHandler(t *testing.T) *Handler {
 	t.Helper()
 
-	// Create test database
-	db, err := storage.New(context.Background(), ":memory:", 168*time.Hour)
+	// Use a unique temp file database for each test to avoid shared memory conflicts
+	// when running t.Parallel() tests. The temp directory is automatically cleaned up.
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	db, err := storage.New(context.Background(), dbPath, 168*time.Hour)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
@@ -105,7 +109,6 @@ func TestCanHandle(t *testing.T) {
 		{"Course no lowercase", "u0001", true},
 
 		// Course keywords at START (English)
-		{"Class keyword at start", "class schedule", true},
 		{"Course keyword at start", "course info", true},
 
 		// Course keywords at START (Chinese)
@@ -114,14 +117,10 @@ func TestCanHandle(t *testing.T) {
 		{"科目 keyword at start", "科目 名稱", true},
 		{"課名 keyword at start", "課名 查詢", true},
 
-		// Teacher keywords at START (now unified with course keywords)
-		{"Professor keyword at start", "professor Wang", true},
-		{"Teacher keyword at start", "teacher info", true},
-		{"Dr keyword at start", "dr Chen", true},
-		{"老師 keyword at start", "老師 王小明", true},
-		{"教授 keyword at start", "教授 陳教授", true},
-		{"教師 keyword at start", "教師 資訊", true},
-		{"師 keyword at start", "師 資訊", true},
+		// Teacher keywords are handled by contact module (should NOT match here)
+		{"老師 keyword (moved to contact)", "老師 王小明", false},
+		{"教授 keyword (moved to contact)", "教授 陳教授", false},
+		{"教師 keyword (moved to contact)", "教師 資訊", false},
 
 		// Keywords NOT at start should NOT match
 		{"課 keyword not at start", "查詢課程", false},
@@ -261,8 +260,6 @@ func TestHandleMessage_EmptyKeywordOnly(t *testing.T) {
 	}{
 		{"課 only", "課"},
 		{"課程 only", "課程"},
-		{"老師 only", "老師"},
-		{"教師 only", "教師"},
 	}
 
 	for _, tt := range tests {

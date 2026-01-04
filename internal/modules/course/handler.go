@@ -92,20 +92,14 @@ type PatternMatcher struct {
 
 // Keyword definitions for bot.BuildKeywordRegex (case-insensitive, ^-anchored).
 var (
-	// validCourseKeywords: unified search (course + teacher), semesters 1-2.
+	// validCourseKeywords: course search only, semesters 1-2.
+	// Teacher queries (老師/教師) are handled by contact module.
 	validCourseKeywords = []string{
 		// 中文課程關鍵字
 		"課", "課程", "科目",
-		"課名", "課程名", "課程名稱",
-		"科目名", "科目名稱",
-		// 中文教師關鍵字
-		"師", "老師", "教師", "教授",
-		"老師名", "教師名", "教授名",
-		"老師名稱", "教師名稱", "教授名稱",
-		"授課教師", "授課老師", "授課教授",
-		// English keywords
-		"class", "course",
-		"teacher", "professor", "prof", "dr", "doctor",
+		"課名", "課程名稱",
+		// English keywords (removed 'class' to avoid ambiguity)
+		"course",
 	}
 
 	// validSmartSearchKeywords: semantic search (BM25 + LLM expansion), semesters 1-2.
@@ -1053,14 +1047,14 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 	var helpText string
 	if extended {
 		helpText = fmt.Sprintf(
-			"🔍 查無相關課程\n\n搜尋內容：%s\n📅 搜尋範圍：%s\n\n💡 建議嘗試\n• 縮短關鍵字（如「線性」→「線」）\n• 只輸入教師姓氏\n• 指定年份：「課程 110 %s」",
+			"🔍 查無相關課程\n\n搜尋內容：%s\n📅 搜尋範圍：%s\n\n💡 建議嘗試\n• 縮短關鍵字（如「線性」→「線」）\n• 指定年份：「課程 110 %s」\n\n👨‍🏫 查詢教師資訊？\n請使用：「聯絡 教師名」或「教授 教師名」",
 			searchTerm,
 			semesterType,
 			searchTerm,
 		)
 	} else {
 		helpText = fmt.Sprintf(
-			"🔍 查無「%s」的相關課程\n\n📅 已搜尋範圍：近 2 學期\n\n💡 建議嘗試\n• 使用「📅 更多學期」搜尋第 3-4 學期\n• 縮短關鍵字（如「線性」→「線」）\n• 指定年份：「課程 110 %s」",
+			"🔍 查無「%s」的相關課程\n\n📅 已搜尋範圍：近 2 學期\n\n💡 建議嘗試\n• 使用「📅 更多學期」搜尋第 3-4 學期\n• 縮短關鍵字（如「線性」→「線」）\n• 指定年份：「課程 110 %s」\n\n👨‍🏫 查詢教師資訊？\n請使用：「聯絡 教師名」或「教授 教師名」",
 			searchTerm,
 			searchTerm,
 		)
@@ -1453,7 +1447,13 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 		}
 
 		// Teacher all courses button - searches for all courses taught by this teacher (內部指令使用紫色)
-		displayText := lineutil.FormatLabel("搜尋近期課程", teacherName, 40)
+		// DisplayText: 搜尋 {Name} 近期課程
+		displayText := "搜尋 " + teacherName + " 近期課程"
+		if len([]rune(displayText)) > 40 {
+			// Truncate name if too long to fit in 40 chars total
+			safeName := lineutil.TruncateRunes(teacherName, 32)
+			displayText = "搜尋 " + safeName + " 近期課程"
+		}
 		row3 = append(row3, lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText(
 				"👨‍🏫 教師課程",
@@ -1902,7 +1902,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 		h.metrics.RecordSearch(searchType, "no_results", time.Since(startTime).Seconds(), 0)
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			"🔍 未找到相關課程\n\n💡 建議嘗試\n• 換個描述方式或關鍵字\n• 使用精確搜尋：「課程 課名」", sender)
+			"🔍 未找到相關課程\n\n💡 建議嘗試\n• 換個描述方式或關鍵字\n• 使用精確搜尋：「課程 課名」\n\n👨‍🏫 查詢教師資訊？\n請使用：「聯絡 教師名」或「教授 教師名」", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyCourseAction(),
 			lineutil.QuickReplySmartSearchAction(),
@@ -1943,7 +1943,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []rag.SearchResult) []messaging_api.MessageInterface {
 	if len(courses) == 0 {
 		sender := lineutil.GetSender(senderName, h.stickerManager)
-		msg := lineutil.NewTextMessageWithConsistentSender("🔍 未找到相關課程\n\n💡 建議嘗試\n• 換個描述方式或關鍵字\n• 使用精確搜尋：「課程 課名」", sender)
+		msg := lineutil.NewTextMessageWithConsistentSender("🔍 未找到相關課程\n\n💡 建議嘗試\n• 換個描述方式或關鍵字\n• 使用精確搜尋：「課程 課名」\n\n👨‍🏫 查詢教師資訊？\n請使用：「聯絡 教師名」或「教授 教師名」", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyCourseAction(),
 			lineutil.QuickReplySmartSearchAction(),

@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -24,13 +25,19 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// setupTestHandler creates a test handler with in-memory database
+// setupTestHandler creates a test handler with isolated temp file database
 func setupTestHandler(t *testing.T) *Handler {
 	t.Helper()
-	db, err := storage.New(context.Background(), ":memory:", 168*time.Hour)
+	// Use a unique temp file database for each test to avoid shared memory conflicts
+	// when running t.Parallel() tests. The temp directory is automatically cleaned up.
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	db, err := storage.New(context.Background(), dbPath, 168*time.Hour)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
+	// Register cleanup to close database before temp directory removal
+	t.Cleanup(func() { _ = db.Close() })
 
 	baseURLs := map[string][]string{
 		"lms": {"https://lms.ntpu.edu.tw"},

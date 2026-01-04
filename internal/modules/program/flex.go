@@ -291,6 +291,7 @@ func (h *Handler) buildProgramBubble(program storage.Program) *lineutil.FlexBubb
 	var footerRows []*lineutil.FlexButton
 
 	// Row 1: Add LMS detail page button if URL is available (renamed to 學程資訊)
+	// Conditionally hide button when URL is empty (safer than fallback)
 	if program.URL != "" {
 		detailBtn := lineutil.NewFlexButton(
 			lineutil.NewURIAction("📋 學程資訊", program.URL),

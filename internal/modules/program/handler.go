@@ -83,7 +83,7 @@ type PatternMatcher struct {
 var (
 	// validListProgramKeywords: list all programs
 	validListProgramKeywords = []string{
-		"學程列表", "學程清單", "所有學程", "全部學程",
+		"學程列表", "所有學程",
 		"program list", "programs",
 	}
 

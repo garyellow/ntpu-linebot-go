@@ -3,6 +3,7 @@ package rag
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -10,14 +11,19 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 )
 
-// setupTestDB creates an in-memory SQLite database for testing
+// setupTestDB creates an isolated temp file database for testing
 func setupTestDB(t *testing.T) *storage.DB {
 	t.Helper()
-	// Use in-memory SQLite database for testing with 7-day TTL
-	db, err := storage.New(context.Background(), ":memory:", 168*time.Hour)
+	// Use a unique temp file database for each test to avoid shared memory conflicts
+	// when running t.Parallel() tests. The temp directory is automatically cleaned up.
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	db, err := storage.New(context.Background(), dbPath, 168*time.Hour)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
+	// Register cleanup to close database before temp directory removal
+	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
 
@@ -110,8 +116,6 @@ func TestBM25Index_PerSemesterIndexing(t *testing.T) {
 	t.Parallel()
 	log := logger.New("debug")
 
-	// Need separate DB per parallel test to avoid conflict (though :memory: is unique per connection usually)
-	// storage.New creates a new connection, so :memory: is new DB.
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
 	ctx := context.Background()

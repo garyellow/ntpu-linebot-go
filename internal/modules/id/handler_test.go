@@ -2,6 +2,7 @@ package id
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -18,8 +19,11 @@ import (
 func setupTestHandler(t *testing.T) *Handler {
 	t.Helper()
 
-	// Create test database
-	db, err := storage.New(context.Background(), ":memory:", 168*time.Hour)
+	// Use a unique temp file database for each test to avoid shared memory conflicts
+	// when running t.Parallel() tests. The temp directory is automatically cleaned up.
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	db, err := storage.New(context.Background(), dbPath, 168*time.Hour)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
@@ -52,8 +56,15 @@ func TestCanHandle(t *testing.T) {
 		{"Valid student ID query (English)", "student 41247001", true},
 		{"Valid name query", "學生 王小明", true},
 		{"Valid name query (English)", "student 王小明", true},
+
+		// Department keywords (Refined)
 		{"Valid department code query", "系代碼 85", true},
-		{"Valid department code query (English)", "dept 85", true},
+		{"Valid department query", "系所 資工", true},
+		{"Valid department Name query", "系名 資工", true},
+		{"Valid department query (English)", "dept 85", true},
+		{"Single char '系' (natural query)", "系 資工", true},
+		{"Single char '所' (natural query)", "所 資工", true},
+
 		{"Year query", "112", false},
 		{"Invalid prefix", "課程 41247001", false},
 		{"Empty string", "", false},
