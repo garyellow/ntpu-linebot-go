@@ -1453,7 +1453,13 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 		}
 
 		// Teacher all courses button - searches for all courses taught by this teacher (內部指令使用紫色)
-		displayText := lineutil.FormatLabel("搜尋近期課程", teacherName, 40)
+		// DisplayText: 搜尋 {Name} 近期課程
+		displayText := "搜尋 " + teacherName + " 近期課程"
+		if len([]rune(displayText)) > 40 {
+			// Truncate name if too long to fit in 40 chars total
+			safeName := lineutil.TruncateRunes(teacherName, 32)
+			displayText = "搜尋 " + safeName + " 近期課程"
+		}
 		row3 = append(row3, lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText(
 				"👨‍🏫 教師課程",

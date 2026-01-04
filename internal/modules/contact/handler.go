@@ -793,7 +793,15 @@ func (h *Handler) formatContactResultsWithSearch(ctx context.Context, contacts [
 				matchingCourses, err := h.db.SearchCoursesByTeacher(ctx, c.Name)
 				if err == nil && len(matchingCourses) > 0 {
 					// Add 授課課程 button
-					displayText := lineutil.FormatLabel("搜尋近期課程", c.Name, 40)
+					// DisplayText: 搜尋 {Name} 近期課程
+					displayText := "搜尋 " + c.Name + " 近期課程"
+					if len([]rune(displayText)) > 40 {
+						// Truncate name if too long to fit in 40 chars total
+						// Static chars: "搜尋 " (3) + " 近期課程" (5) = 8
+						// Max name length: 40 - 8 = 32
+						safeName := lineutil.TruncateRunes(c.Name, 32)
+						displayText = "搜尋 " + safeName + " 近期課程"
+					}
 					row0Buttons = append(row0Buttons,
 						lineutil.NewFlexButton(
 							lineutil.NewPostbackActionWithDisplayText("📚 授課課程", displayText, fmt.Sprintf("course:授課課程%s%s", bot.PostbackSplitChar, c.Name)),
