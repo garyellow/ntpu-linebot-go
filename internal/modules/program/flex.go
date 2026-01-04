@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
+	"github.com/garyellow/ntpu-linebot-go/internal/data"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
@@ -21,21 +22,22 @@ const (
 	ColorHeaderElective = lineutil.ColorHeaderElective // 📝 選修 - cyan
 
 	// Category-based colors for program bubbles (引用 lineutil 設計系統)
-	// Gradient: 碩士類偏紫色系、學士類偏藍色系
+	// 色系設計：碩士類偏紫色系、學士類偏藍色系，形成清晰漸層
+	// Emoji 設計：🎓 學分學程、📚 跨域微學程、📌 單一領域微學程
 	ColorCategoryMasterCredit   = lineutil.ColorHeaderProgramMasterCredit   // 🎓 碩士學分學程
-	ColorCategoryBachelorCredit = lineutil.ColorHeaderProgramBachelorCredit // 📚 學士學分學程
 	ColorCategoryMixedCredit    = lineutil.ColorHeaderProgramMixedCredit    // 🎓 學士暨碩士學分學程
-	ColorCategoryMasterCross    = lineutil.ColorHeaderProgramMasterCross    // 🔗 碩士跨域微學程
-	ColorCategoryBachelorCross  = lineutil.ColorHeaderProgramBachelorCross  // 🔗 學士跨域微學程
-	ColorCategoryMixedCross     = lineutil.ColorHeaderProgramMixedCross     // 🔗 學士暨碩士跨域微學程
+	ColorCategoryBachelorCredit = lineutil.ColorHeaderProgramBachelorCredit // 🎓 學士學分學程
+	ColorCategoryMasterCross    = lineutil.ColorHeaderProgramMasterCross    // 📚 碩士跨域微學程
+	ColorCategoryMixedCross     = lineutil.ColorHeaderProgramMixedCross     // 📚 學士暨碩士跨域微學程
+	ColorCategoryBachelorCross  = lineutil.ColorHeaderProgramBachelorCross  // 📚 學士跨域微學程
 	ColorCategoryMasterSingle   = lineutil.ColorHeaderProgramMasterSingle   // 📌 碩士單一領域微學程
+	ColorCategoryMixedSingle    = lineutil.ColorHeaderProgramMixedSingle    // 📌 學士暨碩士單一領域微學程
 	ColorCategoryBachelorSingle = lineutil.ColorHeaderProgramBachelorSingle // 📌 學士單一領域微學程
 	ColorCategoryDefault        = lineutil.ColorHeaderProgramDefault        // 🎓 學程 (fallback)
 )
 
 // getCategoryLabel returns a BodyLabelInfo based on the program category.
 // Maps program categories to appropriate emoji, label text, and color.
-//
 // Categories (from LMS folders):
 //   - "碩士學分學程" - Master's credit program
 //   - "學士學分學程" - Bachelor's credit program
@@ -45,12 +47,13 @@ const (
 //   - "學士暨碩士跨域微學程" - Joint cross-domain micro-program
 //   - "碩士單一領域微學程" - Master's single-domain micro-program
 //   - "學士單一領域微學程" - Bachelor's single-domain micro-program
+//   - "學士暨碩士單一領域微學程" - Joint bachelor/master single-domain micro-program
 //
 // Design rationale:
-//   - 碩士類 uses violet/purple gradient (academic prestige)
-//   - 學士類 uses blue/cyan gradient (fresh, approachable)
-//   - 跨域類 uses 🔗 emoji (cross-connection)
-//   - 單一領域 uses 📌 emoji (focused, specialized)
+//   - Color gradient: 碩士 (purple/violet) → 混合 (indigo/blue) → 學士 (blue/cyan)
+//   - Each program type (學分/跨域/單一領域) has its own gradient for visual hierarchy
+//   - 跨域微學程 uses 📚 emoji (cross-connection)
+//   - 單一領域微學程 uses 📌 emoji (focused, specialized)
 func getCategoryLabel(category string) lineutil.BodyLabelInfo {
 	switch category {
 	case "碩士學分學程":
@@ -59,41 +62,47 @@ func getCategoryLabel(category string) lineutil.BodyLabelInfo {
 			Label: "碩士學分學程",
 			Color: ColorCategoryMasterCredit,
 		}
-	case "學士學分學程":
-		return lineutil.BodyLabelInfo{
-			Emoji: "📚",
-			Label: "學士學分學程",
-			Color: ColorCategoryBachelorCredit,
-		}
 	case "學士暨碩士學分學程":
 		return lineutil.BodyLabelInfo{
 			Emoji: "🎓",
 			Label: "學士暨碩士學分學程",
 			Color: ColorCategoryMixedCredit,
 		}
+	case "學士學分學程":
+		return lineutil.BodyLabelInfo{
+			Emoji: "🎓",
+			Label: "學士學分學程",
+			Color: ColorCategoryBachelorCredit,
+		}
 	case "碩士跨域微學程":
 		return lineutil.BodyLabelInfo{
-			Emoji: "🔗",
+			Emoji: "📚",
 			Label: "碩士跨域微學程",
 			Color: ColorCategoryMasterCross,
 		}
-	case "學士跨域微學程":
-		return lineutil.BodyLabelInfo{
-			Emoji: "🔗",
-			Label: "學士跨域微學程",
-			Color: ColorCategoryBachelorCross,
-		}
 	case "學士暨碩士跨域微學程":
 		return lineutil.BodyLabelInfo{
-			Emoji: "🔗",
+			Emoji: "📚",
 			Label: "學士暨碩士跨域微學程",
 			Color: ColorCategoryMixedCross,
+		}
+	case "學士跨域微學程":
+		return lineutil.BodyLabelInfo{
+			Emoji: "📚",
+			Label: "學士跨域微學程",
+			Color: ColorCategoryBachelorCross,
 		}
 	case "碩士單一領域微學程":
 		return lineutil.BodyLabelInfo{
 			Emoji: "📌",
 			Label: "碩士單一領域微學程",
 			Color: ColorCategoryMasterSingle,
+		}
+	case "學士暨碩士單一領域微學程":
+		return lineutil.BodyLabelInfo{
+			Emoji: "📌",
+			Label: "學士暨碩士單一領域微學程",
+			Color: ColorCategoryMixedSingle,
 		}
 	case "學士單一領域微學程":
 		return lineutil.BodyLabelInfo{
@@ -290,14 +299,16 @@ func (h *Handler) buildProgramBubble(program storage.Program) *lineutil.FlexBubb
 	// Build footer buttons - using rows for vertical stacking
 	var footerRows []*lineutil.FlexButton
 
-	// Row 1: Add LMS detail page button if URL is available (renamed to 學程資訊)
-	// Conditionally hide button when URL is empty (safer than fallback)
-	if program.URL != "" {
-		detailBtn := lineutil.NewFlexButton(
-			lineutil.NewURIAction("📋 學程資訊", program.URL),
-		).WithStyle("secondary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm")
-		footerRows = append(footerRows, detailBtn)
+	// Row 1: Add LMS detail page button
+	// Uses program-specific URL if available, otherwise falls back to main program list page
+	programURL := program.URL
+	if programURL == "" {
+		programURL = data.LMSBaseURL // Fallback to main program list page
 	}
+	detailBtn := lineutil.NewFlexButton(
+		lineutil.NewURIAction("📋 學程資訊", programURL),
+	).WithStyle("secondary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm")
+	footerRows = append(footerRows, detailBtn)
 
 	// Row 2: View courses button (internal) - only if courses exist
 	// Stacked vertically: distinct row
@@ -488,7 +499,7 @@ func (h *Handler) formatProgramCoursesAsTextList(programName string, requiredCou
 		sb.WriteString("【必修課程】\n")
 		for _, pc := range requiredCourses {
 			idx++
-			sb.WriteString(fmt.Sprintf("%d. %s %s\n", idx, pc.Course.UID, pc.Course.Title))
+			fmt.Fprintf(&sb, "%d. %s %s\n", idx, pc.Course.UID, pc.Course.Title)
 		}
 	}
 
@@ -500,7 +511,7 @@ func (h *Handler) formatProgramCoursesAsTextList(programName string, requiredCou
 		sb.WriteString("【選修課程】\n")
 		for _, pc := range electiveCourses {
 			idx++
-			sb.WriteString(fmt.Sprintf("%d. %s %s\n", idx, pc.Course.UID, pc.Course.Title))
+			fmt.Fprintf(&sb, "%d. %s %s\n", idx, pc.Course.UID, pc.Course.Title)
 		}
 	}
 
@@ -545,4 +556,57 @@ func (h *Handler) formatProgramCoursesAsTextList(programName string, requiredCou
 	messages = append(messages, footerMsg)
 
 	return messages
+}
+
+// buildNoProgramsFoundBubble creates a Flex bubble for when no programs are found for a course.
+// Provides a link to the LMS program listing page for manual lookup.
+//
+// Layout (Colored Header pattern):
+//
+//	┌──────────────────────────┐
+//	│   📭 查無相關學程        │  <- Colored Header (warning amber)
+//	├──────────────────────────┤
+//	│ ⚠️ 注意                   │  <- Body label
+//	│ 課程：XX                 │
+//	│ 目前沒有相關學程資料      │
+//	│ 💡 可至學程列表查詢       │
+//	├──────────────────────────┤
+//	│ [📋 學程列表]            │  <- Footer button (link to LMS)
+//	└──────────────────────────┘
+func (h *Handler) buildNoProgramsFoundBubble(courseName string) *lineutil.FlexBubble {
+	// Header: Warning style with amber color
+	header := lineutil.NewColoredHeader(lineutil.ColoredHeaderInfo{
+		Title: "📭 查無相關學程",
+		Color: lineutil.ColorWarning, // Amber for warning
+	})
+
+	// Build body contents
+	body := lineutil.NewBodyContentBuilder()
+
+	// Body label: warning tag
+	body.AddComponent(lineutil.NewBodyLabel(lineutil.BodyLabelInfo{
+		Emoji: "⚠️",
+		Label: "注意",
+		Color: lineutil.ColorWarning,
+	}).FlexBox)
+
+	// Course name info
+	body.AddInfoRow("📚", "課程", courseName, lineutil.DefaultInfoRowStyle())
+
+	// Message with wrapping
+	msgStyle := lineutil.DefaultInfoRowStyle()
+	msgStyle.Wrap = true
+	body.AddInfoRow("📝", "說明", "目前沒有相關學程資料，可能是因為該課程尚未被任何學程認列", msgStyle)
+
+	// Hint
+	body.AddInfoRow("💡", "提示", "可至學程列表頁面查詢最新學程資訊", msgStyle)
+
+	// Footer: Link to LMS program list
+	detailBtn := lineutil.NewFlexButton(
+		lineutil.NewURIAction("📋 學程列表", data.LMSBaseURL),
+	).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm")
+
+	footer := lineutil.NewButtonFooter([]*lineutil.FlexButton{detailBtn})
+
+	return lineutil.NewFlexBubble(header, nil, body.Build(), footer)
 }

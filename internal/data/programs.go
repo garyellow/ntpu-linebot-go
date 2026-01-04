@@ -9,12 +9,14 @@ type ProgramInfo struct {
 	URL  string // LMS 詳細頁面 URL
 }
 
-// LMSBaseURL is the base URL for LMS program pages.
-const LMSBaseURL = "https://lms.ntpu.edu.tw/board.php?courseID=28286"
+// LMSBaseURL is the base URL for the LMS program listing page.
+// This is the user-facing page for browsing all academic programs.
+const LMSBaseURL = "https://lms.ntpu.edu.tw/site/programs"
 
-// AllPrograms contains all program definitions with their LMS URLs.
+// AllPrograms contains all program definitions with their LMS detail URLs.
 // Names must exactly match those in the course system (選課系統).
-// Source: https://lms.ntpu.edu.tw/board.php?courseID=28286
+// Source: https://lms.ntpu.edu.tw/site/programs
+// Individual program URLs point to detailed pages with syllabus and requirements.
 //
 // Categories:
 // - 碩士學分學程 (folderID=115531)
@@ -217,25 +219,4 @@ var AllPrograms = []ProgramInfo{
 	{"國際租稅學士學分微學程", "https://lms.ntpu.edu.tw/board.php?courseID=28286&f=doc&cid=1899350"},
 	{"政策分析與行政管理學士微學程", "https://lms.ntpu.edu.tw/board.php?courseID=28286&f=doc&cid=1899346"},
 	{"不動產與城鄉環境學士學分微學程", "https://lms.ntpu.edu.tw/board.php?courseID=28286&f=doc&cid=1899338"},
-}
-
-// programURLMap is a lookup map for O(1) URL retrieval.
-// Initialized lazily on first GetProgramURL call.
-var programURLMap map[string]string
-
-// GetProgramURL returns the LMS URL for a program name.
-// Returns empty string if program not found in the static list.
-func GetProgramURL(name string) string {
-	if programURLMap == nil {
-		programURLMap = make(map[string]string, len(AllPrograms))
-		for _, p := range AllPrograms {
-			programURLMap[p.Name] = p.URL
-		}
-	}
-	return programURLMap[name]
-}
-
-// GetProgramCount returns the total number of programs in the static list.
-func GetProgramCount() int {
-	return len(AllPrograms)
 }

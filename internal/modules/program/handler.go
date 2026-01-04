@@ -553,10 +553,10 @@ func (h *Handler) handleCourseProgramsList(ctx context.Context, courseUID string
 	}
 
 	if len(programs) == 0 {
-		msg := lineutil.NewTextMessageWithConsistentSender(
-			"📭 這門課程目前沒有相關學程資料",
-			sender,
-		)
+		// Build Flex message with default program list URL
+		bubble := h.buildNoProgramsFoundBubble(courseName)
+		msg := lineutil.NewFlexMessage("查無相關學程", bubble.FlexBubble)
+		msg.Sender = sender
 		msg.QuickReply = lineutil.NewQuickReply(QuickReplyProgramNav())
 		return []messaging_api.MessageInterface{msg}
 	}
