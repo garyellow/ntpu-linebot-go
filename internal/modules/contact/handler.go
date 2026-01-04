@@ -274,6 +274,17 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 		}
 	}
 
+	// Handle "教師聯繫" postback for course→contact navigation
+	// Format: "教師聯繫${bot.PostbackSplitChar}{teacherName}"
+	if strings.HasPrefix(data, "教師聯繫") {
+		parts := strings.Split(data, bot.PostbackSplitChar)
+		if len(parts) >= 2 {
+			teacherName := parts[1]
+			log.Infof("Handling teacher contact postback for: %s", teacherName)
+			return h.handleContactSearch(ctx, teacherName)
+		}
+	}
+
 	return []messaging_api.MessageInterface{}
 }
 
@@ -436,7 +447,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	if len(contacts) > 0 {
 		h.metrics.RecordCacheHit(ModuleName)
 		log.Debugf("Cache hit for contact search: %s (found %d)", searchTerm, len(contacts))
-		return h.formatContactResultsWithSearch(contacts, searchTerm)
+		return h.formatContactResultsWithSearch(ctx, contacts, searchTerm)
 	}
 
 	// Cache miss - scrape from website
@@ -503,7 +514,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	}
 
 	h.metrics.RecordScraperRequest(ModuleName, "success", time.Since(startTime).Seconds())
-	return h.formatContactResultsWithSearch(contacts, searchTerm)
+	return h.formatContactResultsWithSearch(ctx, contacts, searchTerm)
 }
 
 // handleMembersQuery handles queries for organization members
@@ -540,7 +551,7 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 	if len(individuals) > 0 {
 		h.metrics.RecordCacheHit(ModuleName)
 		log.Infof("Found %d members in cache for organization: %s", len(individuals), orgName)
-		return h.formatContactResults(individuals)
+		return h.formatContactResults(ctx, individuals)
 	}
 
 	// Step 2: Cache miss - try scraping
@@ -585,16 +596,16 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 	}
 
 	h.metrics.RecordScraperRequest(ModuleName, "success", time.Since(startTime).Seconds())
-	return h.formatContactResults(individuals)
+	return h.formatContactResults(ctx, individuals)
 }
 
 // formatContactResults formats contact results as LINE messages
-func (h *Handler) formatContactResults(contacts []storage.Contact) []messaging_api.MessageInterface {
-	return h.formatContactResultsWithSearch(contacts, "")
+func (h *Handler) formatContactResults(ctx context.Context, contacts []storage.Contact) []messaging_api.MessageInterface {
+	return h.formatContactResultsWithSearch(ctx, contacts, "")
 }
 
 // formatContactResultsWithSearch formats contact results as LINE messages with search term for sorting
-func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, searchTerm string) []messaging_api.MessageInterface {
+func (h *Handler) formatContactResultsWithSearch(ctx context.Context, contacts []storage.Contact, searchTerm string) []messaging_api.MessageInterface {
 	if len(contacts) == 0 {
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender("🔍 查無聯絡資料", sender)
@@ -758,12 +769,37 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 			}
 
 			// Footer: Multi-row button layout for optimal UX
+			// Row 0: 資料來源 + 授課課程 (for individuals with matching courses)
 			// Row 1: Phone actions (call, copy)
 			// Row 2: Email actions (send, copy)
 			// Row 3: Website (if available)
+			// Row 4: View Members (for organizations)
+			var row0Buttons []*lineutil.FlexButton
 			var row1Buttons []*lineutil.FlexButton
 			var row2Buttons []*lineutil.FlexButton
 			var row3Buttons []*lineutil.FlexButton
+
+			// Row 0: 資料來源 button (always present) + 授課課程 (for individuals with matching courses)
+			// Build data source URL for viewing original contact page
+			dataSourceURL := ntpu.BuildContactSearchURL(c.Name)
+			if dataSourceURL != "" {
+				row0Buttons = append(row0Buttons,
+					lineutil.NewFlexButton(lineutil.NewURIAction("🔗 資料來源", dataSourceURL)).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
+			}
+
+			// For individuals, check if they have matching courses (skip for organizations)
+			if c.Type == "individual" && c.Name != "" {
+				// Query courses by teacher name to check if this person teaches any courses
+				matchingCourses, err := h.db.SearchCoursesByTeacher(ctx, c.Name)
+				if err == nil && len(matchingCourses) > 0 {
+					// Add 授課課程 button
+					displayText := lineutil.FormatLabel("搜尋近期課程", c.Name, 40)
+					row0Buttons = append(row0Buttons,
+						lineutil.NewFlexButton(
+							lineutil.NewPostbackActionWithDisplayText("📚 授課課程", displayText, fmt.Sprintf("course:授課課程%s%s", bot.PostbackSplitChar, c.Name)),
+						).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm"))
+				}
+			}
 
 			// Row 1: Phone-related buttons
 			if c.Phone != "" {
@@ -825,8 +861,8 @@ func (h *Handler) formatContactResultsWithSearch(contacts []storage.Contact, sea
 			)
 
 			// Build footer with multi-row button layout
-			if len(row1Buttons) > 0 || len(row2Buttons) > 0 || len(row3Buttons) > 0 || len(row4Buttons) > 0 {
-				bubble.Footer = lineutil.NewButtonFooter(row1Buttons, row2Buttons, row3Buttons, row4Buttons).FlexBox
+			if len(row0Buttons) > 0 || len(row1Buttons) > 0 || len(row2Buttons) > 0 || len(row3Buttons) > 0 || len(row4Buttons) > 0 {
+				bubble.Footer = lineutil.NewButtonFooter(row0Buttons, row1Buttons, row2Buttons, row3Buttons, row4Buttons).FlexBox
 			}
 
 			bubbles = append(bubbles, *bubble.FlexBubble)

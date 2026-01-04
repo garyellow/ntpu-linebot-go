@@ -152,7 +152,7 @@ func TestFormatContactResults_Empty(t *testing.T) {
 	t.Parallel()
 	h := setupTestHandler(t)
 
-	messages := h.formatContactResults([]storage.Contact{})
+	messages := h.formatContactResults(context.Background(), []storage.Contact{})
 
 	if len(messages) != 1 {
 		t.Errorf("Expected 1 message for empty results, got %d", len(messages))
@@ -174,7 +174,7 @@ func TestFormatContactResults_Organizations(t *testing.T) {
 		},
 	}
 
-	messages := h.formatContactResults(contacts)
+	messages := h.formatContactResults(context.Background(), contacts)
 
 	if len(messages) == 0 {
 		t.Error("Expected messages for organization results, got none")
@@ -208,7 +208,7 @@ func TestFormatContactResults_Individuals(t *testing.T) {
 		},
 	}
 
-	messages := h.formatContactResults(contacts)
+	messages := h.formatContactResults(context.Background(), contacts)
 
 	if len(messages) == 0 {
 		t.Error("Expected messages for individual results, got none")
@@ -232,7 +232,7 @@ func TestFormatContactResults_LargeList(t *testing.T) {
 		}
 	}
 
-	messages := h.formatContactResults(contacts)
+	messages := h.formatContactResults(context.Background(), contacts)
 
 	// Should split into multiple messages
 	if len(messages) < 2 {

@@ -774,7 +774,10 @@ func (h *Handler) handleExtendedCourseSearch(ctx context.Context, searchTerm str
 }
 
 // handleTeacherCourseSearch handles teacher-specific course search.
-// This is triggered by the "教師課程" button in course detail page.
+// This is triggered by:
+//   - "教師課程" button in course detail page
+//   - "授課課程" button in contact page (via postback)
+//
 // Shows teacher name as label and skips redundant teacher info row.
 // Uses standard 2-semester range search (recent semesters).
 func (h *Handler) handleTeacherCourseSearch(ctx context.Context, teacherName string) []messaging_api.MessageInterface {
@@ -807,6 +810,7 @@ func (h *Handler) handleTeacherCourseSearch(ctx context.Context, teacherName str
 
 // searchCoursesForTeacher searches courses by teacher name using cache.
 // This is a simplified version of searchCoursesWithOptions focused on teacher search.
+// Uses SQL-level fuzzy matching for efficiency (no Go-level iteration needed).
 // Returns deduplicated courses from recent semesters.
 func (h *Handler) searchCoursesForTeacher(ctx context.Context, teacherName string) []storage.Course {
 	log := h.logger.WithModule(ModuleName)
@@ -815,7 +819,7 @@ func (h *Handler) searchCoursesForTeacher(ctx context.Context, teacherName strin
 	// Get recent semesters from data-driven detection
 	searchYears, searchTerms := h.semesterDetector.GetRecentSemesters()
 
-	// SQL LIKE search for teacher
+	// Step 1: SQL LIKE search for exact teacher name match
 	teacherCourses, err := h.db.SearchCoursesByTeacher(ctx, teacherName)
 	if err != nil {
 		log.WithError(err).Warn("Failed to search courses by teacher in cache")
@@ -823,29 +827,17 @@ func (h *Handler) searchCoursesForTeacher(ctx context.Context, teacherName strin
 		courses = append(courses, teacherCourses...)
 	}
 
+	// Step 2: SQL-level fuzzy search for partial/abbreviated teacher names
+	// This replaces the inefficient Go-level iteration over all courses
+	fuzzyCourses, err := h.db.SearchCoursesByTeacherFuzzy(ctx, teacherName)
+	if err != nil {
+		log.WithError(err).Warn("Failed to fuzzy search courses by teacher")
+	} else {
+		courses = append(courses, fuzzyCourses...)
+	}
+
 	// Filter by semester scope
 	courses = filterCoursesBySemesters(courses, searchYears, searchTerms)
-
-	// Also try fuzzy matching for teacher names
-	for i := range searchYears {
-		year := searchYears[i]
-		term := searchTerms[i]
-		semesterCourses, err := h.db.GetCoursesByYearTerm(ctx, year, term)
-		if err != nil {
-			log.WithError(err).Warnf("Failed to get courses for year %d term %d", year, term)
-			continue
-		}
-
-		// Fuzzy match against teacher names
-		for _, c := range semesterCourses {
-			for _, teacher := range c.Teachers {
-				if stringutil.ContainsAllRunes(teacher, teacherName) {
-					courses = append(courses, c)
-					break
-				}
-			}
-		}
-	}
 
 	// Deduplicate by UID
 	return sliceutil.Deduplicate(courses, func(c storage.Course) string { return c.UID })
@@ -1374,22 +1366,30 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 		h.logger.WithModule(ModuleName).WithError(err).Warnf("Failed to get programs for course %s", course.UID)
 	}
 
-	// Build course query URL (used in different rows depending on whether programs exist)
+	// Build course query URL for 資料來源 button
 	courseQueryURL := fmt.Sprintf("https://sea.cc.ntpu.edu.tw/pls/dev_stud/course_query_all.queryByKeyword?qYear=%d&qTerm=%d&courseno=%s&seq1=A&seq2=M",
 		course.Year, course.Term, course.No)
 
-	// Row 1 layout depends on whether course has programs
+	// Check if teachers have matching contacts (for 聯繫教師 button)
+	var hasMatchingContacts bool
+	var teacherName string
+	if len(course.Teachers) > 0 {
+		teacherName = course.Teachers[0]
+		matchingContacts, err := h.db.SearchContactsByName(ctx, teacherName)
+		if err == nil && len(matchingContacts) > 0 {
+			hasMatchingContacts = true
+		}
+	}
+
+	// Row 1: 資料來源 + 課程大綱 (資料來源 always first)
 	row1 := make([]*lineutil.FlexButton, 0, 2)
+	row1 = append(row1, lineutil.NewFlexButton(
+		lineutil.NewURIAction("🔗 資料來源", courseQueryURL),
+	).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
+
 	if course.DetailURL != "" {
 		row1 = append(row1, lineutil.NewFlexButton(
 			lineutil.NewURIAction("📄 課程大綱", course.DetailURL),
-		).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
-	}
-
-	// If no programs, add query system to row 1; otherwise query system goes to row 2
-	if len(programs) == 0 {
-		row1 = append(row1, lineutil.NewFlexButton(
-			lineutil.NewURIAction("🔍 查詢系統", courseQueryURL),
 		).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
 	}
 
@@ -1397,47 +1397,45 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 		footerRows = append(footerRows, row1)
 	}
 
-	// Row 2: 查詢系統 + 學程 (if course has programs)
+	// Row 2: 相關學程 + 聯繫教師 (both optional, layout depends on count)
+	// Collect available buttons first, then arrange based on odd/even rules
+	var row2Buttons []*lineutil.FlexButton
+
+	// 相關學程 button (if course has programs)
 	if len(programs) > 0 {
-		row2 := make([]*lineutil.FlexButton, 0, 2)
-
-		// Add query system button
-		row2 = append(row2, lineutil.NewFlexButton(
-			lineutil.NewURIAction("🔍 查詢系統", courseQueryURL),
-		).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
-
-		// Add program button
+		var programDisplayText string
 		if len(programs) == 1 {
-			// Single program: show program info (same as multiple programs)
-			firstProgram := programs[0]
-			displayText := lineutil.FormatLabel("查看學程", firstProgram.ProgramName, 40)
-			row2 = append(row2, lineutil.NewFlexButton(
-				lineutil.NewPostbackActionWithDisplayText(
-					"🎓 相關學程",
-					displayText,
-					fmt.Sprintf("program:course_programs%s%s", bot.PostbackSplitChar, course.UID),
-				),
-			).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm"))
+			programDisplayText = lineutil.FormatLabel("查看學程", programs[0].ProgramName, 40)
 		} else {
-			// Multiple programs: show count and link to list
-			moreText := fmt.Sprintf("查看 %d 個相關學程", len(programs))
-			row2 = append(row2, lineutil.NewFlexButton(
-				lineutil.NewPostbackActionWithDisplayText(
-					"🎓 相關學程",
-					moreText,
-					fmt.Sprintf("program:course_programs%s%s", bot.PostbackSplitChar, course.UID),
-				),
-			).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm"))
+			programDisplayText = fmt.Sprintf("查看 %d 個相關學程", len(programs))
 		}
+		row2Buttons = append(row2Buttons, lineutil.NewFlexButton(
+			lineutil.NewPostbackActionWithDisplayText(
+				"🎓 相關學程",
+				programDisplayText,
+				fmt.Sprintf("program:course_programs%s%s", bot.PostbackSplitChar, course.UID),
+			),
+		).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm"))
+	}
 
-		if len(row2) > 0 {
-			footerRows = append(footerRows, row2)
-		}
+	// 聯繫教師 button (if teacher has matching contacts)
+	if hasMatchingContacts && teacherName != "" {
+		displayText := lineutil.FormatLabel("查詢教師聯繫方式", teacherName, 40)
+		row2Buttons = append(row2Buttons, lineutil.NewFlexButton(
+			lineutil.NewPostbackActionWithDisplayText(
+				"📞 聯繫教師",
+				displayText,
+				fmt.Sprintf("contact:教師聯繫%s%s", bot.PostbackSplitChar, teacherName),
+			),
+		).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm"))
+	}
+
+	if len(row2Buttons) > 0 {
+		footerRows = append(footerRows, row2Buttons)
 	}
 
 	// Row 3: 教師課表 + 教師課程 (if teachers exist)
 	if len(course.Teachers) > 0 {
-		teacherName := course.Teachers[0]
 		row3 := make([]*lineutil.FlexButton, 0, 2)
 
 		// Teacher schedule button - opens the teacher's course table webpage (外部連結使用藍色)
@@ -1464,7 +1462,6 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 
 	// Row 4: Dcard 查詢 + 選課大全
 	if len(course.Teachers) > 0 {
-		teacherName := course.Teachers[0]
 		row4 := make([]*lineutil.FlexButton, 0, 2)
 
 		// Dcard search button - Google search with site:dcard.tw/f/ntpu (外部連結使用藍色)
