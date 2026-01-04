@@ -2,6 +2,7 @@ package ntpu
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -175,25 +176,10 @@ func TestBuildContactSearchURL(t *testing.T) {
 				t.Error("Expected non-empty URL, got empty")
 			}
 			if tt.contains != "" && result != "" {
-				if !containsSubstring(result, tt.contains) {
+				if !strings.Contains(result, tt.contains) {
 					t.Errorf("Expected URL to contain %q, got %s", tt.contains, result)
 				}
 			}
 		})
 	}
-}
-
-// containsSubstring is a helper to check if a string contains a substring
-func containsSubstring(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
-		(len(s) > 0 && len(substr) > 0 && findSubstring(s, substr)))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
