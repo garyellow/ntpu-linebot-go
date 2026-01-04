@@ -22,4 +22,5 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           container: ${{ github.event.repository.name }}
-          prune-tags-regexes: ^pr-${{ github.event.pull_request.number }}$
+          prune-tags-regexes: ^pr-[0-9]+$
+          dry-run: false

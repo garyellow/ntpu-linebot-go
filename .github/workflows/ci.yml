@@ -3,6 +3,8 @@ name: CI
 on:
   workflow_dispatch:
   push:
+    branches-ignore:
+      - main
     paths:
       - '**.go'
       - 'go.mod'
@@ -21,13 +23,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Test and lint Go code
-  test:
-    name: Test & Lint
+  # Fast validation checks (must pass before Docker build)
+  validate:
+    name: Validate
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
 
     steps:
       - name: Checkout code
@@ -58,10 +59,49 @@ jobs:
             exit 1
           fi
 
-      - name: Build binaries
-        run: |
-          go build -o /dev/null ./cmd/server
-          go build -o /dev/null ./cmd/healthcheck
+  # Build binaries (parallel with tests/lint/security)
+  build-binaries:
+    name: Build Binaries
+    runs-on: ubuntu-latest
+    needs: validate
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Build server
+        run: go build -o /dev/null ./cmd/server
+
+      - name: Build healthcheck
+        run: go build -o /dev/null ./cmd/healthcheck
+
+  # Run tests with coverage (parallel with build/lint/security)
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: validate
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
 
       - name: Run tests
         run: go test -short -v -race -coverprofile=coverage.out -covermode=atomic ./...
@@ -69,10 +109,49 @@ jobs:
       - name: Display coverage
         run: go tool cover -func=coverage.out
 
+  # Lint (parallel with tests/build/security)
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    needs: validate
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
           args: --timeout=5m
+
+  # Security scans (parallel with tests/build/lint)
+  security:
+    name: Security
+    runs-on: ubuntu-latest
+    needs: validate
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
 
       - name: Run govulncheck
         run: |
@@ -91,11 +170,11 @@ jobs:
           sarif_file: gosec-results.sarif
           category: gosec
 
-  # Build and scan Docker image
+  # Build and scan Docker image (only depends on validation)
   build:
     name: Build & Scan
     runs-on: ubuntu-latest
-    needs: test
+    needs: validate
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
     permissions:
       contents: read
