@@ -2,6 +2,7 @@ package ntpu
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -125,5 +126,60 @@ func BenchmarkEncodeToBig5(b *testing.B) {
 func BenchmarkGenerateUID(b *testing.B) {
 	for b.Loop() {
 		_ = generateUID("學術單位", "資訊工程學系")
+	}
+}
+
+// TestBuildContactSearchURL tests the URL building function for contact search
+func TestBuildContactSearchURL(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		searchTerm string
+		wantEmpty  bool
+		contains   string // substring that should be in the URL
+	}{
+		{
+			name:       "Valid Chinese name",
+			searchTerm: "王",
+			wantEmpty:  false,
+			contains:   "https://sea.cc.ntpu.edu.tw",
+		},
+		{
+			name:       "Valid ASCII",
+			searchTerm: "test",
+			wantEmpty:  false,
+			contains:   "?q=",
+		},
+		{
+			name:       "Empty string",
+			searchTerm: "",
+			wantEmpty:  false, // Empty string should still generate URL
+			contains:   "?q=",
+		},
+		{
+			name:       "Chinese name with multiple characters",
+			searchTerm: "王小明",
+			wantEmpty:  false,
+			contains:   "https://sea.cc.ntpu.edu.tw",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := BuildContactSearchURL(tt.searchTerm)
+
+			if tt.wantEmpty && result != "" {
+				t.Errorf("Expected empty URL, got %s", result)
+			}
+			if !tt.wantEmpty && result == "" {
+				t.Error("Expected non-empty URL, got empty")
+			}
+			if tt.contains != "" && result != "" {
+				if !strings.Contains(result, tt.contains) {
+					t.Errorf("Expected URL to contain %q, got %s", tt.contains, result)
+				}
+			}
+		})
 	}
 }

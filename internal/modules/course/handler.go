@@ -225,6 +225,13 @@ func (h *Handler) GetSemesterDetector() *SemesterDetector {
 	return h.semesterDetector
 }
 
+// SetSemesterDetector replaces the semester detector for testing.
+// This allows tests to inject a mock detector with predetermined semester data,
+// avoiding time-dependent test failures.
+func (h *Handler) SetSemesterDetector(detector *SemesterDetector) {
+	h.semesterDetector = detector
+}
+
 // RefreshSemesters updates the cached semester data from database.
 // This should be called after warmup completes to ensure user queries
 // use data-driven semester detection based on actual course availability.
@@ -577,7 +584,7 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 		if len(parts) >= 2 {
 			teacherName := parts[1]
 			log.Infof("Handling teacher courses postback for: %s", teacherName)
-			return h.handleUnifiedCourseSearch(ctx, teacherName)
+			return h.handleTeacherCourseSearch(ctx, teacherName)
 		}
 	}
 
@@ -771,6 +778,76 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 // Search flow: SQL LIKE → Fuzzy match (2 historical semesters) → Scraping (2 historical semesters)
 func (h *Handler) handleExtendedCourseSearch(ctx context.Context, searchTerm string) []messaging_api.MessageInterface {
 	return h.searchCoursesWithOptions(ctx, searchTerm, true)
+}
+
+// handleTeacherCourseSearch handles teacher-specific course search.
+// This is triggered by:
+//   - "教師課程" button in course detail page
+//   - "授課課程" button in contact page (via postback)
+//
+// Shows teacher name as label and skips redundant teacher info row.
+// Uses standard 2-semester range search (recent semesters).
+func (h *Handler) handleTeacherCourseSearch(ctx context.Context, teacherName string) []messaging_api.MessageInterface {
+	log := h.logger.WithModule(ModuleName)
+	log.Infof("Searching courses for teacher: %s", teacherName)
+
+	// Use existing search infrastructure to find courses by teacher
+	courses := h.searchCoursesForTeacher(ctx, teacherName)
+
+	if len(courses) == 0 {
+		sender := lineutil.GetSender(senderName, h.stickerManager)
+		msg := lineutil.NewTextMessageWithConsistentSender(
+			fmt.Sprintf("🔍 查無「%s」的近期課程\n\n💡 建議嘗試\n• 確認教師姓名是否正確\n• 使用「📅 更多學期」搜尋更多歷史課程", teacherName),
+			sender,
+		)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			lineutil.QuickReplyMoreCoursesCompact(teacherName),
+			lineutil.QuickReplyCourseAction(),
+			lineutil.QuickReplyHelpAction(),
+		})
+		return []messaging_api.MessageInterface{msg}
+	}
+
+	return h.formatCourseListResponseWithOptions(courses, FormatOptions{
+		TeacherName:      teacherName,
+		SearchKeyword:    teacherName,
+		IsExtendedSearch: false,
+	})
+}
+
+// searchCoursesForTeacher searches courses by teacher name using cache.
+// This is a simplified version of searchCoursesWithOptions focused on teacher search.
+// Uses SQL-level fuzzy matching for efficiency (no Go-level iteration needed).
+// Returns deduplicated courses from recent semesters.
+func (h *Handler) searchCoursesForTeacher(ctx context.Context, teacherName string) []storage.Course {
+	log := h.logger.WithModule(ModuleName)
+	var courses []storage.Course
+
+	// Get recent semesters from data-driven detection
+	searchYears, searchTerms := h.semesterDetector.GetRecentSemesters()
+
+	// Step 1: SQL LIKE search for exact teacher name match
+	teacherCourses, err := h.db.SearchCoursesByTeacher(ctx, teacherName)
+	if err != nil {
+		log.WithError(err).Warn("Failed to search courses by teacher in cache")
+	} else {
+		courses = append(courses, teacherCourses...)
+	}
+
+	// Step 2: SQL-level fuzzy search for partial/abbreviated teacher names
+	// This replaces the inefficient Go-level iteration over all courses
+	fuzzyCourses, err := h.db.SearchCoursesByTeacherFuzzy(ctx, teacherName)
+	if err != nil {
+		log.WithError(err).Warn("Failed to fuzzy search courses by teacher")
+	} else {
+		courses = append(courses, fuzzyCourses...)
+	}
+
+	// Filter by semester scope
+	courses = filterCoursesBySemesters(courses, searchYears, searchTerms)
+
+	// Deduplicate by UID
+	return sliceutil.Deduplicate(courses, func(c storage.Course) string { return c.UID })
 }
 
 // searchCoursesWithOptions is the core search implementation used by both unified and extended search.
@@ -1296,22 +1373,30 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 		h.logger.WithModule(ModuleName).WithError(err).Warnf("Failed to get programs for course %s", course.UID)
 	}
 
-	// Build course query URL (used in different rows depending on whether programs exist)
+	// Build course query URL for 資料來源 button
 	courseQueryURL := fmt.Sprintf("https://sea.cc.ntpu.edu.tw/pls/dev_stud/course_query_all.queryByKeyword?qYear=%d&qTerm=%d&courseno=%s&seq1=A&seq2=M",
 		course.Year, course.Term, course.No)
 
-	// Row 1 layout depends on whether course has programs
+	// Check if teachers have matching contacts (for 聯繫教師 button)
+	var hasMatchingContacts bool
+	var teacherName string
+	if len(course.Teachers) > 0 {
+		teacherName = course.Teachers[0]
+		matchingContacts, err := h.db.SearchContactsByName(ctx, teacherName)
+		if err == nil && len(matchingContacts) > 0 {
+			hasMatchingContacts = true
+		}
+	}
+
+	// Row 1: 資料來源 + 課程大綱 (資料來源 always first)
 	row1 := make([]*lineutil.FlexButton, 0, 2)
+	row1 = append(row1, lineutil.NewFlexButton(
+		lineutil.NewURIAction("🔗 資料來源", courseQueryURL),
+	).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
+
 	if course.DetailURL != "" {
 		row1 = append(row1, lineutil.NewFlexButton(
 			lineutil.NewURIAction("📄 課程大綱", course.DetailURL),
-		).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
-	}
-
-	// If no programs, add query system to row 1; otherwise query system goes to row 2
-	if len(programs) == 0 {
-		row1 = append(row1, lineutil.NewFlexButton(
-			lineutil.NewURIAction("🔍 查詢系統", courseQueryURL),
 		).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
 	}
 
@@ -1319,47 +1404,45 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 		footerRows = append(footerRows, row1)
 	}
 
-	// Row 2: 查詢系統 + 學程 (if course has programs)
+	// Row 2: 相關學程 + 聯繫教師 (both optional, layout depends on count)
+	// Collect available buttons first, then arrange based on odd/even rules
+	var row2Buttons []*lineutil.FlexButton
+
+	// 相關學程 button (if course has programs)
 	if len(programs) > 0 {
-		row2 := make([]*lineutil.FlexButton, 0, 2)
-
-		// Add query system button
-		row2 = append(row2, lineutil.NewFlexButton(
-			lineutil.NewURIAction("🔍 查詢系統", courseQueryURL),
-		).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
-
-		// Add program button
+		var programDisplayText string
 		if len(programs) == 1 {
-			// Single program: show program info (same as multiple programs)
-			firstProgram := programs[0]
-			displayText := lineutil.FormatLabel("查看學程", firstProgram.ProgramName, 40)
-			row2 = append(row2, lineutil.NewFlexButton(
-				lineutil.NewPostbackActionWithDisplayText(
-					"🎓 相關學程",
-					displayText,
-					fmt.Sprintf("program:course_programs%s%s", bot.PostbackSplitChar, course.UID),
-				),
-			).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm"))
+			programDisplayText = lineutil.FormatLabel("查看學程", programs[0].ProgramName, 40)
 		} else {
-			// Multiple programs: show count and link to list
-			moreText := fmt.Sprintf("查看 %d 個相關學程", len(programs))
-			row2 = append(row2, lineutil.NewFlexButton(
-				lineutil.NewPostbackActionWithDisplayText(
-					"🎓 相關學程",
-					moreText,
-					fmt.Sprintf("program:course_programs%s%s", bot.PostbackSplitChar, course.UID),
-				),
-			).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm"))
+			programDisplayText = fmt.Sprintf("查看 %d 個相關學程", len(programs))
 		}
+		row2Buttons = append(row2Buttons, lineutil.NewFlexButton(
+			lineutil.NewPostbackActionWithDisplayText(
+				"🎓 相關學程",
+				programDisplayText,
+				fmt.Sprintf("program:course_programs%s%s", bot.PostbackSplitChar, course.UID),
+			),
+		).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm"))
+	}
 
-		if len(row2) > 0 {
-			footerRows = append(footerRows, row2)
-		}
+	// 聯繫教師 button (if teacher has matching contacts)
+	if hasMatchingContacts && teacherName != "" {
+		displayText := lineutil.FormatLabel("查詢教師聯繫方式", teacherName, 40)
+		row2Buttons = append(row2Buttons, lineutil.NewFlexButton(
+			lineutil.NewPostbackActionWithDisplayText(
+				"📞 聯繫教師",
+				displayText,
+				fmt.Sprintf("contact:教師聯繫%s%s", bot.PostbackSplitChar, teacherName),
+			),
+		).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm"))
+	}
+
+	if len(row2Buttons) > 0 {
+		footerRows = append(footerRows, row2Buttons)
 	}
 
 	// Row 3: 教師課表 + 教師課程 (if teachers exist)
 	if len(course.Teachers) > 0 {
-		teacherName := course.Teachers[0]
 		row3 := make([]*lineutil.FlexButton, 0, 2)
 
 		// Teacher schedule button - opens the teacher's course table webpage (外部連結使用藍色)
@@ -1386,7 +1469,6 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 
 	// Row 4: Dcard 查詢 + 選課大全
 	if len(course.Teachers) > 0 {
-		teacherName := course.Teachers[0]
 		row4 := make([]*lineutil.FlexButton, 0, 2)
 
 		// Dcard search button - Google search with site:dcard.tw/f/ntpu (外部連結使用藍色)
@@ -1504,7 +1586,8 @@ func extractUniqueSemesters(courses []storage.Course) []lineutil.SemesterPair {
 type FormatOptions struct {
 	SearchKeyword    string // Original search keyword (for "more semesters" Quick Reply)
 	IsExtendedSearch bool   // True if this is already an extended (4-semester) search
-	IsHistorical     bool   // True for historical queries (uses semester text as label instead of "最新學期")
+	IsHistorical     bool   // True for extended search (removes label row, starts from semester info)
+	TeacherName      string // If non-empty, shows teacher name as label and skips teacher info row
 }
 
 // formatCourseListResponse formats a list of courses as LINE messages with semester labels.
@@ -1560,20 +1643,27 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 	// Create bubbles for carousel (LINE API limit: max 10 bubbles per Flex Carousel)
 	bubbles := make([]messaging_api.FlexBubble, 0, len(courses))
 	for _, course := range courses {
-		// Get label info based on mode:
-		// - Historical mode: Use semester text directly as label (e.g., "📅 113 學年度 下學期")
-		// - Regular mode: Use relative labels (最新學期/上個學期/過去學期)
+		// Determine display mode and get appropriate label info
+		// Three modes:
+		// 1. Teacher mode: Shows teacher name as label, skips teacher info row
+		// 2. Historical/Extended mode: No label row, starts from semester info row
+		// 3. Regular mode: Shows relative semester labels (最新學期/上個學期/過去學期)
 		var labelInfo lineutil.BodyLabelInfo
-		if opts.IsHistorical {
-			// Historical: show explicit semester (no "開課學期" info row needed)
-			semesterText := lineutil.FormatSemester(course.Year, course.Term)
+		var skipLabelRow bool
+		var skipTeacherRow bool
+
+		if opts.TeacherName != "" {
+			// Teacher mode: show teacher name as label, skip redundant teacher info row
+			labelInfo = lineutil.GetTeacherLabel(opts.TeacherName)
+			skipTeacherRow = true
+		} else if opts.IsHistorical {
+			// Historical/Extended mode: no label row, use historical color for header
 			labelInfo = lineutil.BodyLabelInfo{
-				Emoji: "📅",
-				Label: semesterText,
-				Color: lineutil.ColorHeaderHistorical, // Use historical color for all
+				Color: lineutil.ColorHeaderHistorical,
 			}
+			skipLabelRow = true
 		} else {
-			// Regular: use relative labels based on data position
+			// Regular mode: use relative labels based on data position
 			labelInfo = lineutil.GetSemesterLabel(course.Year, course.Term, dataSemesters)
 		}
 
@@ -1587,23 +1677,23 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 		// Build body contents using BodyContentBuilder for cleaner code
 		body := lineutil.NewBodyContentBuilder()
 
-		// First row is semester label
-		body.AddComponent(lineutil.NewBodyLabel(labelInfo).FlexBox)
-
-		// For regular mode, add semester info row; for historical mode, skip (already in label)
-		if !opts.IsHistorical {
-			semesterText := lineutil.FormatSemester(course.Year, course.Term)
-			firstInfoRow := lineutil.NewInfoRow("📅", "開課學期", semesterText, lineutil.DefaultInfoRowStyle())
-			body.AddComponent(firstInfoRow.FlexBox)
+		// Add label row only if not skipped (historical/extended mode skips this)
+		if !skipLabelRow {
+			body.AddComponent(lineutil.NewBodyLabel(labelInfo).FlexBox)
 		}
 
-		// 第二列：授課教師 - use shrink-to-fit for maximum content display
-		if len(course.Teachers) > 0 {
+		// Always show semester info row (provides essential context)
+		semesterText := lineutil.FormatSemester(course.Year, course.Term)
+		firstInfoRow := lineutil.NewInfoRow("📅", "開課學期", semesterText, lineutil.DefaultInfoRowStyle())
+		body.AddComponent(firstInfoRow.FlexBox)
+
+		// 授課教師 - skip if in teacher mode (already shown in label)
+		if len(course.Teachers) > 0 && !skipTeacherRow {
 			teacherNames := strings.Join(course.Teachers, "、")
 			body.AddInfoRow("👨‍🏫", "授課教師", teacherNames, lineutil.CarouselInfoRowStyle())
 		}
 
-		// 第三列：上課時間 - use shrink-to-fit for maximum content display
+		// 上課時間 - use shrink-to-fit for maximum content display
 		if len(course.Times) > 0 {
 			formattedTimes := lineutil.FormatCourseTimes(course.Times)
 			timeStr := strings.Join(formattedTimes, "、")

@@ -530,6 +530,23 @@ func GetSemesterLabel(year, term int, dataSemesters []SemesterPair) BodyLabelInf
 	}
 }
 
+// GetTeacherLabel returns a label info for teacher-specific course list.
+// Used when displaying courses filtered by a specific teacher.
+// The teacher name is shown as the label, and the teacher info row can be skipped
+// in the course bubble to avoid redundancy.
+//
+// Parameters:
+//   - teacherName: Name of the teacher to display in the label
+//
+// Returns: BodyLabelInfo with teacher name as label
+func GetTeacherLabel(teacherName string) BodyLabelInfo {
+	return BodyLabelInfo{
+		Emoji: "👨‍🏫",
+		Label: teacherName,
+		Color: ColorHeaderCourse, // Use course color for consistency
+	}
+}
+
 // SemesterPair represents a year-term pair for semester comparison.
 type SemesterPair struct {
 	Year int // ROC year (e.g., 113)

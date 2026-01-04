@@ -76,6 +76,22 @@ func encodeToBig5(s string) (string, error) {
 	return encoded, nil
 }
 
+// BuildContactSearchURL generates the URL for viewing contact search results.
+// The search term is encoded in Big5 format as required by the NTPU directory.
+// Returns empty string if encoding fails.
+// This is used for the "資料來源" button to open the original contact page.
+func BuildContactSearchURL(searchTerm string) string {
+	// Use default SEA URL (not dynamic to avoid async issues in button generation)
+	const defaultSEAURL = "https://sea.cc.ntpu.edu.tw"
+
+	big5Encoded, err := encodeToBig5(searchTerm)
+	if err != nil {
+		return ""
+	}
+	encodedTerm := url.QueryEscape(big5Encoded)
+	return fmt.Sprintf("%s%s?q=%s", defaultSEAURL, contactSearchPath, encodedTerm)
+}
+
 // parseContactsPage parses contact information from the search results page
 func parseContactsPage(doc *goquery.Document) []*storage.Contact {
 	contacts := make([]*storage.Contact, 0)

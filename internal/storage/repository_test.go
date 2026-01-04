@@ -1750,3 +1750,80 @@ func TestGetProgramCoursesFiltering(t *testing.T) {
 		t.Errorf("Expected 2 courses, got %d", len(multi))
 	}
 }
+
+// TestSearchCoursesByTeacherFuzzy tests SQL-based fuzzy character-set matching for teacher names
+func TestSearchCoursesByTeacherFuzzy(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+	ctx := context.Background()
+
+	courses := []*Course{
+		{UID: "1131U0001", Year: 113, Term: 1, No: "U0001", Title: "課程A", Teachers: []string{"王教授"}},
+		{UID: "1131U0002", Year: 113, Term: 1, No: "U0002", Title: "課程B", Teachers: []string{"王小明", "李教授"}},
+		{UID: "1131U0003", Year: 113, Term: 1, No: "U0003", Title: "課程C", Teachers: []string{"陳大華"}},
+		{UID: "1131U0004", Year: 113, Term: 1, No: "U0004", Title: "課程D", Teachers: []string{"林志玲"}},
+	}
+
+	for _, c := range courses {
+		if err := db.SaveCourse(ctx, c); err != nil {
+			t.Fatalf("SaveCourse failed: %v", err)
+		}
+	}
+
+	// Test 1: Single character matching - "王" should match courses with "王教授" or "王小明"
+	results, err := db.SearchCoursesByTeacherFuzzy(ctx, "王")
+	if err != nil {
+		t.Fatalf("SearchCoursesByTeacherFuzzy failed: %v", err)
+	}
+	if len(results) != 2 {
+		t.Errorf("Expected 2 courses with '王', got %d", len(results))
+	}
+
+	// Test 2: Multiple characters - "王明" should match "王小明" (character-set matching)
+	results, err = db.SearchCoursesByTeacherFuzzy(ctx, "王明")
+	if err != nil {
+		t.Fatalf("SearchCoursesByTeacherFuzzy failed: %v", err)
+	}
+	if len(results) != 1 {
+		t.Errorf("Expected 1 course with '王明' (fuzzy), got %d", len(results))
+	}
+	if len(results) > 0 && results[0].UID != "1131U0002" {
+		t.Errorf("Expected course 1131U0002, got %s", results[0].UID)
+	}
+
+	// Test 3: Empty search term should return empty result
+	results, err = db.SearchCoursesByTeacherFuzzy(ctx, "")
+	if err != nil {
+		t.Fatalf("SearchCoursesByTeacherFuzzy with empty term failed: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("Expected 0 courses for empty search, got %d", len(results))
+	}
+
+	// Test 4: No match case
+	results, err = db.SearchCoursesByTeacherFuzzy(ctx, "張三")
+	if err != nil {
+		t.Fatalf("SearchCoursesByTeacherFuzzy failed: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("Expected 0 courses for '張三', got %d", len(results))
+	}
+
+	// Test 5: Search term too long should error
+	longTerm := strings.Repeat("測", 101)
+	_, err = db.SearchCoursesByTeacherFuzzy(ctx, longTerm)
+	if err == nil {
+		t.Error("Expected error for search term over 100 chars, got nil")
+	}
+
+	// Test 6: Character truncation - search term longer than 10 chars should still work (truncated)
+	// Use repeating characters that exist in the target to ensure the search logic itself passes
+	results, err = db.SearchCoursesByTeacherFuzzy(ctx, "王小明王小明王小明王小明")
+	if err != nil {
+		t.Fatalf("SearchCoursesByTeacherFuzzy with long name failed: %v", err)
+	}
+	// Should still find "王小明" due to truncation to 10 chars
+	if len(results) != 1 {
+		t.Errorf("Expected 1 course with truncated search, got %d", len(results))
+	}
+}

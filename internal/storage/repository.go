@@ -828,6 +828,52 @@ func (db *DB) SearchCoursesByTeacher(ctx context.Context, teacher string) ([]Cou
 	return scanCourses(rows)
 }
 
+// SearchCoursesByTeacherFuzzy searches courses using SQL-level character-set matching on teacher names.
+// Optimization: Uses dynamic LIKE clauses for character matching instead of loading all courses into memory.
+// Each character in the search term must appear in the teachers JSON field.
+// Only returns non-expired cache entries based on configured TTL (max 500 results).
+func (db *DB) SearchCoursesByTeacherFuzzy(ctx context.Context, teacherName string) ([]Course, error) {
+	if len(teacherName) > 100 {
+		return nil, errors.New("search term too long")
+	}
+
+	runes := []rune(teacherName)
+	if len(runes) == 0 {
+		return []Course{}, nil
+	}
+
+	// Limit matching characters to prevent excessive SQL generation (Chinese names typically 2-4 chars)
+	if len(runes) > 10 {
+		runes = runes[:10]
+	}
+
+	ttlTimestamp := db.getTTLTimestamp()
+
+	// Build dynamic query with LIKE clauses for each character
+	// Each character must appear in the teachers JSON field
+	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at
+		FROM courses WHERE cached_at > ?`
+	args := []interface{}{ttlTimestamp}
+
+	var whereClauses strings.Builder
+	for _, r := range runes {
+		pattern := "%" + sanitizeSearchTerm(string(r)) + "%"
+		whereClauses.WriteString(` AND teachers LIKE ? ESCAPE '\'`)
+		args = append(args, pattern)
+	}
+	query += whereClauses.String()
+
+	query += ` ORDER BY year DESC, term DESC LIMIT 500`
+
+	rows, err := db.reader.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fuzzy search courses by teacher: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	return scanCourses(rows)
+}
+
 // GetCoursesByYearTerm retrieves courses by year and term
 // Only returns non-expired cache entries based on configured TTL
 func (db *DB) GetCoursesByYearTerm(ctx context.Context, year, term int) ([]Course, error) {

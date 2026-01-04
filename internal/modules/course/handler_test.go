@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
@@ -39,6 +40,44 @@ func setupTestHandler(t *testing.T) *Handler {
 	stickerMgr := sticker.NewManager(db, scraperClient, log)
 
 	return NewHandler(db, scraperClient, m, log, stickerMgr, nil, nil, nil)
+}
+
+// setupTestHandlerWithSemesters creates a handler with a pre-configured semester detector.
+// This is useful for tests that need deterministic semester behavior independent of current date.
+// The semesters parameter should contain year-term pairs in descending order (newest first).
+func setupTestHandlerWithSemesters(t *testing.T, semesters []struct{ year, term int }) *Handler {
+	t.Helper()
+
+	h := setupTestHandler(t)
+
+	// Create a mock semester detector that returns the configured semesters
+	mockDetector := NewSemesterDetector(func(ctx context.Context, year, term int) (int, error) {
+		// Return a high count for all configured semesters
+		for _, s := range semesters {
+			if s.year == year && s.term == term {
+				return 1000, nil
+			}
+		}
+		return 0, nil
+	})
+
+	// Pre-populate the detector's cache with the configured semesters
+	years := make([]int, len(semesters))
+	terms := make([]int, len(semesters))
+	for i, s := range semesters {
+		years[i] = s.year
+		terms[i] = s.term
+	}
+
+	// Manually set cached semesters (bypassing detection logic)
+	mockDetector.mu.Lock()
+	mockDetector.cachedYears = years
+	mockDetector.cachedTerms = terms
+	mockDetector.mu.Unlock()
+
+	h.SetSemesterDetector(mockDetector)
+
+	return h
 }
 
 func TestCanHandle(t *testing.T) {
@@ -1159,5 +1198,171 @@ func TestFilterCoursesBySemesters(t *testing.T) {
 				t.Errorf("filterCoursesBySemesters() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestFormatCourseListResponseWithOptions_Modes verifies the three display modes
+func TestFormatCourseListResponseWithOptions_Modes(t *testing.T) {
+	t.Parallel()
+	h := setupTestHandler(t)
+	courses := []storage.Course{
+		{
+			UID:      "1131U0001",
+			Title:    "Check Logic",
+			Teachers: []string{"Teacher A"},
+			Year:     113,
+			Term:     1,
+		},
+	}
+
+	// 1. Regular Mode
+	msgs := h.formatCourseListResponseWithOptions(courses, FormatOptions{})
+	if len(msgs) == 0 {
+		t.Error("Regular mode: expected messages, got 0")
+	}
+
+	// 2. Extended Mode (IsHistorical = true)
+	// Should produce message without label row, starting with semester info
+	msgsExtended := h.formatCourseListResponseWithOptions(courses, FormatOptions{IsHistorical: true})
+	if len(msgsExtended) == 0 {
+		t.Error("Extended mode: expected messages, got 0")
+	}
+
+	// 3. Teacher Mode (TeacherName set)
+	// Should produce message with Teacher label and NO teacher info row
+	msgsTeacher := h.formatCourseListResponseWithOptions(courses, FormatOptions{TeacherName: "Teacher A"})
+	if len(msgsTeacher) == 0 {
+		t.Error("Teacher mode: expected messages, got 0")
+	}
+}
+
+// TestHandleTeacherCourseSearch tests the teacher course search handler flow
+func TestHandleTeacherCourseSearch(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Use pre-configured semesters to ensure test is time-independent
+	h := setupTestHandlerWithSemesters(t, []struct{ year, term int }{
+		{113, 2}, {113, 1}, {112, 2}, {112, 1},
+	})
+
+	// Setup: Add some courses to the database
+	courses := []*storage.Course{
+		{UID: "1131U0001", Year: 113, Term: 1, No: "U0001", Title: "程式設計", Teachers: []string{"王教授"}},
+		{UID: "1131U0002", Year: 113, Term: 1, No: "U0002", Title: "資料結構", Teachers: []string{"王教授", "李教授"}},
+		{UID: "1131U0003", Year: 113, Term: 1, No: "U0003", Title: "演算法", Teachers: []string{"陳教授"}},
+	}
+
+	for _, c := range courses {
+		if err := h.db.SaveCourse(ctx, c); err != nil {
+			t.Fatalf("SaveCourse failed: %v", err)
+		}
+	}
+
+	// Test 1: Search with results
+	msgs := h.handleTeacherCourseSearch(ctx, "王教授")
+	if len(msgs) == 0 {
+		t.Error("Expected messages for teacher course search with results, got none")
+	}
+
+	// Test 2: Search with no results
+	msgs = h.handleTeacherCourseSearch(ctx, "不存在的教授")
+	if len(msgs) == 0 {
+		t.Error("Expected error message for teacher course search with no results, got none")
+	}
+	// Verify it's the "no results" message
+	if textMsg, ok := msgs[0].(*messaging_api.TextMessage); ok {
+		if !strings.Contains(textMsg.Text, "查無") {
+			t.Errorf("Expected 'no results' message, got: %s", textMsg.Text)
+		}
+	}
+}
+
+// TestSearchCoursesForTeacher tests the internal search aggregation logic
+func TestSearchCoursesForTeacher(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Use pre-configured semesters to ensure test is time-independent
+	// Configure detector to include 113-1 and 113-2 (matches our test data)
+	h := setupTestHandlerWithSemesters(t, []struct{ year, term int }{
+		{113, 2}, // Newest
+		{113, 1}, // Recent
+		{112, 2}, // Extended
+		{112, 1}, // Extended
+	})
+
+	// Setup: Add courses with various teacher patterns
+	courses := []*storage.Course{
+		{UID: "1131U0001", Year: 113, Term: 1, No: "U0001", Title: "課程A", Teachers: []string{"王大明"}},
+		{UID: "1131U0002", Year: 113, Term: 1, No: "U0002", Title: "課程B", Teachers: []string{"王小明"}},
+		{UID: "1131U0003", Year: 113, Term: 1, No: "U0003", Title: "課程C", Teachers: []string{"李教授"}},
+		{UID: "1132U0001", Year: 113, Term: 2, No: "U0001", Title: "課程D", Teachers: []string{"王大明"}}, // Same teacher, different semester
+	}
+
+	for _, c := range courses {
+		if err := h.db.SaveCourse(ctx, c); err != nil {
+			t.Fatalf("SaveCourse failed: %v", err)
+		}
+	}
+
+	// Test 1: Exact name search
+	results := h.searchCoursesForTeacher(ctx, "王大明")
+	if len(results) == 0 {
+		t.Error("Expected results for exact teacher name search")
+	}
+
+	// Test 2: Fuzzy search (partial match) - "王明" should match both "王大明" and "王小明"
+	results = h.searchCoursesForTeacher(ctx, "王明")
+	if len(results) < 2 {
+		for i, r := range results {
+			t.Logf("Result %d: %s %d-%d %v", i, r.Title, r.Year, r.Term, r.Teachers)
+		}
+		t.Errorf("Expected at least 2 results for fuzzy search '王明', got %d", len(results))
+	}
+
+	// Test 3: Deduplication - same course should not appear twice
+	// "王大明" appears in two semesters, both should be returned (different UIDs)
+	results = h.searchCoursesForTeacher(ctx, "王大明")
+	uidMap := make(map[string]bool)
+	for _, r := range results {
+		if uidMap[r.UID] {
+			t.Errorf("Duplicate UID found: %s", r.UID)
+		}
+		uidMap[r.UID] = true
+	}
+
+	// Test 4: No results case
+	results = h.searchCoursesForTeacher(ctx, "不存在")
+	if len(results) != 0 {
+		t.Errorf("Expected 0 results for non-existent teacher, got %d", len(results))
+	}
+}
+
+// TestHandlePostback_TeacherCourse tests the postback handler for teacher course search
+func TestHandlePostback_TeacherCourse(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Use pre-configured semesters to ensure test is time-independent
+	h := setupTestHandlerWithSemesters(t, []struct{ year, term int }{
+		{113, 2}, {113, 1}, {112, 2}, {112, 1},
+	})
+
+	// Setup: Add courses
+	courses := []*storage.Course{
+		{UID: "1131U0001", Year: 113, Term: 1, No: "U0001", Title: "程式設計", Teachers: []string{"王教授"}},
+	}
+	for _, c := range courses {
+		if err := h.db.SaveCourse(ctx, c); err != nil {
+			t.Fatalf("SaveCourse failed: %v", err)
+		}
+	}
+
+	// Test: Postback with "授課課程" prefix should trigger teacher course search
+	// Format: "course:授課課程${bot.PostbackSplitChar}{teacherName}"
+	msgs := h.HandlePostback(ctx, fmt.Sprintf("course:授課課程%s王教授", bot.PostbackSplitChar))
+	if len(msgs) == 0 {
+		t.Error("Expected messages for teacher course postback, got none")
 	}
 }
