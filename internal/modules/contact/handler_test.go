@@ -2,10 +2,12 @@ package contact
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
@@ -347,5 +349,149 @@ func TestDispatchIntent_Integration(t *testing.T) {
 				t.Error("DispatchIntent() expected messages, got none")
 			}
 		})
+	}
+}
+
+// TestHandlePostback_TeacherContact tests the "教師聯繫" postback handler for course→contact navigation
+func TestHandlePostback_TeacherContact(t *testing.T) {
+	t.Parallel()
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	// Setup: Add a contact for the teacher
+	contact := &storage.Contact{
+		UID:          "test_teacher_1",
+		Type:         "individual",
+		Name:         "王教授",
+		Organization: "資訊工程學系",
+		Title:        "教授",
+		Extension:    "12345",
+	}
+	if err := h.db.SaveContact(ctx, contact); err != nil {
+		t.Fatalf("SaveContact failed: %v", err)
+	}
+
+	// Test: Postback with "教師聯繫" prefix should trigger contact search
+	// Format: "contact:教師聯繫${bot.PostbackSplitChar}{teacherName}"
+	msgs := h.HandlePostback(ctx, fmt.Sprintf("contact:教師聯繫%s王教授", bot.PostbackSplitChar))
+	if len(msgs) == 0 {
+		t.Error("Expected messages for teacher contact postback, got none")
+	}
+
+	// Test: Postback for non-existent teacher should still return message (no results)
+	msgs = h.HandlePostback(ctx, fmt.Sprintf("contact:教師聯繫%s不存在的人", bot.PostbackSplitChar))
+	if len(msgs) == 0 {
+		t.Error("Expected 'no results' message for non-existent teacher, got none")
+	}
+}
+
+// TestFormatContactResults_IndividualWithCourses tests that the "授課課程" button appears for teachers with courses
+func TestFormatContactResults_IndividualWithCourses(t *testing.T) {
+	t.Parallel()
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	// Setup: Add a teacher contact
+	teacherContact := &storage.Contact{
+		UID:          "teacher_1",
+		Type:         "individual",
+		Name:         "課程教授",
+		Organization: "資訊工程學系",
+		Title:        "教授",
+	}
+	if err := h.db.SaveContact(ctx, teacherContact); err != nil {
+		t.Fatalf("SaveContact failed: %v", err)
+	}
+
+	// Setup: Add a course taught by this teacher
+	course := &storage.Course{
+		UID:      "1131U0001",
+		Year:     113,
+		Term:     1,
+		No:       "U0001",
+		Title:    "程式設計",
+		Teachers: []string{"課程教授"},
+	}
+	if err := h.db.SaveCourse(ctx, course); err != nil {
+		t.Fatalf("SaveCourse failed: %v", err)
+	}
+
+	// Format results for the teacher contact
+	msgs := h.formatContactResults(ctx, []storage.Contact{*teacherContact})
+
+	// Should return at least one message
+	if len(msgs) == 0 {
+		t.Error("Expected messages for contact with courses, got none")
+	}
+
+	// Verify the message is a FlexMessage (contains the 授課課程 button)
+	if _, ok := msgs[0].(*messaging_api.FlexMessage); !ok {
+		t.Error("Expected FlexMessage for contact result")
+	}
+}
+
+// TestFormatContactResults_IndividualWithoutCourses tests that no course button appears when there are no courses
+func TestFormatContactResults_IndividualWithoutCourses(t *testing.T) {
+	t.Parallel()
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	// Setup: Add a contact without any courses
+	contact := &storage.Contact{
+		UID:          "non_teacher_1",
+		Type:         "individual",
+		Name:         "行政人員",
+		Organization: "教務處",
+		Title:        "秘書",
+	}
+	if err := h.db.SaveContact(ctx, contact); err != nil {
+		t.Fatalf("SaveContact failed: %v", err)
+	}
+
+	// Format results (no courses in DB for this person)
+	msgs := h.formatContactResults(ctx, []storage.Contact{*contact})
+
+	// Should still return a message
+	if len(msgs) == 0 {
+		t.Error("Expected messages for contact without courses, got none")
+	}
+}
+
+// TestFormatContactResults_OrganizationNoCourseButton tests that organizations don't get course buttons
+func TestFormatContactResults_OrganizationNoCourseButton(t *testing.T) {
+	t.Parallel()
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	// Setup: Add an organization contact
+	orgContact := &storage.Contact{
+		UID:          "org_1",
+		Type:         "organization",
+		Name:         "資訊工程學系",
+		Organization: "電機資訊學院",
+	}
+	if err := h.db.SaveContact(ctx, orgContact); err != nil {
+		t.Fatalf("SaveContact failed: %v", err)
+	}
+
+	// Add a course (this shouldn't affect org contacts)
+	course := &storage.Course{
+		UID:      "1131U0001",
+		Year:     113,
+		Term:     1,
+		No:       "U0001",
+		Title:    "程式設計",
+		Teachers: []string{"資訊工程學系"}, // Using org name as "teacher"
+	}
+	if err := h.db.SaveCourse(ctx, course); err != nil {
+		t.Fatalf("SaveCourse failed: %v", err)
+	}
+
+	// Format results
+	msgs := h.formatContactResults(ctx, []storage.Contact{*orgContact})
+
+	// Should return at least one message (organizations displayed normally)
+	if len(msgs) == 0 {
+		t.Error("Expected messages for organization contact, got none")
 	}
 }

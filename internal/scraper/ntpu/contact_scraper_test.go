@@ -127,3 +127,73 @@ func BenchmarkGenerateUID(b *testing.B) {
 		_ = generateUID("學術單位", "資訊工程學系")
 	}
 }
+
+// TestBuildContactSearchURL tests the URL building function for contact search
+func TestBuildContactSearchURL(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		searchTerm string
+		wantEmpty  bool
+		contains   string // substring that should be in the URL
+	}{
+		{
+			name:       "Valid Chinese name",
+			searchTerm: "王",
+			wantEmpty:  false,
+			contains:   "https://sea.cc.ntpu.edu.tw",
+		},
+		{
+			name:       "Valid ASCII",
+			searchTerm: "test",
+			wantEmpty:  false,
+			contains:   "?q=",
+		},
+		{
+			name:       "Empty string",
+			searchTerm: "",
+			wantEmpty:  false, // Empty string should still generate URL
+			contains:   "?q=",
+		},
+		{
+			name:       "Chinese name with multiple characters",
+			searchTerm: "王小明",
+			wantEmpty:  false,
+			contains:   "https://sea.cc.ntpu.edu.tw",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := BuildContactSearchURL(tt.searchTerm)
+
+			if tt.wantEmpty && result != "" {
+				t.Errorf("Expected empty URL, got %s", result)
+			}
+			if !tt.wantEmpty && result == "" {
+				t.Error("Expected non-empty URL, got empty")
+			}
+			if tt.contains != "" && result != "" {
+				if !containsSubstring(result, tt.contains) {
+					t.Errorf("Expected URL to contain %q, got %s", tt.contains, result)
+				}
+			}
+		})
+	}
+}
+
+// containsSubstring is a helper to check if a string contains a substring
+func containsSubstring(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
+		(len(s) > 0 && len(substr) > 0 && findSubstring(s, substr)))
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

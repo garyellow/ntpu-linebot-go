@@ -225,6 +225,13 @@ func (h *Handler) GetSemesterDetector() *SemesterDetector {
 	return h.semesterDetector
 }
 
+// SetSemesterDetector replaces the semester detector for testing.
+// This allows tests to inject a mock detector with predetermined semester data,
+// avoiding time-dependent test failures.
+func (h *Handler) SetSemesterDetector(detector *SemesterDetector) {
+	h.semesterDetector = detector
+}
+
 // RefreshSemesters updates the cached semester data from database.
 // This should be called after warmup completes to ensure user queries
 // use data-driven semester detection based on actual course availability.
