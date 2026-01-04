@@ -1161,3 +1161,38 @@ func TestFilterCoursesBySemesters(t *testing.T) {
 		})
 	}
 }
+
+// TestFormatCourseListResponseWithOptions_Modes verifies the three display modes
+func TestFormatCourseListResponseWithOptions_Modes(t *testing.T) {
+	t.Parallel()
+	h := setupTestHandler(t)
+	courses := []storage.Course{
+		{
+			UID:      "1131U0001",
+			Title:    "Check Logic",
+			Teachers: []string{"Teacher A"},
+			Year:     113,
+			Term:     1,
+		},
+	}
+
+	// 1. Regular Mode
+	msgs := h.formatCourseListResponseWithOptions(courses, FormatOptions{})
+	if len(msgs) == 0 {
+		t.Error("Regular mode: expected messages, got 0")
+	}
+
+	// 2. Extended Mode (IsHistorical = true)
+	// Should produce message without label row, starting with semester info
+	msgsExtended := h.formatCourseListResponseWithOptions(courses, FormatOptions{IsHistorical: true})
+	if len(msgsExtended) == 0 {
+		t.Error("Extended mode: expected messages, got 0")
+	}
+
+	// 3. Teacher Mode (TeacherName set)
+	// Should produce message with Teacher label and NO teacher info row
+	msgsTeacher := h.formatCourseListResponseWithOptions(courses, FormatOptions{TeacherName: "Teacher A"})
+	if len(msgsTeacher) == 0 {
+		t.Error("Teacher mode: expected messages, got 0")
+	}
+}
