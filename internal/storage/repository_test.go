@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -11,11 +12,16 @@ import (
 
 func setupTestDB(t *testing.T) *DB {
 	t.Helper()
-	// Use in-memory SQLite database for testing with 7-day TTL
-	db, err := New(context.Background(), ":memory:", 168*time.Hour)
+	// Use a unique temp file database for each test to avoid shared memory conflicts
+	// when running t.Parallel() tests. The temp directory is automatically cleaned up.
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	db, err := New(context.Background(), dbPath, 168*time.Hour)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
+	// Register cleanup to close database before temp directory removal
+	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
 

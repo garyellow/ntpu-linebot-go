@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestDB(t *testing.T) (*storage.DB, func()) {
+func setupTestDB(t *testing.T) *storage.DB {
 	t.Helper()
 	// Use a unique temporary file for each test to ensure complete isolation
 	// This avoids the shared cache issue with in-memory databases
@@ -20,17 +20,15 @@ func setupTestDB(t *testing.T) (*storage.DB, func()) {
 	db, err := storage.New(context.Background(), tmpFile, 168*time.Hour)
 	require.NoError(t, err)
 
-	cleanup := func() {
-		_ = db.Close()
-	}
+	// Register cleanup to close database before temp directory removal
+	t.Cleanup(func() { _ = db.Close() })
 
-	return db, cleanup
+	return db
 }
 
 func TestNewManager(t *testing.T) {
 	t.Parallel()
-	db, cleanup := setupTestDB(t)
-	defer cleanup()
+	db := setupTestDB(t)
 
 	client := scraper.NewClient(30*time.Second, 2, map[string][]string{"lms": {"https://lms.ntpu.edu.tw"}, "sea": {"https://sea.cc.ntpu.edu.tw"}})
 	log := logger.New("info")
@@ -43,8 +41,7 @@ func TestNewManager(t *testing.T) {
 
 func TestGetRandomStickerWithFallback(t *testing.T) {
 	t.Parallel()
-	db, cleanup := setupTestDB(t)
-	defer cleanup()
+	db := setupTestDB(t)
 
 	client := scraper.NewClient(30*time.Second, 2, map[string][]string{"lms": {"https://lms.ntpu.edu.tw"}, "sea": {"https://sea.cc.ntpu.edu.tw"}})
 	log := logger.New("info")
@@ -58,8 +55,7 @@ func TestGetRandomStickerWithFallback(t *testing.T) {
 
 func TestGetRandomStickerWithLoadedStickers(t *testing.T) {
 	t.Parallel()
-	db, cleanup := setupTestDB(t)
-	defer cleanup()
+	db := setupTestDB(t)
 
 	ctx := context.Background()
 	client := scraper.NewClient(30*time.Second, 2, map[string][]string{"lms": {"https://lms.ntpu.edu.tw"}, "sea": {"https://sea.cc.ntpu.edu.tw"}})
@@ -97,8 +93,7 @@ func TestGetRandomStickerWithLoadedStickers(t *testing.T) {
 
 func TestLoadStickersFromDatabase(t *testing.T) {
 	t.Parallel()
-	db, cleanup := setupTestDB(t)
-	defer cleanup()
+	db := setupTestDB(t)
 
 	ctx := context.Background()
 	client := scraper.NewClient(30*time.Second, 2, map[string][]string{"lms": {"https://lms.ntpu.edu.tw"}, "sea": {"https://sea.cc.ntpu.edu.tw"}})
@@ -126,8 +121,7 @@ func TestLoadStickersFromDatabase(t *testing.T) {
 
 func TestGenerateFallbackStickers(t *testing.T) {
 	t.Parallel()
-	db, cleanup := setupTestDB(t)
-	defer cleanup()
+	db := setupTestDB(t)
 
 	client := scraper.NewClient(30*time.Second, 2, map[string][]string{"lms": {"https://lms.ntpu.edu.tw"}, "sea": {"https://sea.cc.ntpu.edu.tw"}})
 	log := logger.New("info")
@@ -150,8 +144,7 @@ func TestGenerateFallbackStickers(t *testing.T) {
 
 func TestGetStats(t *testing.T) {
 	t.Parallel()
-	db, cleanup := setupTestDB(t)
-	defer cleanup()
+	db := setupTestDB(t)
 
 	ctx := context.Background()
 	client := scraper.NewClient(30*time.Second, 2, map[string][]string{"lms": {"https://lms.ntpu.edu.tw"}, "sea": {"https://sea.cc.ntpu.edu.tw"}})

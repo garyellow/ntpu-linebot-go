@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -20,11 +21,16 @@ import (
 func setupTestApp(t *testing.T) *Application {
 	t.Helper()
 
-	// Create test database
-	db, err := storage.New(context.Background(), ":memory:", 168*time.Hour) // 7 days for tests
+	// Use a unique temp file database for each test to avoid shared memory conflicts
+	// when running t.Parallel() tests. The temp directory is automatically cleaned up.
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	db, err := storage.New(context.Background(), dbPath, 168*time.Hour)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
+	// Register cleanup to close database before temp directory removal
+	t.Cleanup(func() { _ = db.Close() })
 
 	// Create test metrics with a new registry
 	registry := prometheus.NewRegistry()
