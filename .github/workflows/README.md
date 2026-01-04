@@ -5,7 +5,18 @@
 ## 工作流程說明
 
 ### 🧪 CI (`ci.yml`)
-**觸發時機**: Push 到非 main 分支、Pull Request
+**觸發時機**: Push 到非 main 分支 (branches-ignore: main)、Pull Request、手動觸發
+
+**並行架構**:
+```
+validate (快速驗證)
+   ├─ build ⚡
+   ├─ test ⚡
+   ├─ lint ⚡
+   └─ security ⚡
+        ↓ (所有檢查通過後)
+      docker (Docker + Trivy)
+```
 
 **功能**:
 - ✅ 使用 `go-version-file: go.mod` 自動讀取 Go 版本
@@ -13,9 +24,17 @@
 - ✅ 測試 + 覆蓋率顯示（不上傳到第三方）
 - ✅ golangci-lint 代碼檢查
 - ✅ govulncheck 漏洞掃描
-- ✅ Docker 構建 + Trivy 安全掃描（僅 PR）
+- ✅ Docker 構建 + Trivy 安全掃描（僅 PR 非 fork，**所有檢查通過後**才執行）
 - ✅ Trivy 掃描直接使用 metadata 產出的 `pr-{number}` 標籤，避免標籤與映像不同步
 - ✅ 使用 PR 編號標籤 (`pr-123`)，避免分支名稱特殊字符問題
+
+**Jobs 說明**:
+- `validate`: Go 依賴驗證、格式檢查（~30 秒）
+- `build`: 編譯 server 和 healthcheck 二進制檔案
+- `test`: 單元測試 + race detector + 覆蓋率報告
+- `lint`: golangci-lint 代碼質量檢查
+- `security`: govulncheck 漏洞掃描 + gosec 安全掃描
+- `docker`: Docker image 構建、推送、Trivy 掃描（依賴所有上述 jobs）
 
 **Cache 策略**:
 - Go modules 和 build cache 由 `setup-go@v6` 自動處理
@@ -42,8 +61,8 @@
 **觸發時機**: Pull Request 關閉
 
 **功能**:
-- ✅ 自動清理 PR 專用的 Docker image
-- ✅ 使用 PR 編號匹配 (`^pr-{number}$`，正則精確匹配)
+- ✅ 自動清理 **當前 PR** 專用的 Docker image（例如 PR #143 關閉時刪除 `pr-143` 標籤）
+- ✅ 使用精確匹配：`^pr-${{ github.event.pull_request.number }}$`（只刪除當前 PR，不影響其他 PR）
 
 ---
 
@@ -90,63 +109,10 @@
 
 | Workflow | 觸發 | 執行內容 | 產物 | Cache Scope |
 |---------|------|---------|------|-------------|
-| **CI** | Push 非 main<br>PR 到 main<br>手動觸發 | 測試<br>Lint<br>漏洞掃描<br>Docker (僅 PR)<br>Trivy 掃描 | `pr-{number}` image<br>SARIF 報告 | `ci-pr` |
-| **PR Cleanup** | PR 關閉 | 刪除 GHCR image | - | - |
+| **CI** | Push 非 main (branches-ignore)<br>PR 到 main<br>手動觸發 | validate → 4 並行檢查 (build/test/lint/security) → docker<br>docker 需所有檢查通過 | `pr-143` image<br>SARIF 報告 | `ci-pr` |
+| **PR Cleanup** | PR 關閉 | 刪除當前 PR 的 GHCR image | - | - |
 | **Release** | Push main (代碼變更)<br>Push tag `v*.*.*` | 雙平台 Docker 構建 | `latest` 或 `v1.2.3`<br>推送到 Hub+GHCR | `release` |
 | **Docker Build** | 被調用 | 可重用構建邏輯 | 參數化 images | `release` |
-
-## 完整性檢查清單
-
-### ✅ 命名一致性
-- [x] CI 構建標籤: `pr-{number}` (例如 `pr-2`)
-- [x] PR Cleanup 匹配: `^pr-{number}$` (正則完全匹配)
-- [x] Release 標籤: `latest` (main) 或 `v1.2.3` (tag)
-- [x] Concurrency groups: `ci-*`, `pr-cleanup-*`, `release-*` (無衝突)
-- [x] 文件名與 workflow 名稱對應
-
-### ✅ 觸發條件互補
-- [x] CI: 非 main 分支 + PR + 手動
-- [x] PR Cleanup: PR 關閉
-- [x] Release: main 分支（代碼變更）+ tag
-- [x] 無重疊觸發（各司其職）
-
-### ✅ 功能完整性
-- [x] Go 測試覆蓋率 (CI)
-- [x] Linting + 漏洞掃描 (CI)
-- [x] Docker 安全掃描 (CI)
-- [x] PR 專用構建 (CI)
-- [x] PR 清理 (PR Cleanup)
-- [x] 生產構建 (Release)
-- [x] 多平台支援 (Release)
-- [x] 雙 registry 推送 (Release)
-
-### ✅ 無冗餘
-- [x] 無重複的 Docker 構建邏輯（統一在 reusable）
-- [x] 無不必要的 workflow 文件
-- [x] 無未使用的 actions
-- [x] 無過時的配置
-
-### ✅ 無缺漏
-- [x] PR 構建後會清理（防止 GHCR 膨脹）
-- [x] Main 更新會觸發 release
-- [x] Tag 總是觸發 release（忽略 paths）
-- [x] 所有 workflow 都有 concurrency 控制
-- [x] 安全掃描結果上傳到 Security tab
-
----
-
-## 與舊版差異
-
-| 項目 | 舊版 | 新版 |
-|------|------|------|
-| Workflows 數量 | 5 個 | 4 個 |
-| 重複代碼 | 4 處 Docker 構建邏輯 | 1 處可重用 workflow |
-| Go cache | 手動或內建 | 統一使用內建 |
-| PR 標籤 | 分支名稱（特殊字符問題） | `pr-{number}`（安全） |
-| Release 邏輯 | 2 個獨立 workflow | 1 個合併 workflow |
-| Codecov | ✅ 上傳 | ❌ 移除（本地顯示） |
-| Docker 平台 | 不明確 | CI: amd64 / Release: amd64+arm64 |
-| Preview 管理 | upsert + delete | CI 構建 + cleanup |
 
 ---
 
