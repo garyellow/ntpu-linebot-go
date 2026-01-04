@@ -1047,14 +1047,14 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 	var helpText string
 	if extended {
 		helpText = fmt.Sprintf(
-			"🔍 查無相關課程\n\n搜尋內容：%s\n📅 搜尋範圍：%s\n\n💡 建議嘗試\n• 縮短關鍵字（如「線性」→「線」）\n• 只輸入教師姓氏\n• 指定年份：「課程 110 %s」",
+			"🔍 查無相關課程\n\n搜尋內容：%s\n📅 搜尋範圍：%s\n\n💡 建議嘗試\n• 縮短關鍵字（如「線性」→「線」）\n• 指定年份：「課程 110 %s」\n\n👨‍🏫 查詢教師資訊？\n請使用：「聯絡 教師名」或「教授 教師名」",
 			searchTerm,
 			semesterType,
 			searchTerm,
 		)
 	} else {
 		helpText = fmt.Sprintf(
-			"🔍 查無「%s」的相關課程\n\n📅 已搜尋範圍：近 2 學期\n\n💡 建議嘗試\n• 使用「📅 更多學期」搜尋第 3-4 學期\n• 縮短關鍵字（如「線性」→「線」）\n• 指定年份：「課程 110 %s」",
+			"🔍 查無「%s」的相關課程\n\n📅 已搜尋範圍：近 2 學期\n\n💡 建議嘗試\n• 使用「📅 更多學期」搜尋第 3-4 學期\n• 縮短關鍵字（如「線性」→「線」）\n• 指定年份：「課程 110 %s」\n\n👨‍🏫 查詢教師資訊？\n請使用：「聯絡 教師名」或「教授 教師名」",
 			searchTerm,
 			searchTerm,
 		)
@@ -1902,7 +1902,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 		h.metrics.RecordSearch(searchType, "no_results", time.Since(startTime).Seconds(), 0)
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			"🔍 未找到相關課程\n\n💡 建議嘗試\n• 換個描述方式或關鍵字\n• 使用精確搜尋：「課程 課名」", sender)
+			"🔍 未找到相關課程\n\n💡 建議嘗試\n• 換個描述方式或關鍵字\n• 使用精確搜尋：「課程 課名」\n\n👨‍🏫 查詢教師資訊？\n請使用：「聯絡 教師名」或「教授 教師名」", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyCourseAction(),
 			lineutil.QuickReplySmartSearchAction(),
@@ -1943,7 +1943,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 func (h *Handler) formatSmartSearchResponse(courses []storage.Course, results []rag.SearchResult) []messaging_api.MessageInterface {
 	if len(courses) == 0 {
 		sender := lineutil.GetSender(senderName, h.stickerManager)
-		msg := lineutil.NewTextMessageWithConsistentSender("🔍 未找到相關課程\n\n💡 建議嘗試\n• 換個描述方式或關鍵字\n• 使用精確搜尋：「課程 課名」", sender)
+		msg := lineutil.NewTextMessageWithConsistentSender("🔍 未找到相關課程\n\n💡 建議嘗試\n• 換個描述方式或關鍵字\n• 使用精確搜尋：「課程 課名」\n\n👨‍🏫 查詢教師資訊？\n請使用：「聯絡 教師名」或「教授 教師名」", sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyCourseAction(),
 			lineutil.QuickReplySmartSearchAction(),

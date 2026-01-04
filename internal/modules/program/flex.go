@@ -290,17 +290,14 @@ func (h *Handler) buildProgramBubble(program storage.Program) *lineutil.FlexBubb
 	// Build footer buttons - using rows for vertical stacking
 	var footerRows []*lineutil.FlexButton
 
-	// Row 1: Add LMS detail page button (renamed to 學程資訊)
-	// If URL is empty, fallback to general program list page
-	targetURL := program.URL
-	if targetURL == "" {
-		targetURL = "https://lms.ntpu.edu.tw/site/programs"
+	// Row 1: Add LMS detail page button if URL is available (renamed to 學程資訊)
+	// Conditionally hide button when URL is empty (safer than fallback)
+	if program.URL != "" {
+		detailBtn := lineutil.NewFlexButton(
+			lineutil.NewURIAction("📋 學程資訊", program.URL),
+		).WithStyle("secondary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm")
+		footerRows = append(footerRows, detailBtn)
 	}
-
-	detailBtn := lineutil.NewFlexButton(
-		lineutil.NewURIAction("📋 學程資訊", targetURL),
-	).WithStyle("secondary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm")
-	footerRows = append(footerRows, detailBtn)
 
 	// Row 2: View courses button (internal) - only if courses exist
 	// Stacked vertically: distinct row

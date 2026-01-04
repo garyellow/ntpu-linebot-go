@@ -58,10 +58,8 @@ func TestCanHandle(t *testing.T) {
 		{"Valid department query", "系所 資工", true},
 		{"Valid department Name query", "系名 資工", true},
 		{"Valid department query (English)", "dept 85", true},
-
-		// Removed/Invalid keywords
-		{"Single char '系' (Removed)", "系 資工", false},
-		{"Single char '所' (Removed)", "所 資工", false},
+		{"Single char '系' (natural query)", "系 資工", true},
+		{"Single char '所' (natural query)", "所 資工", true},
 
 		{"Year query", "112", false},
 		{"Invalid prefix", "課程 41247001", false},

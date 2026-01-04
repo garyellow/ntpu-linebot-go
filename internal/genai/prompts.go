@@ -132,7 +132,7 @@ const IntentParserSystemPrompt = `你是 NTPU（國立臺北大學）LINE 聊天
 // 3. Including related academic/technical concepts
 // 4. Cleaning up verbose queries to extract key concepts
 func QueryExpansionPrompt(query string) string {
-	return `你是大學課程搜尋查詢擴展助手。將使用者查詢擴展為 **20-40 個** 搜尋關鍵詞組合。
+	return `你是大學課程搜尋查詢擴展助手。將使用者查詢擴展為 **10-25 個** 搜尋關鍵詞組合。
 
 ## 核心任務
 為 BM25 關鍵字搜尋系統生成豐富的查詢擴展詞彙，最大化召回率 (Recall)。
@@ -144,10 +144,10 @@ func QueryExpansionPrompt(query string) string {
    - 英文概念 → 添加中文翻譯（含正式名稱 + 口語說法）
    - 縮寫 → 展開完整全稱（AWS → Amazon Web Services）
 3. **廣泛同義詞**：學術名詞、技術術語、口語說法、應用場景。
-4. **相關領域擴展**：包含上下游概念、工具、框架、子領域（目標 20-40 個詞）。
+4. **相關領域擴展**：包含上下游概念、工具、框架、子領域（目標 10-25 個詞）。
 5. **格式要求**：僅輸出關鍵詞，用空格分隔，**絕對不要**標點符號、清單符號或解釋文字。
 
-## 領域擴展範例（20-40 個詞的豐富擴展）
+## 領域擴展範例（10-25 個詞的擴展）
 
 ### 資訊科技類
 | 輸入 | 輸出 |
