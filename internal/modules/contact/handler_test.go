@@ -56,8 +56,6 @@ func TestCanHandle(t *testing.T) {
 
 		// Contact keywords at START (English)
 		{"Contact keyword at start", "contact info", true},
-		{"Touch keyword at start", "touch base", true},
-		{"Connect keyword at start", "connect with", true},
 
 		// Contact keywords at START (Chinese)
 		{"聯繫 keyword at start", "聯繫 資工系", true},
@@ -68,8 +66,16 @@ func TestCanHandle(t *testing.T) {
 		{"Email keyword at start", "email信箱", true},
 		{"信箱 keyword at start", "信箱查詢", true},
 
+		// Teacher keywords (Added to contact module)
+		{"Find Teacher keyword", "找老師 王小明", true},
+		{"Find Professor keyword", "找教授 陳教授", true},
+		{"老師 keyword", "老師 王小明", true},
+		{"教授 keyword", "教授 陳教授", true},
+		{"教師 keyword", "教師 李老師", true},
+		{"Professor keyword", "professor Wang", true},
+		{"Teacher keyword", "teacher info", true},
+
 		// Keywords NOT at start should NOT match (precise matching only)
-		{"Connect keyword not at start", "how to connect", false},
 		{"分機 keyword not at start", "查詢分機", false},
 		{"電話 keyword not at start", "查詢電話", false},
 		{"信箱 keyword not at start", "電子信箱", false},

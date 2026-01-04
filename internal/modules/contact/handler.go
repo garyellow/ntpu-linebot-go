@@ -96,12 +96,16 @@ var (
 	validContactKeywords = []string{
 		// 繁體中文主要關鍵字
 		"聯繫", "聯絡", "聯繫方式", "聯絡方式",
-		// 簡體/異體字變體
-		"連繫", "連絡",
+		// 簡體/異體字變體（常用）
+		"連絡",
+		// 中文教師關鍵字（優先具體詞彙）
+		"找老師", "找教授", "找教師",
+		"老師", "教師", "教授",
 		// 具體查詢類型
 		"電話", "分機", "email", "信箱",
-		// English keywords
-		"touch", "contact", "connect",
+		// English keywords (common only)
+		"contact",
+		"teacher", "professor", "prof",
 	}
 
 	contactRegex = bot.BuildKeywordRegex(validContactKeywords)

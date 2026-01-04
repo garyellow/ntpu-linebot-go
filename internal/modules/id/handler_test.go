@@ -52,8 +52,17 @@ func TestCanHandle(t *testing.T) {
 		{"Valid student ID query (English)", "student 41247001", true},
 		{"Valid name query", "學生 王小明", true},
 		{"Valid name query (English)", "student 王小明", true},
+
+		// Department keywords (Refined)
 		{"Valid department code query", "系代碼 85", true},
-		{"Valid department code query (English)", "dept 85", true},
+		{"Valid department query", "系所 資工", true},
+		{"Valid department Name query", "系名 資工", true},
+		{"Valid department query (English)", "dept 85", true},
+
+		// Removed/Invalid keywords
+		{"Single char '系' (Removed)", "系 資工", false},
+		{"Single char '所' (Removed)", "所 資工", false},
+
 		{"Year query", "112", false},
 		{"Invalid prefix", "課程 41247001", false},
 		{"Empty string", "", false},

@@ -92,20 +92,14 @@ type PatternMatcher struct {
 
 // Keyword definitions for bot.BuildKeywordRegex (case-insensitive, ^-anchored).
 var (
-	// validCourseKeywords: unified search (course + teacher), semesters 1-2.
+	// validCourseKeywords: course search only, semesters 1-2.
+	// Teacher queries (老師/教師) are handled by contact module.
 	validCourseKeywords = []string{
 		// 中文課程關鍵字
 		"課", "課程", "科目",
-		"課名", "課程名", "課程名稱",
-		"科目名", "科目名稱",
-		// 中文教師關鍵字
-		"師", "老師", "教師", "教授",
-		"老師名", "教師名", "教授名",
-		"老師名稱", "教師名稱", "教授名稱",
-		"授課教師", "授課老師", "授課教授",
-		// English keywords
-		"class", "course",
-		"teacher", "professor", "prof", "dr", "doctor",
+		"課名", "課程名稱",
+		// English keywords (removed 'class' to avoid ambiguity)
+		"course",
 	}
 
 	// validSmartSearchKeywords: semantic search (BM25 + LLM expansion), semesters 1-2.

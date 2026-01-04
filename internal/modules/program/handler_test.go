@@ -53,9 +53,7 @@ func TestCanHandle(t *testing.T) {
 	}{
 		// List program keywords (at start, case-insensitive)
 		{"List - 學程列表", "學程列表", true},
-		{"List - 學程清單", "學程清單", true},
 		{"List - 所有學程", "所有學程", true},
-		{"List - 全部學程", "全部學程", true},
 		{"List - English program list", "program list", true},
 		{"List - English programs", "programs", true},
 
