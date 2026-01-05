@@ -1358,10 +1358,12 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 		body.AddComponent(hint.FlexText)
 	}
 
-	// Build footer actions using button rows for 2-column layout
-	var footerRows [][]*lineutil.FlexButton
+	// Build footer actions using LayoutButtonsWithPattern for consistent layout:
+	// - Odd button count: 1, 2, 2, 2... (first row solo, remaining paired)
+	// - Even button count: 2, 2, 2... (all rows paired)
+	var allButtons []*lineutil.FlexButton
 
-	// Query course programs first to determine layout
+	// Query course programs first to determine available buttons
 	programs, err := h.db.GetCoursePrograms(ctx, course.UID)
 	if err != nil {
 		h.logger.WithModule(ModuleName).WithError(err).Warnf("Failed to get programs for course %s", course.UID)
@@ -1382,27 +1384,20 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 		}
 	}
 
-	// Row 1: 資料來源 + 課程大綱 (資料來源 always first)
-	row1 := make([]*lineutil.FlexButton, 0, 2)
-	row1 = append(row1, lineutil.NewFlexButton(
+	// Collect all buttons in display order (priority order)
+	// Button 1: 資料來源 (always present)
+	allButtons = append(allButtons, lineutil.NewFlexButton(
 		lineutil.NewURIAction("🔗 資料來源", courseQueryURL),
 	).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
 
+	// Button 2: 課程大綱 (if available)
 	if course.DetailURL != "" {
-		row1 = append(row1, lineutil.NewFlexButton(
+		allButtons = append(allButtons, lineutil.NewFlexButton(
 			lineutil.NewURIAction("📄 課程大綱", course.DetailURL),
 		).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
 	}
 
-	if len(row1) > 0 {
-		footerRows = append(footerRows, row1)
-	}
-
-	// Row 2: 相關學程 + 聯繫教師 (both optional, layout depends on count)
-	// Collect available buttons first, then arrange based on odd/even rules
-	var row2Buttons []*lineutil.FlexButton
-
-	// 相關學程 button (if course has programs)
+	// Button 3: 相關學程 (if course has programs)
 	if len(programs) > 0 {
 		var programDisplayText string
 		if len(programs) == 1 {
@@ -1410,7 +1405,7 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 		} else {
 			programDisplayText = fmt.Sprintf("查看 %d 個相關學程", len(programs))
 		}
-		row2Buttons = append(row2Buttons, lineutil.NewFlexButton(
+		allButtons = append(allButtons, lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText(
 				"🎓 相關學程",
 				programDisplayText,
@@ -1419,10 +1414,10 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 		).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm"))
 	}
 
-	// 聯繫教師 button (if teacher has matching contacts)
+	// Button 4: 聯繫教師 (if teacher has matching contacts)
 	if hasMatchingContacts && teacherName != "" {
 		displayText := lineutil.FormatLabel("查詢教師聯繫方式", teacherName, 40)
-		row2Buttons = append(row2Buttons, lineutil.NewFlexButton(
+		allButtons = append(allButtons, lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText(
 				"📞 聯繫教師",
 				displayText,
@@ -1431,30 +1426,22 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 		).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm"))
 	}
 
-	if len(row2Buttons) > 0 {
-		footerRows = append(footerRows, row2Buttons)
-	}
-
-	// Row 3: 教師課表 + 教師課程 (if teachers exist)
+	// Buttons 5-8: Teacher-related buttons (if teachers exist)
 	if len(course.Teachers) > 0 {
-		row3 := make([]*lineutil.FlexButton, 0, 2)
-
-		// Teacher schedule button - opens the teacher's course table webpage (外部連結使用藍色)
+		// Button 5: 教師課表 (if URL available)
 		if len(course.TeacherURLs) > 0 && course.TeacherURLs[0] != "" {
-			row3 = append(row3, lineutil.NewFlexButton(
+			allButtons = append(allButtons, lineutil.NewFlexButton(
 				lineutil.NewURIAction("📅 教師課表", course.TeacherURLs[0]),
 			).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
 		}
 
-		// Teacher all courses button - searches for all courses taught by this teacher (內部指令使用紫色)
-		// DisplayText: 搜尋 {Name} 近期課程
+		// Button 6: 教師課程
 		displayText := "搜尋 " + teacherName + " 近期課程"
 		if len([]rune(displayText)) > 40 {
-			// Truncate name if too long to fit in 40 chars total
 			safeName := lineutil.TruncateRunes(teacherName, 32)
 			displayText = "搜尋 " + safeName + " 近期課程"
 		}
-		row3 = append(row3, lineutil.NewFlexButton(
+		allButtons = append(allButtons, lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText(
 				"👨‍🏫 教師課程",
 				displayText,
@@ -1462,34 +1449,23 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 			),
 		).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm"))
 
-		if len(row3) > 0 {
-			footerRows = append(footerRows, row3)
-		}
-	}
-
-	// Row 4: Dcard 查詢 + 選課大全
-	if len(course.Teachers) > 0 {
-		row4 := make([]*lineutil.FlexButton, 0, 2)
-
-		// Dcard search button - Google search with site:dcard.tw/f/ntpu (外部連結使用藍色)
+		// Button 7: Dcard
 		dcardQuery := fmt.Sprintf("%s %s site:dcard.tw/f/ntpu", teacherName, course.Title)
 		dcardURL := "https://www.google.com/search?q=" + url.QueryEscape(dcardQuery)
-		row4 = append(row4, lineutil.NewFlexButton(
+		allButtons = append(allButtons, lineutil.NewFlexButton(
 			lineutil.NewURIAction("💬 Dcard", dcardURL),
 		).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
 
-		// 選課大全 button (外部連結使用藍色)
+		// Button 8: 選課大全
 		courseSelectionQuery := fmt.Sprintf("%s %s", teacherName, course.Title)
 		courseSelectionURL := "https://no21.ntpu.org/?s=" + url.QueryEscape(courseSelectionQuery)
-		row4 = append(row4, lineutil.NewFlexButton(
+		allButtons = append(allButtons, lineutil.NewFlexButton(
 			lineutil.NewURIAction("📖 選課大全", courseSelectionURL),
 		).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
-
-		if len(row4) > 0 {
-			footerRows = append(footerRows, row4)
-		}
 	}
 
+	// Use LayoutButtonsWithPattern to arrange buttons into rows
+	footerRows := lineutil.LayoutButtonsWithPattern(allButtons)
 	footer := lineutil.NewButtonFooter(footerRows...)
 
 	bubble := lineutil.NewFlexBubble(

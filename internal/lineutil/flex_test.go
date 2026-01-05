@@ -710,6 +710,136 @@ func TestButtonRowFlexDistribution(t *testing.T) {
 	}
 }
 
+// TestLayoutButtonsWithPattern tests the automatic button layout pattern
+func TestLayoutButtonsWithPattern(t *testing.T) {
+	t.Parallel()
+	action := NewMessageAction("Test", "test")
+
+	// Helper to create N buttons
+	createButtons := func(n int) []*FlexButton {
+		buttons := make([]*FlexButton, n)
+		for i := range buttons {
+			buttons[i] = NewFlexButton(action).WithStyle("primary")
+		}
+		return buttons
+	}
+
+	tests := []struct {
+		name         string
+		buttonCount  int
+		expectedRows []int // Expected button count per row
+	}{
+		{
+			name:         "0 buttons → empty",
+			buttonCount:  0,
+			expectedRows: nil,
+		},
+		{
+			name:         "1 button → [1]",
+			buttonCount:  1,
+			expectedRows: []int{1},
+		},
+		{
+			name:         "2 buttons → [2]",
+			buttonCount:  2,
+			expectedRows: []int{2},
+		},
+		{
+			name:         "3 buttons → [1, 2]",
+			buttonCount:  3,
+			expectedRows: []int{1, 2},
+		},
+		{
+			name:         "4 buttons → [2, 2]",
+			buttonCount:  4,
+			expectedRows: []int{2, 2},
+		},
+		{
+			name:         "5 buttons → [1, 2, 2]",
+			buttonCount:  5,
+			expectedRows: []int{1, 2, 2},
+		},
+		{
+			name:         "6 buttons → [2, 2, 2]",
+			buttonCount:  6,
+			expectedRows: []int{2, 2, 2},
+		},
+		{
+			name:         "7 buttons → [1, 2, 2, 2]",
+			buttonCount:  7,
+			expectedRows: []int{1, 2, 2, 2},
+		},
+		{
+			name:         "8 buttons → [2, 2, 2, 2]",
+			buttonCount:  8,
+			expectedRows: []int{2, 2, 2, 2},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			buttons := createButtons(tt.buttonCount)
+			rows := LayoutButtonsWithPattern(buttons)
+
+			// Check row count
+			if tt.expectedRows == nil {
+				if rows != nil {
+					t.Errorf("Expected nil rows, got %d rows", len(rows))
+				}
+				return
+			}
+
+			if len(rows) != len(tt.expectedRows) {
+				t.Errorf("Expected %d rows, got %d", len(tt.expectedRows), len(rows))
+				return
+			}
+
+			// Check button count per row
+			for i, expectedCount := range tt.expectedRows {
+				if len(rows[i]) != expectedCount {
+					t.Errorf("Row %d: expected %d buttons, got %d", i, expectedCount, len(rows[i]))
+				}
+			}
+		})
+	}
+}
+
+// TestLayoutButtonsWithPatternNilFiltering tests that nil buttons are filtered
+func TestLayoutButtonsWithPatternNilFiltering(t *testing.T) {
+	t.Parallel()
+	action := NewMessageAction("Test", "test")
+	btn1 := NewFlexButton(action).WithStyle("primary")
+	btn2 := NewFlexButton(action).WithStyle("secondary")
+	btn3 := NewFlexButton(action).WithStyle("primary")
+
+	// 5 items with 2 nils = 3 valid buttons → [1, 2]
+	buttons := []*FlexButton{btn1, nil, btn2, nil, btn3}
+	rows := LayoutButtonsWithPattern(buttons)
+
+	if len(rows) != 2 {
+		t.Errorf("Expected 2 rows, got %d", len(rows))
+		return
+	}
+	if len(rows[0]) != 1 {
+		t.Errorf("Row 0: expected 1 button, got %d", len(rows[0]))
+	}
+	if len(rows[1]) != 2 {
+		t.Errorf("Row 1: expected 2 buttons, got %d", len(rows[1]))
+	}
+}
+
+// TestLayoutButtonsWithPatternAllNil tests that all nil buttons return nil
+func TestLayoutButtonsWithPatternAllNil(t *testing.T) {
+	t.Parallel()
+	buttons := []*FlexButton{nil, nil, nil}
+	rows := LayoutButtonsWithPattern(buttons)
+
+	if rows != nil {
+		t.Errorf("Expected nil rows for all nil input, got %d rows", len(rows))
+	}
+}
+
 // TestNewFlexCarousel tests carousel creation
 func TestNewFlexCarousel(t *testing.T) {
 	t.Parallel()
