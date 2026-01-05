@@ -529,6 +529,64 @@ func NewButtonFooter(rows ...[]*FlexButton) *FlexBox {
 	return NewFlexBox("vertical", contents...).WithSpacing("sm")
 }
 
+// LayoutButtonsWithPattern arranges buttons into rows following an optimal pattern:
+//   - Odd button count: 1, 2, 2, 2... (first row solo, remaining buttons paired)
+//   - Even button count: 2, 2, 2... (all rows paired)
+//
+// This creates a visually balanced footer with consistent button sizing.
+// Nil buttons are automatically filtered out before layout calculation.
+//
+// Examples:
+//
+//	LayoutButtonsWithPattern([a])           → [[a]]           (1 button: solo)
+//	LayoutButtonsWithPattern([a,b])         → [[a,b]]         (2 buttons: pair)
+//	LayoutButtonsWithPattern([a,b,c])       → [[a],[b,c]]     (3 buttons: 1+2)
+//	LayoutButtonsWithPattern([a,b,c,d])     → [[a,b],[c,d]]   (4 buttons: 2+2)
+//	LayoutButtonsWithPattern([a,b,c,d,e])   → [[a],[b,c],[d,e]] (5 buttons: 1+2+2)
+//
+// Parameters:
+//   - buttons: Flat slice of FlexButton pointers (nil values are filtered)
+//
+// Returns: Slice of button slices, each representing one row
+func LayoutButtonsWithPattern(buttons []*FlexButton) [][]*FlexButton {
+	// Filter nil buttons first
+	var validButtons []*FlexButton
+	for _, btn := range buttons {
+		if btn != nil {
+			validButtons = append(validButtons, btn)
+		}
+	}
+
+	if len(validButtons) == 0 {
+		return nil
+	}
+
+	var rows [][]*FlexButton
+	isOdd := len(validButtons)%2 == 1
+
+	// Process buttons based on odd/even count
+	i := 0
+	if isOdd {
+		// Odd count: first row has 1 button, then pairs of 2
+		rows = append(rows, []*FlexButton{validButtons[0]})
+		i = 1
+	}
+
+	// Remaining buttons in pairs of 2
+	for i < len(validButtons) {
+		if i+1 < len(validButtons) {
+			rows = append(rows, []*FlexButton{validButtons[i], validButtons[i+1]})
+			i += 2
+		} else {
+			// Should not happen if logic is correct, but handle gracefully
+			rows = append(rows, []*FlexButton{validButtons[i]})
+			i++
+		}
+	}
+
+	return rows
+}
+
 // ================================================
 // Body Content Builders (for consistent info display)
 // ================================================
