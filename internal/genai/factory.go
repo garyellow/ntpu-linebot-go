@@ -1,4 +1,4 @@
-// Package genai provides integration with LLM APIs (Gemini and Groq).
+// Package genai provides integration with LLM APIs (Gemini, Groq, and Cerebras).
 // This file contains factory functions for creating LLM providers.
 package genai
 
@@ -10,55 +10,45 @@ import (
 // CreateIntentParser creates an IntentParser based on the provided configuration.
 // It returns a FallbackIntentParser that handles model-to-model and provider-to-provider fallback.
 //
-// Provider selection logic:
-//  1. Primary provider's models are tried first in the specified order.
-//  2. If all primary models fail, fallback provider's models are tried.
-//  3. Each model is tried with retry logic (configured in RetryConfig).
-//  4. Returns nil if no providers/models are configured.
+// Provider chain logic (3-layer fallback):
+//  1. For each provider in cfg.Providers order:
+//     - Each model in provider's IntentModels is tried
+//     - Each model has retry logic (configured in RetryConfig)
+//  2. Providers without API keys are skipped
+//  3. Returns nil if no providers/models are configured.
 func CreateIntentParser(ctx context.Context, cfg LLMConfig) (IntentParser, error) {
 	parsers := []IntentParser{}
 
-	// Helper to add parsers for a provider
-	addParsers := func(provider Provider) {
-		switch provider {
-		case ProviderGemini:
-			if cfg.Gemini.APIKey != "" {
-				for _, m := range cfg.Gemini.IntentModels {
-					p, err := newGeminiIntentParser(ctx, cfg.Gemini.APIKey, m)
-					if err == nil {
-						parsers = append(parsers, p)
-					} else {
-						slog.WarnContext(ctx, "failed to create gemini intent parser", "model", m, "error", err)
-					}
-				}
-			}
-		case ProviderGroq:
-			if cfg.Groq.APIKey != "" {
-				for _, m := range cfg.Groq.IntentModels {
-					p, err := newGroqIntentParser(ctx, cfg.Groq.APIKey, m)
-					if err == nil {
-						parsers = append(parsers, p)
-					} else {
-						slog.WarnContext(ctx, "failed to create groq intent parser", "model", m, "error", err)
-					}
-				}
-			}
+	// Iterate through providers in configured order
+	for _, provider := range cfg.Providers {
+		if !cfg.HasProvider(provider) {
+			continue
 		}
-	}
 
-	// Add primary followed by fallback
-	addParsers(cfg.PrimaryProvider)
-	if cfg.FallbackProvider != cfg.PrimaryProvider {
-		addParsers(cfg.FallbackProvider)
-	}
-
-	// If list is empty, try to find ANY configured provider
-	if len(parsers) == 0 {
-		if cfg.Gemini.APIKey != "" && len(cfg.Gemini.IntentModels) > 0 {
-			addParsers(ProviderGemini)
+		providerCfg := cfg.GetProviderConfig(provider)
+		if providerCfg == nil {
+			continue
 		}
-		if len(parsers) == 0 && cfg.Groq.APIKey != "" && len(cfg.Groq.IntentModels) > 0 {
-			addParsers(ProviderGroq)
+
+		// Get models for this provider (use defaults if not configured)
+		models := providerCfg.IntentModels
+		if len(models) == 0 {
+			models = getDefaultIntentModels(provider)
+		}
+
+		// Create parsers for each model
+		for _, model := range models {
+			p, err := createIntentParserForProvider(ctx, provider, providerCfg.APIKey, model)
+			if err != nil {
+				slog.WarnContext(ctx, "failed to create intent parser",
+					"provider", provider,
+					"model", model,
+					"error", err)
+				continue
+			}
+			if p != nil {
+				parsers = append(parsers, p)
+			}
 		}
 	}
 
@@ -76,52 +66,54 @@ func CreateIntentParser(ctx context.Context, cfg LLMConfig) (IntentParser, error
 	return NewFallbackIntentParser(cfg.RetryConfig, parsers...), nil
 }
 
+// createIntentParserForProvider creates an IntentParser for a specific provider.
+func createIntentParserForProvider(ctx context.Context, provider Provider, apiKey, model string) (IntentParser, error) {
+	switch provider {
+	case ProviderGemini:
+		return newGeminiIntentParser(ctx, apiKey, model)
+	case ProviderGroq, ProviderCerebras:
+		// OpenAI-compatible providers
+		return newOpenAIIntentParser(ctx, provider, apiKey, model)
+	default:
+		return nil, nil
+	}
+}
+
 // CreateQueryExpander creates a QueryExpander based on the provided configuration.
 // Similar to CreateIntentParser, it handles model-to-model and provider-to-provider fallback.
 func CreateQueryExpander(ctx context.Context, cfg LLMConfig) (QueryExpander, error) {
 	expanders := []QueryExpander{}
 
-	// Helper to add expanders for a provider
-	addExpanders := func(provider Provider) {
-		switch provider {
-		case ProviderGemini:
-			if cfg.Gemini.APIKey != "" {
-				for _, m := range cfg.Gemini.ExpanderModels {
-					e, err := newGeminiQueryExpander(ctx, cfg.Gemini.APIKey, m)
-					if err == nil {
-						expanders = append(expanders, e)
-					} else {
-						slog.WarnContext(ctx, "failed to create gemini query expander", "model", m, "error", err)
-					}
-				}
-			}
-		case ProviderGroq:
-			if cfg.Groq.APIKey != "" {
-				for _, m := range cfg.Groq.ExpanderModels {
-					e, err := newGroqQueryExpander(ctx, cfg.Groq.APIKey, m)
-					if err == nil {
-						expanders = append(expanders, e)
-					} else {
-						slog.WarnContext(ctx, "failed to create groq query expander", "model", m, "error", err)
-					}
-				}
-			}
+	// Iterate through providers in configured order
+	for _, provider := range cfg.Providers {
+		if !cfg.HasProvider(provider) {
+			continue
 		}
-	}
 
-	// Add primary followed by fallback
-	addExpanders(cfg.PrimaryProvider)
-	if cfg.FallbackProvider != cfg.PrimaryProvider {
-		addExpanders(cfg.FallbackProvider)
-	}
-
-	// If list is empty, try to find ANY configured provider
-	if len(expanders) == 0 {
-		if cfg.Gemini.APIKey != "" && len(cfg.Gemini.ExpanderModels) > 0 {
-			addExpanders(ProviderGemini)
+		providerCfg := cfg.GetProviderConfig(provider)
+		if providerCfg == nil {
+			continue
 		}
-		if len(expanders) == 0 && cfg.Groq.APIKey != "" && len(cfg.Groq.ExpanderModels) > 0 {
-			addExpanders(ProviderGroq)
+
+		// Get models for this provider (use defaults if not configured)
+		models := providerCfg.ExpanderModels
+		if len(models) == 0 {
+			models = getDefaultExpanderModels(provider)
+		}
+
+		// Create expanders for each model
+		for _, model := range models {
+			e, err := createExpanderForProvider(ctx, provider, providerCfg.APIKey, model)
+			if err != nil {
+				slog.WarnContext(ctx, "failed to create query expander",
+					"provider", provider,
+					"model", model,
+					"error", err)
+				continue
+			}
+			if e != nil {
+				expanders = append(expanders, e)
+			}
 		}
 	}
 
@@ -138,12 +130,52 @@ func CreateQueryExpander(ctx context.Context, cfg LLMConfig) (QueryExpander, err
 	return NewFallbackQueryExpander(cfg.RetryConfig, expanders...), nil
 }
 
+// createExpanderForProvider creates a QueryExpander for a specific provider.
+func createExpanderForProvider(ctx context.Context, provider Provider, apiKey, model string) (QueryExpander, error) {
+	switch provider {
+	case ProviderGemini:
+		return newGeminiQueryExpander(ctx, apiKey, model)
+	case ProviderGroq, ProviderCerebras:
+		// OpenAI-compatible providers
+		return newOpenAIQueryExpander(ctx, provider, apiKey, model)
+	default:
+		return nil, nil
+	}
+}
+
+// getDefaultIntentModels returns the default intent models for a provider.
+func getDefaultIntentModels(provider Provider) []string {
+	switch provider {
+	case ProviderGemini:
+		return DefaultGeminiIntentModels
+	case ProviderGroq:
+		return DefaultGroqIntentModels
+	case ProviderCerebras:
+		return DefaultCerebrasIntentModels
+	default:
+		return nil
+	}
+}
+
+// getDefaultExpanderModels returns the default expander models for a provider.
+func getDefaultExpanderModels(provider Provider) []string {
+	switch provider {
+	case ProviderGemini:
+		return DefaultGeminiExpanderModels
+	case ProviderGroq:
+		return DefaultGroqExpanderModels
+	case ProviderCerebras:
+		return DefaultCerebrasExpanderModels
+	default:
+		return nil
+	}
+}
+
 // DefaultLLMConfig returns a default LLM configuration.
 // API keys must be provided separately.
 func DefaultLLMConfig() LLMConfig {
 	return LLMConfig{
-		PrimaryProvider:  ProviderGemini,
-		FallbackProvider: ProviderGroq,
+		Providers: DefaultProviders,
 		Gemini: ProviderConfig{
 			IntentModels:   DefaultGeminiIntentModels,
 			ExpanderModels: DefaultGeminiExpanderModels,
@@ -151,6 +183,10 @@ func DefaultLLMConfig() LLMConfig {
 		Groq: ProviderConfig{
 			IntentModels:   DefaultGroqIntentModels,
 			ExpanderModels: DefaultGroqExpanderModels,
+		},
+		Cerebras: ProviderConfig{
+			IntentModels:   DefaultCerebrasIntentModels,
+			ExpanderModels: DefaultCerebrasExpanderModels,
 		},
 		RetryConfig: DefaultRetryConfig(),
 	}

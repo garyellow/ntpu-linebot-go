@@ -19,16 +19,18 @@ services:
       # GenAI Configuration (Optional)
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - CEREBRAS_API_KEY=${CEREBRAS_API_KEY:-}
 
       # LLM Provider Selection (Optional)
-      - LLM_PRIMARY_PROVIDER=${LLM_PRIMARY_PROVIDER:-gemini}
-      - LLM_FALLBACK_PROVIDER=${LLM_FALLBACK_PROVIDER:-groq}
+      - LLM_PROVIDERS=${LLM_PROVIDERS:-gemini,groq,cerebras}
 
       # LLM Model Configuration (Optional - comma-separated fallback chain)
       - GEMINI_INTENT_MODELS=${GEMINI_INTENT_MODELS:-}
       - GEMINI_EXPANDER_MODELS=${GEMINI_EXPANDER_MODELS:-}
       - GROQ_INTENT_MODELS=${GROQ_INTENT_MODELS:-}
       - GROQ_EXPANDER_MODELS=${GROQ_EXPANDER_MODELS:-}
+      - CEREBRAS_INTENT_MODELS=${CEREBRAS_INTENT_MODELS:-}
+      - CEREBRAS_EXPANDER_MODELS=${CEREBRAS_EXPANDER_MODELS:-}
 
       # Server Configuration
       - PORT=${PORT:-10000}

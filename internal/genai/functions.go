@@ -1,7 +1,7 @@
-// Package genai provides integration with LLM APIs (Gemini and Groq).
+// Package genai provides integration with LLM APIs (Gemini, Groq, and Cerebras).
 // This file contains function declarations for the NLU intent parser.
 //
-// Design Principles (Gemini/Groq - Best Practices 2025):
+// Design Principles (Gemini/Groq/Cerebras):
 // - functions.go: WHAT the function does (descriptions + parameter formats)
 // - prompts.go: WHEN/HOW to use (decision trees, trigger conditions)
 //

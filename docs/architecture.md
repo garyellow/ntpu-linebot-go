@@ -387,7 +387,7 @@ registry.Register(programHandler) // 學程查詢
 - 分數分佈遵循 Normal-Exponential 混合模型（學術標準）
 
 **啟用條件**:
-- 設定 `GEMINI_API_KEY` 或 `GROQ_API_KEY`（自動啟用 syllabus 模組）
+- 設定 `GEMINI_API_KEY` 或 `GROQ_API_KEY` 或 `CEREBRAS_API_KEY`（自動啟用 syllabus 模組）
 - Query Expansion 需要 LLM API Key
 - 即使沒有 API Key，基本 BM25 搜尋仍可使用（但需手動載入大綱資料）
 

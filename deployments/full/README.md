@@ -36,6 +36,8 @@ docker compose up -d
 |------|------|
 | `GEMINI_API_KEY` | Gemini API Key（啟用 NLU 和智慧搜尋）|
 | `GROQ_API_KEY` | Groq API Key（備援 LLM）|
+| `CEREBRAS_API_KEY` | Cerebras API Key（備援 LLM）|
+| `LLM_PROVIDERS` | LLM 提供者鏈（預設：gemini,groq,cerebras）|
 
 ### 監控設定
 

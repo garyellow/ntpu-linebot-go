@@ -23,19 +23,21 @@ type Config struct {
 	LineChannelSecret string
 
 	// LLM Configuration
-	GeminiAPIKey string // Gemini API key for NLU and Query Expansion features
-	GroqAPIKey   string // Groq API key (alternative LLM provider)
+	GeminiAPIKey   string // Gemini API key for NLU and Query Expansion features
+	GroqAPIKey     string // Groq API key (OpenAI-compatible provider)
+	CerebrasAPIKey string // Cerebras API key (OpenAI-compatible provider)
 
 	// LLM Model Configuration (optional, defaults apply if empty)
 	// Each slice contains models in fallback order: first is primary, rest are fallbacks
-	GeminiIntentModels   []string // Gemini models for intent parsing (comma-separated fallback chain)
-	GeminiExpanderModels []string // Gemini models for query expansion (comma-separated fallback chain)
-	GroqIntentModels     []string // Groq models for intent parsing (comma-separated fallback chain)
-	GroqExpanderModels   []string // Groq models for query expansion (comma-separated fallback chain)
+	GeminiIntentModels     []string // Gemini models for intent parsing (comma-separated fallback chain)
+	GeminiExpanderModels   []string // Gemini models for query expansion (comma-separated fallback chain)
+	GroqIntentModels       []string // Groq models for intent parsing (comma-separated fallback chain)
+	GroqExpanderModels     []string // Groq models for query expansion (comma-separated fallback chain)
+	CerebrasIntentModels   []string // Cerebras models for intent parsing (comma-separated fallback chain)
+	CerebrasExpanderModels []string // Cerebras models for query expansion (comma-separated fallback chain)
 
 	// LLM Provider Configuration
-	LLMPrimaryProvider  string // Primary LLM provider: "gemini" or "groq" (default: "gemini")
-	LLMFallbackProvider string // Fallback LLM provider: "gemini" or "groq" (default: "groq")
+	LLMProviders []string // Ordered list of LLM providers for fallback (default: "gemini,groq,cerebras")
 
 	// Metrics Authentication
 	MetricsUsername string // Username for /metrics endpoint Basic Auth (default: "prometheus")
@@ -103,19 +105,21 @@ func Load() (*Config, error) {
 		LineChannelSecret: getEnv("LINE_CHANNEL_SECRET", ""),
 
 		// LLM Configuration
-		GeminiAPIKey: getEnv("GEMINI_API_KEY", ""),
-		GroqAPIKey:   getEnv("GROQ_API_KEY", ""),
+		GeminiAPIKey:   getEnv("GEMINI_API_KEY", ""),
+		GroqAPIKey:     getEnv("GROQ_API_KEY", ""),
+		CerebrasAPIKey: getEnv("CEREBRAS_API_KEY", ""),
 
 		// LLM Model Configuration (empty = use defaults from genai package)
 		// Comma-separated list: first is primary, rest are fallbacks
-		GeminiIntentModels:   getModelsEnv("GEMINI_INTENT_MODELS"),
-		GeminiExpanderModels: getModelsEnv("GEMINI_EXPANDER_MODELS"),
-		GroqIntentModels:     getModelsEnv("GROQ_INTENT_MODELS"),
-		GroqExpanderModels:   getModelsEnv("GROQ_EXPANDER_MODELS"),
+		GeminiIntentModels:     getModelsEnv("GEMINI_INTENT_MODELS"),
+		GeminiExpanderModels:   getModelsEnv("GEMINI_EXPANDER_MODELS"),
+		GroqIntentModels:       getModelsEnv("GROQ_INTENT_MODELS"),
+		GroqExpanderModels:     getModelsEnv("GROQ_EXPANDER_MODELS"),
+		CerebrasIntentModels:   getModelsEnv("CEREBRAS_INTENT_MODELS"),
+		CerebrasExpanderModels: getModelsEnv("CEREBRAS_EXPANDER_MODELS"),
 
 		// LLM Provider Configuration
-		LLMPrimaryProvider:  getEnv("LLM_PRIMARY_PROVIDER", "gemini"),
-		LLMFallbackProvider: getEnv("LLM_FALLBACK_PROVIDER", "groq"),
+		LLMProviders: getProvidersEnv("LLM_PROVIDERS", []string{"gemini", "groq", "cerebras"}),
 
 		// Metrics Authentication
 		MetricsUsername: getEnv("METRICS_USERNAME", "prometheus"),
@@ -273,6 +277,27 @@ func getModelsEnv(key string) []string {
 	return result
 }
 
+// getProvidersEnv parses comma-separated provider list from environment variable.
+// Returns defaultValue if the environment variable is not set or empty.
+// Leading/trailing whitespace is trimmed from each provider name.
+func getProvidersEnv(key string, defaultValue []string) []string {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	providers := strings.Split(value, ",")
+	result := make([]string, 0, len(providers))
+	for _, p := range providers {
+		if trimmed := strings.TrimSpace(p); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	if len(result) == 0 {
+		return defaultValue
+	}
+	return result
+}
+
 // getDefaultDataDir returns platform-specific default data directory
 func getDefaultDataDir() string {
 	if runtime.GOOS == "windows" {
@@ -288,5 +313,5 @@ func (c *Config) SQLitePath() string {
 
 // HasLLMProvider returns true if at least one LLM provider is configured.
 func (c *Config) HasLLMProvider() bool {
-	return c.GeminiAPIKey != "" || c.GroqAPIKey != ""
+	return c.GeminiAPIKey != "" || c.GroqAPIKey != "" || c.CerebrasAPIKey != ""
 }

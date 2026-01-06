@@ -1,12 +1,12 @@
 # genai
 
-封裝 LLM API 功能，提供 NLU 意圖解析和查詢擴展，支援多提供者 (Gemini + Groq) 自動故障轉移。
+封裝 LLM API 功能，提供 NLU 意圖解析和查詢擴展，支援多提供者 (Gemini + Groq + Cerebras) 自動故障轉移。
 
 ## 功能
 
 - **IntentParser**: NLU 意圖解析器（Function Calling 實作）
 - **QueryExpander**: 查詢擴展器（同義詞、縮寫、翻譯）
-- **Multi-Provider Fallback**: 自動故障轉移和重試機制
+- **Multi-Provider Fallback**: 自動故障轉移和重試機制（支援 3 個提供者）
 
 ## 支援的 LLM 提供者
 
@@ -16,6 +16,8 @@
 | **Gemini** | Expander | `gemini-2.5-flash, gemini-2.5-flash-lite` | 高品質、多模態 |
 | **Groq** | Intent | `llama-4-maverick-17b-128e-instruct, llama-3.3-70b-versatile` | 極速推論 (~900 TPS) |
 | **Groq** | Expander | `llama-4-scout-17b-16e-instruct, llama-3.1-8b-instant` | 極速推論 (~750 TPS) |
+| **Cerebras** | Intent | `llama-3.3-70b, llama-3.1-8b` | 超高速推論 |
+| **Cerebras** | Expander | `llama-3.3-70b, llama-3.1-8b` | 超高速推論 |
 
 ## 檔案結構
 
@@ -25,9 +27,9 @@ internal/genai/
 ├── errors.go             # 錯誤分類和重試判斷
 ├── retry.go              # AWS Full Jitter 重試邏輯
 ├── gemini_intent.go      # Gemini IntentParser 實作
-├── groq_intent.go        # Groq IntentParser 實作
 ├── gemini_expander.go    # Gemini QueryExpander 實作
-├── groq_expander.go      # Groq QueryExpander 實作
+├── openai_intent.go      # OpenAI-compatible IntentParser 實作 (Groq/Cerebras)
+├── openai_expander.go    # OpenAI-compatible QueryExpander 實作 (Groq/Cerebras)
 ├── provider_fallback.go  # 跨提供者故障轉移
 ├── factory.go            # 工廠函式
 ├── functions.go          # Function Calling 函式定義
@@ -58,7 +60,7 @@ internal/genai/
 
 ## NLU Intent Parser
 
-使用 Gemini Function Calling (ANY mode) 和 Groq (required mode) 解析使用者自然語言意圖。
+使用 Gemini Function Calling (ANY mode) 和 OpenAI-compatible providers (required mode) 解析使用者自然語言意圖。
 強制 function calling 確保穩定性，透過 `direct_reply` function 處理閒聊、澄清等非查詢情境。
 
 ## Intent Parser (意圖解析)
@@ -189,6 +191,7 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 |---------|------|------|
 | `GEMINI_API_KEY` | 任一 | Google AI Studio API Key |
 | `GROQ_API_KEY` | 任一 | Groq API Key |
+| `CEREBRAS_API_KEY` | 任一 | Cerebras API Key |
 
 > **注意**: 至少需要設定其中一個 API Key 才能啟用 LLM 功能
 
@@ -196,8 +199,9 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 
 | 變數名稱 | 預設值 | 說明 |
 |---------|--------|------|
-| `LLM_PRIMARY_PROVIDER` | gemini | 主要提供者 (gemini/groq) |
-| `LLM_FALLBACK_PROVIDER` | groq | 備援提供者 (gemini/groq) |
+| `LLM_PROVIDERS` | gemini,groq,cerebras | 提供者鏈（依序故障轉移）|
+
+> **注意**: 只有配置了 API Key 的提供者才會被使用
 
 #### Model Configuration
 
@@ -209,6 +213,8 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 | `GEMINI_EXPANDER_MODELS` | gemini-2.5-flash,gemini-2.5-flash-lite | Gemini 查詢擴展模型鏈 |
 | `GROQ_INTENT_MODELS` | llama-4-maverick...,llama-3.3-70b-versatile | Groq 意圖解析模型鏈 |
 | `GROQ_EXPANDER_MODELS` | llama-4-scout...,llama-3.1-8b-instant | Groq 查詢擴展模型鏈 |
+| `CEREBRAS_INTENT_MODELS` | llama-3.3-70b,llama-3.1-8b | Cerebras 意圖解析模型鏈 |
+| `CEREBRAS_EXPANDER_MODELS` | llama-3.3-70b,llama-3.1-8b | Cerebras 查詢擴展模型鏈 |
 
 > **💡 提示**：可添加更多 fallback 模型，例如：
 > `GEMINI_INTENT_MODELS=gemini-2.5-flash,gemini-2.5-flash-lite,gemini-2.0-flash`
@@ -225,6 +231,7 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 
 - **Gemini**: [Google AI Studio](https://aistudio.google.com/apikey)
 - **Groq**: [Groq Console](https://console.groq.com/keys)
+- **Cerebras**: [Cerebras Platform](https://cloud.cerebras.ai/)
 
 ## Metrics
 

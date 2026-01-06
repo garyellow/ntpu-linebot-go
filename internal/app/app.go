@@ -218,8 +218,10 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 func buildLLMConfig(cfg *config.Config) genai.LLMConfig {
 	llmCfg := genai.DefaultLLMConfig()
 
+	// Set API keys
 	llmCfg.Gemini.APIKey = cfg.GeminiAPIKey
 	llmCfg.Groq.APIKey = cfg.GroqAPIKey
+	llmCfg.Cerebras.APIKey = cfg.CerebrasAPIKey
 
 	// Override model chains if provided in config (supports comma-separated lists)
 	if len(cfg.GeminiIntentModels) > 0 {
@@ -234,17 +236,29 @@ func buildLLMConfig(cfg *config.Config) genai.LLMConfig {
 	if len(cfg.GroqExpanderModels) > 0 {
 		llmCfg.Groq.ExpanderModels = cfg.GroqExpanderModels
 	}
-
-	if cfg.LLMPrimaryProvider == "groq" {
-		llmCfg.PrimaryProvider = genai.ProviderGroq
-	} else {
-		llmCfg.PrimaryProvider = genai.ProviderGemini
+	if len(cfg.CerebrasIntentModels) > 0 {
+		llmCfg.Cerebras.IntentModels = cfg.CerebrasIntentModels
+	}
+	if len(cfg.CerebrasExpanderModels) > 0 {
+		llmCfg.Cerebras.ExpanderModels = cfg.CerebrasExpanderModels
 	}
 
-	if cfg.LLMFallbackProvider == "gemini" {
-		llmCfg.FallbackProvider = genai.ProviderGemini
-	} else {
-		llmCfg.FallbackProvider = genai.ProviderGroq
+	// Set provider order from config
+	if len(cfg.LLMProviders) > 0 {
+		providers := make([]genai.Provider, 0, len(cfg.LLMProviders))
+		for _, p := range cfg.LLMProviders {
+			switch p {
+			case "gemini":
+				providers = append(providers, genai.ProviderGemini)
+			case "groq":
+				providers = append(providers, genai.ProviderGroq)
+			case "cerebras":
+				providers = append(providers, genai.ProviderCerebras)
+			}
+		}
+		if len(providers) > 0 {
+			llmCfg.Providers = providers
+		}
 	}
 
 	return llmCfg
