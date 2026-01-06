@@ -225,13 +225,6 @@ func (idx *BM25Index) buildSemesterIndex(syllabi []*storage.Syllabus) (*semester
 	return semIdx, len(corpus), nil
 }
 
-// RebuildFromDB is deprecated and now alias to Initialize.
-// Kept for interface compatibility if needed, but signature changed.
-// TODO: Update callers to use Initialize(ctx, db) directly.
-func (idx *BM25Index) RebuildFromDB(ctx context.Context, db *storage.DB) error {
-	return idx.Initialize(ctx, db)
-}
-
 // getNewestTwoSemesters returns the newest 2 semesters from the index.
 func (idx *BM25Index) getNewestTwoSemesters() []SemesterKey {
 	if len(idx.allSemesters) == 0 {

@@ -2,6 +2,8 @@ package bot
 
 import (
 	"testing"
+
+	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
 )
 
 func TestBuildKeywordRegex(t *testing.T) {
@@ -175,6 +177,7 @@ func TestExtractSearchTerm(t *testing.T) {
 
 func TestContainsAllRunes(t *testing.T) {
 	t.Parallel()
+	// This test uses stringutil.ContainsAllRunes directly
 	tests := []struct {
 		name     string
 		s        string
@@ -202,7 +205,7 @@ func TestContainsAllRunes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := ContainsAllRunes(tt.s, tt.chars)
+			got := stringutil.ContainsAllRunes(tt.s, tt.chars)
 			if got != tt.expected {
 				t.Errorf("ContainsAllRunes(%q, %q) = %v, want %v",
 					tt.s, tt.chars, got, tt.expected)
