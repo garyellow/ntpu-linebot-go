@@ -22,6 +22,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 	"github.com/gin-gonic/gin"
+	"github.com/line/line-bot-sdk-go/v8/linebot/webhook"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -379,6 +380,232 @@ func TestGetChatID_SourceTypes(t *testing.T) {
 				if tt.expectID {
 					t.Error("Should not expect ID for unknown source types")
 				}
+			}
+		})
+	}
+}
+
+// ==================== Loading Animation Tests ====================
+
+// TestIsBotMentioned tests the isBotMentioned helper function
+func TestIsBotMentioned(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		textMsg  webhook.TextMessageContent
+		expected bool
+	}{
+		{
+			name: "bot mentioned with IsSelf true",
+			textMsg: webhook.TextMessageContent{
+				Text: "@Bot 查詢課程",
+				Mention: &webhook.Mention{
+					Mentionees: []webhook.MentioneeInterface{
+						webhook.UserMentionee{
+							Index:  0,
+							Length: 4,
+							IsSelf: true,
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "other user mentioned, not bot",
+			textMsg: webhook.TextMessageContent{
+				Text: "@Someone 查詢課程",
+				Mention: &webhook.Mention{
+					Mentionees: []webhook.MentioneeInterface{
+						webhook.UserMentionee{
+							Index:  0,
+							Length: 8,
+							IsSelf: false,
+						},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "no mentions",
+			textMsg: webhook.TextMessageContent{
+				Text:    "查詢課程",
+				Mention: nil,
+			},
+			expected: false,
+		},
+		{
+			name: "empty mentionees",
+			textMsg: webhook.TextMessageContent{
+				Text: "查詢課程",
+				Mention: &webhook.Mention{
+					Mentionees: []webhook.MentioneeInterface{},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "multiple mentions, one is bot",
+			textMsg: webhook.TextMessageContent{
+				Text: "@Someone @Bot 查詢課程",
+				Mention: &webhook.Mention{
+					Mentionees: []webhook.MentioneeInterface{
+						webhook.UserMentionee{
+							Index:  0,
+							Length: 8,
+							IsSelf: false,
+						},
+						webhook.UserMentionee{
+							Index:  9,
+							Length: 4,
+							IsSelf: true,
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := isBotMentioned(tt.textMsg)
+			if result != tt.expected {
+				t.Errorf("isBotMentioned() = %v, expected %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestShouldShowLoadingForMessage tests loading animation logic for message events
+func TestShouldShowLoadingForMessage(t *testing.T) {
+	t.Parallel()
+	handler := setupTestHandler(t)
+
+	tests := []struct {
+		name     string
+		event    webhook.MessageEvent
+		expected bool
+	}{
+		{
+			name: "personal chat text message",
+			event: webhook.MessageEvent{
+				Source: webhook.UserSource{UserId: "U123"},
+				Message: webhook.TextMessageContent{
+					Text: "查詢課程",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "personal chat sticker",
+			event: webhook.MessageEvent{
+				Source:  webhook.UserSource{UserId: "U123"},
+				Message: webhook.StickerMessageContent{},
+			},
+			expected: true,
+		},
+		// NOTE: Group text with bot mention test is skipped because LINE SDK's
+		// TextMessageContent doesn't expose a settable Type field for testing.
+		// In production, GetType() returns "text" correctly from JSON unmarshaling.
+		// The isBotMentioned function is tested separately in TestIsBotMentioned.
+		{
+			name: "group text without mention",
+			event: webhook.MessageEvent{
+				Source: webhook.GroupSource{GroupId: "G123"},
+				Message: webhook.TextMessageContent{
+					Text:    "查詢課程",
+					Mention: nil,
+				},
+			},
+			// Returns false because GetType() returns "" for manually constructed TextMessageContent
+			// In production, this would also return false (no @mention = no response)
+			expected: false,
+		},
+		{
+			name: "group sticker (ignored)",
+			event: webhook.MessageEvent{
+				Source:  webhook.GroupSource{GroupId: "G123"},
+				Message: webhook.StickerMessageContent{},
+			},
+			expected: false,
+		},
+		// NOTE: Room text with bot mention test is skipped (same reason as group text above)
+		{
+			name: "room sticker (ignored)",
+			event: webhook.MessageEvent{
+				Source:  webhook.RoomSource{RoomId: "R123"},
+				Message: webhook.StickerMessageContent{},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := handler.shouldShowLoadingForMessage(tt.event)
+			if result != tt.expected {
+				t.Errorf("shouldShowLoadingForMessage() = %v, expected %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestShouldShowLoading tests the main shouldShowLoading function with different event types
+func TestShouldShowLoading(t *testing.T) {
+	t.Parallel()
+	handler := setupTestHandler(t)
+
+	tests := []struct {
+		name     string
+		event    webhook.EventInterface
+		expected bool
+	}{
+		{
+			name: "message event - personal chat",
+			event: webhook.MessageEvent{
+				Source: webhook.UserSource{UserId: "U123"},
+				Message: webhook.TextMessageContent{
+					Text: "查詢課程",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "message event - group without mention",
+			event: webhook.MessageEvent{
+				Source: webhook.GroupSource{GroupId: "G123"},
+				Message: webhook.TextMessageContent{
+					Text: "查詢課程",
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "postback event",
+			event: webhook.PostbackEvent{
+				Source: webhook.UserSource{UserId: "U123"},
+			},
+			expected: true,
+		},
+		{
+			name: "follow event",
+			event: webhook.FollowEvent{
+				Source: webhook.UserSource{UserId: "U123"},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := handler.shouldShowLoading(tt.event)
+			if result != tt.expected {
+				t.Errorf("shouldShowLoading() = %v, expected %v", result, tt.expected)
 			}
 		})
 	}
