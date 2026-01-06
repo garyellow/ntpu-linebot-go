@@ -227,13 +227,13 @@ func TestGetHelpMessage(t *testing.T) {
 	t.Parallel()
 	handler := setupTestHandler(t)
 
-	if handler.processor == nil {
-		t.Fatal("Expected processor to be initialized")
+	if handler == nil {
+		t.Fatal("Expected handler to be initialized")
+		return
 	}
 
-	// The processor has getHelpMessage, and we verify it's set up
-	if handler == nil {
-		t.Error("Expected handler to be initialized")
+	if handler.processor == nil {
+		t.Fatal("Expected processor to be initialized")
 	}
 }
 
@@ -282,6 +282,7 @@ func TestContextTimeout(t *testing.T) {
 	// Verify handler is properly initialized
 	if handler == nil {
 		t.Fatal("handler should not be nil")
+		return
 	}
 
 	// Verify processor is set

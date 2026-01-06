@@ -53,6 +53,7 @@ func TestNew(t *testing.T) {
 			log := New(tt.level)
 			if log == nil {
 				t.Fatal("New() returned nil")
+				return
 			}
 
 			if !log.Enabled(context.Background(), tt.checkLevel) {

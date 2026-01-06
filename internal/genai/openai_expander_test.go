@@ -25,6 +25,7 @@ func TestNewOpenAIQueryExpander_ValidKey(t *testing.T) {
 	}
 	if expander == nil {
 		t.Fatal("Expected non-nil expander")
+		return
 	}
 	if expander.client == nil {
 		t.Error("Expected non-nil client")
@@ -45,6 +46,7 @@ func TestNewOpenAIQueryExpander_Cerebras(t *testing.T) {
 	}
 	if expander == nil {
 		t.Fatal("Expected non-nil expander")
+		return
 	}
 	if expander.provider != ProviderCerebras {
 		t.Errorf("Expected provider %v, got %v", ProviderCerebras, expander.provider)

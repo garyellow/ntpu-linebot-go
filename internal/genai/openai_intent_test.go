@@ -25,6 +25,7 @@ func TestNewOpenAIIntentParser_ValidKey(t *testing.T) {
 	}
 	if parser == nil {
 		t.Fatal("Expected non-nil parser")
+		return
 	}
 	if parser.client == nil {
 		t.Error("Expected non-nil client")
@@ -45,6 +46,7 @@ func TestNewOpenAIIntentParser_Cerebras(t *testing.T) {
 	}
 	if parser == nil {
 		t.Fatal("Expected non-nil parser")
+		return
 	}
 	if parser.provider != ProviderCerebras {
 		t.Errorf("Expected provider %v, got %v", ProviderCerebras, parser.provider)
