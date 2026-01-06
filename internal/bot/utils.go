@@ -4,8 +4,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-
-	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
 )
 
 // PostbackSplitChar is the delimiter used to separate fields in postback data.
@@ -61,13 +59,4 @@ func ExtractSearchTerm(text, keyword string) string {
 		// Keyword in middle: remove first occurrence
 		return strings.TrimSpace(strings.Replace(text, keyword, "", 1))
 	}
-}
-
-// ContainsAllRunes checks if s contains all runes from chars (case-insensitive for ASCII).
-// Counts character occurrences: "aa" requires at least 2 'a's in s.
-// Example: ContainsAllRunes("資訊工程學系", "資工系") returns true.
-//
-// Deprecated: Use stringutil.ContainsAllRunes instead.
-func ContainsAllRunes(s, chars string) bool {
-	return stringutil.ContainsAllRunes(s, chars)
 }

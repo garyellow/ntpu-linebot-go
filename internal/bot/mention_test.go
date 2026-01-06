@@ -106,9 +106,9 @@ func TestIsBotMentioned(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := isBotMentioned(tt.textMsg)
+			result := IsBotMentioned(tt.textMsg)
 			if result != tt.expected {
-				t.Errorf("isBotMentioned() = %v, expected %v", result, tt.expected)
+				t.Errorf("IsBotMentioned() = %v, expected %v", result, tt.expected)
 			}
 		})
 	}

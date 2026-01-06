@@ -304,7 +304,7 @@ func (p *Processor) handleUnmatchedMessage(ctx context.Context, source webhook.S
 
 	// For group chats, only respond if bot is mentioned
 	if isGroup {
-		if !isBotMentioned(textMsg) {
+		if !IsBotMentioned(textMsg) {
 			// No @Bot mention in group - silently ignore
 			return nil, nil
 		}

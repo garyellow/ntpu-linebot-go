@@ -663,7 +663,7 @@ processLoop:
 
 	// Rebuild BM25 index from database (includes all syllabi with full content)
 	if bm25Index != nil {
-		if err := bm25Index.RebuildFromDB(ctx, db); err != nil {
+		if err := bm25Index.Initialize(ctx, db); err != nil {
 			log.WithError(err).Warn("Failed to rebuild BM25 index")
 		}
 	}
