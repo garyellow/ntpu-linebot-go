@@ -187,6 +187,6 @@ results, _ = bm25Index.SearchCourses(ctx, expanded, 10)
 
 ## 依賴
 
-- `internal/genai`: Query Expander（可選，需 Gemini 或 Groq API Key）
+- `internal/genai`: Query Expander（可選，需 Gemini、Groq 或 Cerebras API Key）
 - `internal/storage`: Syllabus 資料模型
 - `internal/syllabus`: Syllabus 欄位處理與內容生成

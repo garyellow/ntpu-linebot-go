@@ -9,12 +9,14 @@ func TestDefaultLLMConfig(t *testing.T) {
 	t.Parallel()
 	cfg := DefaultLLMConfig()
 
-	// Check default provider order
-	if cfg.PrimaryProvider != ProviderGemini {
-		t.Errorf("PrimaryProvider = %v, want %v", cfg.PrimaryProvider, ProviderGemini)
+	// Check default provider order (slice-based)
+	if len(cfg.Providers) != len(DefaultProviders) {
+		t.Errorf("Providers length = %v, want %v", len(cfg.Providers), len(DefaultProviders))
 	}
-	if cfg.FallbackProvider != ProviderGroq {
-		t.Errorf("FallbackProvider = %v, want %v", cfg.FallbackProvider, ProviderGroq)
+	for i, p := range cfg.Providers {
+		if p != DefaultProviders[i] {
+			t.Errorf("Providers[%d] = %v, want %v", i, p, DefaultProviders[i])
+		}
 	}
 
 	// Check Gemini defaults (now using slice-based model chains)
@@ -36,6 +38,14 @@ func TestDefaultLLMConfig(t *testing.T) {
 	}
 	if len(cfg.Groq.ExpanderModels) != len(DefaultGroqExpanderModels) {
 		t.Errorf("Groq.ExpanderModels length = %v, want %v", len(cfg.Groq.ExpanderModels), len(DefaultGroqExpanderModels))
+	}
+
+	// Check Cerebras defaults
+	if len(cfg.Cerebras.IntentModels) != len(DefaultCerebrasIntentModels) {
+		t.Errorf("Cerebras.IntentModels length = %v, want %v", len(cfg.Cerebras.IntentModels), len(DefaultCerebrasIntentModels))
+	}
+	if len(cfg.Cerebras.ExpanderModels) != len(DefaultCerebrasExpanderModels) {
+		t.Errorf("Cerebras.ExpanderModels length = %v, want %v", len(cfg.Cerebras.ExpanderModels), len(DefaultCerebrasExpanderModels))
 	}
 
 	// Check retry config defaults
@@ -128,54 +138,61 @@ func TestLLMConfig_HasProvider(t *testing.T) {
 	}
 }
 
-func TestLLMConfig_GetFallbackProvider(t *testing.T) {
+func TestLLMConfig_ConfiguredProviders(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name     string
 		cfg      LLMConfig
-		expected Provider
+		expected []Provider
 	}{
 		{
-			name: "gemini primary with groq available",
+			name: "gemini and groq configured",
 			cfg: LLMConfig{
-				PrimaryProvider: ProviderGemini,
-				Gemini:          ProviderConfig{APIKey: "gemini-key"},
-				Groq:            ProviderConfig{APIKey: "groq-key"},
+				Providers: DefaultProviders,
+				Gemini:    ProviderConfig{APIKey: "gemini-key"},
+				Groq:      ProviderConfig{APIKey: "groq-key"},
 			},
-			expected: ProviderGroq,
+			expected: []Provider{ProviderGemini, ProviderGroq},
 		},
 		{
-			name: "groq primary with gemini available",
+			name: "groq only configured",
 			cfg: LLMConfig{
-				PrimaryProvider: ProviderGroq,
-				Gemini:          ProviderConfig{APIKey: "gemini-key"},
-				Groq:            ProviderConfig{APIKey: "groq-key"},
+				Providers: DefaultProviders,
+				Groq:      ProviderConfig{APIKey: "groq-key"},
 			},
-			expected: ProviderGemini,
+			expected: []Provider{ProviderGroq},
 		},
 		{
-			name: "gemini primary without groq",
+			name: "all three configured",
 			cfg: LLMConfig{
-				PrimaryProvider: ProviderGemini,
-				Gemini:          ProviderConfig{APIKey: "gemini-key"},
+				Providers: DefaultProviders,
+				Gemini:    ProviderConfig{APIKey: "gemini-key"},
+				Groq:      ProviderConfig{APIKey: "groq-key"},
+				Cerebras:  ProviderConfig{APIKey: "cerebras-key"},
 			},
-			expected: "",
+			expected: []Provider{ProviderGemini, ProviderGroq, ProviderCerebras},
 		},
 		{
-			name: "groq primary without gemini",
+			name: "none configured",
 			cfg: LLMConfig{
-				PrimaryProvider: ProviderGroq,
-				Groq:            ProviderConfig{APIKey: "groq-key"},
+				Providers: DefaultProviders,
 			},
-			expected: "",
+			expected: []Provider{},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := tt.cfg.GetFallbackProvider(); got != tt.expected {
-				t.Errorf("GetFallbackProvider() = %v, want %v", got, tt.expected)
+			got := tt.cfg.ConfiguredProviders()
+			if len(got) != len(tt.expected) {
+				t.Errorf("ConfiguredProviders() length = %v, want %v", len(got), len(tt.expected))
+				return
+			}
+			for i, p := range got {
+				if p != tt.expected[i] {
+					t.Errorf("ConfiguredProviders()[%d] = %v, want %v", i, p, tt.expected[i])
+				}
 			}
 		})
 	}

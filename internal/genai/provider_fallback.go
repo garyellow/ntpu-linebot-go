@@ -276,13 +276,6 @@ func (f *FallbackQueryExpander) expandWithRetry(ctx context.Context, expander Qu
 			return query, ctx.Err()
 		}
 
-		if !HasSufficientBudget(ctx, f.retryConfig.InitialDelay) {
-			if lastErr != nil {
-				return query, lastErr
-			}
-			return query, ctx.Err()
-		}
-
 		result, err := expander.Expand(ctx, query)
 		if err == nil {
 			return result, nil
@@ -300,6 +293,11 @@ func (f *FallbackQueryExpander) expandWithRetry(ctx context.Context, expander Qu
 		}
 
 		backoff := CalculateBackoff(attempt+1, f.retryConfig.InitialDelay, f.retryConfig.MaxDelay)
+
+		// Check if we have sufficient timeout budget for this backoff
+		if !HasSufficientBudget(ctx, backoff) {
+			return query, fmt.Errorf("timeout during retry: %w", lastErr)
+		}
 
 		slog.DebugContext(ctx, "retrying query expansion",
 			"provider", expander.Provider(),

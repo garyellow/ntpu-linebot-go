@@ -317,7 +317,7 @@ lineutil.TruncateRunes(value, 20)                                               
 
 **Load-time validation**: All env vars loaded at startup (`internal/config/`) with validation before server starts
 **Required**: `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN`
-**Optional**: `GEMINI_API_KEY` or `GROQ_API_KEY` (enables NLU + Query Expansion with multi-provider fallback)
+**Optional**: `GEMINI_API_KEY` or `GROQ_API_KEY` or `CEREBRAS_API_KEY` (enables NLU + Query Expansion with multi-provider fallback)
 **Platform paths**: `runtime.GOOS` determines default paths (Windows: `./data`, Linux/Mac: `/data`)
 
 ## Task Commands
@@ -342,8 +342,8 @@ task compose:up       # Start monitoring stack (Prometheus/Grafana, see deployme
 
 **Environment variables** (`.env`):
 - **Required**: `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN`
-- **Optional**: `GEMINI_API_KEY`, `GROQ_API_KEY` (enables NLU + Query Expansion with multi-provider fallback), `DATA_DIR` (default: `./data` on Windows, `/data` on Linux/Mac)
-- **LLM Configuration**: `LLM_PRIMARY_PROVIDER` (gemini/groq), `LLM_FALLBACK_PROVIDER` (gemini/groq), model override env vars (see `internal/config/config.go`)
+- **Optional**: `GEMINI_API_KEY`, `GROQ_API_KEY`, `CEREBRAS_API_KEY` (enables NLU + Query Expansion with multi-provider fallback), `DATA_DIR` (default: `./data` on Windows, `/data` on Linux/Mac)
+- **LLM Configuration**: `LLM_PROVIDERS` (comma-separated provider list, default: gemini,groq,cerebras), model override env vars (see `internal/config/config.go`)
 
 Production warmup runs automatically on server startup (non-blocking). Database migration handled by `storage.New()`.
 
@@ -386,7 +386,7 @@ Multi-stage build (alpine builder + distroless runtime), healthcheck binary (no 
 
 ## NLU Intent Parser (Multi-Provider)
 
-**Location**: `internal/genai/` (types.go, gemini_intent.go, groq_intent.go, factory.go, provider_fallback.go)
+**Location**: `internal/genai/` (types.go, gemini_intent.go, openai_intent.go, gemini_expander.go, openai_expander.go, factory.go, provider_fallback.go)
 
 **Architecture**:
 ```
@@ -403,8 +403,8 @@ handleUnmatchedMessage()
 FallbackIntentParser.Parse()
      ↓
 ┌─ Primary Provider ─┐  ┌─ Fallback Provider ─┐
-│ Gemini/Groq        │→│ Groq/Gemini          │
-│ (with retry)       │  │ (on failure)         │
+│ Gemini/Groq/       │→│ Groq/Cerebras/       │
+│ Cerebras (retry)   │  │ Gemini (on failure)  │
 └────────────────────┴──────────────────────────┘
      ↓
 dispatchIntent() → Route to Handler
@@ -413,22 +413,26 @@ Fallback → getHelpMessage() + Warning Log
 ```
 
 **Key Features**:
-- **Multi-Provider Support**: Gemini and Groq with automatic failover
-- **Three-layer Fallback**: Model retry → Provider fallback → Graceful degradation
+- **Multi-Provider Support**: Gemini, Groq, and Cerebras with automatic failover
+- **Three-layer Fallback**: Model retry → Model chain fallback → Provider fallback → Graceful degradation
+- **OpenAI v3 SDK**: Unified OpenAI-compatible implementation for Groq/Cerebras via custom BaseURL
 - Function Calling (AUTO mode): Model chooses function call or text response
 - 9 intent functions: `course_search`, `course_smart`, `course_uid`, `id_search`, `id_student_id`, `id_department`, `contact_search`, `contact_emergency`, `help`
 - Group @Bot detection: Uses `mention.Index` and `mention.Length` for precise removal
 - Metrics: `ntpu_llm_total{provider,operation}`, `ntpu_llm_duration_seconds{provider}`, `ntpu_llm_fallback_total`
 
 **Implementation Pattern**:
-- `genai.IntentParser`: Interface for NLU parsing (implemented by Gemini and Groq)
+- `genai.IntentParser`: Interface for NLU parsing (implemented by Gemini and OpenAI-compatible)
+- `genai.QueryExpander`: Interface for query expansion (implemented by Gemini and OpenAI-compatible)
 - `genai.FallbackIntentParser`: Cross-provider failover wrapper
-- `genai.CreateIntentParser()`: Factory function with provider selection
+- `genai.FallbackQueryExpander`: Cross-provider failover wrapper
+- `genai.CreateIntentParser()`: Factory function with provider selection (default: `["gemini", "groq", "cerebras"]`)
 - `genai.ParseResult`: Module, Intent, Params, ClarificationText, FunctionName
 
 **Default Models**:
 - Gemini: `gemini-2.5-flash` (primary), `gemini-2.5-flash-lite` (fallback)
 - Groq: `meta-llama/llama-4-maverick-17b-128e-instruct` (intent), `meta-llama/llama-4-scout-17b-16e-instruct` (expander), with Llama 3.x Production fallbacks
+- Cerebras: `llama-3.3-70b` (primary), `llama-3.1-8b` (fallback)
 
 ## Syllabus Module
 

@@ -1,6 +1,15 @@
-// Package genai provides integration with LLM APIs (Gemini and Groq).
+// Package genai provides integration with LLM APIs (Gemini, Groq, and Cerebras).
 // This file contains shared types, interfaces, and configuration for NLU intent parsing
 // and query expansion with multi-provider fallback support.
+//
+// Architecture:
+// - Gemini: Uses google.golang.org/genai (official SDK)
+// - Groq/Cerebras: Uses github.com/openai/openai-go/v3 (OpenAI-compatible API)
+//
+// Fallback Strategy (3-layer):
+// 1. Model Retry: Same model retried with exponential backoff
+// 2. Model Chain: Next model in same provider's model list
+// 3. Provider Chain: Next provider in LLM_PROVIDERS list
 package genai
 
 import (
@@ -12,11 +21,26 @@ import (
 type Provider string
 
 const (
-	// ProviderGemini represents Google's Gemini API.
+	// ProviderGemini represents Google's Gemini API (non-OpenAI-compatible).
 	ProviderGemini Provider = "gemini"
-	// ProviderGroq represents Groq's API (fast inference).
+	// ProviderGroq represents Groq's API (OpenAI-compatible, fast inference).
 	ProviderGroq Provider = "groq"
+	// ProviderCerebras represents Cerebras's API (OpenAI-compatible, ultra-fast inference).
+	ProviderCerebras Provider = "cerebras"
 )
+
+// ProviderEndpoint defines the base URL for OpenAI-compatible providers.
+// Gemini is not included as it uses a different SDK.
+var ProviderEndpoint = map[Provider]string{
+	ProviderGroq:     "https://api.groq.com/openai/v1/",
+	ProviderCerebras: "https://api.cerebras.ai/v1/",
+}
+
+// IsOpenAICompatible returns true if the provider uses OpenAI-compatible API.
+func (p Provider) IsOpenAICompatible() bool {
+	_, ok := ProviderEndpoint[p]
+	return ok
+}
 
 // String returns the string representation of the provider.
 func (p Provider) String() string {
@@ -24,7 +48,7 @@ func (p Provider) String() string {
 }
 
 // IntentParser defines the interface for NLU intent parsing.
-// Implementations include Gemini and Groq providers.
+// Implementations include Gemini (native) and OpenAI-compatible providers (Groq, Cerebras).
 // Uses forced function calling mode (ANY/required) to ensure consistent responses.
 type IntentParser interface {
 	// Parse analyzes user input and returns a parsed intent (always a function call).
@@ -38,7 +62,7 @@ type IntentParser interface {
 }
 
 // QueryExpander defines the interface for query expansion.
-// Implementations include Gemini and Groq providers.
+// Implementations include Gemini (native) and OpenAI-compatible providers (Groq, Cerebras).
 type QueryExpander interface {
 	// Expand expands a query with synonyms and related terms.
 	Expand(ctx context.Context, query string) (string, error)
@@ -99,19 +123,19 @@ type ProviderConfig struct {
 
 // LLMConfig holds configuration for all LLM providers.
 type LLMConfig struct {
-	// PrimaryProvider is the first provider to try.
-	// Default: "gemini" if GEMINI_API_KEY is set, otherwise "groq"
-	PrimaryProvider Provider
-
-	// FallbackProvider is the provider to try if primary fails.
-	// Default: "groq" if primary is "gemini", otherwise "gemini"
-	FallbackProvider Provider
+	// Providers is the ordered list of providers to try.
+	// Fallback happens in order: first provider's models, then second, etc.
+	// Default: ["gemini", "groq", "cerebras"] (only those with API keys)
+	Providers []Provider
 
 	// Gemini configuration
 	Gemini ProviderConfig
 
-	// Groq configuration
+	// Groq configuration (OpenAI-compatible)
 	Groq ProviderConfig
+
+	// Cerebras configuration (OpenAI-compatible)
+	Cerebras ProviderConfig
 
 	// RetryConfig for retry behavior
 	RetryConfig RetryConfig
@@ -137,6 +161,19 @@ var (
 	// Llama 4 Scout (Preview) offers efficient query expansion with fast inference (~750 TPS).
 	// llama-3.1-8b-instant is Production-grade fallback.
 	DefaultGroqExpanderModels = []string{"meta-llama/llama-4-scout-17b-16e-instruct", "llama-3.1-8b-instant"}
+
+	// DefaultCerebrasIntentModels is the default model chain for Cerebras intent parsing.
+	// llama-3.3-70b offers strong function calling with ultra-fast inference.
+	// llama-3.1-8b provides fast fallback.
+	DefaultCerebrasIntentModels = []string{"llama-3.3-70b", "llama-3.1-8b"}
+
+	// DefaultCerebrasExpanderModels is the default model chain for Cerebras query expansion.
+	// llama-3.3-70b offers strong query expansion with ultra-fast inference.
+	// llama-3.1-8b provides fast fallback.
+	DefaultCerebrasExpanderModels = []string{"llama-3.3-70b", "llama-3.1-8b"}
+
+	// DefaultProviders is the default provider order for fallback.
+	DefaultProviders = []Provider{ProviderGemini, ProviderGroq, ProviderCerebras}
 )
 
 // Retry configuration defaults
@@ -148,32 +185,45 @@ const (
 
 // HasAnyProvider returns true if at least one provider is configured.
 func (c *LLMConfig) HasAnyProvider() bool {
-	return c.Gemini.APIKey != "" || c.Groq.APIKey != ""
+	return c.Gemini.APIKey != "" || c.Groq.APIKey != "" || c.Cerebras.APIKey != ""
 }
 
-// HasProvider returns true if the specified provider is configured.
+// HasProvider returns true if the specified provider is configured with an API key.
 func (c *LLMConfig) HasProvider(p Provider) bool {
 	switch p {
 	case ProviderGemini:
 		return c.Gemini.APIKey != ""
 	case ProviderGroq:
 		return c.Groq.APIKey != ""
+	case ProviderCerebras:
+		return c.Cerebras.APIKey != ""
 	default:
 		return false
 	}
 }
 
-// GetFallbackProvider returns the fallback provider (the other one).
-func (c *LLMConfig) GetFallbackProvider() Provider {
-	switch c.PrimaryProvider {
+// GetProviderConfig returns the configuration for a specific provider.
+func (c *LLMConfig) GetProviderConfig(p Provider) *ProviderConfig {
+	switch p {
 	case ProviderGemini:
-		if c.Groq.APIKey != "" {
-			return ProviderGroq
-		}
+		return &c.Gemini
 	case ProviderGroq:
-		if c.Gemini.APIKey != "" {
-			return ProviderGemini
+		return &c.Groq
+	case ProviderCerebras:
+		return &c.Cerebras
+	default:
+		return nil
+	}
+}
+
+// ConfiguredProviders returns the list of providers with configured API keys,
+// in the order specified by c.Providers.
+func (c *LLMConfig) ConfiguredProviders() []Provider {
+	result := make([]Provider, 0, len(c.Providers))
+	for _, p := range c.Providers {
+		if c.HasProvider(p) {
+			result = append(result, p)
 		}
 	}
-	return ""
+	return result
 }

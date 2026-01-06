@@ -176,7 +176,10 @@
 
 - Go 1.25+（Go 直接執行）
 - Docker + Docker Compose（容器部署）
-- [Gemini API Key](https://aistudio.google.com/apikey)（可選，啟用 AI 功能）
+- LLM API Key（可選，啟用 AI 功能）：
+  - [Gemini](https://aistudio.google.com/apikey)
+  - [Groq](https://console.groq.com/keys)
+  - [Cerebras](https://cloud.cerebras.ai/)
 
 ### 取得 LINE Bot 憑證
 
