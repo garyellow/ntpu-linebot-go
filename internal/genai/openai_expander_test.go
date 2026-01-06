@@ -27,9 +27,6 @@ func TestNewOpenAIQueryExpander_ValidKey(t *testing.T) {
 		t.Fatal("Expected non-nil expander")
 		return
 	}
-	if expander.client == nil {
-		t.Error("Expected non-nil client")
-	}
 	if expander.provider != ProviderGroq {
 		t.Errorf("Expected provider %v, got %v", ProviderGroq, expander.provider)
 	}
@@ -94,13 +91,6 @@ func TestOpenAIQueryExpander_Close(t *testing.T) {
 	err := nilExpander.Close()
 	if err != nil {
 		t.Errorf("Close on nil expander should return nil, got: %v", err)
-	}
-
-	// expander with nil client - should not panic
-	expanderWithNilClient := &openaiQueryExpander{client: nil}
-	err = expanderWithNilClient.Close()
-	if err != nil {
-		t.Errorf("Close on expander with nil client should return nil, got: %v", err)
 	}
 
 	// expander with valid client

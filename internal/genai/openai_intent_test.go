@@ -27,9 +27,6 @@ func TestNewOpenAIIntentParser_ValidKey(t *testing.T) {
 		t.Fatal("Expected non-nil parser")
 		return
 	}
-	if parser.client == nil {
-		t.Error("Expected non-nil client")
-	}
 	if parser.provider != ProviderGroq {
 		t.Errorf("Expected provider %v, got %v", ProviderGroq, parser.provider)
 	}
@@ -99,13 +96,6 @@ func TestOpenAIIntentParser_Close(t *testing.T) {
 		t.Errorf("Close on nil parser should return nil, got: %v", err)
 	}
 
-	// parser with nil client - should not panic
-	parserWithNilClient := &openaiIntentParser{client: nil}
-	err = parserWithNilClient.Close()
-	if err != nil {
-		t.Errorf("Close on parser with nil client should return nil, got: %v", err)
-	}
-
 	// parser with valid client
 	parser, _ := newOpenAIIntentParser(context.Background(), ProviderGroq, "test-key", "")
 	if parser != nil {
@@ -163,6 +153,12 @@ func TestGetProviderEndpoint(t *testing.T) {
 			wantOK:   true,
 		},
 		{
+			name:     "Gemini provider (not OpenAI-compatible)",
+			provider: ProviderGemini,
+			wantURL:  "",
+			wantOK:   false,
+		},
+		{
 			name:     "Unknown provider",
 			provider: Provider("unknown"),
 			wantURL:  "",
@@ -185,6 +181,52 @@ func TestGetProviderEndpoint(t *testing.T) {
 			}
 			if gotURL != tt.wantURL {
 				t.Errorf("ProviderEndpoint[%v] = %q, want %q", tt.provider, gotURL, tt.wantURL)
+			}
+		})
+	}
+}
+
+func TestProvider_IsOpenAICompatible(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		provider Provider
+		want     bool
+	}{
+		{
+			name:     "Gemini is not OpenAI-compatible",
+			provider: ProviderGemini,
+			want:     false,
+		},
+		{
+			name:     "Groq is OpenAI-compatible",
+			provider: ProviderGroq,
+			want:     true,
+		},
+		{
+			name:     "Cerebras is OpenAI-compatible",
+			provider: ProviderCerebras,
+			want:     true,
+		},
+		{
+			name:     "Unknown provider is not OpenAI-compatible",
+			provider: Provider("unknown"),
+			want:     false,
+		},
+		{
+			name:     "Empty provider is not OpenAI-compatible",
+			provider: Provider(""),
+			want:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := tt.provider.IsOpenAICompatible()
+			if got != tt.want {
+				t.Errorf("Provider.IsOpenAICompatible() = %v, want %v", got, tt.want)
 			}
 		})
 	}

@@ -18,7 +18,7 @@ import (
 // Uses OpenAI-compatible LLM to add synonyms, translations, and related concepts.
 // It implements the QueryExpander interface.
 type openaiQueryExpander struct {
-	client   *openai.Client
+	client   openai.Client
 	model    string
 	provider Provider
 }
@@ -60,7 +60,7 @@ func newOpenAIQueryExpander(_ context.Context, provider Provider, apiKey, model 
 	)
 
 	return &openaiQueryExpander{
-		client:   &client,
+		client:   client,
 		model:    model,
 		provider: provider,
 	}, nil
@@ -69,7 +69,7 @@ func newOpenAIQueryExpander(_ context.Context, provider Provider, apiKey, model 
 // Expand expands a query with synonyms and related terms for better search.
 // Returns the expanded query string.
 func (e *openaiQueryExpander) Expand(ctx context.Context, query string) (string, error) {
-	if e == nil || e.client == nil {
+	if e == nil {
 		return query, nil
 	}
 

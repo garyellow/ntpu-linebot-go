@@ -20,7 +20,7 @@ import (
 // It implements the IntentParser interface.
 // Works with Groq, Cerebras, and other OpenAI-compatible providers.
 type openaiIntentParser struct {
-	client     *openai.Client
+	client     openai.Client
 	model      string
 	tools      []openai.ChatCompletionToolUnionParam
 	systemInst string
@@ -67,7 +67,7 @@ func newOpenAIIntentParser(_ context.Context, provider Provider, apiKey, model s
 	tools := buildOpenAITools()
 
 	return &openaiIntentParser{
-		client:     &client,
+		client:     client,
 		model:      model,
 		tools:      tools,
 		systemInst: IntentParserSystemPrompt,
@@ -242,7 +242,7 @@ func (p *openaiIntentParser) parseToolCall(tc openai.ChatCompletionMessageToolCa
 
 // IsEnabled returns true if the intent parser is enabled.
 func (p *openaiIntentParser) IsEnabled() bool {
-	return p != nil && p.client != nil
+	return p != nil
 }
 
 // Provider returns the provider type for this parser.

@@ -254,6 +254,8 @@ func buildLLMConfig(cfg *config.Config) genai.LLMConfig {
 				providers = append(providers, genai.ProviderGroq)
 			case "cerebras":
 				providers = append(providers, genai.ProviderCerebras)
+			default:
+				slog.Warn("ignoring unknown provider", "name", p)
 			}
 		}
 		if len(providers) > 0 {
