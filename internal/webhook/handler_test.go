@@ -387,98 +387,6 @@ func TestGetChatID_SourceTypes(t *testing.T) {
 
 // ==================== Loading Animation Tests ====================
 
-// TestIsBotMentioned tests the isBotMentioned helper function
-func TestIsBotMentioned(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name     string
-		textMsg  webhook.TextMessageContent
-		expected bool
-	}{
-		{
-			name: "bot mentioned with IsSelf true",
-			textMsg: webhook.TextMessageContent{
-				Text: "@Bot 查詢課程",
-				Mention: &webhook.Mention{
-					Mentionees: []webhook.MentioneeInterface{
-						webhook.UserMentionee{
-							Index:  0,
-							Length: 4,
-							IsSelf: true,
-						},
-					},
-				},
-			},
-			expected: true,
-		},
-		{
-			name: "other user mentioned, not bot",
-			textMsg: webhook.TextMessageContent{
-				Text: "@Someone 查詢課程",
-				Mention: &webhook.Mention{
-					Mentionees: []webhook.MentioneeInterface{
-						webhook.UserMentionee{
-							Index:  0,
-							Length: 8,
-							IsSelf: false,
-						},
-					},
-				},
-			},
-			expected: false,
-		},
-		{
-			name: "no mentions",
-			textMsg: webhook.TextMessageContent{
-				Text:    "查詢課程",
-				Mention: nil,
-			},
-			expected: false,
-		},
-		{
-			name: "empty mentionees",
-			textMsg: webhook.TextMessageContent{
-				Text: "查詢課程",
-				Mention: &webhook.Mention{
-					Mentionees: []webhook.MentioneeInterface{},
-				},
-			},
-			expected: false,
-		},
-		{
-			name: "multiple mentions, one is bot",
-			textMsg: webhook.TextMessageContent{
-				Text: "@Someone @Bot 查詢課程",
-				Mention: &webhook.Mention{
-					Mentionees: []webhook.MentioneeInterface{
-						webhook.UserMentionee{
-							Index:  0,
-							Length: 8,
-							IsSelf: false,
-						},
-						webhook.UserMentionee{
-							Index:  9,
-							Length: 4,
-							IsSelf: true,
-						},
-					},
-				},
-			},
-			expected: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			result := isBotMentioned(tt.textMsg)
-			if result != tt.expected {
-				t.Errorf("isBotMentioned() = %v, expected %v", result, tt.expected)
-			}
-		})
-	}
-}
-
 // TestShouldShowLoadingForMessage tests loading animation logic for message events
 func TestShouldShowLoadingForMessage(t *testing.T) {
 	t.Parallel()
@@ -510,7 +418,7 @@ func TestShouldShowLoadingForMessage(t *testing.T) {
 		// NOTE: Group text with bot mention test is skipped because LINE SDK's
 		// TextMessageContent doesn't expose a settable Type field for testing.
 		// In production, GetType() returns "text" correctly from JSON unmarshaling.
-		// The isBotMentioned function is tested separately in TestIsBotMentioned.
+		// The bot.IsBotMentioned function is tested in internal/bot/mention_test.go.
 		{
 			name: "group text without mention",
 			event: webhook.MessageEvent{

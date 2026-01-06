@@ -261,28 +261,10 @@ func (h *Handler) shouldShowLoadingForMessage(e webhook.MessageEvent) bool {
 		if !ok {
 			return false
 		}
-		return isBotMentioned(textMsg)
+		return bot.IsBotMentioned(textMsg)
 	}
 
 	// Unknown message types - don't show loading
-	return false
-}
-
-// isBotMentioned checks if the bot is mentioned in a text message.
-// Used to determine if the bot should respond in group chats.
-func isBotMentioned(textMsg webhook.TextMessageContent) bool {
-	if textMsg.Mention == nil || len(textMsg.Mention.Mentionees) == 0 {
-		return false
-	}
-
-	for _, mentionee := range textMsg.Mention.Mentionees {
-		if userMentionee, ok := mentionee.(webhook.UserMentionee); ok {
-			if userMentionee.IsSelf {
-				return true
-			}
-		}
-	}
-
 	return false
 }
 
@@ -295,7 +277,8 @@ func (h *Handler) showLoadingAnimation(event webhook.EventInterface) error {
 	}
 
 	// LINE API: loadingSeconds must be 5-60 seconds, multiple of 5.
-	// Set to max (60s) to match context timeout in config.WebhookProcessing.
+	// Set to max (60s) to align with bot operation timeout (config.WebhookProcessing)
+	// applied via ctxutil.PreserveTracing() for individual bot operations.
 	var loadingSeconds int32 = 60
 
 	req := &messaging_api.ShowLoadingAnimationRequest{

@@ -8,10 +8,10 @@ import (
 	"github.com/line/line-bot-sdk-go/v8/linebot/webhook"
 )
 
-// isBotMentioned checks if the bot is mentioned in a text message.
+// IsBotMentioned checks if the bot is mentioned in a text message.
 // It iterates through all mentionees and checks if any is a UserMentionee with IsSelf == true.
 // Returns false if the message has no mentions or the bot is not mentioned.
-func isBotMentioned(textMsg webhook.TextMessageContent) bool {
+func IsBotMentioned(textMsg webhook.TextMessageContent) bool {
 	if textMsg.Mention == nil || len(textMsg.Mention.Mentionees) == 0 {
 		return false
 	}
