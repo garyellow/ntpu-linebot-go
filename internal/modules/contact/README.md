@@ -48,25 +48,14 @@ type Handler struct {
 
 ### 搜尋策略
 
-#### 2-Tier SQL Search（Memory Efficient）
+採用 **2-Tier SQL Search** 策略，在資料庫層級完成所有篩選，避免載入全表資料：
 
-```go
-// Tier 1: SQL LIKE (精確匹配)
-SELECT * FROM contacts
-WHERE name LIKE ? OR title LIKE ?
+1. **Tier 1 - 精確匹配**：使用 SQL LIKE 查詢姓名和職稱
+2. **Tier 2 - 模糊匹配**：使用 `SearchContactsFuzzy()` 進行字元集合匹配
+   - 支援非連續字元匹配（例如：「王明」可匹配「王小明」）
+   - 所有篩選都在 SQL 層級執行，確保記憶體效率
 
-// Tier 2: SQL Fuzzy (字元集合匹配)
-// 在 SQL 層級執行字元匹配，不載入全表
-func (db *DB) SearchContactsFuzzy(ctx, query, limit) {
-    // 為每個字元生成 LIKE 子句
-    // 範例：「王明」→ WHERE (name LIKE '%王%' AND name LIKE '%明%')
-}
-```
-
-**優點**：
-- ✅ SQL-level filtering - 不載入全部資料
-- ✅ 支援非連續字元匹配
-- ✅ Memory efficient - 只載入匹配結果
+詳細實作請參考 `internal/storage/repository.go` 中的查詢方法。
 
 #### 排序邏輯
 
@@ -97,9 +86,10 @@ type Contact struct {
 ```
 
 ### 快取策略
-- **TTL**：7 天（可配置）
-- **Warmup**：啟動時自動預載
-- **Refresh**：每日 3:00 AM
+
+> 完整的快取策略說明請參考 [架構說明文件](/.github/copilot-instructions.md#data-layer-cache-first-strategy)
+
+- **TTL**：7 天（每日 3:00 AM 自動更新）
 - **來源**：NTPU 通訊錄系統
 
 ## Flex Message 設計

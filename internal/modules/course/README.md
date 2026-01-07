@@ -165,14 +165,14 @@ Carousel (max 40)       Carousel + Score        Single Bubble
 ```
 
 ### Cache 策略
-- **TTL**：7 天（可配置）
+
+> 完整的快取策略說明請參考 [架構說明文件](/.github/copilot-instructions.md#data-layer-cache-first-strategy)
+
+- **TTL**：7 天（每日 3:00 AM 自動更新）
 - **範圍**：最近 4 個學期的課程資料
-- **Warmup**：啟動時自動預載
-- **Refresh**：每日 3:00 AM
 
 ### Syllabus 整合
-- **來源**：`internal/syllabus/` scraper
-- **觸發**：Warmup only（非即時查詢）
+- **更新時機**：Warmup only（非即時查詢，僅最近 2 個學期）
 - **範圍**：最近 2 個有資料的學期
 - **用途**：智慧搜尋的語意索引
 

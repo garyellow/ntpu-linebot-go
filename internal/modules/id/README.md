@@ -97,18 +97,13 @@ const MaxStudentsPerSearch = 400
 
 ### 快取策略
 
-#### 學生資料
-- **TTL**：Never expires（靜態資料）
-- **範圍**：
-  - Cache: 101-113 學年度（warmup 自動載入）
-  - Query: 94-113 學年度（real-time scraping）
-- **狀態**：114 學年度起無新資料（LMS 2.0 deprecated）
+> 完整的快取策略說明請參考 [架構說明文件](/.github/copilot-instructions.md#data-layer-cache-first-strategy)
 
-#### Warmup 行為
-```go
-// 啟動時自動預載 101-113 學年度
-// 不會過期，永久保留在資料庫
-```
+**學生資料特性**：
+- **TTL**：永不過期（靜態資料，不會更新）
+- **Cache 範圍**：101-113 學年度（啟動時自動載入）
+- **Query 範圍**：94-113 學年度（cache miss 時即時爬取）
+- **資料狀態**：114 學年度起無新資料（LMS 2.0 deprecated）
 
 ## Flex Message 設計
 

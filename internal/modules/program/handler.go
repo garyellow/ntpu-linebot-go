@@ -404,7 +404,8 @@ func (h *Handler) handleProgramSearch(ctx context.Context, searchTerm string) []
 	if err != nil {
 		log.WithError(err).Warn("Failed to get all programs for fuzzy matching")
 	} else {
-		// Create a set of already found program names
+		// Deduplicate by program name (foundNames tracks already matched programs)
+		// ContainsAllRunes allows non-contiguous character matching (e.g., "人工" matches "人工智慧")
 		foundNames := make(map[string]bool)
 		for _, p := range programs {
 			foundNames[p.Name] = true
