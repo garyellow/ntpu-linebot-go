@@ -12,7 +12,7 @@ import (
 //
 // Usage:
 //
-//	sender := lineutil.GetSender("學號小幫手", stickerManager)
+//	sender := lineutil.GetSender("NTPU 小工具", stickerManager)
 //	msg1 := &messaging_api.TextMessage{Text: "訊息1", Sender: sender}
 //	msg2 := &messaging_api.TextMessage{Text: "訊息2", Sender: sender}
 func GetSender(name string, stickerManager *sticker.Manager) *messaging_api.Sender {

@@ -201,7 +201,7 @@ const (
 
 | Context | 標題 | 說明 | 情境 |
 |---------|------|------|------|
-| `FallbackGeneric` | 🔍 北大查詢小工具 | 直接對話或使用關鍵字查詢 | 群組聊天中僅有 @Bot 但無內容 |
+| `FallbackGeneric` | 🔍 NTPU 小工具 | 直接對話或使用關鍵字查詢 | 群組聊天中僅有 @Bot 但無內容 |
 | `FallbackNLUDisabled` | 📖 請使用關鍵字 | 目前僅支援關鍵字查詢 | NLU 未啟用且無關鍵字匹配 |
 | `FallbackNLUFailed` | 😅 無法理解訊息 | 請試著換個方式說明，或使用關鍵字 | NLU 解析失敗 |
 | `FallbackDispatchFailed` | ⚠️ 處理失敗 | 系統暫時無法處理此請求 | Intent 分發失敗 |

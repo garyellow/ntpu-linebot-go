@@ -1,6 +1,6 @@
 # NTPU LineBot Go - AI Agent Instructions
 
-LINE chatbot for NTPU (National Taipei University) providing student ID lookup, contact directory, course queries, and academic program information. Built with Go, emphasizing anti-scraping measures, persistent caching, and observability.
+LINE chatbot "NTPU 小工具" for NTPU (National Taipei University) providing student ID lookup, contact directory, course queries, and academic program information. Built with Go, emphasizing anti-scraping measures, persistent caching, and observability.
 
 ## 🎯 Architecture Principles
 
@@ -193,10 +193,10 @@ lineutil.QuickReplyProgramNav()     // 學程列表→學程→說明 (program m
 lineutil.QuickReplyErrorRecovery(retryText) // 重試→說明 (errors with retry)
 
 // Sender pattern (REQUIRED)
-// System/Help: "北大小幫手" (unified for bot-level messages)
+// System/Help: "NTPU 小工具" (unified for bot-level messages)
 // Modules: "課程小幫手", "學號小幫手", "聯繫小幫手", "學程小幫手" (module-specific)
 // Special: "貼圖小幫手" (sticker responses only)
-sender := lineutil.GetSender("北大小幫手", stickerManager)  // Once at handler start
+sender := lineutil.GetSender("NTPU 小工具", stickerManager)  // Once at handler start
 msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
 // Use same sender for all messages in one reply
 ```

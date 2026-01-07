@@ -115,7 +115,7 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 	}
 	if len(text) > config.LINEMaxTextMessageLength {
 		p.logger.Infof("Text message too long: %d characters (limit: %d)", len(text), config.LINEMaxTextMessageLength)
-		sender := lineutil.GetSender("北大小幫手", p.stickerManager)
+		sender := lineutil.GetSender("NTPU 小工具", p.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
 			fmt.Sprintf("❌ 訊息內容過長\n\n訊息長度超過 %d 字元，請縮短後重試。", config.LINEMaxTextMessageLength),
 			sender,
@@ -165,7 +165,7 @@ func (p *Processor) ProcessPostback(ctx context.Context, event webhook.PostbackE
 	}
 	if len(data) > config.LINEMaxPostbackDataLength {
 		p.logger.Infof("Postback data too long: %d bytes (limit: %d)", len(data), config.LINEMaxPostbackDataLength)
-		sender := lineutil.GetSender("北大小幫手", p.stickerManager)
+		sender := lineutil.GetSender("NTPU 小工具", p.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender("❌ 操作資料異常\n\n請使用下方按鈕重新操作", sender)
 		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNavCompact())
 		return []messaging_api.MessageInterface{msg}, nil
@@ -194,7 +194,7 @@ func (p *Processor) ProcessPostback(ctx context.Context, event webhook.PostbackE
 	}
 
 	// No handler matched - provide helpful guidance
-	sender := lineutil.GetSender("北大小幫手", p.stickerManager)
+	sender := lineutil.GetSender("NTPU 小工具", p.stickerManager)
 	msg := lineutil.NewTextMessageWithConsistentSender("⚠️ 操作已過期或無效\n\n請使用下方按鈕重新操作", sender)
 	msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNavCompact())
 	return []messaging_api.MessageInterface{msg}, nil
@@ -205,7 +205,7 @@ func (p *Processor) ProcessPostback(ctx context.Context, event webhook.PostbackE
 func (p *Processor) ProcessFollow(event webhook.FollowEvent) ([]messaging_api.MessageInterface, error) {
 	p.logger.Info("New user followed the bot")
 
-	sender := lineutil.GetSender("北大小幫手", p.stickerManager)
+	sender := lineutil.GetSender("NTPU 小工具", p.stickerManager)
 
 	// Build welcome Flex Message
 	welcomeMsg := p.buildWelcomeFlexMessage(p.isNLUEnabled(), sender)
@@ -218,7 +218,7 @@ func (p *Processor) buildWelcomeFlexMessage(nluEnabled bool, sender *messaging_a
 	// Hero section with blue theme
 	hero := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexText("泥好~~").WithSize("lg").WithColor(lineutil.ColorHeroText).WithWeight("bold").FlexText,
-		lineutil.NewFlexText("我是北大查詢小工具 🔍").WithSize("md").WithColor(lineutil.ColorHeroText).WithMargin("sm").FlexText,
+		lineutil.NewFlexText("我是 NTPU 小工具 🔍").WithSize("md").WithColor(lineutil.ColorHeroText).WithMargin("sm").FlexText,
 	).
 		WithBackgroundColor(lineutil.ColorHeaderPrimary).
 		WithPaddingAll("xl").
@@ -288,7 +288,7 @@ func (p *Processor) buildWelcomeFlexMessage(nluEnabled bool, sender *messaging_a
 	).WithSpacing("none")
 
 	bubble := lineutil.NewFlexBubble(nil, hero.FlexBox, body, footer)
-	msg := lineutil.NewFlexMessage("歡迎使用北大查詢小工具", bubble.FlexBubble)
+	msg := lineutil.NewFlexMessage("歡迎使用 NTPU 小工具", bubble.FlexBubble)
 	msg.Sender = sender
 
 	// Add Quick Reply for immediate actions
@@ -375,7 +375,7 @@ func (p *Processor) dispatchIntent(ctx context.Context, result *genai.ParseResul
 			p.logger.Warn("direct_reply called without message parameter")
 			return p.getHelpMessage(FallbackGeneric), nil
 		}
-		sender := lineutil.GetSender("北大小幫手", p.stickerManager)
+		sender := lineutil.GetSender("NTPU 小工具", p.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(message, sender)
 		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNavCompact())
 		return []messaging_api.MessageInterface{msg}, nil
@@ -417,7 +417,7 @@ func (p *Processor) checkUserRateLimit(source webhook.SourceInterface, chatID st
 	p.logger.WithField("chat_id", logChatID).Warn("User rate limit exceeded")
 
 	if IsPersonalChat(source) {
-		sender := lineutil.GetSender("北大小幫手", p.stickerManager)
+		sender := lineutil.GetSender("NTPU 小工具", p.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
 			"⏳ 訊息過於頻繁，請稍後再試\n💡 稍等幾秒後即可繼續使用",
 			sender,
@@ -447,7 +447,7 @@ func (p *Processor) checkLLMRateLimit(source webhook.SourceInterface, chatID str
 	p.logger.WithField("chat_id", logChatID).Warn("LLM rate limit exceeded")
 
 	if IsPersonalChat(source) {
-		sender := lineutil.GetSender("北大小幫手", p.stickerManager)
+		sender := lineutil.GetSender("NTPU 小工具", p.stickerManager)
 		msg := p.buildLLMRateLimitFlexMessage(sender)
 
 		return false, []messaging_api.MessageInterface{
@@ -489,7 +489,7 @@ const (
 // getHelpMessage returns a contextualized fallback message as Flex Message for better UX
 // context parameter helps provide transparent feedback to users about why their input wasn't understood
 func (p *Processor) getHelpMessage(context FallbackContext) []messaging_api.MessageInterface {
-	sender := lineutil.GetSender("北大小幫手", p.stickerManager)
+	sender := lineutil.GetSender("NTPU 小工具", p.stickerManager)
 	nluEnabled := p.isNLUEnabled()
 
 	// Hero section with contextualized message
@@ -507,7 +507,7 @@ func (p *Processor) getHelpMessage(context FallbackContext) []messaging_api.Mess
 	case FallbackGeneric:
 		fallthrough
 	default:
-		heroTitle = "🔍 北大查詢小工具"
+		heroTitle = "🔍 NTPU 小工具"
 		if nluEnabled {
 			heroSubtext = "直接對話或使用關鍵字查詢"
 		} else {
@@ -579,7 +579,7 @@ func (p *Processor) getHelpMessage(context FallbackContext) []messaging_api.Mess
 	).WithSpacing("none")
 
 	bubble := lineutil.NewFlexBubble(nil, hero.FlexBox, body, footer)
-	msg := lineutil.NewFlexMessage("北大查詢小工具", bubble.FlexBubble)
+	msg := lineutil.NewFlexMessage("NTPU 小工具", bubble.FlexBubble)
 	msg.Sender = sender
 	msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNav())
 
@@ -589,7 +589,7 @@ func (p *Processor) getHelpMessage(context FallbackContext) []messaging_api.Mess
 // getDetailedInstructionMessages returns detailed instruction messages
 // Total messages: 3 or 4 Flex Messages - within LINE's 5-message limit
 func (p *Processor) getDetailedInstructionMessages() []messaging_api.MessageInterface {
-	sender := lineutil.GetSender("北大小幫手", p.stickerManager)
+	sender := lineutil.GetSender("NTPU 小工具", p.stickerManager)
 	nluEnabled := p.isNLUEnabled()
 
 	var messages []messaging_api.MessageInterface
@@ -1029,7 +1029,7 @@ func (p *Processor) buildDataSourceFlexMessage(sender *messaging_api.Sender) mes
 
 	// Body section with data sources (simplified)
 	body := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexText("所有查詢資料來自北大公開網站").
+		lineutil.NewFlexText("所有查詢資料來自 NTPU 公開網站").
 			WithSize("sm").
 			WithColor(lineutil.ColorText).
 			WithWeight("bold").
