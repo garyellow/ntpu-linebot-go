@@ -132,8 +132,13 @@ CREATE TABLE course_programs (
 - **按鈕**：每個學程一個「查看課程」按鈕
 
 ### Quick Reply
-- 使用 `QuickReplyProgramNav()`
-- 包含：🎓 學程列表、🎓 學程、📖 說明
+- **統一設計**：所有 Quick Reply 函數定義在 `internal/lineutil/builder.go`
+- **Actions**：
+  - `lineutil.QuickReplyProgramListAction()` - 🎓 學程列表
+  - `lineutil.QuickReplyProgramAction()` - 🎓 學程
+  - `lineutil.QuickReplyHelpAction()` - 📖 說明
+- **Navigation**：`lineutil.QuickReplyProgramNav()` 組合上述動作
+- **一致性**：與其他模組（course, id, contact, usage）保持相同模式
 
 ## 搜尋策略
 

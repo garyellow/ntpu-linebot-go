@@ -10,6 +10,7 @@ import (
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
+	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 	"github.com/garyellow/ntpu-linebot-go/internal/modules/course"
@@ -483,19 +484,19 @@ func TestFindMatcher(t *testing.T) {
 func TestQuickReplyActions(t *testing.T) {
 	t.Parallel()
 	// Test QuickReplyProgramListAction
-	listAction := QuickReplyProgramListAction()
+	listAction := lineutil.QuickReplyProgramListAction()
 	if listAction.Action == nil {
 		t.Error("Expected non-nil action for QuickReplyProgramListAction")
 	}
 
 	// Test QuickReplyProgramSearchAction
-	searchAction := QuickReplyProgramSearchAction()
+	searchAction := lineutil.QuickReplyProgramAction()
 	if searchAction.Action == nil {
 		t.Error("Expected non-nil action for QuickReplyProgramSearchAction")
 	}
 
 	// Test QuickReplyProgramNav
-	navItems := QuickReplyProgramNav()
+	navItems := lineutil.QuickReplyProgramNav()
 	if len(navItems) < 2 {
 		t.Errorf("Expected at least 2 nav items, got %d", len(navItems))
 	}

@@ -210,7 +210,7 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, headerTi
 
 	// Create the final (or only) message
 	msg := lineutil.NewTextMessageWithConsistentSender(sb.String(), sender)
-	msg.QuickReply = lineutil.NewQuickReply(QuickReplyProgramNav())
+	msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyProgramNav())
 	messages = append(messages, msg)
 
 	return messages
@@ -233,7 +233,7 @@ func (h *Handler) formatProgramSearchResponse(programs []storage.Program) []mess
 
 	// Add quick reply to last message
 	if len(messages) > 0 {
-		lineutil.AddQuickReplyToMessages(messages, QuickReplyProgramNav()...)
+		lineutil.AddQuickReplyToMessages(messages, lineutil.QuickReplyProgramNav()...)
 	}
 
 	return messages
@@ -361,7 +361,7 @@ func (h *Handler) formatProgramCoursesResponse(programName string, requiredCours
 			fmt.Sprintf("📭 「%s」目前沒有課程資料", programName),
 			sender,
 		)
-		msg.QuickReply = lineutil.NewQuickReply(QuickReplyProgramNav())
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyProgramNav())
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -387,7 +387,7 @@ func (h *Handler) formatProgramCoursesResponse(programName string, requiredCours
 
 	// Add quick reply to last message
 	if len(messages) > 0 {
-		lineutil.AddQuickReplyToMessages(messages, QuickReplyProgramNav()...)
+		lineutil.AddQuickReplyToMessages(messages, lineutil.QuickReplyProgramNav()...)
 	}
 
 	return messages
@@ -552,7 +552,7 @@ func (h *Handler) formatProgramCoursesAsTextList(programName string, requiredCou
 		"💡 可利用課程編號或課程名稱查詢相關課程詳細資訊",
 		sender,
 	)
-	footerMsg.QuickReply = lineutil.NewQuickReply(QuickReplyProgramNav())
+	footerMsg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyProgramNav())
 	messages = append(messages, footerMsg)
 
 	return messages

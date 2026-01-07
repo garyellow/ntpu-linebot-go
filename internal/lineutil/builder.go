@@ -783,6 +783,17 @@ func QuickReplyUsageNav() []QuickReplyItem {
 	}
 }
 
+// QuickReplyProgramNav returns quick reply items for program module navigation.
+// Use this after program-related responses.
+// Order: 🎓 學程列表 → 🎓 學程 → 📖 說明
+func QuickReplyProgramNav() []QuickReplyItem {
+	return []QuickReplyItem{
+		QuickReplyProgramListAction(),
+		QuickReplyProgramAction(),
+		QuickReplyHelpAction(),
+	}
+}
+
 // ================================================
 // Message Helper Functions
 // ================================================
