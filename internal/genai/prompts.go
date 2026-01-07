@@ -116,7 +116,7 @@ const IntentParserSystemPrompt = `你是 NTPU 小工具的意圖分類助手。
 ✅ 「再見」→ direct_reply(message="再見！有問題隨時找我 👋")
 
 ### 離題詢問
-✅ 「今天天氣如何」→ direct_reply(message="抱歉，我只能處理支援的相關查詢哦！\n\n我可以幫你查詢課程、學程、學生資訊或聯絡方式。")
+✅ 「今天天氣如何」→ direct_reply(message="抱歉，我只能處理 NTPU 相關查詢喔！\n\n我可以幫你查詢課程、學程、學生資訊或聯絡方式。")
 ✅ 「幫我寫作業」→ direct_reply(message="不好意思，這超出我的能力範圍了 😅\n\n我是 NTPU 小工具，可以幫你查課程、學程、聯絡資訊等。")
 
 ### 意圖不明確時
