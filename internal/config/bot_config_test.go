@@ -8,11 +8,11 @@ import (
 func newTestBotConfig() BotConfig {
 	return BotConfig{
 		WebhookTimeout:       WebhookProcessing,
-		UserRateBurst:        12.0,
-		UserRateRefill:       0.2,
-		LLMRateBurst:         120.0,
-		LLMRateRefill:        60.0,
-		LLMRateDaily:         300,
+		UserRateBurst:        15.0,
+		UserRateRefill:       0.1,
+		LLMRateBurst:         60.0,
+		LLMRateRefill:        30.0,
+		LLMRateDaily:         180,
 		GlobalRateRPS:        100.0,
 		MaxMessagesPerReply:  5,
 		MaxEventsPerWebhook:  100,
@@ -48,24 +48,24 @@ func TestNewBotConfig(t *testing.T) {
 		t.Errorf("expected GlobalRateRPS 100.0, got %f", cfg.GlobalRateRPS)
 	}
 
-	if cfg.LLMRateBurst != 120.0 {
-		t.Errorf("expected LLMRateBurst 120.0, got %f", cfg.LLMRateBurst)
+	if cfg.LLMRateBurst != 60.0 {
+		t.Errorf("expected LLMRateBurst 60.0, got %f", cfg.LLMRateBurst)
 	}
 
-	if cfg.LLMRateRefill != 60.0 {
-		t.Errorf("expected LLMRateRefill 60.0, got %f", cfg.LLMRateRefill)
+	if cfg.LLMRateRefill != 30.0 {
+		t.Errorf("expected LLMRateRefill 30.0, got %f", cfg.LLMRateRefill)
 	}
 
-	if cfg.LLMRateDaily != 300 {
-		t.Errorf("expected LLMRateDaily 300, got %d", cfg.LLMRateDaily)
+	if cfg.LLMRateDaily != 180 {
+		t.Errorf("expected LLMRateDaily 180, got %d", cfg.LLMRateDaily)
 	}
 
-	if cfg.UserRateBurst != 12.0 {
-		t.Errorf("expected UserRateBurst 12.0, got %f", cfg.UserRateBurst)
+	if cfg.UserRateBurst != 15.0 {
+		t.Errorf("expected UserRateBurst 15.0, got %f", cfg.UserRateBurst)
 	}
 
-	if cfg.UserRateRefill != 0.2 {
-		t.Errorf("expected UserRateRefill 0.2, got %f", cfg.UserRateRefill)
+	if cfg.UserRateRefill != 0.1 {
+		t.Errorf("expected UserRateRefill 0.1, got %f", cfg.UserRateRefill)
 	}
 
 	// Test module limits

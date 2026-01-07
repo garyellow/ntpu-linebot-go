@@ -83,7 +83,7 @@ type Handler struct {
     stickerManager   *sticker.Manager
     bm25Index        *rag.BM25Index           // 智慧搜尋
     queryExpander    genai.QueryExpander      // LLM Query Expansion
-    llmRateLimiter   *ratelimit.KeyedLimiter  // LLM 配額控制
+    llmRateLimiter   *ratelimit.KeyedLimiter  // LLM 額度控制
     semesterDetector *SemesterDetector        // 資料驅動學期偵測
     matchers         []PatternMatcher         // Pattern-Action Table
 }
@@ -215,4 +215,4 @@ Carousel (max 40)       Carousel + Score        Single Bubble
 - `scraper.Client` - 即時抓取
 - `rag.BM25Index` - 智慧搜尋（可選）
 - `genai.QueryExpander` - 查詢擴展（可選）
-- `ratelimit.KeyedLimiter` - LLM 配額控制（可選）
+- `ratelimit.KeyedLimiter` - LLM 額度控制（可選）

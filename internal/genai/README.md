@@ -133,7 +133,7 @@ if err != nil {
 
 - 所有智慧搜尋查詢都會自動觸發 Query Expansion（若 `queryExpander` 已配置）
 - 提供 graceful degradation：擴展失敗時使用原始查詢，不影響搜尋功能
-- 受 LLM Rate Limiter 限制（預設：120 burst, 60/hr refill, 300/day cap）
+- 受 LLM Rate Limiter 限制（預設：60 burst, 30/hr refill, 180/day cap）
 
 ### 使用方式
 
@@ -223,9 +223,9 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 
 | 變數名稱 | 預設值 | 說明 |
 |---------|--------|------|
-| `LLM_RATE_BURST` | 120 | LLM 請求 burst 上限 |
-| `LLM_RATE_REFILL` | 60 | 每小時恢復 token 數 |
-| `LLM_RATE_DAILY` | 300 | 每日 LLM 請求上限 (0=無限制) |
+| `LLM_RATE_BURST` | 60 | LLM 請求 burst 上限 |
+| `LLM_RATE_REFILL` | 30 | 每小時恢復 token 數 |
+| `LLM_RATE_DAILY` | 180 | 每日 LLM 請求上限 (0=無限制) |
 
 ### 獲取 API Key
 
