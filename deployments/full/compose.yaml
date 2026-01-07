@@ -47,11 +47,11 @@ services:
       - WEBHOOK_TIMEOUT=${WEBHOOK_TIMEOUT:-60s}
 
       # Rate Limit Configuration
-      - USER_RATE_BURST=${USER_RATE_BURST:-15}
-      - USER_RATE_REFILL=${USER_RATE_REFILL:-0.1}
-      - LLM_RATE_BURST=${LLM_RATE_BURST:-60}
-      - LLM_RATE_REFILL=${LLM_RATE_REFILL:-30}
-      - LLM_RATE_DAILY=${LLM_RATE_DAILY:-150}
+      - USER_RATE_BURST=${USER_RATE_BURST:-12}
+      - USER_RATE_REFILL=${USER_RATE_REFILL:-0.2}
+      - LLM_RATE_BURST=${LLM_RATE_BURST:-120}
+      - LLM_RATE_REFILL=${LLM_RATE_REFILL:-60}
+      - LLM_RATE_DAILY=${LLM_RATE_DAILY:-300}
       - GLOBAL_RATE_RPS=${GLOBAL_RATE_RPS:-100}
 
       # Metrics Auth (empty password = disabled for internal network)

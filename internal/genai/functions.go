@@ -175,7 +175,19 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 		},
 
 		// ============================================
-		// 5. Help (使用說明)
+		// 5. Usage Module (配額查詢)
+		// ============================================
+		{
+			Name:        "usage_query",
+			Description: "查詢使用者的功能配額狀態（訊息頻率限制、AI 功能配額）。",
+			Parameters: &genai.Schema{
+				Type:       genai.TypeObject,
+				Properties: map[string]*genai.Schema{},
+			},
+		},
+
+		// ============================================
+		// 6. Help (使用說明)
 		// ============================================
 		{
 			Name:        "help",
@@ -210,7 +222,7 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 // Key: function name (from FunctionDeclaration.Name)
 // Value: [module, intent] pair
 //
-// Order: Course → ID → Contact → Program → Help → Direct
+// Order: Course → ID → Contact → Program → Usage → Help → Direct
 var IntentModuleMap = map[string][2]string{
 	// Course Module
 	"course_search": {"course", "search"},
@@ -226,6 +238,8 @@ var IntentModuleMap = map[string][2]string{
 	// Program Module
 	"program_list":   {"program", "list"},
 	"program_search": {"program", "search"},
+	// Usage Module
+	"usage_query": {"usage", "query"},
 	// Help
 	"help": {"help", ""},
 	// Direct Reply

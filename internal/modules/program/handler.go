@@ -314,7 +314,7 @@ func (h *Handler) handleSearchPattern(ctx context.Context, text string, matches 
 			"• 學程 管理\n" +
 			"• 學程 智慧財產"
 		msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
-		msg.QuickReply = lineutil.NewQuickReply(QuickReplyProgramNav())
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyProgramNav())
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -352,7 +352,7 @@ func (h *Handler) handleProgramList(ctx context.Context) []messaging_api.Message
 			"📭 目前沒有學程資料\n\n請稍後再試，系統會定期更新學程資訊。",
 			sender,
 		)
-		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNavCompact())
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyProgramNav())
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -394,7 +394,7 @@ func (h *Handler) handleProgramSearch(ctx context.Context, searchTerm string) []
 			"⚠️ 搜尋學程時發生錯誤\n\n請稍後再試。",
 			sender,
 		)
-		msg.QuickReply = lineutil.NewQuickReply(QuickReplyProgramNav())
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyProgramNav())
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -404,7 +404,8 @@ func (h *Handler) handleProgramSearch(ctx context.Context, searchTerm string) []
 	if err != nil {
 		log.WithError(err).Warn("Failed to get all programs for fuzzy matching")
 	} else {
-		// Create a set of already found program names
+		// Deduplicate by program name (foundNames tracks already matched programs)
+		// ContainsAllRunes allows non-contiguous character matching (e.g., "人工" matches "人工智慧")
 		foundNames := make(map[string]bool)
 		for _, p := range programs {
 			foundNames[p.Name] = true
@@ -425,7 +426,7 @@ func (h *Handler) handleProgramSearch(ctx context.Context, searchTerm string) []
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			QuickReplyProgramListAction(),
+			lineutil.QuickReplyProgramListAction(),
 			lineutil.QuickReplyHelpAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
@@ -478,7 +479,7 @@ func (h *Handler) handleProgramCourses(ctx context.Context, programName string) 
 			"⚠️ 取得學程課程時發生錯誤\n\n請稍後再試。",
 			sender,
 		)
-		msg.QuickReply = lineutil.NewQuickReply(QuickReplyProgramNav())
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyProgramNav())
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -491,7 +492,7 @@ func (h *Handler) handleProgramCourses(ctx context.Context, programName string) 
 			fmt.Sprintf("📭 「%s」在近 2 學期沒有課程資料\n\n💡 可能原因：\n• 該學程可能在本學期未開設相關課程\n• 學程名稱可能有誤，請嘗試「學程列表」查看正確名稱", programName),
 			sender,
 		)
-		msg.QuickReply = lineutil.NewQuickReply(QuickReplyProgramNav())
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyProgramNav())
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -548,7 +549,7 @@ func (h *Handler) handleCourseProgramsList(ctx context.Context, courseUID string
 			"⚠️ 取得相關學程時發生錯誤\n\n請稍後再試。",
 			sender,
 		)
-		msg.QuickReply = lineutil.NewQuickReply(QuickReplyProgramNav())
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyProgramNav())
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -557,7 +558,7 @@ func (h *Handler) handleCourseProgramsList(ctx context.Context, courseUID string
 		bubble := h.buildNoProgramsFoundBubble(courseName)
 		msg := lineutil.NewFlexMessage("查無相關學程", bubble.FlexBubble)
 		msg.Sender = sender
-		msg.QuickReply = lineutil.NewQuickReply(QuickReplyProgramNav())
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyProgramNav())
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -610,32 +611,10 @@ func (h *Handler) formatCourseProgramsAsCarousel(ctx context.Context, courseName
 
 	// Add quick reply to last message
 	if len(messages) > 0 {
-		lineutil.AddQuickReplyToMessages(messages, QuickReplyProgramNav()...)
+		lineutil.AddQuickReplyToMessages(messages, lineutil.QuickReplyProgramNav()...)
 	}
 
 	return messages
 }
 
 // ================================================
-// Quick Reply Actions
-// ================================================
-
-// QuickReplyProgramListAction returns a "學程列表" quick reply item.
-func QuickReplyProgramListAction() lineutil.QuickReplyItem {
-	return lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("🎓 學程列表", "學程列表")}
-}
-
-// QuickReplyProgramSearchAction returns a "學程" quick reply item.
-func QuickReplyProgramSearchAction() lineutil.QuickReplyItem {
-	return lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("🎓 學程", "學程")}
-}
-
-// QuickReplyProgramNav returns quick reply items for program module navigation.
-// Order: 🎓 學程列表 → 🎓 學程 → 📖 說明
-func QuickReplyProgramNav() []lineutil.QuickReplyItem {
-	return []lineutil.QuickReplyItem{
-		QuickReplyProgramListAction(),
-		QuickReplyProgramSearchAction(),
-		lineutil.QuickReplyHelpAction(),
-	}
-}

@@ -211,6 +211,62 @@ func (kl *KeyedLimiter) GetDailyRemaining(key string) int {
 	return entry.daily.GetRemaining()
 }
 
+// UsageStats holds comprehensive rate limit usage information for display.
+type UsageStats struct {
+	// Token bucket (burst)
+	BurstAvailable  float64 // Current available tokens
+	BurstMax        float64 // Maximum burst capacity
+	BurstRefillRate float64 // Tokens per second
+
+	// Daily limit (sliding window)
+	DailyRemaining int // Remaining daily quota
+	DailyMax       int // Maximum daily quota (-1 if disabled)
+}
+
+// GetUsageStats returns comprehensive usage statistics for a key.
+// This is used to display rate limit status to users.
+func (kl *KeyedLimiter) GetUsageStats(key string) UsageStats {
+	stats := UsageStats{
+		BurstMax:        kl.config.Burst,
+		BurstRefillRate: kl.config.RefillRate,
+		DailyMax:        kl.config.DailyLimit,
+	}
+
+	// If daily limit is disabled, set to -1
+	if kl.config.DailyLimit <= 0 {
+		stats.DailyMax = -1
+		stats.DailyRemaining = -1
+	}
+
+	if key == "" {
+		stats.BurstAvailable = kl.config.Burst
+		if stats.DailyMax > 0 {
+			stats.DailyRemaining = kl.config.DailyLimit
+		}
+		return stats
+	}
+
+	kl.mu.RLock()
+	entry, exists := kl.entries[key]
+	kl.mu.RUnlock()
+
+	if !exists {
+		// No entry means full quota available
+		stats.BurstAvailable = kl.config.Burst
+		if stats.DailyMax > 0 {
+			stats.DailyRemaining = kl.config.DailyLimit
+		}
+		return stats
+	}
+
+	stats.BurstAvailable = entry.limiter.Available()
+	if entry.daily != nil {
+		stats.DailyRemaining = entry.daily.GetRemaining()
+	}
+
+	return stats
+}
+
 // GetActiveCount returns the number of active limiters.
 func (kl *KeyedLimiter) GetActiveCount() int {
 	kl.mu.RLock()

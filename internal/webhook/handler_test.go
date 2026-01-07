@@ -64,11 +64,11 @@ func setupTestHandler(t *testing.T) *Handler {
 
 	botCfg := config.BotConfig{
 		WebhookTimeout:      30 * time.Second,
-		UserRateBurst:       15.0,
-		UserRateRefill:      0.1,
-		LLMRateBurst:        60.0,
-		LLMRateRefill:       30.0,
-		LLMRateDaily:        150,
+		UserRateBurst:       12.0,
+		UserRateRefill:      0.2,
+		LLMRateBurst:        120.0,
+		LLMRateRefill:       60.0,
+		LLMRateDaily:        300,
 		GlobalRateRPS:       100.0,
 		MaxMessagesPerReply: 5,
 		MaxEventsPerWebhook: 100,

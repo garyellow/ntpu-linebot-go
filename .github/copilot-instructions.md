@@ -33,7 +33,7 @@ LINE chatbot for NTPU (National Taipei University) providing student ID lookup, 
 5. Sticker Manager (avatar URLs)
 6. BM25 Index (load from DB syllabi)
 7. GenAI (IntentParser + QueryExpander with fallback, auto-enabled if API keys present)
-8. LLMRateLimiter (per-user hourly token bucket, 50/hour default)
+8. LLMRateLimiter (per-user hourly token bucket, 120 burst, 60/hour refill)
 9. UserRateLimiter (per-user request token bucket, webhook protection)
 10. Handlers (id, course, contact, program with DI)
 11. Registry (handler registration and dispatch)
@@ -166,11 +166,11 @@ LINE Webhook → Gin Handler
 
 **Scraper** (`internal/scraper/client.go`): No fixed delay between successful requests, exponential backoff on failure (1s initial, max 10 retries, ±25% jitter), 60s HTTP timeout per request
 
-**Webhook**: Per-user (6 tokens, 1 token/5s refill), global (100 rps), silently drops excess requests
+**Webhook**: Per-user (12 tokens, 1 token/5s refill), global (100 rps), silently drops excess requests
 
-**LLM API** (`internal/ratelimit/llm_limiter.go`): Per-user hourly limits (default 50/hour) for NLU and query expansion operations
-- Token bucket with configurable `maxPerHour` burst capacity
-- Refill rate: `maxPerHour / 3600` tokens per second
+**LLM API** (`internal/ratelimit/llm_limiter.go`): Per-user multi-layer limits (default 120 burst, 60/hr refill, 300/day cap) for NLU and query expansion operations
+- Token bucket with configurable burst capacity and hourly refill rate
+- Daily sliding window to prevent quota exhaustion
 - Independent from webhook rate limiter to control expensive LLM operations separately
 - Auto-cleanup of inactive limiters every 5 minutes
 

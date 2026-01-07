@@ -648,6 +648,11 @@ func QuickReplyProgramListAction() QuickReplyItem {
 	return QuickReplyItem{Action: NewMessageAction("🎓 學程列表", "學程列表")}
 }
 
+// QuickReplyUsageAction returns a "配額" quick reply item
+func QuickReplyUsageAction() QuickReplyItem {
+	return QuickReplyItem{Action: NewMessageAction("📊 配額", "配額")}
+}
+
 // QuickReplyMoreCoursesCompact returns a compact "更多" quick reply item for course search results.
 // This provides a cleaner UX with a short label "📅 更多" while the message output
 // remains "更多學期 {keyword}" for consistent behavior.
@@ -762,6 +767,29 @@ func QuickReplyContactNav() []QuickReplyItem {
 	return []QuickReplyItem{
 		QuickReplyContactAction(),
 		QuickReplyEmergencyAction(),
+		QuickReplyHelpAction(),
+	}
+}
+
+// QuickReplyUsageNav returns quick reply items for usage module navigation.
+// Use this after usage-related responses.
+// Order: 📚 課程 → 🎓 學號 → 📞 聯絡 → 📖 說明
+func QuickReplyUsageNav() []QuickReplyItem {
+	return []QuickReplyItem{
+		QuickReplyCourseAction(),
+		QuickReplyStudentAction(),
+		QuickReplyContactAction(),
+		QuickReplyHelpAction(),
+	}
+}
+
+// QuickReplyProgramNav returns quick reply items for program module navigation.
+// Use this after program-related responses.
+// Order: 🎓 學程列表 → 🎓 學程 → 📖 說明
+func QuickReplyProgramNav() []QuickReplyItem {
+	return []QuickReplyItem{
+		QuickReplyProgramListAction(),
+		QuickReplyProgramAction(),
 		QuickReplyHelpAction(),
 	}
 }
