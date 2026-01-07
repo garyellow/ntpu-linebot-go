@@ -30,7 +30,7 @@ const IntentParserSystemPrompt = `你是 NTPU 小工具的意圖分類助手。
 - **program_search** - 搜尋學程：依名稱搜尋學程
 
 ### 5. 使用說明
-- **help** - 顯示機器人使用說明
+- **help** - 顯示使用說明
 
 ### 6. 直接回覆
 - **direct_reply** - 用於閒聊、問候、感謝、離題詢問、或需要澄清意圖時

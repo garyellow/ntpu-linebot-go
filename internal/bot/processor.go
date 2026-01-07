@@ -1029,7 +1029,7 @@ func (p *Processor) buildDataSourceFlexMessage(sender *messaging_api.Sender) mes
 
 	// Body section with data sources (simplified)
 	body := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexText("所有查詢資料來自北大公開網站").
+		lineutil.NewFlexText("所有查詢資料來自 NTPU 公開網站").
 			WithSize("sm").
 			WithColor(lineutil.ColorText).
 			WithWeight("bold").
