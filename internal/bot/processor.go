@@ -855,6 +855,25 @@ func (p *Processor) buildKeywordModeFlexMessage(nluEnabled bool, sender *messagi
 			WithColor(lineutil.ColorSubtext).
 			WithMargin("xs").
 			WithWrap(true).FlexText,
+
+		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
+
+		// Usage query
+		lineutil.NewFlexText("📊 配額查詢").
+			WithWeight("bold").
+			WithColor(lineutil.ColorText).
+			WithSize("sm").
+			WithMargin("md").FlexText,
+		lineutil.NewFlexText("• 查詢：配額 / 用量 / 額度").
+			WithSize("xs").
+			WithColor(lineutil.ColorSubtext).
+			WithMargin("sm").
+			WithWrap(true).FlexText,
+		lineutil.NewFlexText("• 顯示：訊息頻率限制與 AI 配額").
+			WithSize("xs").
+			WithColor(lineutil.ColorSubtext).
+			WithMargin("xs").
+			WithWrap(true).FlexText,
 	).WithSpacing("none")
 
 	bubble := lineutil.NewFlexBubble(hero, nil, body, nil)

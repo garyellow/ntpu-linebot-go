@@ -22,6 +22,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/modules/course"
 	"github.com/garyellow/ntpu-linebot-go/internal/modules/id"
 	"github.com/garyellow/ntpu-linebot-go/internal/modules/program"
+	"github.com/garyellow/ntpu-linebot-go/internal/modules/usage"
 	"github.com/garyellow/ntpu-linebot-go/internal/rag"
 	"github.com/garyellow/ntpu-linebot-go/internal/ratelimit"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
@@ -137,12 +138,14 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerMgr, bm25Index, queryExpander, llmLimiter)
 	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerMgr, cfg.Bot.MaxContactsPerSearch)
 	programHandler := program.NewHandler(db, m, log, stickerMgr, courseHandler.GetSemesterDetector())
+	usageHandler := usage.NewHandler(userLimiter, llmLimiter, log, stickerMgr)
 
 	botRegistry := bot.NewRegistry()
 	botRegistry.Register(contactHandler)
 	botRegistry.Register(courseHandler)
 	botRegistry.Register(idHandler)
 	botRegistry.Register(programHandler)
+	botRegistry.Register(usageHandler)
 
 	processor := bot.NewProcessor(bot.ProcessorConfig{
 		Registry:       botRegistry,
