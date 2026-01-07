@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
+	"github.com/garyellow/ntpu-linebot-go/internal/ctxutil"
 	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
@@ -21,7 +22,7 @@ import (
 // Module constants
 const (
 	ModuleName = "usage"
-	senderName = "配額小幫手"
+	senderName = "額度小幫手"
 )
 
 // Handler handles usage-related queries.
@@ -35,10 +36,13 @@ type Handler struct {
 // Keyword definitions for usage queries
 var (
 	usageKeywords = []string{
-		"用量", "配額", "額度",
+		"用量", "配額", "額度", "扣打",
 		"quota", "usage", "limit",
 	}
 	usageRegex = bot.BuildKeywordRegex(usageKeywords)
+
+	// Quota explanation keyword - triggers explanation of what consumes quota
+	quotaExplainKeyword = "額度說明"
 )
 
 // Name returns the module name
@@ -61,15 +65,26 @@ func NewHandler(
 	}
 }
 
-// CanHandle returns true if the text matches usage keywords.
+// CanHandle returns true if the text matches usage or quota explanation keywords.
 func (h *Handler) CanHandle(text string) bool {
 	text = strings.TrimSpace(text)
-	return usageRegex.MatchString(text)
+	return usageRegex.MatchString(text) || strings.EqualFold(text, quotaExplainKeyword)
 }
 
 // HandleMessage processes usage queries and returns a Flex Message with quota status.
 func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(ModuleName)
+
+	// Check for quota explanation request
+	if strings.EqualFold(strings.TrimSpace(text), quotaExplainKeyword) {
+		log.Debug("Handling quota explanation request")
+		var sender *messaging_api.Sender
+		if h.stickerManager != nil {
+			sender = lineutil.GetSender(senderName, h.stickerManager)
+		}
+		return []messaging_api.MessageInterface{h.buildQuotaExplanationFlexMessage(sender)}
+	}
+
 	log.Debug("Handling usage query")
 
 	// Get user ID from context for per-user quota lookup
@@ -128,56 +143,60 @@ func getUserIDFromContext(ctx context.Context) string {
 	if ctx == nil {
 		return ""
 	}
-	// Rate limiting uses chat ID as the primary key
-	if chatID, ok := ctx.Value("chatID").(string); ok {
-		return chatID
-	}
-	return ""
+	// Use ctxutil.GetChatID which uses the correct typed context key
+	return ctxutil.GetChatID(ctx)
 }
 
 // buildUsageFlexMessage creates a Flex Message displaying usage statistics.
+//
+// Layout (Colored Header pattern):
+//
+//	┌──────────────────────────┐
+//	│   📊 使用額度狀態        │  <- Colored header (sky blue)
+//	├──────────────────────────┤
+//	│ ⚡ 訊息額度              │  <- User quota section
+//	│ 可用: X / Y 次           │
+//	│ [colored bar 8px]        │  <- Progress bar (green/yellow/red)
+//	│ 💡 恢復說明              │
+//	├──────────────────────────┤
+//	│ 🤖 AI 功能額度           │  <- LLM rate limit section
+//	│ ...                      │
+//	├──────────────────────────┤
+//	│     [📖 使用說明]        │  <- Single footer button
+//	└──────────────────────────┘
 func (h *Handler) buildUsageFlexMessage(userStats, llmStats ratelimit.UsageStats, sender *messaging_api.Sender) *messaging_api.FlexMessage {
-	// Hero section
-	hero := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexText("📊 使用配額狀態").
-			WithSize("lg").
-			WithWeight("bold").
-			WithColor(lineutil.ColorHeroText).FlexText,
-	).
-		WithBackgroundColor(lineutil.ColorHeaderPrimary).
-		WithPaddingAll("lg").
-		WithPaddingBottom("md")
+	// Header: Colored header with title (matching other modules)
+	header := lineutil.NewColoredHeader(lineutil.ColoredHeaderInfo{
+		Title: "📊 使用額度狀態",
+		Color: lineutil.ColorHeaderInfo, // Sky blue for info display
+	})
 
-	// Body sections
-	var bodyContents []messaging_api.FlexComponentInterface
+	// Body: Use BodyContentBuilder for consistent structure
+	body := lineutil.NewBodyContentBuilder()
 
 	// User rate limit section (if available)
 	if h.userLimiter != nil {
-		bodyContents = append(bodyContents, h.buildUserRateLimitSection(userStats)...)
-		bodyContents = append(bodyContents, lineutil.NewFlexSeparator().WithMargin("lg").FlexSeparator)
+		h.addUserRateLimitSection(body, userStats)
 	}
 
 	// LLM rate limit section (if available)
 	if h.llmLimiter != nil {
-		bodyContents = append(bodyContents, h.buildLLMRateLimitSection(llmStats)...)
+		h.addLLMRateLimitSection(body, llmStats)
 	}
 
-	body := lineutil.NewFlexBox("vertical", bodyContents...).WithSpacing("sm")
+	// Footer: Quota explanation button + Help button
+	quotaExplainBtn := lineutil.NewFlexButton(
+		lineutil.NewMessageAction("❓ 額度說明", "額度說明"),
+	).WithStyle("secondary").WithHeight("sm")
 
-	// Footer with quick actions
-	footer := lineutil.NewFlexBox("horizontal",
-		lineutil.NewFlexButton(lineutil.NewMessageAction("📚 課程查詢", "課程")).
-			WithStyle("primary").
-			WithColor(lineutil.ColorButtonInternal).
-			WithHeight("sm").FlexButton,
-		lineutil.NewFlexButton(lineutil.NewMessageAction("📖 使用說明", "使用說明")).
-			WithStyle("secondary").
-			WithHeight("sm").
-			WithMargin("sm").FlexButton,
-	).WithSpacing("sm")
+	helpBtn := lineutil.NewFlexButton(
+		lineutil.NewMessageAction("📖 使用說明", "使用說明"),
+	).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm")
 
-	bubble := lineutil.NewFlexBubble(hero, nil, body, footer)
-	msg := lineutil.NewFlexMessage("使用配額狀態", bubble.FlexBubble)
+	footer := lineutil.NewButtonFooter([]*lineutil.FlexButton{quotaExplainBtn, helpBtn})
+
+	bubble := lineutil.NewFlexBubble(header, nil, body.Build(), footer)
+	msg := lineutil.NewFlexMessage("使用額度狀態", bubble.FlexBubble)
 	if sender != nil {
 		msg.Sender = sender
 	}
@@ -187,8 +206,77 @@ func (h *Handler) buildUsageFlexMessage(userStats, llmStats ratelimit.UsageStats
 	return msg
 }
 
-// buildUserRateLimitSection creates the user rate limit display section.
-func (h *Handler) buildUserRateLimitSection(stats ratelimit.UsageStats) []messaging_api.FlexComponentInterface {
+// buildQuotaExplanationFlexMessage creates a Flex Message explaining what operations consume quota.
+func (h *Handler) buildQuotaExplanationFlexMessage(sender *messaging_api.Sender) *messaging_api.FlexMessage {
+	// Header
+	header := lineutil.NewColoredHeader(lineutil.ColoredHeaderInfo{
+		Title: "❓ 額度說明",
+		Color: lineutil.ColorHeaderTips,
+	})
+
+	// Body
+	body := lineutil.NewBodyContentBuilder()
+
+	// User quota section
+	body.AddComponent(lineutil.NewFlexText("⚡ 訊息額度").
+		WithWeight("bold").
+		WithColor(lineutil.ColorText).
+		WithSize("sm").FlexText)
+	body.AddComponent(lineutil.NewFlexText("每則訊息都會扣除 1 次，包括文字、貼圖等。").
+		WithSize("xs").
+		WithColor(lineutil.ColorSubtext).
+		WithWrap(true).
+		WithMargin("sm").FlexText)
+
+	// AI quota section
+	body.AddComponent(lineutil.NewFlexText("🤖 AI 額度").
+		WithWeight("bold").
+		WithColor(lineutil.ColorText).
+		WithSize("sm").
+		WithMargin("lg").FlexText)
+	body.AddComponent(lineutil.NewFlexText("以下操作會扣除 AI 額度：").
+		WithSize("xs").
+		WithColor(lineutil.ColorSubtext).
+		WithWrap(true).
+		WithMargin("sm").FlexText)
+	body.AddComponent(lineutil.NewFlexText("• 自然語言對話（非關鍵字查詢）\n• 智慧搜尋（找課）").
+		WithSize("xs").
+		WithColor(lineutil.ColorSubtext).
+		WithWrap(true).
+		WithMargin("xs").FlexText)
+
+	// Tips section
+	body.AddComponent(lineutil.NewFlexText("💡 省 AI 額度技巧").
+		WithWeight("bold").
+		WithColor(lineutil.ColorText).
+		WithSize("sm").
+		WithMargin("lg").FlexText)
+	body.AddComponent(lineutil.NewFlexText("使用關鍵字查詢不扣 AI 額度。").
+		WithSize("xs").
+		WithColor(lineutil.ColorSubtext).
+		WithWrap(true).
+		WithMargin("sm").FlexText)
+
+	// Footer
+	checkQuotaBtn := lineutil.NewFlexButton(
+		lineutil.NewMessageAction("📊 查看額度", "額度"),
+	).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm")
+
+	footer := lineutil.NewButtonFooter([]*lineutil.FlexButton{checkQuotaBtn})
+
+	bubble := lineutil.NewFlexBubble(header, nil, body.Build(), footer)
+	msg := lineutil.NewFlexMessage("額度說明", bubble.FlexBubble)
+	if sender != nil {
+		msg.Sender = sender
+	}
+
+	msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyUsageNav())
+
+	return msg
+}
+
+// addUserRateLimitSection adds the user rate limit display to the body builder.
+func (h *Handler) addUserRateLimitSection(body *lineutil.BodyContentBuilder, stats ratelimit.UsageStats) {
 	available := int(math.Floor(stats.BurstAvailable))
 	maxBurst := int(stats.BurstMax)
 	var percentage float64
@@ -207,35 +295,32 @@ func (h *Handler) buildUserRateLimitSection(stats ratelimit.UsageStats) []messag
 		}
 	}
 
-	return []messaging_api.FlexComponentInterface{
-		lineutil.NewFlexText("⚡ 訊息頻率限制").
-			WithWeight("bold").
-			WithColor(lineutil.ColorText).
-			WithSize("sm").FlexText,
-		lineutil.NewFlexBox("horizontal",
-			lineutil.NewFlexText(fmt.Sprintf("可用: %d / %d 次", available, maxBurst)).
-				WithSize("sm").
-				WithColor(lineutil.ColorText).FlexText,
-		).WithMargin("sm").FlexBox,
+	// Section title
+	body.AddComponent(lineutil.NewFlexText("⚡ 訊息額度").
+		WithWeight("bold").
+		WithColor(lineutil.ColorText).
+		WithSize("sm").FlexText)
+
+	// Usage info and progress bar
+	body.AddComponent(lineutil.NewFlexBox("vertical",
+		lineutil.NewFlexText(fmt.Sprintf("可用: %d / %d 次", available, maxBurst)).
+			WithSize("sm").
+			WithColor(lineutil.ColorText).FlexText,
 		h.buildProgressBar(percentage).WithMargin("sm").FlexBox,
 		lineutil.NewFlexText(fmt.Sprintf("💡 %s", refillInfo)).
 			WithSize("xs").
 			WithColor(lineutil.ColorSubtext).
 			WithMargin("sm").FlexText,
-	}
+	).FlexBox)
 }
 
-// buildLLMRateLimitSection creates the LLM rate limit display section.
-func (h *Handler) buildLLMRateLimitSection(stats ratelimit.UsageStats) []messaging_api.FlexComponentInterface {
-	var contents []messaging_api.FlexComponentInterface
-
-	contents = append(contents,
-		lineutil.NewFlexText("🤖 AI 功能配額").
-			WithWeight("bold").
-			WithColor(lineutil.ColorText).
-			WithSize("sm").
-			WithMargin("md").FlexText,
-	)
+// addLLMRateLimitSection adds the LLM rate limit display to the body builder.
+func (h *Handler) addLLMRateLimitSection(body *lineutil.BodyContentBuilder, stats ratelimit.UsageStats) {
+	// Section title
+	body.AddComponent(lineutil.NewFlexText("🤖 AI 功能額度").
+		WithWeight("bold").
+		WithColor(lineutil.ColorText).
+		WithSize("sm").FlexText)
 
 	// Burst (short-term) quota
 	burstAvailable := int(math.Floor(stats.BurstAvailable))
@@ -248,23 +333,22 @@ func (h *Handler) buildLLMRateLimitSection(stats ratelimit.UsageStats) []messagi
 	// Calculate hourly refill (convert from per-second)
 	hourlyRefill := stats.BurstRefillRate * 3600
 
-	contents = append(contents,
-		lineutil.NewFlexText("📈 短期配額").
+	// Short-term quota subsection
+	body.AddComponent(lineutil.NewFlexBox("vertical",
+		lineutil.NewFlexText("📈 短期額度").
 			WithSize("xs").
 			WithColor(lineutil.ColorText).
-			WithWeight("bold").
-			WithMargin("md").FlexText,
-		lineutil.NewFlexBox("horizontal",
-			lineutil.NewFlexText(fmt.Sprintf("可用: %d / %d 次", burstAvailable, burstMax)).
-				WithSize("sm").
-				WithColor(lineutil.ColorText).FlexText,
-		).WithMargin("sm").FlexBox,
+			WithWeight("bold").FlexText,
+		lineutil.NewFlexText(fmt.Sprintf("可用: %d / %d 次", burstAvailable, burstMax)).
+			WithSize("sm").
+			WithColor(lineutil.ColorText).
+			WithMargin("sm").FlexText,
 		h.buildProgressBar(burstPercentage).WithMargin("sm").FlexBox,
 		lineutil.NewFlexText(fmt.Sprintf("💡 每小時恢復 %.0f 次", hourlyRefill)).
 			WithSize("xs").
 			WithColor(lineutil.ColorSubtext).
 			WithMargin("sm").FlexText,
-	)
+	).FlexBox)
 
 	// Daily quota (if enabled)
 	if stats.DailyMax > 0 {
@@ -272,29 +356,27 @@ func (h *Handler) buildLLMRateLimitSection(stats ratelimit.UsageStats) []messagi
 		dailyMax := stats.DailyMax
 		dailyPercentage := float64(dailyRemaining) / float64(dailyMax) * 100
 
-		contents = append(contents,
-			lineutil.NewFlexText("📅 每日配額").
+		body.AddComponent(lineutil.NewFlexBox("vertical",
+			lineutil.NewFlexText("📅 每日額度").
 				WithSize("xs").
 				WithColor(lineutil.ColorText).
-				WithWeight("bold").
-				WithMargin("md").FlexText,
-			lineutil.NewFlexBox("horizontal",
-				lineutil.NewFlexText(fmt.Sprintf("可用: %d / %d 次", dailyRemaining, dailyMax)).
-					WithSize("sm").
-					WithColor(lineutil.ColorText).FlexText,
-			).WithMargin("sm").FlexBox,
+				WithWeight("bold").FlexText,
+			lineutil.NewFlexText(fmt.Sprintf("可用: %d / %d 次", dailyRemaining, dailyMax)).
+				WithSize("sm").
+				WithColor(lineutil.ColorText).
+				WithMargin("sm").FlexText,
 			h.buildProgressBar(dailyPercentage).WithMargin("sm").FlexBox,
-			lineutil.NewFlexText("💡 每日凌晨重置").
+			lineutil.NewFlexText("💡 滾動 24 小時計算").
 				WithSize("xs").
 				WithColor(lineutil.ColorSubtext).
 				WithMargin("sm").FlexText,
-		)
+		).FlexBox)
 	}
-
-	return contents
 }
 
 // buildProgressBar creates a visual progress bar using box components.
+// The bar uses explicit height to ensure visibility in LINE Flex Messages.
+// Uses flex ratios to represent percentage: filled vs empty parts.
 func (h *Handler) buildProgressBar(percentage float64) *lineutil.FlexBox {
 	// Clamp percentage to 0-100
 	if percentage < 0 {
@@ -308,52 +390,58 @@ func (h *Handler) buildProgressBar(percentage float64) *lineutil.FlexBox {
 	var color string
 	switch {
 	case percentage > 50:
-		color = "#4CAF50" // Green
+		color = "#4CAF50" // Green - healthy
 	case percentage > 20:
-		color = "#FFC107" // Yellow
+		color = "#FFC107" // Yellow - warning
 	default:
-		color = "#F44336" // Red
+		color = "#F44336" // Red - critical
 	}
 
-	// Create filled and empty parts
-	// Use flex ratios to represent percentage (min 2 to ensure visibility)
+	// Calculate flex ratios (integer values, range 1-100)
 	filledFlex := int32(percentage)
-	emptyFlex := int32(100) - filledFlex
+	emptyFlex := int32(100 - percentage)
 
-	// Ensure minimum visibility (at least 2%)
-	if filledFlex > 0 && filledFlex < 2 {
-		filledFlex = 2
-		emptyFlex = 98
-	} else if emptyFlex > 0 && emptyFlex < 2 {
-		emptyFlex = 2
-		filledFlex = 98
-	}
-
-	// Handle 0% and 100% cases
-	if percentage <= 0 {
+	// Ensure minimum visibility of 1 for non-zero values
+	if filledFlex == 0 && percentage > 0 {
 		filledFlex = 1
 		emptyFlex = 99
-	} else if percentage >= 100 {
-		filledFlex = 99
+	}
+	if emptyFlex == 0 && percentage < 100 {
 		emptyFlex = 1
+		filledFlex = 99
 	}
 
+	// Handle exact 0% and 100%
+	if percentage <= 0 {
+		filledFlex = 0
+		emptyFlex = 100
+	} else if percentage >= 100 {
+		filledFlex = 100
+		emptyFlex = 0
+	}
+
+	// Create progress bar container with explicit height for visibility
+	// LINE Flex Message requires height for empty boxes to render
+	const barHeight = "8px"
+
+	// Build filled and empty box parts
 	filledBox := lineutil.NewFlexBox("vertical").
 		WithBackgroundColor(color).
-		WithCornerRadius("sm")
+		WithHeight(barHeight)
 	filledBox.Flex = filledFlex
 
 	emptyBox := lineutil.NewFlexBox("vertical").
 		WithBackgroundColor("#E0E0E0").
-		WithCornerRadius("sm")
+		WithHeight(barHeight)
 	emptyBox.Flex = emptyFlex
 
-	return lineutil.NewFlexBox("horizontal",
+	// Create horizontal container for the bar
+	bar := lineutil.NewFlexBox("horizontal",
 		filledBox.FlexBox,
 		emptyBox.FlexBox,
-	).
-		WithCornerRadius("sm").
-		WithBackgroundColor("#E0E0E0")
+	).WithCornerRadius("sm").WithHeight(barHeight)
+
+	return bar
 }
 
 // Ensure Handler implements bot interfaces

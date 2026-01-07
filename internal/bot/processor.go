@@ -869,7 +869,7 @@ func (p *Processor) buildKeywordModeFlexMessage(nluEnabled bool, sender *messagi
 			WithColor(lineutil.ColorSubtext).
 			WithMargin("sm").
 			WithWrap(true).FlexText,
-		lineutil.NewFlexText("• 顯示：訊息頻率限制與 AI 配額").
+		lineutil.NewFlexText("• 顯示：訊息額度與 AI 額度").
 			WithSize("xs").
 			WithColor(lineutil.ColorSubtext).
 			WithMargin("xs").

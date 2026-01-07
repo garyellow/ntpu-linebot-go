@@ -138,6 +138,14 @@ func (b *FlexBox) WithCornerRadius(radius string) *FlexBox {
 	return b
 }
 
+// WithHeight sets the height of the box.
+// Use this for elements that need explicit height, such as progress bars.
+// Valid values: "xxs" (16px), "xs" (26px), "sm" (36px), "md" (46px), "lg" (76px), "xl" (106px), "xxl" (126px), or explicit pixels (e.g., "10px").
+func (b *FlexBox) WithHeight(height string) *FlexBox {
+	b.Height = height
+	return b
+}
+
 // FlexText wrapper for messaging_api.FlexText with fluent API.
 type FlexText struct {
 	*messaging_api.FlexText

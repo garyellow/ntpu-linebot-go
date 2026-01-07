@@ -20,6 +20,7 @@ func TestHandler_CanHandle(t *testing.T) {
 		{"用量", "用量", true},
 		{"配額", "配額", true},
 		{"額度", "額度", true},
+		{"扣打", "扣打", true},
 		// English keywords
 		{"quota", "quota", true},
 		{"usage", "usage", true},

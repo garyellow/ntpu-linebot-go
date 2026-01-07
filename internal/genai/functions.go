@@ -179,7 +179,7 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 		// ============================================
 		{
 			Name:        "usage_query",
-			Description: "查詢使用者的功能配額狀態（訊息頻率限制、AI 功能配額）。",
+			Description: "查詢使用者的功能額度狀態（訊息額度、AI 額度）。",
 			Parameters: &genai.Schema{
 				Type:       genai.TypeObject,
 				Properties: map[string]*genai.Schema{},
