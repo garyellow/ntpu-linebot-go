@@ -190,8 +190,11 @@ func (h *Handler) buildUsageFlexMessage(userStats, llmStats ratelimit.UsageStats
 // buildUserRateLimitSection creates the user rate limit display section.
 func (h *Handler) buildUserRateLimitSection(stats ratelimit.UsageStats) []messaging_api.FlexComponentInterface {
 	available := int(math.Floor(stats.BurstAvailable))
-	max := int(stats.BurstMax)
-	percentage := stats.BurstAvailable / stats.BurstMax * 100
+	maxBurst := int(stats.BurstMax)
+	var percentage float64
+	if stats.BurstMax > 0 {
+		percentage = stats.BurstAvailable / stats.BurstMax * 100
+	}
 
 	// Calculate refill info
 	refillInfo := "持續恢復中"
@@ -210,7 +213,7 @@ func (h *Handler) buildUserRateLimitSection(stats ratelimit.UsageStats) []messag
 			WithColor(lineutil.ColorText).
 			WithSize("sm").FlexText,
 		lineutil.NewFlexBox("horizontal",
-			lineutil.NewFlexText(fmt.Sprintf("可用: %d / %d 次", available, max)).
+			lineutil.NewFlexText(fmt.Sprintf("可用: %d / %d 次", available, maxBurst)).
 				WithSize("sm").
 				WithColor(lineutil.ColorText).FlexText,
 		).WithMargin("sm").FlexBox,
@@ -237,7 +240,10 @@ func (h *Handler) buildLLMRateLimitSection(stats ratelimit.UsageStats) []messagi
 	// Burst (short-term) quota
 	burstAvailable := int(math.Floor(stats.BurstAvailable))
 	burstMax := int(stats.BurstMax)
-	burstPercentage := stats.BurstAvailable / stats.BurstMax * 100
+	var burstPercentage float64
+	if stats.BurstMax > 0 {
+		burstPercentage = stats.BurstAvailable / stats.BurstMax * 100
+	}
 
 	// Calculate hourly refill (convert from per-second)
 	hourlyRefill := stats.BurstRefillRate * 3600

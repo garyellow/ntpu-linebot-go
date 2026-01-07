@@ -33,7 +33,7 @@ LINE chatbot for NTPU (National Taipei University) providing student ID lookup, 
 5. Sticker Manager (avatar URLs)
 6. BM25 Index (load from DB syllabi)
 7. GenAI (IntentParser + QueryExpander with fallback, auto-enabled if API keys present)
-8. LLMRateLimiter (per-user hourly token bucket, 60/hour default)
+8. LLMRateLimiter (per-user hourly token bucket, 120 burst, 60/hour refill)
 9. UserRateLimiter (per-user request token bucket, webhook protection)
 10. Handlers (id, course, contact, program with DI)
 11. Registry (handler registration and dispatch)
