@@ -263,8 +263,8 @@ User Query → Bot Module → Repository Layer
 
 2. **Webhook Level（API 層）**
    - Global: 100 rps
-   - Per-User: 15 tokens, refill 1 token/10s
-   - LLM: 60 burst, 30/hr refill, 150/day cap
+   - Per-User: 12 tokens, refill 1 token/5s
+   - Per-User LLM: 120 burst, 60/hr refill, 300/day cap
    - 防止濫用
 
 ### 3. Strategy Pattern（策略模式）
@@ -492,9 +492,10 @@ func sanitizeSearchTerm(term string) string {
 ### 3. Rate Limiting（防 DDoS）
 
 - Global Rate Limit: 100 rps
-- Per-User Rate Limit: 15 tokens, 1 token/10s refill (Token Bucket)
-- LLM Rate Limit: 60 burst, 30/hr refill, 150/day sliding window
-- 超過限制靜默丟棄請求
+- Per-User Rate Limit: 12 tokens, 1 token/5s refill (Token Bucket)
+- Per-User LLM Rate Limit: 120 burst, 60/hr refill, 300/day sliding window
+- 超過一般限制：群組靜默丟棄，個人回覆提示訊息
+- 超過 LLM 限制：回覆提示訊息，引導使用關鍵字查詢
 
 ### 4. 輸入驗證
 

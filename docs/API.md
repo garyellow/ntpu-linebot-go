@@ -188,8 +188,8 @@ X-Line-Signature: {signature}
 - Request body < 1MB
 - 處理超時: 60 秒
 - Global rate limit: 100 rps
-- Per-user rate limit: 15 tokens, 1 token/10s refill (Token Bucket)
-- LLM rate limit: 60 burst, 30/hr refill, 150/day cap
+- Per-user rate limit: 12 tokens, 1 token/5s refill (Token Bucket)
+- LLM rate limit: 120 burst, 60/hr refill, 300/day cap
 
 ---
 
@@ -442,17 +442,18 @@ LINE Webhook **必須**使用 HTTPS：
 100 requests/second (LINE API limit: 100 rps)
 ```
 
-**Per-User Level**:
+**Per-User Level (Webhook)**:
 ```
-15 tokens burst, 1 token per 10 seconds refill (Token Bucket)
-```
-
-**LLM Level (Multi-Layer)**:
-```
-60 burst, 30/hr refill, 150/day sliding window cap
+12 tokens burst, 1 token per 5 seconds refill (Token Bucket)
 ```
 
-超過限制時請求會被靜默丟棄。
+**Per-User Level (LLM - Multi-Layer)**:
+```
+120 burst, 60/hr refill, 300/day sliding window cap
+```
+
+超過一般限制時請求會被靜默丟棄（群組）或回覆提示訊息（個人）。
+超過 LLM 限制時會回覆提示訊息，引導使用者使用關鍵字查詢。
 
 ---
 
