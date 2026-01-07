@@ -222,7 +222,7 @@ func (h *Handler) buildQuotaExplanationFlexMessage(sender *messaging_api.Sender)
 		WithWeight("bold").
 		WithColor(lineutil.ColorText).
 		WithSize("sm").FlexText)
-	body.AddComponent(lineutil.NewFlexText("每則訊息都會扣除 1 次，包括文字、貼圖等。").
+	body.AddComponent(lineutil.NewFlexText("每則訊息都會扣除 1 次，包括文字、互動等。").
 		WithSize("xs").
 		WithColor(lineutil.ColorSubtext).
 		WithWrap(true).
@@ -234,7 +234,7 @@ func (h *Handler) buildQuotaExplanationFlexMessage(sender *messaging_api.Sender)
 		WithColor(lineutil.ColorText).
 		WithSize("sm").
 		WithMargin("lg").FlexText)
-	body.AddComponent(lineutil.NewFlexText("以下操作會扣除 AI 額度：").
+	body.AddComponent(lineutil.NewFlexText("以下操作會扣除 1 次 AI 額度：").
 		WithSize("xs").
 		WithColor(lineutil.ColorSubtext).
 		WithWrap(true).
@@ -251,7 +251,7 @@ func (h *Handler) buildQuotaExplanationFlexMessage(sender *messaging_api.Sender)
 		WithColor(lineutil.ColorText).
 		WithSize("sm").
 		WithMargin("lg").FlexText)
-	body.AddComponent(lineutil.NewFlexText("使用關鍵字查詢不扣 AI 額度。").
+	body.AddComponent(lineutil.NewFlexText("使用關鍵字查詢不會扣 AI 額度。").
 		WithSize("xs").
 		WithColor(lineutil.ColorSubtext).
 		WithWrap(true).

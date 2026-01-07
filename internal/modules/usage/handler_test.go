@@ -58,7 +58,7 @@ func TestHandler_HandleMessage(t *testing.T) {
 
 	userLimiter := ratelimit.NewKeyedLimiter(ratelimit.KeyedConfig{
 		Burst:      5,
-		RefillRate: 0.2,
+		RefillRate: 0.1,
 	})
 	defer userLimiter.Stop()
 

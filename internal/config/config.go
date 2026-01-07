@@ -67,13 +67,13 @@ type BotConfig struct {
 	WebhookTimeout time.Duration // Timeout for webhook bot processing (see config/timeouts.go)
 
 	// Rate Limits (Token Bucket Algorithm - Per-User)
-	UserRateBurst  float64 // Maximum burst tokens per user (default: 12)
-	UserRateRefill float64 // Tokens refilled per second (default: 0.2 = 1 per 5s)
+	UserRateBurst  float64 // Maximum burst tokens per user (default: 15)
+	UserRateRefill float64 // Tokens refilled per second (default: 0.1 = 1 per 10s)
 
 	// LLM Rate Limits (Multi-Layer: Hourly + Daily - Per-User)
-	LLMRateBurst  float64 // Maximum burst tokens per user for LLM (default: 120)
-	LLMRateRefill float64 // LLM tokens refilled per hour per user (default: 60)
-	LLMRateDaily  int     // Maximum LLM requests per day per user (default: 300, 0 = disabled)
+	LLMRateBurst  float64 // Maximum burst tokens per user for LLM (default: 60)
+	LLMRateRefill float64 // LLM tokens refilled per hour per user (default: 30)
+	LLMRateDaily  int     // Maximum LLM requests per day per user (default: 180, 0 = disabled)
 
 	GlobalRateRPS float64 // Global rate limit in requests per second (default: 100)
 
@@ -155,11 +155,11 @@ func Load() (*Config, error) {
 		// Bot Configuration
 		Bot: BotConfig{
 			WebhookTimeout:      getDurationEnv("WEBHOOK_TIMEOUT", WebhookProcessing),
-			UserRateBurst:       getFloatEnv("USER_RATE_BURST", 12.0),
-			UserRateRefill:      getFloatEnv("USER_RATE_REFILL", 0.2), // 1 per 5s
-			LLMRateBurst:        getFloatEnv("LLM_RATE_BURST", 120.0),
-			LLMRateRefill:       getFloatEnv("LLM_RATE_REFILL", 60.0),
-			LLMRateDaily:        getIntEnv("LLM_RATE_DAILY", 300),
+			UserRateBurst:       getFloatEnv("USER_RATE_BURST", 15.0),
+			UserRateRefill:      getFloatEnv("USER_RATE_REFILL", 0.1), // 1 per 10s
+			LLMRateBurst:        getFloatEnv("LLM_RATE_BURST", 60.0),
+			LLMRateRefill:       getFloatEnv("LLM_RATE_REFILL", 30.0),
+			LLMRateDaily:        getIntEnv("LLM_RATE_DAILY", 180),
 			GlobalRateRPS:       getFloatEnv("GLOBAL_RATE_RPS", 100.0),
 			MaxMessagesPerReply: LINEMaxMessagesPerReply,
 			MaxEventsPerWebhook: 100,
