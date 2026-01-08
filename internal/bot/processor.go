@@ -83,8 +83,9 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 	// Inject context values for tracing and logging
 	ctx = p.injectContextValues(ctx, event.Source)
 
-	// Extract QuoteToken early for Quote Reply functionality
-	// We support quoting for both Text and Sticker messages
+	// Extract QuoteToken early for Quote Reply functionality.
+	// Both Text and Sticker messages have this field, but LINE API only supports
+	// displaying quote tokens in TextMessage replies (other message types ignore it).
 	var quoteToken string
 	switch m := event.Message.(type) {
 	case webhook.TextMessageContent:
@@ -283,10 +284,11 @@ func (p *Processor) buildWelcomeFlexMessage(nluEnabled bool, sender *messaging_a
 		).WithMargin("xs").FlexBox,
 	)
 
-	// Body section
-	bodyContents := []messaging_api.FlexComponentInterface{
+	// Body section (preallocate capacity: 1 initial + features + 3 data source elements)
+	bodyContents := make([]messaging_api.FlexComponentInterface, 0, 1+len(features)+3)
+	bodyContents = append(bodyContents,
 		lineutil.NewFlexText("🎯 主要功能").WithWeight("bold").WithColor(lineutil.ColorText).WithSize("sm").FlexText,
-	}
+	)
 	bodyContents = append(bodyContents, features...)
 
 	// Data source note

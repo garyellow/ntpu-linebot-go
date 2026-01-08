@@ -12,7 +12,7 @@ const (
 	userIDKey     contextKey = "ctxutil.userID"
 	chatIDKey     contextKey = "ctxutil.chatID"
 	requestIDKey  contextKey = "ctxutil.requestID"
-	quoteTokenKey contextKey = "ctxutil.quoteToken"
+	quoteTokenKey contextKey = "ctxutil.quoteToken" //nolint:gosec // G101: False positive - this is a context key name, not a credential
 )
 
 // WithUserID adds a user ID to the context.
