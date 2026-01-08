@@ -125,19 +125,6 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 		return nil, errors.New("failed to cast message to text")
 	}
 
-	// Extract quoteToken early for Quote Reply functionality
-	// This token allows replies to visually reference the user's original message
-	// Must be done before rate limit check so rate limit messages can also quote
-	if textMsg.QuoteToken != "" {
-		ctx = ctxutil.WithQuoteToken(ctx, textMsg.QuoteToken)
-	}
-
-	// Check rate limit after extracting quoteToken so rate limit messages can quote
-	if allowed, rateLimitMsg := p.checkUserRateLimit(event.Source, GetChatID(event.Source)); !allowed {
-		lineutil.SetQuoteTokenToFirst(rateLimitMsg, ctxutil.GetQuoteToken(ctx))
-		return rateLimitMsg, nil
-	}
-
 	text := textMsg.Text
 
 	// Validate text length (LINE API allows up to config.LINEMaxTextMessageLength characters)
