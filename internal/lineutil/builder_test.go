@@ -1117,7 +1117,19 @@ func TestSetQuoteToken(t *testing.T) {
 func TestSetQuoteTokenToFirst(t *testing.T) {
 	t.Parallel()
 
-	t.Run("sets token on first TextMessage", func(t *testing.T) {
+	t.Run("single message - sets token", func(t *testing.T) {
+		t.Parallel()
+		msg := NewTextMessage("Hello")
+		messages := []messaging_api.MessageInterface{msg}
+
+		SetQuoteTokenToFirst(messages, "quote-token-first")
+
+		if msg.QuoteToken != "quote-token-first" {
+			t.Errorf("Expected QuoteToken 'quote-token-first', got %q", msg.QuoteToken)
+		}
+	})
+
+	t.Run("multiple messages - no-op (reduced clutter)", func(t *testing.T) {
 		t.Parallel()
 		msg1 := NewTextMessage("First")
 		msg2 := NewTextMessage("Second")
@@ -1125,8 +1137,9 @@ func TestSetQuoteTokenToFirst(t *testing.T) {
 
 		SetQuoteTokenToFirst(messages, "quote-token-first")
 
-		if msg1.QuoteToken != "quote-token-first" {
-			t.Errorf("Expected first message QuoteToken 'quote-token-first', got %q", msg1.QuoteToken)
+		// With multiple messages, quote token should not be set for better UX
+		if msg1.QuoteToken != "" {
+			t.Errorf("Expected first message QuoteToken to be empty, got %q", msg1.QuoteToken)
 		}
 		if msg2.QuoteToken != "" {
 			t.Errorf("Expected second message QuoteToken to be empty, got %q", msg2.QuoteToken)
@@ -1156,19 +1169,14 @@ func TestSetQuoteTokenToFirst(t *testing.T) {
 		}
 	})
 
-	t.Run("first message is FlexMessage - no-op", func(t *testing.T) {
+	t.Run("single FlexMessage - no-op (not supported)", func(t *testing.T) {
 		t.Parallel()
 		bubble := NewFlexBubble(nil, nil, nil, nil)
 		flexMsg := NewFlexMessage("Alt", bubble.FlexBubble)
-		textMsg := NewTextMessage("Second")
-		messages := []messaging_api.MessageInterface{flexMsg, textMsg}
+		messages := []messaging_api.MessageInterface{flexMsg}
 
 		// Should not panic, just be a no-op for FlexMessage
 		SetQuoteTokenToFirst(messages, "token")
-
-		// Second message should NOT have token (only first message is processed)
-		if textMsg.QuoteToken != "" {
-			t.Errorf("Expected second message QuoteToken to be empty, got %q", textMsg.QuoteToken)
-		}
+		// FlexMessage doesn't have QuoteToken field - just verify no panic
 	})
 }
