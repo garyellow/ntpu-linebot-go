@@ -83,15 +83,33 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 	// Inject context values for tracing and logging
 	ctx = p.injectContextValues(ctx, event.Source)
 
+	// Extract QuoteToken early for Quote Reply functionality
+	// We support quoting for both Text and Sticker messages
+	var quoteToken string
+	switch m := event.Message.(type) {
+	case webhook.TextMessageContent:
+		quoteToken = m.QuoteToken
+	case webhook.StickerMessageContent:
+		quoteToken = m.QuoteToken
+	}
+
+	if quoteToken != "" {
+		ctx = ctxutil.WithQuoteToken(ctx, quoteToken)
+	}
+
 	// Check rate limit early to avoid unnecessary processing
+	// This happens AFTER extracting quoteToken so rate limit messages can quote the user
 	if allowed, rateLimitMsg := p.checkUserRateLimit(event.Source, GetChatID(event.Source)); !allowed {
+		lineutil.SetQuoteTokenToFirst(rateLimitMsg, ctxutil.GetQuoteToken(ctx))
 		return rateLimitMsg, nil
 	}
 
 	// Handle sticker messages - only in personal chats
 	if event.Message.GetType() == "sticker" {
 		if IsPersonalChat(event.Source) {
-			return p.handleStickerMessage(event), nil
+			msgs := p.handleStickerMessage(event)
+			lineutil.SetQuoteTokenToFirst(msgs, ctxutil.GetQuoteToken(ctx))
+			return msgs, nil
 		}
 		// Ignore sticker messages in group/room chats
 		return nil, nil
@@ -105,6 +123,19 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 	textMsg, ok := event.Message.(webhook.TextMessageContent)
 	if !ok {
 		return nil, errors.New("failed to cast message to text")
+	}
+
+	// Extract quoteToken early for Quote Reply functionality
+	// This token allows replies to visually reference the user's original message
+	// Must be done before rate limit check so rate limit messages can also quote
+	if textMsg.QuoteToken != "" {
+		ctx = ctxutil.WithQuoteToken(ctx, textMsg.QuoteToken)
+	}
+
+	// Check rate limit after extracting quoteToken so rate limit messages can quote
+	if allowed, rateLimitMsg := p.checkUserRateLimit(event.Source, GetChatID(event.Source)); !allowed {
+		lineutil.SetQuoteTokenToFirst(rateLimitMsg, ctxutil.GetQuoteToken(ctx))
+		return rateLimitMsg, nil
 	}
 
 	text := textMsg.Text
@@ -121,6 +152,8 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNavCompact())
+		// Apply quote token to error message for context
+		lineutil.SetQuoteToken(msg, ctxutil.GetQuoteToken(ctx))
 		return []messaging_api.MessageInterface{msg}, nil
 	}
 
@@ -135,20 +168,28 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 		return strings.EqualFold(text, k)
 	}) {
 		p.logger.Debug("User requested help/instruction")
-		return p.getDetailedInstructionMessages(), nil
+		msgs := p.getDetailedInstructionMessages()
+		lineutil.SetQuoteTokenToFirst(msgs, ctxutil.GetQuoteToken(ctx))
+		return msgs, nil
 	}
 
 	// Create context with timeout for bot processing.
+	// PreserveTracing also preserves quoteToken for downstream handlers.
 	processCtx, cancel := context.WithTimeout(ctxutil.PreserveTracing(ctx), p.webhookTimeout)
 	defer cancel()
 
 	// Dispatch to appropriate bot module based on CanHandle
 	if msgs := p.registry.DispatchMessage(processCtx, text); len(msgs) > 0 {
+		lineutil.SetQuoteTokenToFirst(msgs, ctxutil.GetQuoteToken(processCtx))
 		return msgs, nil
 	}
 
 	// No handler matched - try NLU if available
-	return p.handleUnmatchedMessage(processCtx, event.Source, textMsg, text)
+	msgs, err := p.handleUnmatchedMessage(processCtx, event.Source, textMsg, text)
+	if err == nil && len(msgs) > 0 {
+		lineutil.SetQuoteTokenToFirst(msgs, ctxutil.GetQuoteToken(processCtx))
+	}
+	return msgs, err
 }
 
 // ProcessPostback handles a postback event.
