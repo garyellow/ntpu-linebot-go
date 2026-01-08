@@ -128,7 +128,7 @@ type Handler struct {
 - **Body**：
   - 第一列：`NewBodyLabel()` 學期/相關性標籤（文字色與 header 一致）
   - 課程資訊：課號、教師、時間、地點
-  - 文字預設不換行（緊湊顯示）
+  - 重要欄位（教師、時間）使用 `CarouselInfoRowStyleMultiLine()`：`maxLines: 2` + `shrink-to-fit`
 - **Footer**：
   - 「查看詳細」按鈕（顏色與 header 同步）
 

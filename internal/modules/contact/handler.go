@@ -743,17 +743,17 @@ func (h *Handler) formatContactResultsWithSearch(ctx context.Context, contacts [
 			// Add type label as first row
 			body.AddComponent(lineutil.NewBodyLabel(bodyLabel).FlexBox)
 
-			// Add Title if available (previously in Hero subtitle) - use shrink-to-fit for variable length
+			// Add Title if available (secondary field, single-line)
 			if c.Title != "" && c.Type != "organization" {
 				titleRow := lineutil.NewInfoRow("🔖", "職稱", c.Title, lineutil.CarouselInfoRowStyle())
 				body.AddComponent(titleRow.FlexBox)
 			}
 
-			// Organization / Superior - use shrink-to-fit for variable length org names
+			// Organization / Superior - use multi-line style for potentially long org names
 			if c.Type == "organization" && c.Superior != "" {
-				body.AddInfoRow("🏢", "上級單位", c.Superior, lineutil.CarouselInfoRowStyle())
+				body.AddInfoRow("🏢", "上級單位", c.Superior, lineutil.CarouselInfoRowStyleMultiLine())
 			} else if c.Organization != "" {
-				body.AddInfoRow("🏢", "所屬單位", c.Organization, lineutil.CarouselInfoRowStyle())
+				body.AddInfoRow("🏢", "所屬單位", c.Organization, lineutil.CarouselInfoRowStyleMultiLine())
 			}
 
 			// Contact Info - Display full phone OR just extension (important, keep bold)
@@ -763,7 +763,7 @@ func (h *Handler) formatContactResultsWithSearch(ctx context.Context, contacts [
 				body.AddInfoRow("☎️", "分機號碼", c.Extension, lineutil.BoldInfoRowStyle())
 			}
 
-			// Contact Info - Location and Email (variable length, use shrink-to-fit)
+			// Contact Info - Location and Email (secondary fields, single-line)
 			body.AddInfoRowIf("📍", "辦公位置", c.Location, lineutil.CarouselInfoRowStyle())
 			body.AddInfoRowIf("✉️", "電子郵件", c.Email, lineutil.CarouselInfoRowStyle())
 

@@ -420,10 +420,10 @@ func BoldInfoRowStyle() InfoRowStyle {
 	}
 }
 
-// CarouselInfoRowStyle returns style optimized for carousel cards:
+// CarouselInfoRowStyle returns style optimized for secondary fields in carousel cards:
 // - shrink-to-fit: Auto-shrink font to fit content in available space
 // - maxLines: 1 (single line, no wrap)
-// This allows maximum content display without wrapping
+// Use CarouselInfoRowStyleMultiLine() for important fields like teacher names and times.
 func CarouselInfoRowStyle() InfoRowStyle {
 	return InfoRowStyle{
 		ValueSize:   "sm",
@@ -432,6 +432,22 @@ func CarouselInfoRowStyle() InfoRowStyle {
 		Wrap:        false,
 		AdjustMode:  "shrink-to-fit",
 		MaxLines:    1,
+	}
+}
+
+// CarouselInfoRowStyleMultiLine returns style for important fields in carousel cards:
+// - shrink-to-fit: Auto-shrink font to fit content in available space
+// - maxLines: 2 (allows wrapping to 2 lines before shrinking)
+// This provides better readability for longer content like teacher names and course times.
+// Use CarouselInfoRowStyle() for secondary fields that can remain single-line.
+func CarouselInfoRowStyleMultiLine() InfoRowStyle {
+	return InfoRowStyle{
+		ValueSize:   "sm",
+		ValueWeight: "regular",
+		ValueColor:  ColorText,
+		Wrap:        true,
+		AdjustMode:  "shrink-to-fit",
+		MaxLines:    2,
 	}
 }
 
@@ -449,7 +465,8 @@ func CarouselInfoRowStyle() InfoRowStyle {
 //
 //	NewInfoRow("👨‍🏫", "授課教師", "王教授、李教授", DefaultInfoRowStyle())
 //	NewInfoRow("☎️", "分機號碼", "12345", BoldInfoRowStyle())
-//	NewInfoRow("⏰", "上課時間", longTimeString, CarouselInfoRowStyle()) // shrink-to-fit
+//	NewInfoRow("👨‍🏫", "授課教師", longTeacherList, CarouselInfoRowStyleMultiLine()) // important: 2-line wrap + shrink
+//	NewInfoRow("📍", "辦公位置", location, CarouselInfoRowStyle())                  // secondary: 1-line shrink
 func NewInfoRow(emoji, label, value string, style InfoRowStyle) *FlexBox {
 	valueText := NewFlexText(value).WithColor(style.ValueColor).WithSize(style.ValueSize).WithMargin("sm")
 	if style.ValueWeight == "bold" {
