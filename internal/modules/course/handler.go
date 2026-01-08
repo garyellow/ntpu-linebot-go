@@ -1663,17 +1663,17 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 		firstInfoRow := lineutil.NewInfoRow("📅", "開課學期", semesterText, lineutil.DefaultInfoRowStyle())
 		body.AddComponent(firstInfoRow.FlexBox)
 
-		// 授課教師 - skip if in teacher mode (already shown in label)
+		// 授課教師 - use multi-line style for better readability
 		if len(course.Teachers) > 0 && !skipTeacherRow {
 			teacherNames := strings.Join(course.Teachers, "、")
-			body.AddInfoRow("👨‍🏫", "授課教師", teacherNames, lineutil.CarouselInfoRowStyle())
+			body.AddInfoRow("👨‍🏫", "授課教師", teacherNames, lineutil.CarouselInfoRowStyleMultiLine())
 		}
 
-		// 上課時間 - use shrink-to-fit for maximum content display
+		// 上課時間 - use multi-line style for better readability
 		if len(course.Times) > 0 {
 			formattedTimes := lineutil.FormatCourseTimes(course.Times)
 			timeStr := strings.Join(formattedTimes, "、")
-			body.AddInfoRow("⏰", "上課時間", timeStr, lineutil.CarouselInfoRowStyle())
+			body.AddInfoRow("⏰", "上課時間", timeStr, lineutil.CarouselInfoRowStyleMultiLine())
 		}
 
 		// Footer with "View Detail" button - displayText shows course title
@@ -2033,17 +2033,17 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 	// Note: Semester info is already in the header text message, so we don't repeat it here
 	body.AddComponent(lineutil.NewBodyLabel(labelInfo).FlexBox)
 
-	// 授課教師 - use shrink-to-fit for maximum content display
+	// 授課教師 - use multi-line style for better readability
 	if len(course.Teachers) > 0 {
 		teacherNames := strings.Join(course.Teachers, "、")
-		body.AddInfoRow("👨‍🏫", "授課教師", teacherNames, lineutil.CarouselInfoRowStyle())
+		body.AddInfoRow("👨‍🏫", "授課教師", teacherNames, lineutil.CarouselInfoRowStyleMultiLine())
 	}
 
-	// 上課時間 - use shrink-to-fit for maximum content display
+	// 上課時間 - use multi-line style for better readability
 	if len(course.Times) > 0 {
 		formattedTimes := lineutil.FormatCourseTimes(course.Times)
 		timeStr := strings.Join(formattedTimes, "、")
-		body.AddInfoRow("⏰", "上課時間", timeStr, lineutil.CarouselInfoRowStyle())
+		body.AddInfoRow("⏰", "上課時間", timeStr, lineutil.CarouselInfoRowStyleMultiLine())
 	}
 
 	// Footer with "View Detail" button

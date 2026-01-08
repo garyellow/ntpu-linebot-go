@@ -515,6 +515,40 @@ func TestInfoRowStyles(t *testing.T) {
 			t.Error("Expected Wrap to be false for carousel cards")
 		}
 	})
+
+	t.Run("CarouselInfoRowStyle", func(t *testing.T) {
+		t.Parallel()
+		style := CarouselInfoRowStyle()
+		if style.ValueSize != "sm" {
+			t.Errorf("Expected ValueSize 'sm', got %s", style.ValueSize)
+		}
+		if style.Wrap {
+			t.Error("Expected Wrap to be false for single-line carousel fields")
+		}
+		if style.AdjustMode != "shrink-to-fit" {
+			t.Errorf("Expected AdjustMode 'shrink-to-fit', got %s", style.AdjustMode)
+		}
+		if style.MaxLines != 1 {
+			t.Errorf("Expected MaxLines 1, got %d", style.MaxLines)
+		}
+	})
+
+	t.Run("CarouselInfoRowStyleMultiLine", func(t *testing.T) {
+		t.Parallel()
+		style := CarouselInfoRowStyleMultiLine()
+		if style.ValueSize != "sm" {
+			t.Errorf("Expected ValueSize 'sm', got %s", style.ValueSize)
+		}
+		if !style.Wrap {
+			t.Error("Expected Wrap to be true for multi-line carousel fields")
+		}
+		if style.AdjustMode != "shrink-to-fit" {
+			t.Errorf("Expected AdjustMode 'shrink-to-fit', got %s", style.AdjustMode)
+		}
+		if style.MaxLines != 2 {
+			t.Errorf("Expected MaxLines 2, got %d", style.MaxLines)
+		}
+	})
 }
 
 // BenchmarkNewInfoRow benchmarks the NewInfoRow function
