@@ -1057,3 +1057,118 @@ func TestGetSemesterLabel(t *testing.T) {
 		})
 	}
 }
+
+func TestSetQuoteToken(t *testing.T) {
+	t.Parallel()
+
+	t.Run("TextMessage - sets token", func(t *testing.T) {
+		t.Parallel()
+		msg := NewTextMessage("Hello")
+		SetQuoteToken(msg, "quote-token-123")
+
+		if msg.QuoteToken != "quote-token-123" {
+			t.Errorf("Expected QuoteToken 'quote-token-123', got %q", msg.QuoteToken)
+		}
+	})
+
+	t.Run("TextMessage - empty token is no-op", func(t *testing.T) {
+		t.Parallel()
+		msg := NewTextMessage("Hello")
+		msg.QuoteToken = "existing"
+		SetQuoteToken(msg, "")
+
+		if msg.QuoteToken != "existing" {
+			t.Errorf("Expected QuoteToken to remain 'existing', got %q", msg.QuoteToken)
+		}
+	})
+
+	t.Run("FlexMessage - no-op (not supported)", func(t *testing.T) {
+		t.Parallel()
+		bubble := NewFlexBubble(nil, nil, nil, nil)
+		msg := NewFlexMessage("Alt text", bubble.FlexBubble)
+		result := SetQuoteToken(msg, "quote-token-456")
+
+		// Should return the same message (for chaining)
+		if result != msg {
+			t.Error("SetQuoteToken should return the same message")
+		}
+		// FlexMessage doesn't have QuoteToken field - just verify no panic
+	})
+
+	t.Run("nil message - no panic", func(t *testing.T) {
+		t.Parallel()
+		// Should not panic
+		result := SetQuoteToken(nil, "token")
+		if result != nil {
+			t.Error("SetQuoteToken(nil) should return nil")
+		}
+	})
+
+	t.Run("returns message for chaining", func(t *testing.T) {
+		t.Parallel()
+		msg := NewTextMessage("Hello")
+		result := SetQuoteToken(msg, "token")
+		if result != msg {
+			t.Error("SetQuoteToken should return the same message for chaining")
+		}
+	})
+}
+
+func TestSetQuoteTokenToFirst(t *testing.T) {
+	t.Parallel()
+
+	t.Run("sets token on first TextMessage", func(t *testing.T) {
+		t.Parallel()
+		msg1 := NewTextMessage("First")
+		msg2 := NewTextMessage("Second")
+		messages := []messaging_api.MessageInterface{msg1, msg2}
+
+		SetQuoteTokenToFirst(messages, "quote-token-first")
+
+		if msg1.QuoteToken != "quote-token-first" {
+			t.Errorf("Expected first message QuoteToken 'quote-token-first', got %q", msg1.QuoteToken)
+		}
+		if msg2.QuoteToken != "" {
+			t.Errorf("Expected second message QuoteToken to be empty, got %q", msg2.QuoteToken)
+		}
+	})
+
+	t.Run("empty slice - no panic", func(t *testing.T) {
+		t.Parallel()
+		// Should not panic
+		SetQuoteTokenToFirst([]messaging_api.MessageInterface{}, "token")
+	})
+
+	t.Run("nil slice - no panic", func(t *testing.T) {
+		t.Parallel()
+		// Should not panic
+		SetQuoteTokenToFirst(nil, "token")
+	})
+
+	t.Run("empty token - no-op", func(t *testing.T) {
+		t.Parallel()
+		msg := NewTextMessage("Hello")
+		msg.QuoteToken = "existing"
+		SetQuoteTokenToFirst([]messaging_api.MessageInterface{msg}, "")
+
+		if msg.QuoteToken != "existing" {
+			t.Errorf("Expected QuoteToken to remain 'existing', got %q", msg.QuoteToken)
+		}
+	})
+
+	t.Run("first message is FlexMessage - no-op", func(t *testing.T) {
+		t.Parallel()
+		bubble := NewFlexBubble(nil, nil, nil, nil)
+		flexMsg := NewFlexMessage("Alt", bubble.FlexBubble)
+		textMsg := NewTextMessage("Second")
+		messages := []messaging_api.MessageInterface{flexMsg, textMsg}
+
+		// Should not panic, just be a no-op for FlexMessage
+		SetQuoteTokenToFirst(messages, "token")
+
+		// Second message should NOT have token (only first message is processed)
+		if textMsg.QuoteToken != "" {
+			t.Errorf("Expected second message QuoteToken to be empty, got %q", textMsg.QuoteToken)
+		}
+	})
+}

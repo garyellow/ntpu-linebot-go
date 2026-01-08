@@ -9,9 +9,10 @@ import (
 type contextKey string
 
 const (
-	userIDKey    contextKey = "ctxutil.userID"
-	chatIDKey    contextKey = "ctxutil.chatID"
-	requestIDKey contextKey = "ctxutil.requestID"
+	userIDKey     contextKey = "ctxutil.userID"
+	chatIDKey     contextKey = "ctxutil.chatID"
+	requestIDKey  contextKey = "ctxutil.requestID"
+	quoteTokenKey contextKey = "ctxutil.quoteToken" //nolint:gosec // G101: False positive - this is a context key name, not a credential
 )
 
 // WithUserID adds a user ID to the context.
@@ -113,6 +114,28 @@ func PreserveTracing(ctx context.Context) context.Context {
 	if requestID, ok := GetRequestID(ctx); ok && requestID != "" {
 		newCtx = WithRequestID(newCtx, requestID)
 	}
+	if quoteToken := GetQuoteToken(ctx); quoteToken != "" {
+		newCtx = WithQuoteToken(newCtx, quoteToken)
+	}
 
 	return newCtx
+}
+
+// WithQuoteToken adds a quote token to the context.
+// Quote token is used to quote a specific message when replying in LINE.
+// This enables Quote Reply functionality for better conversation context.
+func WithQuoteToken(ctx context.Context, quoteToken string) context.Context {
+	return context.WithValue(ctx, quoteTokenKey, quoteToken)
+}
+
+// GetQuoteToken retrieves the quote token from the context.
+// Returns the quote token if found, empty string otherwise.
+// An empty token means no message should be quoted in the reply.
+func GetQuoteToken(ctx context.Context) string {
+	if v := ctx.Value(quoteTokenKey); v != nil {
+		if quoteToken, ok := v.(string); ok && quoteToken != "" {
+			return quoteToken
+		}
+	}
+	return ""
 }

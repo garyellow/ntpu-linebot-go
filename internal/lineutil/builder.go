@@ -818,3 +818,38 @@ func AddQuickReplyToMessages(messages []messaging_api.MessageInterface, items ..
 		m.QuickReply = qr
 	}
 }
+
+// SetQuoteToken sets the QuoteToken field on a message for Quote Reply functionality.
+// This enables the bot's reply to visually reference the user's original message.
+// Returns the same message for method chaining.
+//
+// Supported message types: TextMessage only (LINE API limitation).
+// FlexMessage and other types do not support QuoteToken.
+// For unsupported message types, this function is a no-op.
+func SetQuoteToken(msg messaging_api.MessageInterface, quoteToken string) messaging_api.MessageInterface {
+	if quoteToken == "" {
+		return msg
+	}
+
+	if m, ok := msg.(*messaging_api.TextMessage); ok {
+		m.QuoteToken = quoteToken
+	}
+
+	return msg
+}
+
+// SetQuoteTokenToFirst sets the QuoteToken on the first message of a slice.
+// Per LINE best practices, only the first message should have a quote token
+// when replying with multiple messages, as it clearly indicates the response context.
+//
+// Note: Only TextMessage supports QuoteToken. If the first message is a FlexMessage
+// or other type, this is a no-op. Consider prepending a TextMessage if quote context
+// is critical for non-text responses.
+//
+// If the slice is empty or the quote token is empty, this is a no-op.
+func SetQuoteTokenToFirst(messages []messaging_api.MessageInterface, quoteToken string) {
+	if len(messages) == 0 || quoteToken == "" {
+		return
+	}
+	SetQuoteToken(messages[0], quoteToken)
+}

@@ -135,6 +135,7 @@ func TestContextChaining(t *testing.T) {
 	ctx = WithUserID(ctx, "U123")
 	ctx = WithChatID(ctx, "C456")
 	ctx = WithRequestID(ctx, "req-789")
+	ctx = WithQuoteToken(ctx, "quote-abc")
 
 	// Verify all values are preserved
 	if userID := GetUserID(ctx); userID != "U123" {
@@ -146,6 +147,9 @@ func TestContextChaining(t *testing.T) {
 	if requestID, ok := GetRequestID(ctx); !ok || requestID != "req-789" {
 		t.Error("RequestID not preserved in chained context")
 	}
+	if quoteToken := GetQuoteToken(ctx); quoteToken != "quote-abc" {
+		t.Error("QuoteToken not preserved in chained context")
+	}
 }
 
 func TestPreserveTracing(t *testing.T) {
@@ -156,6 +160,7 @@ func TestPreserveTracing(t *testing.T) {
 		parentCtx = WithUserID(parentCtx, "user123")
 		parentCtx = WithChatID(parentCtx, "chat456")
 		parentCtx = WithRequestID(parentCtx, "req789")
+		parentCtx = WithQuoteToken(parentCtx, "quote-xyz")
 
 		detachedCtx := PreserveTracing(parentCtx)
 
@@ -167,6 +172,9 @@ func TestPreserveTracing(t *testing.T) {
 		}
 		if requestID, ok := GetRequestID(detachedCtx); !ok || requestID != "req789" {
 			t.Errorf("Expected requestID 'req789', got %q (ok=%v)", requestID, ok)
+		}
+		if quoteToken := GetQuoteToken(detachedCtx); quoteToken != "quote-xyz" {
+			t.Errorf("Expected quoteToken 'quote-xyz', got %q", quoteToken)
 		}
 	})
 
@@ -182,6 +190,9 @@ func TestPreserveTracing(t *testing.T) {
 		if chatID := GetChatID(detachedPartial); chatID != "" {
 			t.Errorf("Expected empty chatID, got %q", chatID)
 		}
+		if quoteToken := GetQuoteToken(detachedPartial); quoteToken != "" {
+			t.Errorf("Expected empty quoteToken, got %q", quoteToken)
+		}
 	})
 
 	t.Run("handles empty context", func(t *testing.T) {
@@ -196,6 +207,9 @@ func TestPreserveTracing(t *testing.T) {
 		}
 		if requestID, ok := GetRequestID(emptyDetached); ok || requestID != "" {
 			t.Errorf("Expected empty requestID, got %q (ok=%v)", requestID, ok)
+		}
+		if quoteToken := GetQuoteToken(emptyDetached); quoteToken != "" {
+			t.Errorf("Expected empty quoteToken, got %q", quoteToken)
 		}
 	})
 
@@ -219,6 +233,38 @@ func TestPreserveTracing(t *testing.T) {
 		// But values should still be preserved
 		if userID := GetUserID(detachedCancel); userID != "user_cancel" {
 			t.Errorf("Expected userID 'user_cancel', got %q", userID)
+		}
+	})
+}
+
+func TestQuoteTokenContext(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty context", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+		if quoteToken := GetQuoteToken(ctx); quoteToken != "" {
+			t.Errorf("Expected empty string, got %s", quoteToken)
+		}
+	})
+
+	t.Run("with quote token", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+		expectedToken := "quote-token-12345"
+		ctx = WithQuoteToken(ctx, expectedToken)
+		quoteToken := GetQuoteToken(ctx)
+		if quoteToken != expectedToken {
+			t.Errorf("Expected quoteToken %s, got %s", expectedToken, quoteToken)
+		}
+	})
+
+	t.Run("empty token returns empty", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+		ctx = WithQuoteToken(ctx, "")
+		if quoteToken := GetQuoteToken(ctx); quoteToken != "" {
+			t.Errorf("Expected empty quoteToken for empty input, got %s", quoteToken)
 		}
 	})
 }
