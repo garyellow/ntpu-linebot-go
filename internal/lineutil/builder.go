@@ -839,16 +839,16 @@ func SetQuoteToken(msg messaging_api.MessageInterface, quoteToken string) messag
 }
 
 // SetQuoteTokenToFirst sets the QuoteToken on the first message of a slice.
-// Per LINE best practices, only the first message should have a quote token
-// when replying with multiple messages, as it clearly indicates the response context.
+// Quote reply is only applied when there is exactly one message, as multiple
+// messages with quote reply can look cluttered and reduce readability.
 //
-// Note: Only TextMessage supports QuoteToken. If the first message is a FlexMessage
+// Note: Only TextMessage supports QuoteToken. If the message is a FlexMessage
 // or other type, this is a no-op. Consider prepending a TextMessage if quote context
 // is critical for non-text responses.
 //
-// If the slice is empty or the quote token is empty, this is a no-op.
+// If the slice is empty, has multiple messages, or the quote token is empty, this is a no-op.
 func SetQuoteTokenToFirst(messages []messaging_api.MessageInterface, quoteToken string) {
-	if len(messages) == 0 || quoteToken == "" {
+	if len(messages) != 1 || quoteToken == "" {
 		return
 	}
 	SetQuoteToken(messages[0], quoteToken)
