@@ -212,7 +212,7 @@ User Query → Bot Module → Repository Layer
    - Sender: "聯繫小幫手"
 
 3. **Course Module** - 課程查詢
-   - 關鍵字：課程、課、教師、老師、找課
+   - 關鍵字：課程、課、科目、找課
    - Sender: "課程小幫手"
    - 功能：
      * 精確搜尋（課程名稱/教師姓名，近 2 學期）
