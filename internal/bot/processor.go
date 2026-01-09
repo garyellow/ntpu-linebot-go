@@ -591,7 +591,7 @@ func (p *Processor) getHelpMessage(context FallbackContext) []messaging_api.Mess
 				}
 				return "none"
 			}()).FlexText,
-		lineutil.NewFlexText("📚 課程 微積分、老師 王教授\n🎓 學號 王小明、系 資工\n📞 聯絡 資工系、緊急").
+		lineutil.NewFlexText("📚 課程 微積分、課程 王教授\n🎓 學號 王小明、系 資工\n📞 聯絡 資工系、緊急").
 			WithSize("xs").
 			WithColor(lineutil.ColorSubtext).
 			WithMargin("sm").
@@ -788,7 +788,7 @@ func (p *Processor) buildKeywordModeFlexMessage(nluEnabled bool, sender *messagi
 			WithColor(lineutil.ColorText).
 			WithSize("sm").
 			WithMargin("none").FlexText,
-		lineutil.NewFlexText("• 精確：課程 微積分 / 老師 王教授").
+		lineutil.NewFlexText("• 精確：課程 微積分 / 課程 王教授").
 			WithSize("xs").
 			WithColor(lineutil.ColorSubtext).
 			WithMargin("sm").
@@ -963,7 +963,7 @@ func (p *Processor) buildTipsFlexMessage(nluEnabled bool, sender *messaging_api.
 					WithSize("sm").
 					WithColor(lineutil.ColorSubtext).
 					WithFlex(0).FlexText,
-				lineutil.NewFlexText("AI 配額達上限時請改用關鍵字").
+				lineutil.NewFlexText("AI 配額用完時請改用關鍵字").
 					WithSize("sm").
 					WithColor(lineutil.ColorText).
 					WithMargin("sm").
@@ -1149,7 +1149,7 @@ func (p *Processor) buildDataSourceFlexMessage(sender *messaging_api.Sender) mes
 func (p *Processor) buildLLMRateLimitFlexMessage(sender *messaging_api.Sender) *messaging_api.FlexMessage {
 	// Hero section - warning style
 	hero := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexText("⏳ AI 功能配額已達上限").
+		lineutil.NewFlexText("⏳ AI 配額已用完").
 			WithSize("md").
 			WithWeight("bold").
 			WithColor(lineutil.ColorHeroText).FlexText,
@@ -1163,7 +1163,7 @@ func (p *Processor) buildLLMRateLimitFlexMessage(sender *messaging_api.Sender) *
 		// Simple status
 		lineutil.NewFlexBox("horizontal",
 			lineutil.NewFlexText("📊").WithSize("sm").WithFlex(0).FlexText,
-			lineutil.NewFlexText("目前配額已達上限，請稍後再試").
+			lineutil.NewFlexText("目前配額已用完，請稍後再試").
 				WithSize("sm").
 				WithColor(lineutil.ColorText).
 				WithMargin("sm").
@@ -1195,7 +1195,7 @@ func (p *Processor) buildLLMRateLimitFlexMessage(sender *messaging_api.Sender) *
 	).WithSpacing("none")
 
 	bubble := lineutil.NewFlexBubble(hero, nil, body, nil)
-	msg := lineutil.NewFlexMessage("AI 功能配額已達上限", bubble.FlexBubble)
+	msg := lineutil.NewFlexMessage("AI 配額已用完", bubble.FlexBubble)
 	if sender != nil {
 		msg.Sender = sender
 	}

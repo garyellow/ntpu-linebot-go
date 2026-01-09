@@ -1,10 +1,6 @@
 # NTPU LineBot
 
 <p align="center">
-  <a href="https://lin.ee/QiMmPBv"><img src="https://img.shields.io/badge/LINE-加入好友-00C300?style=for-the-badge&logo=line&logoColor=white" alt="加入好友"></a>
-</p>
-
-<p align="center">
   <a href="https://github.com/garyellow/ntpu-linebot-go/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/garyellow/ntpu-linebot-go/ci.yml?branch=main&label=CI&logo=github" alt="CI"></a>
   <a href="https://stats.uptimerobot.com/OqI3euBWoF"><img src="https://img.shields.io/uptimerobot/status/m795331349-bc2923cffedbf48e2a93c6f9?style=flat&label=Uptime" alt="Uptime"></a>
   <a href="https://goreportcard.com/report/github.com/garyellow/ntpu-linebot-go"><img src="https://goreportcard.com/badge/github.com/garyellow/ntpu-linebot-go" alt="Go Report Card"></a>
@@ -13,6 +9,10 @@
   <a href="https://hub.docker.com/r/garyellow/ntpu-linebot-go"><img src="https://img.shields.io/docker/pulls/garyellow/ntpu-linebot-go?logo=docker&logoColor=white" alt="Docker Pulls"></a>
   <a href="https://github.com/garyellow/ntpu-linebot-go/pkgs/container/ntpu-linebot-go"><img src="https://img.shields.io/badge/GHCR-latest-blue?logo=github&logoColor=white" alt="GHCR"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
+</p>
+
+<p align="center">
+  <a href="https://line.me/R/ti/p/@148wrcch"><img src="https://img.shields.io/badge/LINE-加入好友-00C300?style=for-the-badge&logo=line&logoColor=white" alt="加入好友"></a>
 </p>
 
 國立臺北大學 LINE 聊天機器人「NTPU 小工具」，提供學號查詢、通訊錄查詢、課程查詢等功能。
@@ -38,11 +38,11 @@
 
 **加入好友即可使用，完全免費！**
 
-**LINE ID**: [@148wrcch](https://lin.ee/QiMmPBv)
+**LINE ID**: [@148wrcch](https://line.me/R/ti/p/@148wrcch)
 
 <p align="center">
-  <a href="https://lin.ee/QiMmPBv">
-    <img src="add_friend/M_add_friend_button.png" alt="加入好友">
+  <a href="https://line.me/R/ti/p/@148wrcch">
+    <img src="add_friend/M_add_friend_button.png" alt="加入好友" width="200">
   </a>
 </p>
 
