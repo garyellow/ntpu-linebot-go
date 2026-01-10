@@ -134,7 +134,7 @@ func MinCachedAt(cachedAts ...int64) int64 {
 //
 // This provides transparency about data limitations.
 func NewDataRangeHint() *FlexText {
-	return NewFlexText("📊 資料範圍：94-113 學年度").
+	return NewFlexText("📋 資料範圍：94-113 學年度 (113 不完整)").
 		WithSize("xxs").
 		WithColor(ColorGray400).
 		WithAlign("end").

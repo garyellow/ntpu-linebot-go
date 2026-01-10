@@ -359,7 +359,7 @@ func ScrapeStudentByID(ctx context.Context, client *scraper.Client, studentID st
 		}
 
 		// Extract year from student ID
-		year := extractYear(studentID)
+		year := ExtractYear(studentID)
 		department := determineDepartment(studentID)
 
 		student = &storage.Student{
@@ -378,9 +378,9 @@ func ScrapeStudentByID(ctx context.Context, client *scraper.Client, studentID st
 	return student, nil
 }
 
-// extractYear extracts the academic year from a student ID
-// Example: 410571074 -> 105, 41121074 -> 112
-func extractYear(studentID string) int {
+// ExtractYear extracts the academic year from a student ID.
+// Example: 410571074 -> 105, 41121074 -> 112, 414185001 -> 114
+func ExtractYear(studentID string) int {
 	if len(studentID) < 5 {
 		return 0
 	}

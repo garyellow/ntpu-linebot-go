@@ -353,7 +353,7 @@ func (h *Handler) handleYearPattern(ctx context.Context, text string, matches []
 	// No year provided - show guidance message
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	msg := lineutil.NewTextMessageWithConsistentSender(
-		"📅 按學年度查詢學生\n\n請輸入學年度進行查詢\n例如：學年 112、學年 110\n\n📋 查詢流程：\n1️⃣ 選擇學院群（文法商/公社電資）\n2️⃣ 選擇學院\n3️⃣ 選擇系所\n4️⃣ 查看該系所所有學生\n\n⚠️ 僅提供 94-113 學年度資料",
+		"📅 按學年度查詢學生\n\n請輸入學年度進行查詢\n例如：學年 112、學年 110\n\n📋 查詢流程：\n1️⃣ 選擇學院群（文法商/公社電資）\n2️⃣ 選擇學院\n3️⃣ 選擇系所\n4️⃣ 查看該系所所有學生\n\n⚠️ 僅提供 94-112 學年度完整資料（113 年起不完整）",
 		sender,
 	)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -511,6 +511,25 @@ func (h *Handler) handleAllDepartmentCodes() []messaging_api.MessageInterface {
 		lineutil.QuickReplyHelpAction(),
 	})
 	return []messaging_api.MessageInterface{msg}
+}
+
+// RIP image URL for LMS 2.0 deprecation (year 114+)
+const lmsDeprecatedImageURL = "https://raw.githubusercontent.com/garyellow/ntpu-linebot-go/main/assets/rip.png"
+
+// buildLMSDeprecatedResponse builds a response for year 114+ (NO data at all).
+// Returns text message + RIP image with quick reply.
+func (h *Handler) buildLMSDeprecatedResponse(message string, sender *messaging_api.Sender, quickReplyItems []lineutil.QuickReplyItem) []messaging_api.MessageInterface {
+	textMsg := lineutil.NewTextMessageWithConsistentSender(message, sender)
+
+	// Image message with quick reply (must be on last message)
+	imgMsg := &messaging_api.ImageMessage{
+		OriginalContentUrl: lmsDeprecatedImageURL,
+		PreviewImageUrl:    lmsDeprecatedImageURL,
+	}
+	imgMsg.Sender = sender
+	imgMsg.QuickReply = lineutil.NewQuickReply(quickReplyItems)
+
+	return []messaging_api.MessageInterface{textMsg, imgMsg}
 }
 
 // handleDepartmentNameQuery handles department name to code queries with fuzzy matching.
@@ -684,27 +703,33 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	// 2. Check for 2025+ data warning (year >= 114) - LMS 2.0 is deprecated
-	if year >= config.IDDataCutoffYear {
-		imageURL := "https://raw.githubusercontent.com/garyellow/ntpu-linebot-go/main/assets/rip.png"
-		msg := lineutil.NewTextMessageWithConsistentSender(config.IDYear114PlusMessage, sender)
-
-		// Quick Reply must be on last message (image)
-		imgMsg := &messaging_api.ImageMessage{
-			OriginalContentUrl: imageURL,
-			PreviewImageUrl:    imageURL,
-		}
-		imgMsg.Sender = sender
-		imgMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", config.IDDataYearEnd), fmt.Sprintf("學年 %d", config.IDDataYearEnd))},
-			{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", config.IDDataYearEnd-1), fmt.Sprintf("學年 %d", config.IDDataYearEnd-1))},
-			lineutil.QuickReplyStudentAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
-		return []messaging_api.MessageInterface{msg, imgMsg}
+	// 2. Check for year 114+ (NO data at all) - reject with RIP image
+	if year > config.IDDataYearEnd+1 {
+		return h.buildLMSDeprecatedResponse(
+			config.IDLMSDeprecatedMessage,
+			sender,
+			[]lineutil.QuickReplyItem{
+				{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", config.IDDataYearEnd), fmt.Sprintf("學年 %d", config.IDDataYearEnd))},
+				lineutil.QuickReplyYearAction(),
+				lineutil.QuickReplyHelpAction(),
+			},
+		)
 	}
 
-	// 3. Check if year is before NTPU was founded
+	// 3. Check for year 113 (sparse data) - warn but allow query
+	if year == config.IDDataYearEnd+1 {
+		// Show warning but allow user to proceed
+		msg := lineutil.NewTextMessageWithConsistentSender(config.ID113YearWarningMessage, sender)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			{Action: lineutil.NewMessageAction("繼續查詢 ➡️", fmt.Sprintf("搜尋全系%s%d", bot.PostbackSplitChar, year))},
+			{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 改查 %d 學年度", config.IDDataYearEnd), fmt.Sprintf("學年 %d", config.IDDataYearEnd))},
+			lineutil.QuickReplyYearAction(),
+			lineutil.QuickReplyHelpAction(),
+		})
+		return []messaging_api.MessageInterface{msg}
+	}
+
+	// 4. Check if year is before NTPU was founded
 	if year < config.NTPUFoundedYear {
 		msg := lineutil.NewTextMessageWithConsistentSender(config.IDYearBeforeNTPUMessage, sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -715,7 +740,7 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	// 4. Check if year is before LMS has complete data (90-93 have sparse data)
+	// 5. Check if year is before LMS has complete data (90-93 have sparse data)
 	if year < config.LMSLaunchYear {
 		msg := lineutil.NewTextMessageWithConsistentSender(config.IDYearTooOldMessage, sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -768,6 +793,35 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	startTime := time.Now()
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
+	// Validate student ID format (8-9 digits)
+	if len(studentID) < 8 || len(studentID) > 9 || !stringutil.IsNumeric(studentID) {
+		msg := lineutil.NewTextMessageWithConsistentSender(
+			"🔍 學號格式不正確\n\n學號應為 8-9 位數字\n例如：412345678",
+			sender,
+		)
+		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+			lineutil.QuickReplyStudentAction(),
+			lineutil.QuickReplyHelpAction(),
+		})
+		return []messaging_api.MessageInterface{msg}
+	}
+
+	// Extract year for validation (keep in scope for later error handling)
+	year := ntpu.ExtractYear(studentID)
+
+	// Check year before querying - reject 114+ immediately
+	if year > config.IDDataYearEnd+1 {
+		return h.buildLMSDeprecatedResponse(
+			config.IDLMSDeprecatedMessage,
+			sender,
+			[]lineutil.QuickReplyItem{
+				lineutil.QuickReplyYearAction(),
+				lineutil.QuickReplyStudentAction(),
+				lineutil.QuickReplyHelpAction(),
+			},
+		)
+	}
+
 	// Check cache first
 	student, err := h.db.GetStudentByID(ctx, studentID)
 	if err != nil {
@@ -793,6 +847,27 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	if err != nil {
 		log.WithError(err).Errorf("Failed to scrape student ID: %s", studentID)
 		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
+
+		// Check if the student ID belongs to year 113 (incomplete data)
+		// Year 114+ would have been rejected earlier, so this is only for 113
+		if year == config.IDDataYearEnd+1 {
+			msg := lineutil.NewTextMessageWithConsistentSender(
+				fmt.Sprintf("🔍 查無學號 %s 的資料\n\n"+
+					"⚠️ 113 學年度資料極不完整\n"+
+					"僅極少數手動建立 LMS 2.0 帳號的學生有資料。\n\n"+
+					"📅 完整資料範圍：94-112 學年度",
+					studentID),
+				sender,
+			)
+			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+				lineutil.QuickReplyYearAction(),
+				lineutil.QuickReplyStudentAction(),
+				lineutil.QuickReplyHelpAction(),
+			})
+			return []messaging_api.MessageInterface{msg}
+		}
+
+		// Regular not found message
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🔍 查無此學號\n\n學號：%s\n請確認學號格式是否正確", studentID), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyStudentAction(),
@@ -913,7 +988,8 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	infoBuilder.WriteString("ℹ️ 系所資訊說明\n")
 	infoBuilder.WriteString("系所資訊由學號推測，若有轉系之類的情況可能與實際不符。\n\n")
 	infoBuilder.WriteString("📊 姓名查詢範圍\n")
-	infoBuilder.WriteString("• 大學部/碩博士班：101-113 學年度\n\n")
+	infoBuilder.WriteString("• 大學部/碩博士班：101-112 學年度（完整）\n")
+	infoBuilder.WriteString("• 113 學年度：資料極不完整\n\n")
 	infoBuilder.WriteString("💡 若找不到學生，可使用「學年」功能按年度查詢")
 
 	infoMsg := lineutil.NewTextMessageWithConsistentSender(infoBuilder.String(), sender)
@@ -964,7 +1040,7 @@ func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_ap
 
 	// Add name search scope note (姓名查詢限制說明)
 	body.AddComponent(lineutil.NewFlexText(
-		"📊 姓名查詢涵蓋大學部/碩博士班 101-113 學年度。").
+		"📊 姓名查詢涵蓋大學部/碩博士班 101-112 學年度（完整）、113 學年度（極不完整）。").
 		WithSize("xs").
 		WithColor(lineutil.ColorNote).
 		WithWrap(true).
@@ -1301,6 +1377,21 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 		if ntpu.IsLawDepartment(deptCode) {
 			departmentType = "組"
 		}
+		// Special message for year 113 (incomplete data)
+		// Year 114+ would have been rejected in handleYearQuery
+		if year == config.IDDataYearEnd+1 {
+			msg := lineutil.NewTextMessageWithConsistentSender(
+				fmt.Sprintf(config.ID113YearEmptyMessage, deptName+departmentType),
+				sender,
+			)
+			msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+				{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", config.IDDataYearEnd), fmt.Sprintf("學年 %d", config.IDDataYearEnd))},
+				lineutil.QuickReplyYearAction(),
+				lineutil.QuickReplyHelpAction(),
+			})
+			return []messaging_api.MessageInterface{msg}
+		}
+		// Regular "no students" message for other years
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🤔 %d 學年度%s%s好像沒有人耶", year, deptName, departmentType), sender)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 			lineutil.QuickReplyYearAction(),

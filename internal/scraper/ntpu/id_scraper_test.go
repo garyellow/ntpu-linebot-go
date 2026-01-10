@@ -74,7 +74,7 @@ func TestExtractYear(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			year := extractYear(tt.studentID)
+			year := ExtractYear(tt.studentID)
 			if year != tt.expected {
 				t.Errorf("Expected year %d, got %d", tt.expected, year)
 			}
@@ -136,7 +136,7 @@ func TestDetermineDepartment(t *testing.T) {
 func BenchmarkExtractYear(b *testing.B) {
 	studentID := "410812345"
 	for b.Loop() {
-		_ = extractYear(studentID)
+		_ = ExtractYear(studentID)
 	}
 }
 
