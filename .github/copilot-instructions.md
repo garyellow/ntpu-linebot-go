@@ -151,9 +151,16 @@ LINE Webhook → Gin Handler
 
 **Data availability**:
 - Student:
-  - **Cache range**: 101-113 學年度 (warmup auto-loads)
-  - **Query range**: 94-113 學年度 (real-time scraping, hard limit due to LMS 2.0 deprecated)
-  - **Status**: Static data, no new data after 114
+  - **Cache range**: 101-112 學年度 (warmup auto-loads, complete data)
+  - **Query range**: 94-112 學年度 (real-time scraping, complete data)
+  - **Year 113**: Allowed with warning, extremely sparse data (only students with manual LMS 2.0 accounts)
+    - **Academic year query** (`handleYearQuery`): Shows warning before proceeding
+    - **Student ID query** (`handleStudentIDQuery`): Returns data if available (no warning); shows special explanation if empty
+    - Empty results show special explanation message
+  - **Year 114+**: Rejected with RIP image + `IDLMSDeprecatedMessage` (no data at all)
+    - **Academic year query**: RIP image + deprecation message
+    - **Student ID query**: Early rejection before database query
+  - **Status**: Static data, year 114+ has no data due to LMS 2.0 deprecation
 - Course:
   - **Cache range**: 4 most recent semesters (7-day TTL, warmup auto-loads)
   - **Query range**: 90-current year (Course system launched 90, real-time scraping supported)

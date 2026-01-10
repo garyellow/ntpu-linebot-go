@@ -101,8 +101,9 @@ const MaxStudentsPerSearch = 400
 
 **學生資料特性**：
 - **TTL**：永不過期（靜態資料，不會更新）
-- **Cache 範圍**：101-113 學年度（啟動時自動載入）
-- **Query 範圍**：94-113 學年度（cache miss 時即時爬取）
+- **Cache 範圍**：101-112 學年度（啟動時自動載入，完整資料）
+- **Query 範圍**：94-112 學年度（cache miss 時即時爬取，完整資料）
+- **113 學年度**：資料極不完整，僅極少數學生（允許查詢但顯示警告）
 - **資料狀態**：114 學年度起無新資料（LMS 2.0 deprecated）
 
 ## Flex Message 設計
@@ -159,9 +160,9 @@ User Input: "412345678"
     ↓
 Validate format (8-9 digits)
     ↓
-Check cache (101-113)
+Check cache (101-112)
     ↓ (if miss)
-Scrape from LMS (94-113)
+Scrape from LMS (94-112 完整, 113 極不完整)
     ↓ (if found)
 Save to cache
     ↓
@@ -236,16 +237,22 @@ deptName := data.DepartmentCodeToName[deptCode]
 - **結果限制**：400 筆避免訊息過載
 
 ### Memory 使用
-- **靜態資料**：101-113 學年度常駐快取（~50MB）
+- **靜態資料**：101-112 學年度常駐快取（~50MB，完整資料）
+- **113 學年度**：資料極不完整，僅極少數學生
 - **不會增長**：114 起無新資料
 - **快速查詢**：無需網路請求（cache hit）
 
 ## 限制與注意事項
 
 ### 資料範圍
-- **Cache**：101-113 學年度（自動預載）
-- **Query**：94-113 學年度（real-time scraping）
-- **Hard limit**：LMS 2.0 deprecated，114 起無資料
+- **Cache**：101-112 學年度（自動預載，完整資料）
+- **Query**：94-112 學年度（real-time scraping，完整資料）
+- **Year 113**：允許查詢但資料極不完整（僅極少數學生有 LMS 2.0 帳號）
+  - 學年度查詢：顯示警告訊息，提供「繼續查詢」按鈕
+  - 個人學號查詢：有資料正常顯示（不警告），無資料顯示特別說明
+- **Year 114+**：LMS 2.0 deprecated，無資料
+  - 學年度查詢：RIP 圖片 + 拒絕訊息
+  - 個人學號查詢：提前拒絕（不查詢資料庫）
 
 ### 資料準確性
 - **系所推測**：從學號推測，可能不準確
