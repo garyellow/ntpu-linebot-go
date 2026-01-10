@@ -49,7 +49,7 @@ const (
 // Message structure: Emoji + Clear statement + Brief explanation + Actionable alternatives.
 const (
 	// IDLMSDeprecatedMessage is the core message for LMS 2.0 deprecation.
-	// Used for year-based queries (學年 113+) and student ID queries (413/414xxxxxx+).
+	// Used for year-based queries (學年 114+) and student ID queries (學號 414xxxxxx+).
 	IDLMSDeprecatedMessage = "😢 數位學苑 2.0 已於 113 學年度起停用\n\n" +
 		"113 學年度起新生使用 LMS 3.0，僅少數學生有建立 LMS 2.0 帳號。\n\n" +
 		"📅 完整資料範圍：\n" +
