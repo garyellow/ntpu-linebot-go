@@ -934,12 +934,12 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	// 3. Return first 400 students (sorted by year DESC, id DESC)
 	// 4. Display all returned students (4 messages × 100 students), reserve 5th message for meta info
 
-	// Format student list - up to 3 messages (100 students per message)
-	// 4th message is always reserved for disclaimer and optional warning
+	// Format student list - up to 4 messages (100 students per message)
+	// 5th message is always reserved for disclaimer and optional warning
 	var messages []messaging_api.MessageInterface
-	const maxListMessages = 3                                       // Max messages for student list
+	const maxListMessages = 4                                       // Max messages for student list
 	const studentsPerMessage = 100                                  // Students per message
-	const maxDisplayStudents = maxListMessages * studentsPerMessage // 300 students max
+	const maxDisplayStudents = maxListMessages * studentsPerMessage // 400 students max
 
 	displayCount := min(len(students), maxDisplayStudents)
 
