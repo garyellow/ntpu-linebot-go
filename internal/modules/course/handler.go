@@ -37,15 +37,15 @@ import (
 //
 // Pattern priority (1=highest): UID → CourseNo → Historical → Smart → Extended → Regular
 type Handler struct {
-	db               *storage.DB
-	scraper          *scraper.Client
-	metrics          *metrics.Metrics
-	logger           *logger.Logger
-	stickerManager   *sticker.Manager
-	bm25Index        *rag.BM25Index
-	queryExpander    genai.QueryExpander // Interface for multi-provider support
-	llmRateLimiter   *ratelimit.KeyedLimiter
-	semesterDetector *SemesterDetector // Data-driven semester detection
+	db             *storage.DB
+	scraper        *scraper.Client
+	metrics        *metrics.Metrics
+	logger         *logger.Logger
+	stickerManager *sticker.Manager
+	bm25Index      *rag.BM25Index
+	queryExpander  genai.QueryExpander // Interface for multi-provider support
+	llmRateLimiter *ratelimit.KeyedLimiter
+	semesterCache  *SemesterCache // Shared cache updated by warmup
 
 	// matchers contains all pattern-handler pairs sorted by priority.
 	// Shared by CanHandle and HandleMessage for consistent routing.
@@ -126,9 +126,9 @@ var (
 )
 
 // NewHandler creates a new course handler.
-// Optional: bm25Index, queryExpander, llmRateLimiter (pass nil if unused).
+// Optional: bm25Index, queryExpander, llmRateLimiter, semesterCache (pass nil if unused).
 // Initializes and sorts matchers by priority during construction.
-// The semesterDetector is initialized with db.CountCoursesBySemester for data-driven semester detection.
+// semesterCache should be shared with warmup module for coordinated updates.
 func NewHandler(
 	db *storage.DB,
 	scraper *scraper.Client,
@@ -138,20 +138,23 @@ func NewHandler(
 	bm25Index *rag.BM25Index,
 	queryExpander genai.QueryExpander, // Interface for multi-provider support
 	llmRateLimiter *ratelimit.KeyedLimiter,
+	semesterCache *SemesterCache, // Shared cache (nil = create new)
 ) *Handler {
-	// Create semester detector with database count function
-	semesterDetector := NewSemesterDetector(db.CountCoursesBySemester)
+	// Use provided cache or create new one
+	if semesterCache == nil {
+		semesterCache = NewSemesterCache()
+	}
 
 	h := &Handler{
-		db:               db,
-		scraper:          scraper,
-		metrics:          metrics,
-		logger:           logger,
-		stickerManager:   stickerManager,
-		bm25Index:        bm25Index,
-		queryExpander:    queryExpander,
-		llmRateLimiter:   llmRateLimiter,
-		semesterDetector: semesterDetector,
+		db:             db,
+		scraper:        scraper,
+		metrics:        metrics,
+		logger:         logger,
+		stickerManager: stickerManager,
+		bm25Index:      bm25Index,
+		queryExpander:  queryExpander,
+		llmRateLimiter: llmRateLimiter,
+		semesterCache:  semesterCache,
 	}
 
 	// Initialize Pattern-Action Table
@@ -214,33 +217,10 @@ func (h *Handler) IsBM25SearchEnabled() bool {
 	return h.bm25Index != nil && h.bm25Index.IsEnabled()
 }
 
-// GetSemesterDetector returns the semester detector for sharing with other modules.
-// This enables consistent 2-semester filtering across course and program modules.
-func (h *Handler) GetSemesterDetector() *SemesterDetector {
-	return h.semesterDetector
-}
-
-// SetSemesterDetector replaces the semester detector for testing.
-// This allows tests to inject a mock detector with predetermined semester data,
-// avoiding time-dependent test failures.
-func (h *Handler) SetSemesterDetector(detector *SemesterDetector) {
-	h.semesterDetector = detector
-}
-
-// RefreshSemesters updates the cached semester data from database.
-// This should be called after warmup completes to ensure user queries
-// use data-driven semester detection based on actual course availability.
-func (h *Handler) RefreshSemesters(ctx context.Context) {
-	if h.semesterDetector == nil {
-		return
-	}
-	h.semesterDetector.RefreshSemesters(ctx)
-	if h.semesterDetector.HasData() {
-		years, terms := h.semesterDetector.GetAllSemesters()
-		h.logger.WithModule(ModuleName).
-			WithField("semesters", formatSemesterList(years, terms)).
-			Info("Refreshed semester data (data-driven)")
-	}
+// GetSemesterCache returns the semester cache for sharing with other modules.
+// This enables consistent semester data across course and program modules.
+func (h *Handler) GetSemesterCache() *SemesterCache {
+	return h.semesterCache
 }
 
 // formatSemesterList formats semester pairs for logging (e.g., "113-2, 113-1, 112-2, 112-1")
@@ -714,7 +694,7 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 	log.Infof("Handling course number query: %s", courseNo)
 
 	// Get semesters to search from data-driven semester detection
-	searchYears, searchTerms := h.semesterDetector.GetRecentSemesters()
+	searchYears, searchTerms := h.semesterCache.GetRecentSemesters()
 
 	// Search in cache first
 	for i := range searchYears {
@@ -855,7 +835,7 @@ func (h *Handler) searchCoursesForTeacher(ctx context.Context, teacherName strin
 	var courses []storage.Course
 
 	// Get recent semesters from data-driven detection
-	searchYears, searchTerms := h.semesterDetector.GetRecentSemesters()
+	searchYears, searchTerms := h.semesterCache.GetRecentSemesters()
 
 	// Step 1: SQL LIKE search for exact teacher name match
 	teacherCourses, err := h.db.SearchCoursesByTeacher(ctx, teacherName)
@@ -909,9 +889,9 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 	// Get courses based on search range (2 or 4 semesters) - data-driven
 	var searchYears, searchTerms []int
 	if extended {
-		searchYears, searchTerms = h.semesterDetector.GetExtendedSemesters()
+		searchYears, searchTerms = h.semesterCache.GetExtendedSemesters()
 	} else {
-		searchYears, searchTerms = h.semesterDetector.GetRecentSemesters()
+		searchYears, searchTerms = h.semesterCache.GetRecentSemesters()
 	}
 
 	// Step 1: Try SQL LIKE search for title first
@@ -1148,8 +1128,8 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	// Check if the requested year is in the recent/active semesters (Hot Data).
 	// If so, we query the 'courses' table instead of 'historical_courses' to use the pre-warmed cache.
 	isRecent := false
-	if h.semesterDetector != nil {
-		recentYears, _ := h.semesterDetector.GetRecentSemesters()
+	if h.semesterCache != nil {
+		recentYears, _ := h.semesterCache.GetRecentSemesters()
 		for _, recentYear := range recentYears {
 			if year == recentYear {
 				isRecent = true
@@ -1158,7 +1138,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 		}
 		// Also check extended semesters (3rd and 4th) as they are also in 'courses' table
 		if !isRecent {
-			extendedYears, _ := h.semesterDetector.GetExtendedSemesters()
+			extendedYears, _ := h.semesterCache.GetExtendedSemesters()
 			for _, extendedYear := range extendedYears {
 				if year == extendedYear {
 					isRecent = true

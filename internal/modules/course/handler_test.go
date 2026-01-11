@@ -43,45 +43,46 @@ func setupTestHandler(t *testing.T) *Handler {
 	log := logger.New("info")
 	stickerMgr := sticker.NewManager(db, scraperClient, log)
 
-	return NewHandler(db, scraperClient, m, log, stickerMgr, nil, nil, nil)
+	return NewHandler(db, scraperClient, m, log, stickerMgr, nil, nil, nil, nil)
 }
 
-// setupTestHandlerWithSemesters creates a handler with a pre-configured semester detector.
+// setupTestHandlerWithSemesters creates a handler with a pre-configured semester cache.
 // This is useful for tests that need deterministic semester behavior independent of current date.
 // The semesters parameter should contain year-term pairs in descending order (newest first).
 func setupTestHandlerWithSemesters(t *testing.T, semesters []struct{ year, term int }) *Handler {
 	t.Helper()
 
-	h := setupTestHandler(t)
+	// Create a semester cache with pre-configured semesters
+	semesterCache := NewSemesterCache()
 
-	// Create a mock semester detector that returns the configured semesters
-	mockDetector := NewSemesterDetector(func(ctx context.Context, year, term int) (int, error) {
-		// Return a high count for all configured semesters
-		for _, s := range semesters {
-			if s.year == year && s.term == term {
-				return 1000, nil
-			}
-		}
-		return 0, nil
-	})
-
-	// Pre-populate the detector's cache with the configured semesters
-	years := make([]int, len(semesters))
-	terms := make([]int, len(semesters))
+	// Convert to Semester slice and update cache
+	semesterList := make([]Semester, len(semesters))
 	for i, s := range semesters {
-		years[i] = s.year
-		terms[i] = s.term
+		semesterList[i] = Semester{Year: s.year, Term: s.term}
 	}
+	semesterCache.Update(semesterList)
 
-	// Manually set cached semesters (bypassing detection logic)
-	mockDetector.mu.Lock()
-	mockDetector.cachedYears = years
-	mockDetector.cachedTerms = terms
-	mockDetector.mu.Unlock()
+	// Create handler with the pre-configured cache
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	db, err := storage.New(context.Background(), dbPath, 168*time.Hour)
+	if err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
 
-	h.SetSemesterDetector(mockDetector)
+	// Create dependencies
+	baseURLs := map[string][]string{
+		"lms": {"https://lms.ntpu.edu.tw"},
+		"sea": {"https://sea.cc.ntpu.edu.tw"},
+	}
+	scraperClient := scraper.NewClient(30*time.Second, 3, baseURLs)
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	log := logger.New("info")
+	stickerMgr := sticker.NewManager(db, scraperClient, log)
 
-	return h
+	return NewHandler(db, scraperClient, m, log, stickerMgr, nil, nil, nil, semesterCache)
 }
 
 func TestCanHandle(t *testing.T) {
@@ -477,9 +478,9 @@ func TestHandlePostback_WithPrefix(t *testing.T) {
 // The postback logic reuses the same scraper as HandleMessage.
 // TestHandleMessage_NetworkIntegration provides sufficient integration coverage.
 
-// NOTE: Semester determination logic is tested in semester_test.go
-// TestSemesterDetectionLogic tests the actual getSemestersForDate() function
-// with comprehensive date-based test cases - no need to duplicate here.
+// NOTE: Semester cache and calendar-based logic is tested in semester_test.go
+// with comprehensive test cases for SemesterCache, GetWarmupProbeStart,
+// GenerateProbeSequence, and getCalendarBasedSemesters.
 
 // ==================== Smart Search Tests ====================
 

@@ -52,8 +52,8 @@ type Application struct {
 	queryExpander  genai.QueryExpander // Interface type for multi-provider support
 	llmLimiter     *ratelimit.KeyedLimiter
 	userLimiter    *ratelimit.KeyedLimiter
-	courseHandler  *course.Handler // For refreshing semester data after warmup
-	wg             sync.WaitGroup  // Track background goroutines for graceful shutdown
+	semesterCache  *course.SemesterCache // Shared cache for semester data (updated by warmup)
+	wg             sync.WaitGroup        // Track background goroutines for graceful shutdown
 }
 
 // Initialize creates and initializes a new application with all dependencies.
@@ -135,9 +135,12 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	})
 
 	idHandler := id.NewHandler(db, scraperClient, m, log, stickerMgr)
-	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerMgr, bm25Index, queryExpander, llmLimiter)
+
+	// Create shared semester cache for course and program handlers
+	semesterCache := course.NewSemesterCache()
+	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerMgr, bm25Index, queryExpander, llmLimiter, semesterCache)
 	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerMgr, cfg.Bot.MaxContactsPerSearch)
-	programHandler := program.NewHandler(db, m, log, stickerMgr, courseHandler.GetSemesterDetector())
+	programHandler := program.NewHandler(db, m, log, stickerMgr, semesterCache)
 	usageHandler := usage.NewHandler(userLimiter, llmLimiter, log, stickerMgr)
 
 	botRegistry := bot.NewRegistry()
@@ -191,7 +194,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		queryExpander:  queryExpander,
 		llmLimiter:     llmLimiter,
 		userLimiter:    userLimiter,
-		courseHandler:  courseHandler,
+		semesterCache:  semesterCache,
 	}
 
 	router.GET("/", app.redirectToGitHub)
@@ -613,23 +616,18 @@ func (a *Application) performProactiveWarmup(ctx context.Context, warmID bool) {
 	defer cancel()
 
 	opts := warmup.Options{
-		Reset:     false,
-		HasLLMKey: a.cfg.HasLLMProvider(),
-		WarmID:    warmID,
-		Metrics:   a.metrics,
-		BM25Index: a.bm25Index,
+		Reset:         false,
+		HasLLMKey:     a.cfg.HasLLMProvider(),
+		WarmID:        warmID,
+		Metrics:       a.metrics,
+		BM25Index:     a.bm25Index,
+		SemesterCache: a.semesterCache,
 	}
 
 	stats, err := warmup.Run(warmupCtx, a.db, a.scraperClient, a.logger, opts)
 	if err != nil {
 		a.logger.WithError(err).Error("Proactive warmup failed")
 		return
-	}
-
-	// Refresh semester data in course handler after warmup completes
-	// This ensures user queries use data-driven semester detection
-	if a.courseHandler != nil {
-		a.courseHandler.RefreshSemesters(ctx)
 	}
 
 	logEntry := a.logger.WithField("contacts", stats.Contacts.Load()).
