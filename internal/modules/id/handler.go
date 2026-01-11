@@ -687,6 +687,19 @@ func (h *Handler) handleDepartmentCodesByDegree(degree DegreeType) []messaging_a
 			lineutil.QuickReplyYearAction(),
 			lineutil.QuickReplyHelpAction(),
 		}
+
+	default:
+		// Fallback for unexpected DegreeType values to avoid empty/malformed replies.
+		builder.WriteString("⚠️ 無法判別學制，請從下方按鈕重新選擇系代碼或查詢學年。\n\n")
+		builder.WriteString("目前支援的學制：學士班、碩士班、博士班。")
+
+		quickReplyItems = []lineutil.QuickReplyItem{
+			lineutil.QuickReplyBachelorDeptCodeAction(),
+			lineutil.QuickReplyMasterDeptCodeAction(),
+			lineutil.QuickReplyPhDDeptCodeAction(),
+			lineutil.QuickReplyYearAction(),
+			lineutil.QuickReplyHelpAction(),
+		}
 	}
 
 	msg := lineutil.NewTextMessageWithConsistentSender(builder.String(), sender)
