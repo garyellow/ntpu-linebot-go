@@ -52,7 +52,6 @@ func TestDataLimitConstants(t *testing.T) {
 func TestDataLimitMessages(t *testing.T) {
 	messages := map[string]string{
 		"IDLMSDeprecatedMessage":   IDLMSDeprecatedMessage,
-		"ID113YearWarningMessage":  ID113YearWarningMessage,
 		"ID113YearEmptyMessage":    ID113YearEmptyMessage,
 		"IDNotFoundWithCutoffHint": IDNotFoundWithCutoffHint,
 		"IDYearTooOldMessage":      IDYearTooOldMessage,

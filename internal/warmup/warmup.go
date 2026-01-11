@@ -228,7 +228,7 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 		}
 	}()
 
-	// Warmup range: 101-112 (LMS 2.0 已無 113+ 完整資料)
+	// Warmup range: 101-112 (數位學苑 2.0 已無 113+ 完整資料)
 	currentYear := time.Now().Year() - 1911
 	fromYear := min(config.IDDataYearEnd, currentYear)
 

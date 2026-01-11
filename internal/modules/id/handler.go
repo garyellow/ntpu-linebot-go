@@ -353,7 +353,7 @@ func (h *Handler) handleYearPattern(ctx context.Context, text string, matches []
 	// No year provided - show guidance message
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	msg := lineutil.NewTextMessageWithConsistentSender(
-		"📅 按學年度查詢學生\n\n請輸入學年度進行查詢\n例如：學年 112、學年 110\n\n📋 查詢流程：\n1️⃣ 選擇學院群（文法商/公社電資）\n2️⃣ 選擇學院\n3️⃣ 選擇系所\n4️⃣ 查看該系所所有學生\n\n⚠️ 僅提供 94-112 學年度完整資料（113 年極不完整、114 年起無資料）",
+		"📅 按學年度查詢學生\n\n請輸入學年度進行查詢\n例如：學年 112、學年 110\n\n📋 查詢流程：\n1️⃣ 選擇學院群（文法商/公社電資）\n2️⃣ 選擇學院\n3️⃣ 選擇系所\n4️⃣ 查看該系所所有學生\n\n⚠️ 僅提供 94-112 學年度完整資料\n（113 年不完整、114 年起無資料 - 數位學苑 2.0 停用）",
 		sender,
 	)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -716,14 +716,16 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 		)
 	}
 
-	// 3. Check for year 113 (sparse data) - warn but allow query
+	// 3. Check for year 113 (sparse data) - reject query
 	if year == config.IDDataYearEnd+1 {
-		// Show warning but allow user to proceed
-		msg := lineutil.NewTextMessageWithConsistentSender(config.ID113YearWarningMessage, sender)
+		// Reject 113 queries as data is too sparse for list view
+		msg := lineutil.NewTextMessageWithConsistentSender(
+			"⚠️ 113 學年度資料不完整\n\n因僅極少數學生有資料，故不開放「學年」列表查詢。\n\n💡 若已知學號或姓名，請改用「學號」或「姓名」功能查詢。",
+			sender,
+		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			{Action: lineutil.NewMessageAction("繼續查詢 ➡️", fmt.Sprintf("搜尋全系%s%d", bot.PostbackSplitChar, year))},
+			lineutil.QuickReplyStudentAction(),
 			{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 改查 %d 學年度", config.IDDataYearEnd), fmt.Sprintf("學年 %d", config.IDDataYearEnd))},
-			lineutil.QuickReplyYearAction(),
 			lineutil.QuickReplyHelpAction(),
 		})
 		return []messaging_api.MessageInterface{msg}
@@ -853,8 +855,8 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 		if year == config.IDDataYearEnd+1 {
 			msg := lineutil.NewTextMessageWithConsistentSender(
 				fmt.Sprintf("🔍 查無學號 %s 的資料\n\n"+
-					"⚠️ 113 學年度資料極不完整\n"+
-					"僅極少數手動建立 LMS 2.0 帳號的學生有資料。\n\n"+
+					"⚠️ 113 學年度資料不完整\n"+
+					"僅極少數手動建立數位學苑 2.0 帳號的學生有資料。\n\n"+
 					"📅 完整資料範圍：94-112 學年度",
 					studentID),
 				sender,
@@ -932,12 +934,12 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	// 3. Return first 400 students (sorted by year DESC, id DESC)
 	// 4. Display all returned students (4 messages × 100 students), reserve 5th message for meta info
 
-	// Format student list - up to 4 messages (100 students per message)
-	// 5th message is always reserved for disclaimer and optional warning
+	// Format student list - up to 3 messages (100 students per message)
+	// 4th message is always reserved for disclaimer and optional warning
 	var messages []messaging_api.MessageInterface
-	const maxListMessages = 4                                       // Max messages for student list
+	const maxListMessages = 3                                       // Max messages for student list
 	const studentsPerMessage = 100                                  // Students per message
-	const maxDisplayStudents = maxListMessages * studentsPerMessage // 400 students max
+	const maxDisplayStudents = maxListMessages * studentsPerMessage // 300 students max
 
 	displayCount := min(len(students), maxDisplayStudents)
 
@@ -989,7 +991,8 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	infoBuilder.WriteString("系所資訊由學號推測，若有轉系之類的情況可能與實際不符。\n\n")
 	infoBuilder.WriteString("📊 姓名查詢範圍\n")
 	infoBuilder.WriteString("• 大學部/碩博士班：101-112 學年度（完整）\n")
-	infoBuilder.WriteString("• 113 學年度：資料極不完整\n\n")
+	infoBuilder.WriteString("• 113 學年度資料不完整（僅極少數學生）\n")
+	infoBuilder.WriteString("• 114 學年度起無資料（數位學苑 2.0 停用）\n\n")
 	infoBuilder.WriteString("💡 若找不到學生，可使用「學年」功能按年度查詢")
 
 	infoMsg := lineutil.NewTextMessageWithConsistentSender(infoBuilder.String(), sender)
@@ -1037,14 +1040,6 @@ func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_ap
 		WithColor(lineutil.ColorNote).
 		WithWrap(true).
 		WithMargin("md").FlexText)
-
-	// Add name search scope note (姓名查詢限制說明)
-	body.AddComponent(lineutil.NewFlexText(
-		"📊 姓名查詢涵蓋大學部/碩博士班 101-112 學年度（完整）、113 學年度（極不完整）。").
-		WithSize("xs").
-		WithColor(lineutil.ColorNote).
-		WithWrap(true).
-		WithMargin("sm").FlexText)
 
 	// Add cache time hint (unobtrusive, right-aligned)
 	if hint := lineutil.NewCacheTimeHint(student.CachedAt); hint != nil {
