@@ -550,9 +550,9 @@ func (h *Handler) handleDepartmentCodesByDegree(degree DegreeType) []messaging_a
 
 		// 法律學院
 		builder.WriteString("\n\n⚖️ 法律學院")
-		builder.WriteString("\n  法學組 → 712")
-		builder.WriteString("\n  司法組 → 714")
-		builder.WriteString("\n  財法組 → 716")
+		builder.WriteString("\n  法律系法學組 → 712")
+		builder.WriteString("\n  法律系司法組 → 714")
+		builder.WriteString("\n  法律系財法組 → 716")
 
 		// 商學院
 		builder.WriteString("\n\n💼 商學院")
