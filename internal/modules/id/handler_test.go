@@ -65,6 +65,15 @@ func TestCanHandle(t *testing.T) {
 		{"Single char '系' (natural query)", "系 資工", true},
 		{"Single char '所' (natural query)", "所 資工", true},
 
+		// Degree-specific department code keywords
+		{"Bachelor dept code", "學士系代碼", true},
+		{"Bachelor dept code alt", "大學部系代碼", true},
+		{"Master dept code", "碩士系代碼", true},
+		{"Master dept code alt", "碩班系代碼", true},
+		{"PhD dept code", "博士系代碼", true},
+		{"PhD dept code alt", "博班系代碼", true},
+		{"Legacy all dept code", "所有系代碼", true},
+
 		{"Year query", "112", false},
 		{"Invalid prefix", "課程 41247001", false},
 		{"Empty string", "", false},
@@ -228,6 +237,45 @@ func TestHandleMessage_Postback(t *testing.T) {
 	msgsInvalid := h.HandlePostback(ctx, invalidData)
 	if len(msgsInvalid) != 1 {
 		t.Errorf("Expected 1 error message for invalid postback, got %d", len(msgsInvalid))
+	}
+}
+
+// ==================== Degree-Specific Department Code Tests ====================
+
+// TestHandleDepartmentCodesByDegree tests degree-specific department code responses
+func TestHandleDepartmentCodesByDegree(t *testing.T) {
+	t.Parallel()
+	h := setupTestHandler(t)
+	ctx := context.Background()
+
+	tests := []struct {
+		name      string
+		input     string
+		wantTitle string
+	}{
+		{"Bachelor", "學士系代碼", "學士班系代碼"},
+		{"Bachelor alt", "大學部系代碼", "學士班系代碼"},
+		{"Master", "碩士系代碼", "碩士班系代碼"},
+		{"PhD", "博士系代碼", "博士班系代碼"},
+		{"Legacy all dept", "所有系代碼", "學士班系代碼"}, // legacy maps to bachelor
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			msgs := h.HandleMessage(ctx, tt.input)
+			if len(msgs) == 0 {
+				t.Fatal("Expected response message")
+			}
+			// Verify text message contains expected title
+			textMsg, ok := msgs[0].(*messaging_api.TextMessage)
+			if !ok {
+				t.Fatal("Expected TextMessage")
+			}
+			if !strings.Contains(textMsg.Text, tt.wantTitle) {
+				t.Errorf("Response should contain %q, got: %s", tt.wantTitle, textMsg.Text)
+			}
+		})
 	}
 }
 
