@@ -48,15 +48,21 @@ func newGeminiQueryExpander(ctx context.Context, apiKey, model string) (*geminiQ
 // Returns the expanded query string.
 //
 // Strategy:
-// 1. Detect technical terms, abbreviations, and English words
-// 2. Add Chinese translations for English terms
-// 3. Add English translations for Chinese terms
-// 4. Add related concepts and synonyms
+// 1. Extract core keywords (remove instruction words like "想學", "幫我找")
+// 2. Expand abbreviations (AWS → Amazon Web Services)
+// 3. Add bilingual translations (Chinese ↔ English)
+// 4. Include related concepts and synonyms
+// 5. Natural deduplication via space-separated output format
+//
+// BM25 Integration:
+// - Expanded query is tokenized by BM25 (unigram for CJK, words for English)
+// - Space-separated format allows BM25 to weight each term independently
+// - Duplicate terms are naturally merged by BM25's term frequency calculation
 //
 // Examples:
-//   - "AWS" → "AWS Amazon Web Services 雲端服務 雲端運算 cloud computing"
-//   - "我想學 AI" → "我想學 AI 人工智慧 機器學習 深度學習 artificial intelligence machine learning"
-//   - "程式設計" → "程式設計 programming 軟體開發 coding 程式開發"
+//   - "想學 AWS" → "AWS Amazon Web Services 雲端服務 雲端運算 cloud computing"
+//   - "我想學 AI" → "AI 人工智慧 機器學習 深度學習 artificial intelligence machine learning"
+//   - "程式設計課程" → "程式設計 programming 軟體開發 coding 演算法 algorithms"
 func (e *geminiQueryExpander) Expand(ctx context.Context, query string) (string, error) {
 	if e == nil || e.client == nil {
 		return query, nil
