@@ -3,7 +3,7 @@
 package genai
 
 // IntentParserSystemPrompt defines the system prompt for the NLU intent parser.
-// Follows 2025-2026 best practices: minimal prompt + self-documenting functions.
+// minimal prompt + self-documenting functions.
 //
 // Design Principle: Function descriptions are complete contracts.
 // System prompt only provides context and essential disambiguation rules.
@@ -30,7 +30,7 @@ const IntentParserSystemPrompt = `你是 NTPU 小工具的意圖分類助手。
 // The expansion is used for BM25 keyword search to improve recall.
 // BM25 tokenization: Chinese=unigram (per-char), English=whole word.
 //
-// Design principles (based on 2024-2025 best practices):
+// Design principles:
 // - Original query preserved: Caller prepends original if missing
 // - Core terms first: BM25 is sensitive to term frequency
 // - 15-25 expansion terms: Optimal balance per MuGI/ThinkQE research (EMNLP 2024)

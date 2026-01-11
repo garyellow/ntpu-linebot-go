@@ -1,7 +1,7 @@
 // Package genai provides integration with LLM APIs (Gemini, Groq, and Cerebras).
 // This file contains function declarations for the NLU intent parser.
 //
-// Design Principles (2025-2026 Best Practices):
+// Design Principles:
 //
 // 1. SELF-DOCUMENTING: Each function description is a complete contract
 //   - Trigger conditions embedded in descriptions
@@ -432,11 +432,6 @@ var IntentModuleMap = map[string][2]string{
 // ParamKeysMap maps function names to their parameter keys.
 // All parameter keys in the slice will be extracted from the function call args.
 // Functions without parameters (contact_emergency, program_list, help) are not listed.
-//
-// Best Practice:
-//   - LLM function calling returns all args in FunctionCall.Args (Gemini) or Function.Arguments (OpenAI)
-//   - We iterate through all specified keys to build the params map
-//   - Handler receives the full params map and validates required parameters
 //
 // Order: Course → ID → Contact → Program → Direct
 var ParamKeysMap = map[string][]string{
