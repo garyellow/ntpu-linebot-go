@@ -51,7 +51,7 @@ const (
 	// IDLMSDeprecatedMessage is the core message for LMS 2.0 deprecation.
 	// Used for year-based queries (學年 114+) and student ID queries (學號 414xxxxxx+).
 	IDLMSDeprecatedMessage = "😢 數位學苑 2.0 已於 113 學年度起停用\n\n" +
-		"113 學年度起新生使用 LMS 3.0，僅少數學生有建立數位學苑 2.0 帳號。\n\n" +
+		"113 學年度起新生使用數位學苑 3.0，僅少數學生有建立數位學苑 2.0 帳號。\n\n" +
 		"📅 完整資料範圍：\n" +
 		"• 學年度/學號查詢：94-112 學年度\n" +
 		"• 姓名查詢：101-112 學年度\n\n" +
@@ -61,7 +61,7 @@ const (
 	// with a hint about data availability.
 	IDNotFoundWithCutoffHint = "🔍 查無「%s」的學號資料\n\n" +
 		"📊 姓名查詢範圍\n" +
-		"• 大學部/碩博士班：101-112 學年度（完整）\n" +
+		"• 學士班/碩博士班：101-112 學年度（完整）\n" +
 		"• 113 學年度資料不完整（僅極少數學生）\n" +
 		"• 114 學年度起無資料（數位學苑 2.0 停用）\n\n" +
 		"💡 建議：\n" +

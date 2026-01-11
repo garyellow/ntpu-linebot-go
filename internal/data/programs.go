@@ -6,7 +6,7 @@ package data
 // Names must exactly match those in the course system (選課系統) for correct matching.
 type ProgramInfo struct {
 	Name string // 學程名稱 (e.g., "智慧財產權學士學分學程")
-	URL  string // LMS 詳細頁面 URL
+	URL  string // 數位學苑詳細頁面 URL
 }
 
 // LMSBaseURL is the base URL for the LMS program listing page.

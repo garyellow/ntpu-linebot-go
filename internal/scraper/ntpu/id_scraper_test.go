@@ -132,6 +132,48 @@ func TestDetermineDepartment(t *testing.T) {
 	}
 }
 
+// TestGetDegreeTypeName tests degree type name extraction from student ID prefix
+func TestGetDegreeTypeName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		studentID string
+		want      string
+	}{
+		// Valid degree types
+		{"Continuing education (3)", "31247001", DegreeNameContinuing},
+		{"Undergraduate (4)", "41247001", DegreeNameBachelor},
+		{"Master (7)", "71247001", DegreeNameMaster},
+		{"PhD (8)", "81247001", DegreeNamePhD},
+
+		// 9-digit variants
+		{"9-digit Continuing", "312470001", DegreeNameContinuing},
+		{"9-digit Undergraduate", "412470001", DegreeNameBachelor},
+		{"9-digit Master", "712470001", DegreeNameMaster},
+		{"9-digit PhD", "812470001", DegreeNamePhD},
+
+		// Edge cases
+		{"Empty ID", "", DegreeNameUnknown},
+		{"Invalid prefix 0", "01247001", DegreeNameUnknown},
+		{"Invalid prefix 1", "11247001", DegreeNameUnknown},
+		{"Invalid prefix 2", "21247001", DegreeNameUnknown},
+		{"Invalid prefix 5", "51247001", DegreeNameUnknown},
+		{"Invalid prefix 6", "61247001", DegreeNameUnknown},
+		{"Invalid prefix 9", "91247001", DegreeNameUnknown},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := GetDegreeTypeName(tt.studentID)
+			if got != tt.want {
+				t.Errorf("GetDegreeTypeName(%q) = %q, want %q", tt.studentID, got, tt.want)
+			}
+		})
+	}
+}
+
 // BenchmarkExtractYear benchmarks the year extraction function
 func BenchmarkExtractYear(b *testing.B) {
 	studentID := "410812345"

@@ -136,10 +136,42 @@ func IsLawDepartment(deptCode string) bool {
 
 // Student type prefixes for scraping
 const (
-	StudentTypeUndergrad = "4" // 大學部
-	StudentTypeMaster    = "7" // 碩士班
-	StudentTypePhD       = "8" // 博士班
+	StudentTypeContinuing = "3" // 進修學士班
+	StudentTypeUndergrad  = "4" // 大學部/學士班
+	StudentTypeMaster     = "7" // 碩士班
+	StudentTypePhD        = "8" // 博士班
 )
+
+// DegreeTypeName constants for user-facing display (標準名稱)
+const (
+	DegreeNameContinuing = "進修學士班"
+	DegreeNameBachelor   = "學士班"
+	DegreeNameMaster     = "碩士班"
+	DegreeNamePhD        = "博士班"
+	DegreeNameUnknown    = "國立臺北大學" // Fallback for invalid/unknown prefix
+)
+
+// GetDegreeTypeName returns the degree type display name based on student ID prefix.
+// Returns the standard Chinese name: 進修學士班, 學士班, 碩士班, 博士班.
+// Falls back to "國立臺北大學" if the prefix is invalid or empty.
+func GetDegreeTypeName(studentID string) string {
+	if len(studentID) == 0 {
+		return DegreeNameUnknown
+	}
+
+	switch string(studentID[0]) {
+	case StudentTypeContinuing:
+		return DegreeNameContinuing
+	case StudentTypeUndergrad:
+		return DegreeNameBachelor
+	case StudentTypeMaster:
+		return DegreeNameMaster
+	case StudentTypePhD:
+		return DegreeNamePhD
+	default:
+		return DegreeNameUnknown
+	}
+}
 
 const (
 	studentSearchPath = "/portfolio/search.php"

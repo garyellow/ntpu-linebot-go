@@ -238,7 +238,7 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 		depts  []string
 		name   string
 	}{
-		{ntpu.StudentTypeUndergrad, ntpu.UndergradDeptCodes, "大學部"},
+		{ntpu.StudentTypeUndergrad, ntpu.UndergradDeptCodes, "學士班"},
 		{ntpu.StudentTypeMaster, ntpu.MasterDeptCodes, "碩士班"},
 		{ntpu.StudentTypePhD, ntpu.PhDDeptCodes, "博士班"},
 	}

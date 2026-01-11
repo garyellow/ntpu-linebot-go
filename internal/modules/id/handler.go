@@ -54,15 +54,26 @@ const (
 	senderName = "學號小幫手"
 )
 
+// DegreeType represents academic degree types for department code queries.
+type DegreeType string
+
+// Academic degree type constants for department code classification.
+const (
+	DegreeBachelor DegreeType = "bachelor" // 學士班/大學部
+	DegreeMaster   DegreeType = "master"   // 碩士班
+	DegreePhD      DegreeType = "phd"      // 博士班
+)
+
 // Pattern priorities (lower = higher priority).
 // IMPORTANT: More specific patterns (e.g., "系代碼") must have higher priority
 // than less specific ones (e.g., "系") to prevent incorrect matches.
 const (
-	PriorityAllDeptCode = 1 // Exact match: "所有系代碼"
-	PriorityStudentID   = 2 // 8-9 digit numeric student ID
-	PriorityDepartment  = 3 // Department query (name or code) - Higher than Year
-	PriorityYear        = 4 // Year query (學年)
-	PriorityStudent     = 5 // Student name/ID query (學號, 學生)
+	PriorityDegreeDeptCode = 0 // Degree-specific: "學士系代碼", "碩士系代碼", "博士系代碼"
+	PriorityAllDeptCode    = 1 // Exact match: "所有系代碼" (legacy, maps to bachelor)
+	PriorityStudentID      = 2 // 8-9 digit numeric student ID
+	PriorityDepartment     = 3 // Department query (name or code) - Higher than Year
+	PriorityYear           = 4 // Year query (學年)
+	PriorityStudent        = 5 // Student name/ID query (學號, 學生)
 )
 
 // PatternHandler processes a matched pattern and returns LINE messages.
@@ -103,6 +114,11 @@ var (
 	departmentRegex = bot.BuildKeywordRegex(validDepartmentKeywords)
 	yearRegex       = bot.BuildKeywordRegex(validYearKeywords)
 	allDeptCodeText = "所有系代碼"
+
+	// Degree-specific department code keywords (exact match)
+	bachelorDeptCodeKeywords = []string{"學士系代碼", "大學系代碼", "大學部系代碼"}
+	masterDeptCodeKeywords   = []string{"碩士系代碼", "碩班系代碼", "研究所系代碼"}
+	phdDeptCodeKeywords      = []string{"博士系代碼", "博班系代碼"}
 )
 
 // NewHandler creates a new ID handler with required dependencies.
@@ -135,7 +151,37 @@ func NewHandler(
 func (h *Handler) initializeMatchers() {
 	h.matchers = []PatternMatcher{
 		{
-			// Exact match: "所有系代碼"
+			// Bachelor department codes: "學士系代碼", "大學部系代碼", etc.
+			pattern:  nil,
+			priority: PriorityDegreeDeptCode,
+			handler:  h.handleBachelorDeptCodePattern,
+			name:     "BachelorDeptCode",
+			matchFunc: func(text string) bool {
+				return matchAnyKeyword(text, bachelorDeptCodeKeywords)
+			},
+		},
+		{
+			// Master department codes: "碩士系代碼", etc.
+			pattern:  nil,
+			priority: PriorityDegreeDeptCode,
+			handler:  h.handleMasterDeptCodePattern,
+			name:     "MasterDeptCode",
+			matchFunc: func(text string) bool {
+				return matchAnyKeyword(text, masterDeptCodeKeywords)
+			},
+		},
+		{
+			// PhD department codes: "博士系代碼", etc.
+			pattern:  nil,
+			priority: PriorityDegreeDeptCode,
+			handler:  h.handlePhDDeptCodePattern,
+			name:     "PhDDeptCode",
+			matchFunc: func(text string) bool {
+				return matchAnyKeyword(text, phdDeptCodeKeywords)
+			},
+		},
+		{
+			// Exact match: "所有系代碼" (legacy, maps to bachelor)
 			pattern:  nil, // Uses matchFunc instead
 			priority: PriorityAllDeptCode,
 			handler:  h.handleAllDeptCodePattern,
@@ -309,9 +355,34 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 // Must return non-empty messages when invoked (pattern matched).
 // ================================================
 
-// handleAllDeptCodePattern handles "所有系代碼" exact match.
+// matchAnyKeyword returns true if text exactly matches any keyword in the list.
+func matchAnyKeyword(text string, keywords []string) bool {
+	for _, kw := range keywords {
+		if text == kw {
+			return true
+		}
+	}
+	return false
+}
+
+// handleBachelorDeptCodePattern handles bachelor department code queries.
+func (h *Handler) handleBachelorDeptCodePattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
+	return h.handleDepartmentCodesByDegree(DegreeBachelor)
+}
+
+// handleMasterDeptCodePattern handles master department code queries.
+func (h *Handler) handleMasterDeptCodePattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
+	return h.handleDepartmentCodesByDegree(DegreeMaster)
+}
+
+// handlePhDDeptCodePattern handles PhD department code queries.
+func (h *Handler) handlePhDDeptCodePattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
+	return h.handleDepartmentCodesByDegree(DegreePhD)
+}
+
+// handleAllDeptCodePattern handles "所有系代碼" exact match (legacy, maps to bachelor).
 func (h *Handler) handleAllDeptCodePattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
-	return h.handleAllDepartmentCodes()
+	return h.handleDepartmentCodesByDegree(DegreeBachelor)
 }
 
 // handleStudentIDPattern handles 8-9 digit numeric student ID.
@@ -329,7 +400,7 @@ func (h *Handler) handleDepartmentPattern(ctx context.Context, text string, matc
 		// Provide guidance message
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			"🔍 查詢系所資訊\n\n請輸入系名或系代碼：\n例如：「系 資工」或「系代碼 85」\n\n💡 提示：輸入「所有系代碼」查看完整對照表",
+			"🔍 查詢系所資訊\n\n請輸入系名或系代碼：\n例如：「系 資工」或「系代碼 85」\n\n💡 提示：輸入「學士系代碼」查看完整對照表",
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -460,59 +531,179 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 	return []messaging_api.MessageInterface{}
 }
 
-// handleAllDepartmentCodes returns all undergraduate department codes organized by college.
-// Includes a tip for searching graduate program codes.
-func (h *Handler) handleAllDepartmentCodes() []messaging_api.MessageInterface {
-	var builder strings.Builder
-	builder.WriteString("📋 大學部系代碼一覽\n")
-
-	// 人文學院
-	builder.WriteString("\n📖 人文學院")
-	builder.WriteString("\n  中文系 → 81")
-	builder.WriteString("\n  應外系 → 82")
-	builder.WriteString("\n  歷史系 → 83")
-
-	// 法律學院
-	builder.WriteString("\n\n⚖️ 法律學院")
-	builder.WriteString("\n  法學組 → 712")
-	builder.WriteString("\n  司法組 → 714")
-	builder.WriteString("\n  財法組 → 716")
-
-	// 商學院
-	builder.WriteString("\n\n💼 商學院")
-	builder.WriteString("\n  企管系 → 79")
-	builder.WriteString("\n  金融系 → 80")
-	builder.WriteString("\n  會計系 → 77")
-	builder.WriteString("\n  統計系 → 78")
-	builder.WriteString("\n  休運系 → 84")
-
-	// 公共事務學院
-	builder.WriteString("\n\n🏛️ 公共事務學院")
-	builder.WriteString("\n  公行系 → 72")
-	builder.WriteString("\n  財政系 → 75")
-	builder.WriteString("\n  不動系 → 76")
-
-	// 社會科學學院
-	builder.WriteString("\n\n👥 社會科學學院")
-	builder.WriteString("\n  經濟系 → 73")
-	builder.WriteString("\n  社學系 → 742")
-	builder.WriteString("\n  社工系 → 744")
-
-	// 電機資訊學院
-	builder.WriteString("\n\n💻 電機資訊學院")
-	builder.WriteString("\n  電機系 → 87")
-	builder.WriteString("\n  資工系 → 85")
-	builder.WriteString("\n  通訊系 → 86")
-
-	builder.WriteString("\n\n🎓 查詢碩博士班\n輸入「系名 XXX」（如：系名 法律）可搜尋所有學制")
-
+// handleDepartmentCodesByDegree returns department codes for a specific degree type.
+// Includes quick reply for switching between degree types.
+func (h *Handler) handleDepartmentCodesByDegree(degree DegreeType) []messaging_api.MessageInterface {
 	sender := lineutil.GetSender(senderName, h.stickerManager)
+	var builder strings.Builder
+	var quickReplyItems []lineutil.QuickReplyItem
+
+	switch degree {
+	case DegreeBachelor:
+		builder.WriteString("📋 學士班系代碼一覽\n")
+
+		// 人文學院
+		builder.WriteString("\n📖 人文學院")
+		builder.WriteString("\n  中文系 → 81")
+		builder.WriteString("\n  應外系 → 82")
+		builder.WriteString("\n  歷史系 → 83")
+
+		// 法律學院
+		builder.WriteString("\n\n⚖️ 法律學院")
+		builder.WriteString("\n  法律系法學組 → 712")
+		builder.WriteString("\n  法律系司法組 → 714")
+		builder.WriteString("\n  法律系財法組 → 716")
+
+		// 商學院
+		builder.WriteString("\n\n💼 商學院")
+		builder.WriteString("\n  企管系 → 79")
+		builder.WriteString("\n  金融系 → 80")
+		builder.WriteString("\n  會計系 → 77")
+		builder.WriteString("\n  統計系 → 78")
+		builder.WriteString("\n  休運系 → 84")
+
+		// 公共事務學院
+		builder.WriteString("\n\n🏛️ 公共事務學院")
+		builder.WriteString("\n  公行系 → 72")
+		builder.WriteString("\n  財政系 → 75")
+		builder.WriteString("\n  不動系 → 76")
+
+		// 社會科學學院
+		builder.WriteString("\n\n👥 社會科學學院")
+		builder.WriteString("\n  經濟系 → 73")
+		builder.WriteString("\n  社學系 → 742")
+		builder.WriteString("\n  社工系 → 744")
+
+		// 電機資訊學院
+		builder.WriteString("\n\n💻 電機資訊學院")
+		builder.WriteString("\n  電機系 → 87")
+		builder.WriteString("\n  資工系 → 85")
+		builder.WriteString("\n  通訊系 → 86")
+
+		builder.WriteString("\n\n🎓 碩士/博士班請按下方按鈕查詢")
+
+		quickReplyItems = []lineutil.QuickReplyItem{
+			lineutil.QuickReplyMasterDeptCodeAction(),
+			lineutil.QuickReplyPhDDeptCodeAction(),
+			lineutil.QuickReplyYearAction(),
+			lineutil.QuickReplyHelpAction(),
+		}
+
+	case DegreeMaster:
+		builder.WriteString("📋 碩士班系代碼一覽\n")
+
+		// 商學院系所
+		builder.WriteString("\n💼 商學院")
+		builder.WriteString("\n  企管碩 → 31")
+		builder.WriteString("\n  會計碩 → 32")
+		builder.WriteString("\n  統計碩 → 33")
+		builder.WriteString("\n  金融碩 → 34")
+		builder.WriteString("\n  國企所 → 35")
+		builder.WriteString("\n  資管所 → 36")
+		builder.WriteString("\n  財金英碩 → 37")
+		builder.WriteString("\n  會計在職 → 77")
+		builder.WriteString("\n  統計在職 → 78")
+		builder.WriteString("\n  企管在職 → 79")
+
+		// 人文學院系所
+		builder.WriteString("\n\n📖 人文學院")
+		builder.WriteString("\n  民俗所 → 41")
+		builder.WriteString("\n  古典所 → 42")
+		builder.WriteString("\n  中文碩 → 43")
+		builder.WriteString("\n  歷史碩 → 44")
+
+		// 法律學院系所
+		builder.WriteString("\n\n⚖️ 法律學院")
+		builder.WriteString("\n  法律碩(一般) → 51")
+		builder.WriteString("\n  法律碩(專業) → 52")
+
+		// 社會科學學院系所
+		builder.WriteString("\n\n👥 社會科學學院")
+		builder.WriteString("\n  經濟碩 → 61")
+		builder.WriteString("\n  社會碩 → 62")
+		builder.WriteString("\n  社工碩 → 63")
+		builder.WriteString("\n  犯罪所 → 64")
+
+		// 公共事務學院系所
+		builder.WriteString("\n\n🏛️ 公共事務學院")
+		builder.WriteString("\n  公行碩 → 71")
+		builder.WriteString("\n  財政碩 → 72")
+		builder.WriteString("\n  不動碩 → 73")
+		builder.WriteString("\n  都計所 → 74")
+		builder.WriteString("\n  自環所 → 75")
+		builder.WriteString("\n  城市治理英碩 → 76")
+
+		// 電機資訊學院系所
+		builder.WriteString("\n\n💻 電機資訊學院")
+		builder.WriteString("\n  通訊碩 → 81")
+		builder.WriteString("\n  電機碩 → 82")
+		builder.WriteString("\n  資工碩 → 83")
+
+		// 其他
+		builder.WriteString("\n\n🏥 其他")
+		builder.WriteString("\n  智慧醫療英碩 → 91")
+
+		builder.WriteString("\n\n🎓 學士/博士班請按下方按鈕查詢")
+
+		quickReplyItems = []lineutil.QuickReplyItem{
+			lineutil.QuickReplyBachelorDeptCodeAction(),
+			lineutil.QuickReplyPhDDeptCodeAction(),
+			lineutil.QuickReplyYearAction(),
+			lineutil.QuickReplyHelpAction(),
+		}
+
+	case DegreePhD:
+		builder.WriteString("📋 博士班系代碼一覽\n")
+
+		// 商學院
+		builder.WriteString("\n💼 商學院")
+		builder.WriteString("\n  企管博 → 31")
+		builder.WriteString("\n  會計博 → 32")
+
+		// 法律學院
+		builder.WriteString("\n\n⚖️ 法律學院")
+		builder.WriteString("\n  法律博 → 51")
+
+		// 社會科學學院
+		builder.WriteString("\n\n👥 社會科學學院")
+		builder.WriteString("\n  經濟博 → 61")
+
+		// 公共事務學院
+		builder.WriteString("\n\n🏛️ 公共事務學院")
+		builder.WriteString("\n  公行博 → 71")
+		builder.WriteString("\n  不動博 → 73")
+		builder.WriteString("\n  都計博 → 74")
+		builder.WriteString("\n  自環博 → 75")
+
+		// 電機資訊學院
+		builder.WriteString("\n\n💻 電機資訊學院")
+		builder.WriteString("\n  電資博 → 76")
+
+		builder.WriteString("\n\n🎓 學士/碩士班請按下方按鈕查詢")
+
+		quickReplyItems = []lineutil.QuickReplyItem{
+			lineutil.QuickReplyBachelorDeptCodeAction(),
+			lineutil.QuickReplyMasterDeptCodeAction(),
+			lineutil.QuickReplyYearAction(),
+			lineutil.QuickReplyHelpAction(),
+		}
+
+	default:
+		// Fallback for unexpected DegreeType values to avoid empty/malformed replies.
+		builder.WriteString("⚠️ 無法判別學制，請從下方按鈕重新選擇系代碼或查詢學年。\n\n")
+		builder.WriteString("目前支援的學制：學士班、碩士班、博士班。")
+
+		quickReplyItems = []lineutil.QuickReplyItem{
+			lineutil.QuickReplyBachelorDeptCodeAction(),
+			lineutil.QuickReplyMasterDeptCodeAction(),
+			lineutil.QuickReplyPhDDeptCodeAction(),
+			lineutil.QuickReplyYearAction(),
+			lineutil.QuickReplyHelpAction(),
+		}
+	}
+
 	msg := lineutil.NewTextMessageWithConsistentSender(builder.String(), sender)
-	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		lineutil.QuickReplyYearAction(),
-		lineutil.QuickReplyStudentAction(),
-		lineutil.QuickReplyHelpAction(),
-	})
+	msg.QuickReply = lineutil.NewQuickReply(quickReplyItems)
 	return []messaging_api.MessageInterface{msg}
 }
 
@@ -549,7 +740,7 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 	type deptMatch struct {
 		name   string
 		code   string
-		degree string // 大學部, 碩士班, 博士班
+		degree string // 學士班, 碩士班, 博士班
 	}
 	var matches []deptMatch
 
@@ -563,7 +754,7 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 	}
 
 	// Fuzzy search across all degree types
-	addMatches(ntpu.FullDepartmentCodes, "大學部")
+	addMatches(ntpu.FullDepartmentCodes, "學士班")
 	addMatches(ntpu.MasterDepartmentCodes, "碩士班")
 	addMatches(ntpu.PhDDepartmentCodes, "博士班")
 
@@ -583,7 +774,7 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 		fmt.Fprintf(&builder, "🔍「%s」找到 %d 個符合的系所：\n", deptName, len(matches))
 
 		// Group by degree for clearer display
-		degreeOrder := []string{"大學部", "碩士班", "博士班"}
+		degreeOrder := []string{"學士班", "碩士班", "博士班"}
 		for _, deg := range degreeOrder {
 			var degMatches []deptMatch
 			for _, m := range matches {
@@ -634,7 +825,7 @@ func (h *Handler) handleDepartmentCodeQuery(code string) []messaging_api.Message
 
 	// Check undergraduate names
 	if name, ok := ntpu.DepartmentNames[code]; ok {
-		matches = append(matches, codeMatch{name + "系", "大學部"})
+		matches = append(matches, codeMatch{name + "系", "學士班"})
 	}
 
 	// Check master's program names
@@ -991,9 +1182,9 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 
 	// Always add department inference disclaimer
 	infoBuilder.WriteString("ℹ️ 系所資訊說明\n")
-	infoBuilder.WriteString("系所資訊由學號推測，若有轉系之類的情況可能與實際不符。\n\n")
+	infoBuilder.WriteString("系所資訊由學號推測，可能與實際不符。\n\n")
 	infoBuilder.WriteString("📊 姓名查詢範圍\n")
-	infoBuilder.WriteString("• 大學部/碩博士班：101-112 學年度（完整）\n")
+	infoBuilder.WriteString("• 學士班/碩博士班：101-112 學年度（完整）\n")
 	infoBuilder.WriteString("• 113 學年度資料不完整（僅極少數學生）\n")
 	infoBuilder.WriteString("• 114 學年度起無資料（數位學苑 2.0 停用）\n\n")
 	infoBuilder.WriteString("💡 若找不到學生，可使用「學年」功能按年度查詢")
@@ -1024,10 +1215,11 @@ func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_ap
 	// Body: Student details using BodyContentBuilder for cleaner code
 	body := lineutil.NewBodyContentBuilder()
 
-	// First row: NTPU label (consistent with course/contact modules)
+	// First row: Degree type label (dynamic based on student ID prefix)
+	degreeTypeName := ntpu.GetDegreeTypeName(student.ID)
 	body.AddComponent(lineutil.NewBodyLabel(lineutil.BodyLabelInfo{
 		Emoji: "🎓",
-		Label: "國立臺北大學",
+		Label: degreeTypeName,
 		Color: lineutil.ColorHeaderStudent, // Purple color matching header
 	}).FlexBox)
 
@@ -1038,7 +1230,7 @@ func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_ap
 	body.AddInfoRow("📅", "入學學年", fmt.Sprintf("%d 學年度", student.Year), lineutil.BoldInfoRowStyle())
 
 	// Add department inference note (transparency about data limitations)
-	body.AddComponent(lineutil.NewFlexText("⚠️ 系所資訊由學號推測，若有轉系之類的情況可能與實際不符").
+	body.AddComponent(lineutil.NewFlexText("⚠️ 系所由學號推測，可能與實際不符").
 		WithSize("xs").
 		WithColor(lineutil.ColorNote).
 		WithWrap(true).
@@ -1047,11 +1239,6 @@ func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_ap
 	// Add cache time hint (unobtrusive, right-aligned)
 	if hint := lineutil.NewCacheTimeHint(student.CachedAt); hint != nil {
 		body.AddComponent(hint.FlexText)
-	}
-
-	// Add data source hint (transparency about data limitations)
-	if dataHint := lineutil.NewDataRangeHint(); dataHint != nil {
-		body.AddComponent(dataHint.FlexText)
 	}
 
 	// Footer: Action buttons (內部指令使用紫色)
