@@ -991,7 +991,7 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 
 	// Always add department inference disclaimer
 	infoBuilder.WriteString("ℹ️ 系所資訊說明\n")
-	infoBuilder.WriteString("系所資訊由學號推測，若有轉系之類的情況可能與實際不符。\n\n")
+	infoBuilder.WriteString("系所資訊由學號推測，可能與實際不符。\n\n")
 	infoBuilder.WriteString("📊 姓名查詢範圍\n")
 	infoBuilder.WriteString("• 大學部/碩博士班：101-112 學年度（完整）\n")
 	infoBuilder.WriteString("• 113 學年度資料不完整（僅極少數學生）\n")
@@ -1038,7 +1038,7 @@ func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_ap
 	body.AddInfoRow("📅", "入學學年", fmt.Sprintf("%d 學年度", student.Year), lineutil.BoldInfoRowStyle())
 
 	// Add department inference note (transparency about data limitations)
-	body.AddComponent(lineutil.NewFlexText("⚠️ 系所資訊由學號推測，若有轉系之類的情況可能與實際不符").
+	body.AddComponent(lineutil.NewFlexText("⚠️ 系所由學號推測，可能與實際不符").
 		WithSize("xs").
 		WithColor(lineutil.ColorNote).
 		WithWrap(true).
@@ -1047,11 +1047,6 @@ func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_ap
 	// Add cache time hint (unobtrusive, right-aligned)
 	if hint := lineutil.NewCacheTimeHint(student.CachedAt); hint != nil {
 		body.AddComponent(hint.FlexText)
-	}
-
-	// Add data source hint (transparency about data limitations)
-	if dataHint := lineutil.NewDataRangeHint(); dataHint != nil {
-		body.AddComponent(dataHint.FlexText)
 	}
 
 	// Footer: Action buttons (內部指令使用紫色)
