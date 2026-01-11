@@ -449,7 +449,8 @@ func (h *Handler) handleHistoricalPattern(ctx context.Context, text string, matc
 
 // handleSmartPattern processes smart search with help message fallback.
 func (h *Handler) handleSmartPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
-	match := matches[0] // The matched keyword
+	// Use matches[1] to get the keyword without trailing space
+	match := matches[1] // The captured keyword (group 1)
 	searchTerm := bot.ExtractSearchTerm(text, match)
 
 	if searchTerm == "" {
@@ -484,7 +485,8 @@ func (h *Handler) handleSmartPattern(ctx context.Context, text string, matches [
 
 // handleExtendedPattern processes extended search queries (e.g., 更多學期 微積分).
 func (h *Handler) handleExtendedPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
-	match := matches[0] // The matched keyword
+	// Use matches[1] to get the keyword without trailing space
+	match := matches[1] // The captured keyword (group 1)
 	searchTerm := bot.ExtractSearchTerm(text, match)
 
 	if searchTerm == "" {
@@ -511,7 +513,8 @@ func (h *Handler) handleExtendedPattern(ctx context.Context, text string, matche
 
 // handleRegularPattern processes regular course/teacher queries (e.g., 課程 微積分).
 func (h *Handler) handleRegularPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
-	match := matches[0] // The matched keyword
+	// Use matches[1] to get the keyword without trailing space
+	match := matches[1] // The captured keyword (group 1)
 	searchTerm := bot.ExtractSearchTerm(text, match)
 
 	if searchTerm == "" {
