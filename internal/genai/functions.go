@@ -238,12 +238,12 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 			Parameters: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
-					"program_name": {
+					"programName": {
 						Type:        genai.TypeString,
 						Description: "學程全名（必須包含「學程」二字）。例：「人工智慧學程」「永續發展學程」。",
 					},
 				},
-				Required: []string{"program_name"},
+				Required: []string{"programName"},
 			},
 		},
 
@@ -324,29 +324,34 @@ var IntentModuleMap = map[string][2]string{
 	"direct_reply": {"direct_reply", ""},
 }
 
-// ParamKeyMap maps function names to their primary parameter key.
-// This is used to extract the parameter value from the function call args.
+// ParamKeysMap maps function names to their parameter keys.
+// All parameter keys in the slice will be extracted from the function call args.
 // Functions without parameters (contact_emergency, program_list, help) are not listed.
 //
+// Best Practice:
+//   - LLM function calling returns all args in FunctionCall.Args (Gemini) or Function.Arguments (OpenAI)
+//   - We iterate through all specified keys to build the params map
+//   - Handler receives the full params map and validates required parameters
+//
 // Order: Course → ID → Contact → Program → Direct
-var ParamKeyMap = map[string]string{
+var ParamKeysMap = map[string][]string{
 	// Course Module
-	"course_search":     "keyword",
-	"course_smart":      "query",
-	"course_uid":        "uid",
-	"course_extended":   "keyword",
-	"course_historical": "keyword", // Also has "year" param, but keyword is primary
+	"course_search":     {"keyword"},
+	"course_smart":      {"query"},
+	"course_uid":        {"uid"},
+	"course_extended":   {"keyword"},
+	"course_historical": {"year", "keyword"}, // Multi-param: both are required
 	// ID Module
-	"id_search":     "name",
-	"id_student_id": "student_id",
-	"id_department": "department",
-	"id_year":       "year",
-	"id_dept_codes": "degree",
+	"id_search":     {"name"},
+	"id_student_id": {"student_id"},
+	"id_department": {"department"},
+	"id_year":       {"year"},
+	"id_dept_codes": {"degree"}, // Optional param, handler has default value
 	// Contact Module
-	"contact_search": "query",
+	"contact_search": {"query"},
 	// Program Module
-	"program_search":  "query",
-	"program_courses": "program_name",
+	"program_search":  {"query"},
+	"program_courses": {"programName"},
 	// Direct Reply
-	"direct_reply": "message",
+	"direct_reply": {"message"},
 }

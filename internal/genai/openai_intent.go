@@ -197,6 +197,7 @@ func (p *openaiIntentParser) parseResult(resp *openai.ChatCompletion) (*ParseRes
 }
 
 // parseToolCall extracts intent and parameters from an OpenAI tool call.
+// Iterates through all parameter keys defined in ParamKeysMap to extract values.
 // v3 API: ChatCompletionMessageToolCallUnion is the union type for tool calls.
 func (p *openaiIntentParser) parseToolCall(tc openai.ChatCompletionMessageToolCallUnion) (*ParseResult, error) {
 	if tc.Type != "function" {
@@ -211,25 +212,29 @@ func (p *openaiIntentParser) parseToolCall(tc openai.ChatCompletionMessageToolCa
 		return nil, fmt.Errorf("unknown function: %s", funcName)
 	}
 
-	// Parse JSON arguments
-	params := make(map[string]string)
-	if paramKey, hasParam := ParamKeyMap[funcName]; hasParam {
-		// OpenAI returns arguments as JSON string
-		var args map[string]any
+	// Parse JSON arguments once
+	var args map[string]any
+	if tc.Function.Arguments != "" {
 		if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
 			return nil, fmt.Errorf("failed to parse function arguments: %w", err)
 		}
+	}
 
-		value, exists := args[paramKey]
-		if !exists {
-			return nil, fmt.Errorf("missing required parameter %q for function %q", paramKey, funcName)
+	// Extract all parameters defined for this function
+	params := make(map[string]string)
+	if paramKeys, hasParams := ParamKeysMap[funcName]; hasParams {
+		for _, paramKey := range paramKeys {
+			value, exists := args[paramKey]
+			if !exists {
+				// Parameter not provided by model - handler will validate if required
+				continue
+			}
+			strVal, ok := value.(string)
+			if !ok {
+				return nil, fmt.Errorf("parameter %q for function %q is not a string (got %T)", paramKey, funcName, value)
+			}
+			params[paramKey] = strVal
 		}
-
-		strVal, ok := value.(string)
-		if !ok {
-			return nil, fmt.Errorf("parameter %q for function %q is not a string (got %T)", paramKey, funcName, value)
-		}
-		params[paramKey] = strVal
 	}
 
 	return &ParseResult{

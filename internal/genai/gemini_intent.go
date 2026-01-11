@@ -139,6 +139,7 @@ func (p *geminiIntentParser) parseResult(result *genai.GenerateContentResponse) 
 }
 
 // parseFunctionCall extracts intent and parameters from a function call.
+// Iterates through all parameter keys defined in ParamKeysMap to extract values.
 func (p *geminiIntentParser) parseFunctionCall(fc *genai.FunctionCall) (*ParseResult, error) {
 	funcName := fc.Name
 
@@ -148,20 +149,22 @@ func (p *geminiIntentParser) parseFunctionCall(fc *genai.FunctionCall) (*ParseRe
 		return nil, fmt.Errorf("unknown function: %s", funcName)
 	}
 
-	// Extract parameters
+	// Extract all parameters defined for this function
 	params := make(map[string]string)
-	if paramKey, hasParam := ParamKeyMap[funcName]; hasParam {
-		value, exists := fc.Args[paramKey]
-		if !exists {
-			// Required parameter is missing from function call
-			return nil, fmt.Errorf("missing required parameter %q for function %q", paramKey, funcName)
+	if paramKeys, hasParams := ParamKeysMap[funcName]; hasParams {
+		for _, paramKey := range paramKeys {
+			value, exists := fc.Args[paramKey]
+			if !exists {
+				// Parameter not provided by model - handler will validate if required
+				continue
+			}
+			strVal, ok := value.(string)
+			if !ok {
+				// Parameter exists but is not a string type
+				return nil, fmt.Errorf("parameter %q for function %q is not a string (got %T)", paramKey, funcName, value)
+			}
+			params[paramKey] = strVal
 		}
-		strVal, ok := value.(string)
-		if !ok {
-			// Parameter exists but is not a string type
-			return nil, fmt.Errorf("parameter %q for function %q is not a string (got %T)", paramKey, funcName, value)
-		}
-		params[paramKey] = strVal
 	}
 
 	return &ParseResult{

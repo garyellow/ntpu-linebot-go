@@ -174,9 +174,9 @@ const IntentParserSystemPrompt = `你是 NTPU 小工具的意圖分類助手。
 - 「XX 學程有哪些課」「XX 學程的課程」「XX 學程包含什麼」
 
 **範例**：
-✅ 「人工智慧學程有哪些課」→ program_courses(program_name="人工智慧學程")
-✅ 「永續發展學程的課程」→ program_courses(program_name="永續發展學程")
-✅ 「智財學程包含什麼課」→ program_courses(program_name="智財學程")
+✅ 「人工智慧學程有哪些課」→ program_courses(programName="人工智慧學程")
+✅ 「永續發展學程的課程」→ program_courses(programName="永續發展學程")
+✅ 「智財學程包含什麼課」→ program_courses(programName="智財學程")
 
 ## 決策優先級
 
@@ -218,7 +218,7 @@ const IntentParserSystemPrompt = `你是 NTPU 小工具的意圖分類助手。
 **範例**：
 ✅ 「你好」→ direct_reply(友善歡迎 + 功能介紹)
 ✅ 「王小明」→ direct_reply(澄清：教師 or 學生？)
-✅ 「今天天氣」→ direct_reply(歉輭說明功能範圍)`
+✅ 「今天天氣」→ direct_reply(抱歉說明功能範圍)`
 
 // QueryExpansionPrompt creates the prompt for query expansion.
 // This prompt is shared between Gemini and Groq expanders.
