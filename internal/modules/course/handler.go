@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -262,13 +263,15 @@ func (h *Handler) hasQueryExpander() bool {
 
 // Intent names for NLU dispatcher
 const (
-	IntentSearch = "search" // Unified course/teacher search
-	IntentSmart  = "smart"  // Smart search via BM25 + Query Expansion
-	IntentUID    = "uid"    // Direct course UID lookup
+	IntentSearch     = "search"     // Unified course/teacher search
+	IntentSmart      = "smart"      // Smart search via BM25 + Query Expansion
+	IntentUID        = "uid"        // Direct course UID lookup
+	IntentExtended   = "extended"   // Extended search (more semesters)
+	IntentHistorical = "historical" // Historical year search
 )
 
 // DispatchIntent handles NLU-parsed intents.
-// Intents: "search" (keyword), "smart" (query), "uid" (uid).
+// Intents: "search", "smart", "uid", "extended", "historical".
 // Returns error if intent unknown or required params missing.
 func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[string]string) ([]messaging_api.MessageInterface, error) {
 	// Validate parameters first (before logging) to support testing with nil dependencies
@@ -302,6 +305,37 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			h.logger.WithModule(ModuleName).Debugf("Dispatching course intent: %s, uid: %s", intent, uid)
 		}
 		return h.handleCourseUIDQuery(ctx, uid), nil
+
+	case IntentExtended:
+		keyword, ok := params["keyword"]
+		if !ok || keyword == "" {
+			return nil, fmt.Errorf("%w: keyword", domerrors.ErrMissingParameter)
+		}
+		if h.logger != nil {
+			h.logger.WithModule(ModuleName).Debugf("Dispatching course intent: %s, keyword: %s", intent, keyword)
+		}
+		return h.handleExtendedCourseSearch(ctx, keyword), nil
+
+	case IntentHistorical:
+		yearStr, okYear := params["year"]
+		keyword, okKw := params["keyword"]
+		if !okYear || yearStr == "" {
+			return nil, fmt.Errorf("%w: year", domerrors.ErrMissingParameter)
+		}
+		if !okKw || keyword == "" {
+			return nil, fmt.Errorf("%w: keyword", domerrors.ErrMissingParameter)
+		}
+
+		// Parse year
+		year, err := strconv.Atoi(yearStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid year format: %s", yearStr)
+		}
+
+		if h.logger != nil {
+			h.logger.WithModule(ModuleName).Debugf("Dispatching course intent: %s, year: %d, keyword: %s", intent, year, keyword)
+		}
+		return h.handleHistoricalCourseSearch(ctx, year, keyword), nil
 
 	default:
 		return nil, fmt.Errorf("%w: %s", domerrors.ErrUnknownIntent, intent)

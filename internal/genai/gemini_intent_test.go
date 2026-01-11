@@ -14,16 +14,23 @@ func TestIntentModuleMap(t *testing.T) {
 		"course_search",
 		"course_smart",
 		"course_uid",
+		"course_extended",
+		"course_historical",
 		// ID module
 		"id_search",
 		"id_student_id",
 		"id_department",
+		"id_year",
+		"id_dept_codes",
 		// Contact module
 		"contact_search",
 		"contact_emergency",
 		// Program module
 		"program_list",
 		"program_search",
+		"program_courses",
+		// Usage module
+		"usage_query",
 		// Help
 		"help",
 		// Direct reply
@@ -42,45 +49,56 @@ func TestIntentModuleMap(t *testing.T) {
 	}
 }
 
-func TestParamKeyMap(t *testing.T) {
+func TestParamKeysMap(t *testing.T) {
 	t.Parallel()
 	// Verify parameter keys for functions that require parameters
 	testCases := []struct {
-		funcName    string
-		expectedKey string
-		shouldExist bool
+		funcName     string
+		expectedKeys []string
+		shouldExist  bool
 	}{
 		// Course module
-		{"course_search", "keyword", true},
-		{"course_smart", "query", true},
-		{"course_uid", "uid", true},
+		{"course_search", []string{"keyword"}, true},
+		{"course_smart", []string{"query"}, true},
+		{"course_uid", []string{"uid"}, true},
+		{"course_extended", []string{"keyword"}, true},
+		{"course_historical", []string{"year", "keyword"}, true}, // Multi-param
 		// ID module
-		{"id_search", "name", true},
-		{"id_student_id", "student_id", true},
-		{"id_department", "department", true},
+		{"id_search", []string{"name"}, true},
+		{"id_student_id", []string{"student_id"}, true},
+		{"id_department", []string{"department"}, true},
+		{"id_year", []string{"year"}, true},
+		{"id_dept_codes", []string{"degree"}, true},
 		// Contact module
-		{"contact_search", "query", true},
-		{"contact_emergency", "", false}, // No parameters
+		{"contact_search", []string{"query"}, true},
+		{"contact_emergency", nil, false}, // No parameters
 		// Program module
-		{"program_list", "", false}, // No parameters
-		{"program_search", "query", true},
+		{"program_list", nil, false}, // No parameters
+		{"program_search", []string{"query"}, true},
+		{"program_courses", []string{"programName"}, true},
 		// Help
-		{"help", "", false}, // No parameters
+		{"help", nil, false}, // No parameters
 		// Direct reply
-		{"direct_reply", "message", true},
+		{"direct_reply", []string{"message"}, true},
 	}
 
 	for _, tc := range testCases {
-		key, exists := ParamKeyMap[tc.funcName]
+		keys, exists := ParamKeysMap[tc.funcName]
 		if tc.shouldExist {
 			if !exists {
-				t.Errorf("Function %s should have param key but doesn't", tc.funcName)
-			} else if key != tc.expectedKey {
-				t.Errorf("Function %s: expected key %s, got %s", tc.funcName, tc.expectedKey, key)
+				t.Errorf("Function %s should have param keys but doesn't", tc.funcName)
+			} else if len(keys) != len(tc.expectedKeys) {
+				t.Errorf("Function %s: expected %d keys, got %d", tc.funcName, len(tc.expectedKeys), len(keys))
+			} else {
+				for i, expectedKey := range tc.expectedKeys {
+					if keys[i] != expectedKey {
+						t.Errorf("Function %s: expected key[%d]=%s, got %s", tc.funcName, i, expectedKey, keys[i])
+					}
+				}
 			}
 		} else {
-			if exists && key != "" {
-				t.Errorf("Function %s should not have param key but has: %s", tc.funcName, key)
+			if exists && len(keys) > 0 {
+				t.Errorf("Function %s should not have param keys but has: %v", tc.funcName, keys)
 			}
 		}
 	}

@@ -27,7 +27,7 @@ import "google.golang.org/genai"
 // BuildIntentFunctions returns the function declarations for NLU intent parsing.
 // These functions represent the available intents the parser can recognize.
 //
-// Total: 12 functions across 6 modules
+// Total: 17 functions across 6 modules
 func BuildIntentFunctions() []*genai.FunctionDeclaration {
 	return []*genai.FunctionDeclaration{
 		// ============================================
@@ -35,13 +35,13 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 		// ============================================
 		{
 			Name:        "course_search",
-			Description: "依課程名稱或教師姓名精確搜尋。",
+			Description: "依課程名稱或教師姓名搜尋最近 2 個學期的課程。",
 			Parameters: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
 					"keyword": {
 						Type:        genai.TypeString,
-						Description: "課程名稱或教師姓名。範例：「微積分」「程式設計」「王小明」。注意：只提取名稱本身，不要包含「課程」「老師」等前綴。",
+						Description: "課程名稱或教師姓名。移除修飾詞（課程、老師、教授、的）。例：「微積分」「王小明」。",
 					},
 				},
 				Required: []string{"keyword"},
@@ -49,13 +49,13 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 		},
 		{
 			Name:        "course_smart",
-			Description: "依學習興趣或需求描述進行語意搜尋。適用於抽象需求或技術縮寫。",
+			Description: "依學習需求或技術領域進行智慧搜尋。適合抽象需求、技術縮寫、領域概念的查詢。",
 			Parameters: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
 					"query": {
 						Type:        genai.TypeString,
-						Description: "學習目標描述或技術關鍵詞。範例：「想學 AI」「資料分析」「ESG」",
+						Description: "學習目標或技術關鍵字。保留原始表達。例：「想學 AI」「資料分析」「好過的通識」。",
 					},
 				},
 				Required: []string{"query"},
@@ -75,6 +75,38 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 				Required: []string{"uid"},
 			},
 		},
+		{
+			Name:        "course_extended",
+			Description: "搜尋第 3-4 個學期的課程（較舊學期）。用於「找更多」「舊學期」等時間擴展需求。",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"keyword": {
+						Type:        genai.TypeString,
+						Description: "課程名稱或教師姓名。移除時間修飾詞（更多、舊、歷史）。例：「微積分」。",
+					},
+				},
+				Required: []string{"keyword"},
+			},
+		},
+		{
+			Name:        "course_historical",
+			Description: "查詢指定學年度的課程。需要學年度 + 課程關鍵字兩個參數。",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"year": {
+						Type:        genai.TypeString,
+						Description: "學年度（民國年 3 位數）。移除「學年度」「年」後綴。例：「110」「112」。",
+					},
+					"keyword": {
+						Type:        genai.TypeString,
+						Description: "課程名稱或教師姓名。例：「微積分」「王小明」。",
+					},
+				},
+				Required: []string{"year", "keyword"},
+			},
+		},
 
 		// ============================================
 		// 2. ID Module (學生查詢)
@@ -87,7 +119,7 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 				Properties: map[string]*genai.Schema{
 					"name": {
 						Type:        genai.TypeString,
-						Description: "學生姓名，全名或部分皆可。例如「王小明」或「小明」",
+						Description: "學生姓名，全名或部分皆可。例：「王小明」「小明」。",
 					},
 				},
 				Required: []string{"name"},
@@ -109,16 +141,43 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 		},
 		{
 			Name:        "id_department",
-			Description: "查詢科系代碼或名稱。",
+			Description: "依科系查詢學生。接受系代碼（數字）或系名（文字）。",
 			Parameters: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
 					"department": {
 						Type:        genai.TypeString,
-						Description: "科系代碼（如 85）或名稱（如資工系）。系統會自動辨識數字代碼或文字名稱。",
+						Description: "科系代碼（數字）或名稱（文字）。例：「85」「資工系」「資訊工程」。",
 					},
 				},
 				Required: []string{"department"},
+			},
+		},
+		{
+			Name:        "id_year",
+			Description: "依學年度查詢學生。僅支援 94-112 學年度完整資料。",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"year": {
+						Type:        genai.TypeString,
+						Description: "學年度，民國年 3 位數。範例：「112」「110」「100」",
+					},
+				},
+				Required: []string{"year"},
+			},
+		},
+		{
+			Name:        "id_dept_codes",
+			Description: "顯示系代碼對照表。依學制類型分類顯示所有系所代碼。",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"degree": {
+						Type:        genai.TypeString,
+						Description: "學制類型：bachelor（學士班）、master（碩士班）、phd（博士班）。預設 bachelor。",
+					},
+				},
 			},
 		},
 
@@ -127,13 +186,13 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 		// ============================================
 		{
 			Name:        "contact_search",
-			Description: "查詢校內單位或人員聯絡方式。",
+			Description: "查詢校內單位或人員聯絡方式（電話、分機、email、地址）。包含行政單位和教職員。",
 			Parameters: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
 					"query": {
 						Type:        genai.TypeString,
-						Description: "單位或人員名稱。只提取名稱本身，移除「辦公室」「電話」「分機」「email」「怎麼聯絡」「在哪」等查詢詞。範例：「資工系的電話」→「資工系」。",
+						Description: "單位或人員名稱。移除查詢動詞（辦公室、電話、分機、email、怎麼聯絡、在哪）。例：「資工系」「圖書館」「王小明」。",
 					},
 				},
 				Required: []string{"query"},
@@ -161,16 +220,30 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 		},
 		{
 			Name:        "program_search",
-			Description: "依關鍵字搜尋學程。",
+			Description: "依關鍵字搜尋學程。用於查找特定領域的學程。",
 			Parameters: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
 					"query": {
 						Type:        genai.TypeString,
-						Description: "學程名稱關鍵字。範例：「智財」「永續」「資訊」",
+						Description: "學程名稱關鍵字。移除「學程」後綴。例：「智財」「永續」「人工智慧」。",
 					},
 				},
 				Required: []string{"query"},
+			},
+		},
+		{
+			Name:        "program_courses",
+			Description: "列出指定學程包含的課程（必修/選修）。需要完整學程名稱。",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"programName": {
+						Type:        genai.TypeString,
+						Description: "學程全名（必須包含「學程」二字）。例：「人工智慧學程」「永續發展學程」。",
+					},
+				},
+				Required: []string{"programName"},
 			},
 		},
 
@@ -199,17 +272,17 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 		},
 
 		// ============================================
-		// 6. Direct Reply (直接回覆)
+		// 7. Direct Reply (直接回覆)
 		// ============================================
 		{
 			Name:        "direct_reply",
-			Description: "直接回覆使用者。當訊息不屬於任何查詢功能（閒聊、問候、感謝、離題詢問），或需要澄清使用者意圖時使用。",
+			Description: "直接回覆使用者。用於：社交對話、意圖不明需澄清、離題詢問、無法匹配其他功能的情況。",
 			Parameters: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
 					"message": {
 						Type:        genai.TypeString,
-						Description: "要傳送給使用者的回覆內容。",
+						Description: "回覆內容。語氣友善專業。澄清意圖時提供編號選項。例：「請問您是想查詢：\n1️⃣ 王小明老師的課程？\n2️⃣ 學生王小明的資料？」",
 					},
 				},
 				Required: []string{"message"},
@@ -225,19 +298,24 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 // Order: Course → ID → Contact → Program → Usage → Help → Direct
 var IntentModuleMap = map[string][2]string{
 	// Course Module
-	"course_search": {"course", "search"},
-	"course_smart":  {"course", "smart"},
-	"course_uid":    {"course", "uid"},
+	"course_search":     {"course", "search"},
+	"course_smart":      {"course", "smart"},
+	"course_uid":        {"course", "uid"},
+	"course_extended":   {"course", "extended"},
+	"course_historical": {"course", "historical"},
 	// ID Module
 	"id_search":     {"id", "search"},
 	"id_student_id": {"id", "student_id"},
 	"id_department": {"id", "department"},
+	"id_year":       {"id", "year"},
+	"id_dept_codes": {"id", "dept_codes"},
 	// Contact Module
 	"contact_search":    {"contact", "search"},
 	"contact_emergency": {"contact", "emergency"},
 	// Program Module
-	"program_list":   {"program", "list"},
-	"program_search": {"program", "search"},
+	"program_list":    {"program", "list"},
+	"program_search":  {"program", "search"},
+	"program_courses": {"program", "courses"},
 	// Usage Module
 	"usage_query": {"usage", "query"},
 	// Help
@@ -246,24 +324,34 @@ var IntentModuleMap = map[string][2]string{
 	"direct_reply": {"direct_reply", ""},
 }
 
-// ParamKeyMap maps function names to their primary parameter key.
-// This is used to extract the parameter value from the function call args.
+// ParamKeysMap maps function names to their parameter keys.
+// All parameter keys in the slice will be extracted from the function call args.
 // Functions without parameters (contact_emergency, program_list, help) are not listed.
 //
+// Best Practice:
+//   - LLM function calling returns all args in FunctionCall.Args (Gemini) or Function.Arguments (OpenAI)
+//   - We iterate through all specified keys to build the params map
+//   - Handler receives the full params map and validates required parameters
+//
 // Order: Course → ID → Contact → Program → Direct
-var ParamKeyMap = map[string]string{
+var ParamKeysMap = map[string][]string{
 	// Course Module
-	"course_search": "keyword",
-	"course_smart":  "query",
-	"course_uid":    "uid",
+	"course_search":     {"keyword"},
+	"course_smart":      {"query"},
+	"course_uid":        {"uid"},
+	"course_extended":   {"keyword"},
+	"course_historical": {"year", "keyword"}, // Multi-param: both are required
 	// ID Module
-	"id_search":     "name",
-	"id_student_id": "student_id",
-	"id_department": "department",
+	"id_search":     {"name"},
+	"id_student_id": {"student_id"},
+	"id_department": {"department"},
+	"id_year":       {"year"},
+	"id_dept_codes": {"degree"}, // Optional param, handler has default value
 	// Contact Module
-	"contact_search": "query",
+	"contact_search": {"query"},
 	// Program Module
-	"program_search": "query",
+	"program_search":  {"query"},
+	"program_courses": {"programName"},
 	// Direct Reply
-	"direct_reply": "message",
+	"direct_reply": {"message"},
 }
