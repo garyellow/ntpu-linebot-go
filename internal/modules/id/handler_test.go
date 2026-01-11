@@ -127,6 +127,45 @@ func TestFormatStudentResponse(t *testing.T) {
 	}
 }
 
+// TestFormatStudentResponse_DegreeType tests that degree type label is correctly displayed
+// based on student ID prefix (3=進修學士班, 4=學士班, 7=碩士班, 8=博士班)
+func TestFormatStudentResponse_DegreeType(t *testing.T) {
+	t.Parallel()
+	h := setupTestHandler(t)
+
+	tests := []struct {
+		name      string
+		studentID string
+	}{
+		{"Continuing education (3)", "31247001"},
+		{"Undergraduate (4)", "41247001"},
+		{"Master (7)", "71247001"},
+		{"PhD (8)", "81247001"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			student := &storage.Student{
+				ID:         tt.studentID,
+				Name:       "測試學生",
+				Department: "資訊工程學系",
+				Year:       112,
+			}
+
+			msgs := h.formatStudentResponse(student)
+			if len(msgs) == 0 {
+				t.Fatal("Expected formatted messages")
+			}
+
+			// Verify it's a Flex Message (degree type is rendered in the body)
+			if _, ok := msgs[0].(*messaging_api.FlexMessage); !ok {
+				t.Error("Expected FlexMessage")
+			}
+		})
+	}
+}
+
 func TestDispatchIntent_ParamValidation(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

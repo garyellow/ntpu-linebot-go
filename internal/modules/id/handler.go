@@ -727,7 +727,7 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 	type deptMatch struct {
 		name   string
 		code   string
-		degree string // 大學部, 碩士班, 博士班
+		degree string // 學士班, 碩士班, 博士班
 	}
 	var matches []deptMatch
 
@@ -741,7 +741,7 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 	}
 
 	// Fuzzy search across all degree types
-	addMatches(ntpu.FullDepartmentCodes, "大學部")
+	addMatches(ntpu.FullDepartmentCodes, "學士班")
 	addMatches(ntpu.MasterDepartmentCodes, "碩士班")
 	addMatches(ntpu.PhDDepartmentCodes, "博士班")
 
@@ -761,7 +761,7 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 		fmt.Fprintf(&builder, "🔍「%s」找到 %d 個符合的系所：\n", deptName, len(matches))
 
 		// Group by degree for clearer display
-		degreeOrder := []string{"大學部", "碩士班", "博士班"}
+		degreeOrder := []string{"學士班", "碩士班", "博士班"}
 		for _, deg := range degreeOrder {
 			var degMatches []deptMatch
 			for _, m := range matches {
@@ -812,7 +812,7 @@ func (h *Handler) handleDepartmentCodeQuery(code string) []messaging_api.Message
 
 	// Check undergraduate names
 	if name, ok := ntpu.DepartmentNames[code]; ok {
-		matches = append(matches, codeMatch{name + "系", "大學部"})
+		matches = append(matches, codeMatch{name + "系", "學士班"})
 	}
 
 	// Check master's program names
@@ -1171,7 +1171,7 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	infoBuilder.WriteString("ℹ️ 系所資訊說明\n")
 	infoBuilder.WriteString("系所資訊由學號推測，可能與實際不符。\n\n")
 	infoBuilder.WriteString("📊 姓名查詢範圍\n")
-	infoBuilder.WriteString("• 大學部/碩博士班：101-112 學年度（完整）\n")
+	infoBuilder.WriteString("• 學士班/碩博士班：101-112 學年度（完整）\n")
 	infoBuilder.WriteString("• 113 學年度資料不完整（僅極少數學生）\n")
 	infoBuilder.WriteString("• 114 學年度起無資料（數位學苑 2.0 停用）\n\n")
 	infoBuilder.WriteString("💡 若找不到學生，可使用「學年」功能按年度查詢")
@@ -1202,10 +1202,11 @@ func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_ap
 	// Body: Student details using BodyContentBuilder for cleaner code
 	body := lineutil.NewBodyContentBuilder()
 
-	// First row: NTPU label (consistent with course/contact modules)
+	// First row: Degree type label (dynamic based on student ID prefix)
+	degreeTypeName := ntpu.GetDegreeTypeName(student.ID)
 	body.AddComponent(lineutil.NewBodyLabel(lineutil.BodyLabelInfo{
 		Emoji: "🎓",
-		Label: "國立臺北大學",
+		Label: degreeTypeName,
 		Color: lineutil.ColorHeaderStudent, // Purple color matching header
 	}).FlexBox)
 
