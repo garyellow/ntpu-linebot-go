@@ -28,11 +28,11 @@ import (
 //
 // Pattern priority (1=highest): PostbackViewCourses → List → Search
 type Handler struct {
-	db               *storage.DB
-	metrics          *metrics.Metrics
-	logger           *logger.Logger
-	stickerManager   *sticker.Manager
-	semesterDetector *course.SemesterDetector // Data-driven semester detection (shared with course module)
+	db             *storage.DB
+	metrics        *metrics.Metrics
+	logger         *logger.Logger
+	stickerManager *sticker.Manager
+	semesterCache  *course.SemesterCache // Shared cache (from course module)
 
 	// matchers contains all pattern-handler pairs sorted by priority.
 	// Shared by CanHandle and HandleMessage for consistent routing.
@@ -98,21 +98,21 @@ var (
 )
 
 // NewHandler creates a new program handler.
-// Requires semesterDetector from course module for consistent 2-semester filtering.
+// semesterCache should be shared from course module for consistent semester data.
 // Initializes and sorts matchers by priority during construction.
 func NewHandler(
 	db *storage.DB,
 	metrics *metrics.Metrics,
 	logger *logger.Logger,
 	stickerManager *sticker.Manager,
-	semesterDetector *course.SemesterDetector,
+	semesterCache *course.SemesterCache,
 ) *Handler {
 	h := &Handler{
-		db:               db,
-		metrics:          metrics,
-		logger:           logger,
-		stickerManager:   stickerManager,
-		semesterDetector: semesterDetector,
+		db:             db,
+		metrics:        metrics,
+		logger:         logger,
+		stickerManager: stickerManager,
+		semesterCache:  semesterCache,
 	}
 
 	// Initialize Pattern-Action Table
@@ -331,8 +331,8 @@ func (h *Handler) handleProgramList(ctx context.Context) []messaging_api.Message
 
 	// Get recent 2 semesters for filtering statistics (data-driven)
 	var years, terms []int
-	if h.semesterDetector != nil {
-		years, terms = h.semesterDetector.GetRecentSemesters()
+	if h.semesterCache != nil {
+		years, terms = h.semesterCache.GetRecentSemesters()
 		log.Debugf("Using semester filter for program statistics: years=%v, terms=%v", years, terms)
 	}
 
@@ -381,8 +381,8 @@ func (h *Handler) handleProgramSearch(ctx context.Context, searchTerm string) []
 
 	// Get recent 2 semesters for filtering statistics (data-driven)
 	var years, terms []int
-	if h.semesterDetector != nil {
-		years, terms = h.semesterDetector.GetRecentSemesters()
+	if h.semesterCache != nil {
+		years, terms = h.semesterCache.GetRecentSemesters()
 		log.Debugf("Using semester filter for program search: years=%v, terms=%v", years, terms)
 	}
 
@@ -461,15 +461,15 @@ func (h *Handler) handleProgramCourses(ctx context.Context, programName string) 
 
 	log.Infof("Handling program courses query: %s", programName)
 
-	// Get recent 2 semesters from semester detector (data-driven)
+	// Get recent 2 semesters from semester cache (data-driven)
 	var years, terms []int
-	if h.semesterDetector != nil {
-		years, terms = h.semesterDetector.GetRecentSemesters()
+	if h.semesterCache != nil {
+		years, terms = h.semesterCache.GetRecentSemesters()
 		log.Debugf("Using semester filter: years=%v, terms=%v", years, terms)
 	} else {
-		// No semester detector available - will return all courses
-		// This should only happen in tests; in production, semesterDetector is always set
-		log.Debug("No semester detector available, returning all program courses")
+		// No semester cache available - will return all courses
+		// This should only happen in tests; in production, semesterCache is always set
+		log.Debug("No semester cache available, returning all program courses")
 	}
 
 	// Get program courses from database (filtered by 2 semesters)
@@ -577,8 +577,8 @@ func (h *Handler) formatCourseProgramsAsCarousel(ctx context.Context, courseName
 
 	// Get recent 2 semesters for consistent course count filtering
 	var years, terms []int
-	if h.semesterDetector != nil {
-		years, terms = h.semesterDetector.GetRecentSemesters()
+	if h.semesterCache != nil {
+		years, terms = h.semesterCache.GetRecentSemesters()
 	}
 
 	// Build program bubbles

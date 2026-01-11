@@ -60,12 +60,12 @@ type PatternMatcher struct {
 
 ```go
 type Handler struct {
-    db               *storage.DB
-    metrics          *metrics.Metrics
-    logger           *logger.Logger
-    stickerManager   *sticker.Manager
-    semesterDetector *course.SemesterDetector  // 共享學期偵測器
-    matchers         []PatternMatcher
+    db             *storage.DB
+    metrics        *metrics.Metrics
+    logger         *logger.Logger
+    stickerManager *sticker.Manager
+    semesterCache  *course.SemesterCache  // 共享學期快取
+    matchers       []PatternMatcher
 }
 ```
 
@@ -167,7 +167,7 @@ Course Detail (返回)
 ```
 
 ### 共享組件
-- **SemesterDetector**：course 模組提供，program 使用
+- **SemesterCache**：course 模組提供，warmup 更新，program 使用
 - **Flex Message Builders**：共用 lineutil 工具
 
 ### Postback 路由
@@ -208,13 +208,15 @@ Build Course Carousel (colored by type)
 ```
 Warmup (Daily 3:00 AM)
     ↓
+Probe Semesters (scraper)
+    ↓
 Refresh Courses (course module)
     ↓
 Parse 應修系級 → Extract Programs
     ↓
 Update course_programs table
     ↓
-semesterDetector.Refresh() (shared)
+semesterCache.Update() (shared)
 ```
 
 ## 測試覆蓋
@@ -260,7 +262,7 @@ semesterDetector.Refresh() (shared)
 
 ## 依賴關係
 - `storage.DB` - 學程/課程資料查詢
-- `course.SemesterDetector` - 學期偵測（共享）
+- `course.SemesterCache` - 學期快取（共享）
 - `metrics.Metrics` - 監控指標
 - `logger.Logger` - 日誌記錄
 - `sticker.Manager` - Sender 頭像

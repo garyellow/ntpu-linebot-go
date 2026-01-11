@@ -86,20 +86,21 @@ type Handler struct {
     bm25Index        *rag.BM25Index           // 智慧搜尋
     queryExpander    genai.QueryExpander      // LLM Query Expansion
     llmRateLimiter   *ratelimit.KeyedLimiter  // LLM 額度控制
-    semesterDetector *SemesterDetector        // 資料驅動學期偵測
+    semesterCache    *SemesterCache           // 共享學期快取
     matchers         []PatternMatcher         // Pattern-Action Table
 }
 ```
 
-#### SemesterDetector
-- **資料驅動設計**：從資料庫動態載入可用學期
+#### SemesterCache
+- **資料驅動設計**：由 warmup 探測實際資料源更新
 - **方法**：
-  - `GetRecentSemesters(count)` - 取得最近 N 個學期
-  - `GetHistoricalSemesters(skip, count)` - 取得歷史學期
-  - `Refresh()` - 重新載入可用學期（warmup 後）
+  - `GetRecentSemesters()` - 取得最近 2 個學期
+  - `GetExtendedSemesters()` - 取得第 3-4 個學期
+  - `GetAllSemesters()` - 取得全部快取的學期
+  - `Update(semesters)` - 更新快取（warmup 呼叫）
 - **使用情境**：
-  - 精確搜尋：`GetRecentSemesters(2)` → 1-2
-  - 擴展搜尋：`GetHistoricalSemesters(2, 2)` → 3-4
+  - 精確搜尋：`GetRecentSemesters()` → 1-2
+  - 擴展搜尋：`GetExtendedSemesters()` → 3-4
   - 避免硬編碼學期範圍
 
 ### 搜尋策略

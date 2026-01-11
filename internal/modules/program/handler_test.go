@@ -39,11 +39,11 @@ func setupTestHandler(t *testing.T) *Handler {
 	log := logger.New("info")
 	stickerMgr := sticker.NewManager(db, nil, log)
 
-	// Create a mock semester detector (nil is acceptable - handler will return all courses)
-	// In production, this comes from course.Handler.GetSemesterDetector()
-	var semesterDetector *course.SemesterDetector
+	// Create a mock semester cache (nil is acceptable - handler will use calendar-based fallback)
+	// In production, this comes from course.Handler.GetSemesterCache()
+	var semesterCache *course.SemesterCache
 
-	return NewHandler(db, m, log, stickerMgr, semesterDetector)
+	return NewHandler(db, m, log, stickerMgr, semesterCache)
 }
 
 // TestCanHandle verifies keyword pattern matching for program queries
@@ -549,8 +549,8 @@ func TestDispatchIntent_ParameterValidation(t *testing.T) {
 	}
 }
 
-// TestNewHandler_NilSemesterDetector verifies handler works without semester detector
-func TestNewHandler_NilSemesterDetector(t *testing.T) {
+// TestNewHandler_NilSemesterCache verifies handler works without semester cache
+func TestNewHandler_NilSemesterCache(t *testing.T) {
 	t.Parallel()
 	// Use a unique temp file database for each test to avoid shared memory conflicts
 	tmpDir := t.TempDir()
@@ -567,7 +567,7 @@ func TestNewHandler_NilSemesterDetector(t *testing.T) {
 	log := logger.New("info")
 	stickerMgr := sticker.NewManager(db, nil, log)
 
-	// Create handler with nil semester detector (should not panic)
+	// Create handler with nil semester cache (should not panic)
 	h := NewHandler(db, m, log, stickerMgr, nil)
 	if h == nil {
 		t.Fatal("Expected non-nil handler")

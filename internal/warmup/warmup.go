@@ -43,11 +43,12 @@ type Stats struct {
 
 // Options configures cache warming behavior
 type Options struct {
-	Reset     bool
-	HasLLMKey bool // Enables syllabus module for smart search
-	WarmID    bool // Enables ID module warmup (static data, startup only, not used in daily refresh)
-	Metrics   *metrics.Metrics
-	BM25Index *rag.BM25Index
+	Reset         bool
+	HasLLMKey     bool // Enables syllabus module for smart search
+	WarmID        bool // Enables ID module warmup (static data, startup only, not used in daily refresh)
+	Metrics       *metrics.Metrics
+	BM25Index     *rag.BM25Index
+	SemesterCache *course.SemesterCache // Shared cache to update after warmup
 }
 
 // Run executes daily cache refresh: contact, course, program (always), syllabus (if HasLLMKey).
@@ -80,7 +81,7 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, log *logge
 
 	g.Go(func() error {
 		defer close(courseDone)
-		if err := warmupCourseModule(ctx, db, client, log, stats, opts.Metrics); err != nil {
+		if err := warmupCourseModule(ctx, db, client, log, stats, opts.Metrics, opts.SemesterCache); err != nil {
 			log.WithError(err).Error("Course module warmup failed")
 			return fmt.Errorf("course module: %w", err)
 		}
@@ -377,8 +378,9 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 }
 
 // warmupCourseModule warms course cache for the 4 most recent semesters.
-// Uses intelligent detection based on actual data availability.
-func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
+// Probes actual data source (scraper) to find semesters with data.
+// Updates SemesterCache after successful warmup.
+func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics, semesterCache *course.SemesterCache) error {
 	startTime := time.Now()
 	defer func() {
 		if m != nil {
@@ -386,18 +388,25 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 		}
 	}()
 
-	log.Info("Starting course module warmup with intelligent semester detection")
+	log.Info("Starting course module warmup with data-driven probing")
 
-	// Use intelligent detection to determine which 4 semesters to warm up
-	// Detection: checks if semester has any data (> 0 courses)
-	semesters := detectWarmupSemesters(ctx, db, log)
+	// Probe semesters to find 4 with actual data
+	semesters, err := probeSemestersWithData(ctx, client, log)
+	if err != nil {
+		return fmt.Errorf("failed to probe semesters: %w", err)
+	}
+
+	if len(semesters) == 0 {
+		log.Warn("No semesters with data found during probing")
+		return nil
+	}
 
 	// Each semester makes 4 requests (U/M/N/P education codes)
 	estimatedRequests := len(semesters) * 4
 	log.WithField("semesters", formatSemesters(semesters)).
 		WithField("total_semesters", len(semesters)).
 		WithField("estimated_requests", estimatedRequests).
-		Info("Course warmup: fetching courses by semester (intelligent detection)")
+		Info("Course warmup: fetching courses by semester (data-driven probing)")
 
 	// Scrape courses for each semester individually
 	for _, sem := range semesters {
@@ -454,6 +463,13 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 			Info("Courses cached for semester")
 	}
 
+	// Update shared semester cache after successful warmup
+	if semesterCache != nil {
+		semesterCache.Update(semesters)
+		log.WithField("semesters", formatSemesters(semesters)).
+			Info("Updated semester cache with probed semesters")
+	}
+
 	log.WithField("total_courses", stats.Courses.Load()).
 		WithField("semesters_processed", len(semesters)).
 		Info("Course module warmup complete")
@@ -461,19 +477,75 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 	return nil
 }
 
-// detectWarmupSemesters determines which 4 semesters to warm up based on data availability.
-func detectWarmupSemesters(ctx context.Context, db *storage.DB, log *logger.Logger) []course.Semester {
-	// Create semester detector with database count function
-	detector := course.NewSemesterDetector(db.CountCoursesBySemester)
+// probeSemestersWithData probes the course system to find 4 semesters with actual data.
+// Starts from current ROC year term 2 and probes backwards until 4 semesters are found.
+// Uses lightweight probing (single education code) to minimize requests.
+func probeSemestersWithData(ctx context.Context, client *scraper.Client, log *logger.Logger) ([]course.Semester, error) {
+	const (
+		targetCount = 4  // Number of semesters to find
+		maxProbes   = 12 // Maximum semesters to probe (prevents infinite loop)
+	)
 
-	// Use intelligent detection to get 4 most recent semesters with data
-	semesters := detector.DetectWarmupSemesters(ctx)
+	// Get probe starting point: current ROC year, term 2
+	startYear, startTerm := course.GetWarmupProbeStart()
 
-	log.WithField("semesters", formatSemesters(semesters)).
-		WithField("total_semesters", len(semesters)).
-		Info("Detected warmup semesters using intelligent data-driven detection")
+	// Generate probe sequence
+	probeSequence := course.GenerateProbeSequence(startYear, startTerm, maxProbes)
 
-	return semesters
+	log.WithField("start", fmt.Sprintf("%d-%d", startYear, startTerm)).
+		WithField("max_probes", maxProbes).
+		Info("Starting semester probing")
+
+	var foundSemesters []course.Semester
+
+	for _, sem := range probeSequence {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		// Probe with single education code (U = undergraduate) for efficiency
+		// If U has data, the semester likely has data for other codes too
+		hasData, err := probeSemesterHasData(ctx, client, sem.Year, sem.Term)
+		if err != nil {
+			log.WithError(err).
+				WithField("year", sem.Year).
+				WithField("term", sem.Term).
+				Warn("Failed to probe semester, skipping")
+			continue
+		}
+
+		if hasData {
+			foundSemesters = append(foundSemesters, sem)
+			log.WithField("year", sem.Year).
+				WithField("term", sem.Term).
+				WithField("found", len(foundSemesters)).
+				Debug("Found semester with data")
+
+			if len(foundSemesters) >= targetCount {
+				break
+			}
+		} else {
+			log.WithField("year", sem.Year).
+				WithField("term", sem.Term).
+				Debug("Semester has no data")
+		}
+	}
+
+	log.WithField("found", len(foundSemesters)).
+		WithField("semesters", formatSemesters(foundSemesters)).
+		Info("Semester probing complete")
+
+	return foundSemesters, nil
+}
+
+// probeSemesterHasData checks if a semester has course data using a lightweight probe.
+// Uses ntpu.ProbeCoursesExist() which only queries a single education code (U = undergraduate)
+// to minimize HTTP requests (1 request vs 4 when using ScrapeCourses with empty title).
+// Returns true if any courses are found, false otherwise.
+func probeSemesterHasData(ctx context.Context, client *scraper.Client, year, term int) (bool, error) {
+	return ntpu.ProbeCoursesExist(ctx, client, year, term)
 }
 
 // formatSemesters formats semester list for logging

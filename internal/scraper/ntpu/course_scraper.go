@@ -37,6 +37,48 @@ func ScrapeCoursesByYear(ctx context.Context, client *scraper.Client, year int) 
 	return ScrapeCourses(ctx, client, year, 0, "")
 }
 
+// ProbeCoursesExist performs a lightweight check if courses exist for a semester.
+// Uses a single education code (U = undergraduate) to minimize HTTP requests.
+// Returns true if any courses are found, false otherwise.
+// This is specifically designed for warmup probing and should not be used for data collection.
+func ProbeCoursesExist(ctx context.Context, client *scraper.Client, year, term int) (bool, error) {
+	// Check context before starting
+	if err := ctx.Err(); err != nil {
+		return false, fmt.Errorf("context canceled before probing courses: %w", err)
+	}
+
+	// Get working base URL with failover support
+	courseBaseURL, err := seaCache(ctx, client)
+	if err != nil {
+		return false, fmt.Errorf("failed to get working SEA URL: %w", err)
+	}
+
+	// Use only U (undergraduate) education code for lightweight probing
+	// Format: {baseURL}/pls/dev_stud/course_query_all.queryByKeyword?qYear={year}&qTerm={term}&seq1=A&seq2=M&courseno=U
+	queryURL := fmt.Sprintf("%s%s?qYear=%d&qTerm=%d&seq1=A&seq2=M&courseno=U",
+		courseBaseURL, courseQueryByKeywordPath, year, term)
+
+	doc, err := client.GetDocument(ctx, queryURL)
+	if err != nil {
+		// Try to recover with failover if needed
+		if scraper.IsNetworkError(err) {
+			newURL, failoverErr := seaCache(ctx, client)
+			if failoverErr == nil && newURL != courseBaseURL {
+				queryURL = fmt.Sprintf("%s%s?qYear=%d&qTerm=%d&seq1=A&seq2=M&courseno=U",
+					newURL, courseQueryByKeywordPath, year, term)
+				doc, err = client.GetDocument(ctx, queryURL)
+			}
+		}
+		if err != nil {
+			return false, fmt.Errorf("failed to probe courses: %w", err)
+		}
+	}
+
+	// Parse the page to check if any courses exist
+	courses := parseCoursesPage(ctx, doc, year, term)
+	return len(courses) > 0, nil
+}
+
 // ScrapeCourses scrapes courses by year, term, and optional filters
 // For title search: uses POST to {baseURL}/pls/dev_stud/course_query_all.queryByAllConditions with 'cour' parameter
 // For general query: uses GET to {baseURL}/pls/dev_stud/course_query_all.queryByKeyword with 'courseno' parameter

@@ -8,7 +8,7 @@ import (
 )
 
 // metricsAuthMiddleware returns a Gin middleware that enforces Basic Auth for /metrics.
-// If password is empty, authentication is disabled (pass-through) for backward compatibility
+// If password is empty, authentication is disabled (pass-through)
 // and internal Docker network deployments.
 func metricsAuthMiddleware(username, password string) gin.HandlerFunc {
 	return func(c *gin.Context) {
