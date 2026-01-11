@@ -244,7 +244,8 @@ func (h *Handler) handleEmergencyPattern(ctx context.Context, text string, match
 }
 
 func (h *Handler) handleContactPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
-	matchStr := matches[0] // Full match
+	// Use matches[1] to get the keyword without trailing space
+	matchStr := matches[1] // The captured keyword (group 1)
 	searchTerm := bot.ExtractSearchTerm(text, matchStr)
 
 	if searchTerm == "" {

@@ -16,11 +16,12 @@ func TestHandler_CanHandle(t *testing.T) {
 		input    string
 		expected bool
 	}{
-		// Chinese keywords
+		// Chinese keywords - must have space after or be entire text
 		{"用量", "用量", true},
 		{"配額", "配額", true},
 		{"額度", "額度", true},
 		{"扣打", "扣打", true},
+		{"用量_with_space", "用量 查詢", true},
 		// English keywords
 		{"quota", "quota", true},
 		{"usage", "usage", true},
@@ -33,9 +34,9 @@ func TestHandler_CanHandle(t *testing.T) {
 		// Should not match
 		{"random_text", "hello world", false},
 		{"empty", "", false},
-		{"keyword_in_middle", "我的用量", false}, // keyword not at start
-		// Should match - keyword at start
-		{"keyword_with_suffix", "用量查詢的資訊", true}, // starts with 用量
+		{"keyword_in_middle", "我的用量", false},      // keyword not at start
+		{"keyword_with_suffix", "用量查詢的資訊", false}, // no space after keyword (compound word)
+		{"keyword_no_space", "quota123", false},   // no space after keyword
 	}
 
 	for _, tt := range tests {

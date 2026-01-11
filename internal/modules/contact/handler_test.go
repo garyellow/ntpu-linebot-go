@@ -58,19 +58,28 @@ func TestCanHandle(t *testing.T) {
 		{"Emergency query", "緊急電話", true},
 		{"Emergency without space", "緊急", true},
 
-		// Contact keywords at START (English)
+		// Contact keywords at START (English) - must have space or be entire text
 		{"Contact keyword at start", "contact info", true},
 
-		// Contact keywords at START (Chinese)
+		// Contact keywords at START (Chinese) - must have space or be entire text
 		{"聯繫 keyword at start", "聯繫 資工系", true},
 		{"聯絡 keyword at start", "聯絡 圖書館", true},
-		{"連絡 keyword at start", "連絡方式", true},
-		{"電話 keyword at start", "電話分機", true},
-		{"分機 keyword at start", "分機查詢", true},
-		{"Email keyword at start", "email信箱", true},
-		{"信箱 keyword at start", "信箱查詢", true},
+		{"聯絡方式 keyword (compound)", "聯絡方式", true},    // This is a keyword itself
+		{"聯繫方式 keyword (compound)", "聯繫方式 查詢", true}, // Longer keyword with space
+		{"連絡 without space", "連絡方式", false},          // "連絡方式" is NOT a keyword, no space after "連絡"
+		{"電話 keyword only", "電話", true},              // keyword is entire text
+		{"電話 with space", "電話 分機", true},             // keyword with space
+		{"電話 without space", "電話分機", false},          // no space after keyword (compound word)
+		{"分機 keyword only", "分機", true},              // keyword is entire text
+		{"分機 with space", "分機 號碼", true},             // keyword with space
+		{"分機 without space", "分機查詢", false},          // no space after keyword
+		{"Email with space", "email 查詢", true},       // keyword with space
+		{"Email without space", "email信箱", false},    // no space after keyword
+		{"信箱 keyword only", "信箱", true},              // keyword is entire text
+		{"信箱 with space", "信箱 查詢", true},             // keyword with space
+		{"信箱 without space", "信箱查詢", false},          // no space after keyword
 
-		// Teacher keywords (Added to contact module)
+		// Teacher keywords (Added to contact module) - must have space or be entire text
 		{"Find Teacher keyword", "找老師 王小明", true},
 		{"Find Professor keyword", "找教授 陳教授", true},
 		{"老師 keyword", "老師 王小明", true},
@@ -149,8 +158,9 @@ func TestHandleMessage_Contact(t *testing.T) {
 	h := setupTestHandler(t)
 	ctx := context.Background()
 
+	// Note: Keyword must be followed by space or be entire text
 	// This will likely return no results from empty cache
-	messages := h.HandleMessage(ctx, "聯絡陳教授")
+	messages := h.HandleMessage(ctx, "聯絡 陳教授")
 
 	// Should return at least some response
 	if len(messages) == 0 {

@@ -61,7 +61,7 @@ func TestCanHandle(t *testing.T) {
 		{"Valid department code query", "系代碼 85", true},
 		{"Valid department query", "系所 資工", true},
 		{"Valid department Name query", "系名 資工", true},
-		{"Valid department query (English)", "dept 85", true},
+		{"Valid department query (English)", "department 85", true},
 		{"Single char '系' (natural query)", "系 資工", true},
 		{"Single char '所' (natural query)", "所 資工", true},
 

@@ -15,9 +15,15 @@ const PostbackSplitChar = "$"
 // Keywords are sorted by length (longest first) to prevent partial matches.
 // Uses ^ anchor to match only at beginning. Panics if keywords is empty.
 //
+// IMPORTANT: Keywords must be followed by a space or be the entire text.
+// This prevents false matches like "課程表" triggering "課程".
+// Use MatchKeyword() to get the matched keyword without trailing space.
+//
 // Example:
 //
-//	BuildKeywordRegex([]string{"課", "課程"}).FindString("課程 微積分") // Returns "課程"
+//	MatchKeyword(BuildKeywordRegex([]string{"課", "課程"}), "課程 微積分") // Returns "課程"
+//	MatchKeyword(BuildKeywordRegex([]string{"課", "課程"}), "課程")      // Returns "課程"
+//	MatchKeyword(BuildKeywordRegex([]string{"課", "課程"}), "課程微積分") // Returns "" (no space)
 func BuildKeywordRegex(keywords []string) *regexp.Regexp {
 	if len(keywords) == 0 {
 		panic("BuildKeywordRegex: keywords cannot be empty")
@@ -34,8 +40,26 @@ func BuildKeywordRegex(keywords []string) *regexp.Regexp {
 
 	// Use ^ anchor to match only at the start of text
 	// (?i) for case-insensitive matching
-	pattern := "(?i)^(" + strings.Join(sorted, "|") + ")"
+	// Group 1 captures the keyword, (?:\s|$) requires space or end after keyword
+	// This prevents false matches like "課程表" triggering "課程"
+	pattern := "(?i)^(" + strings.Join(sorted, "|") + ")(?:\\s|$)"
 	return regexp.MustCompile(pattern)
+}
+
+// MatchKeyword returns the matched keyword from text using the given regex.
+// Returns empty string if no match. The keyword is returned without trailing space.
+//
+// Example:
+//
+//	regex := BuildKeywordRegex([]string{"課程", "課"})
+//	MatchKeyword(regex, "課程 微積分") // Returns "課程"
+//	MatchKeyword(regex, "課程微積分")  // Returns "" (no space after keyword)
+func MatchKeyword(regex *regexp.Regexp, text string) string {
+	match := regex.FindStringSubmatch(text)
+	if len(match) < 2 {
+		return ""
+	}
+	return match[1] // Group 1 is the keyword without trailing space
 }
 
 // ExtractSearchTerm extracts the search term by removing the matched keyword.

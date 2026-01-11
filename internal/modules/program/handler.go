@@ -300,7 +300,8 @@ func (h *Handler) handleListPattern(ctx context.Context, text string, matches []
 
 // handleSearchPattern extracts search term and queries programs.
 func (h *Handler) handleSearchPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
-	match := matches[0] // The matched keyword
+	// Use matches[1] to get the keyword without trailing space
+	match := matches[1] // The captured keyword (group 1)
 	searchTerm := bot.ExtractSearchTerm(text, match)
 
 	if searchTerm == "" {

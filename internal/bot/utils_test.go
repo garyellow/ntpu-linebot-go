@@ -15,7 +15,7 @@ func TestBuildKeywordRegex(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "Single keyword at start",
+			name:     "Single keyword at start with space",
 			keywords: []string{"課程"},
 			input:    "課程 微積分",
 			expected: "課程",
@@ -63,10 +63,59 @@ func TestBuildKeywordRegex(t *testing.T) {
 			expected: "", // Should NOT match - keyword is at end
 		},
 		{
-			name:     "Match short keyword at start",
+			name:     "Match short keyword at start with space",
 			keywords: []string{"課", "課程"},
 			input:    "課 微積分",
 			expected: "課", // Should match "課" at start
+		},
+		// New test cases for space requirement
+		{
+			name:     "No match - keyword without space (課程微積分)",
+			keywords: []string{"課程"},
+			input:    "課程微積分",
+			expected: "", // Should NOT match - no space after keyword
+		},
+		{
+			name:     "No match - compound word (課程表)",
+			keywords: []string{"課程"},
+			input:    "課程表",
+			expected: "", // Should NOT match - this is a compound word
+		},
+		{
+			name:     "Match - keyword is entire text",
+			keywords: []string{"課程"},
+			input:    "課程",
+			expected: "課程", // Should match - keyword is entire text (end of string)
+		},
+		{
+			name:     "No match - teacher suffix (王老師)",
+			keywords: []string{"老師"},
+			input:    "王老師",
+			expected: "", // Should NOT match - keyword not at start
+		},
+		{
+			name:     "Match - teacher keyword at start",
+			keywords: []string{"老師"},
+			input:    "老師 王小明",
+			expected: "老師", // Should match - keyword at start with space
+		},
+		{
+			name:     "No match - no space before query",
+			keywords: []string{"學號"},
+			input:    "學號王小明",
+			expected: "", // Should NOT match - no space after keyword
+		},
+		{
+			name:     "Match - keyword with tab separator",
+			keywords: []string{"課程"},
+			input:    "課程\t微積分",
+			expected: "課程", // Should match - tab is whitespace
+		},
+		{
+			name:     "Match - keyword with newline separator",
+			keywords: []string{"課程"},
+			input:    "課程\n微積分",
+			expected: "課程", // Should match - newline is whitespace
 		},
 	}
 
@@ -74,9 +123,9 @@ func TestBuildKeywordRegex(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			regex := BuildKeywordRegex(tt.keywords)
-			got := regex.FindString(tt.input)
+			got := MatchKeyword(regex, tt.input)
 			if got != tt.expected {
-				t.Errorf("BuildKeywordRegex(%v).FindString(%q) = %q, want %q",
+				t.Errorf("MatchKeyword(BuildKeywordRegex(%v), %q) = %q, want %q",
 					tt.keywords, tt.input, got, tt.expected)
 			}
 		})

@@ -321,7 +321,8 @@ func (h *Handler) handleStudentIDPattern(ctx context.Context, text string, match
 
 // handleDepartmentPattern handles all department-related queries (name or code).
 func (h *Handler) handleDepartmentPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
-	match := matches[0] // The matched keyword
+	// Use matches[1] to get the keyword without trailing space
+	match := matches[1] // The captured keyword (group 1)
 	searchTerm := bot.ExtractSearchTerm(text, match)
 
 	if searchTerm == "" {
@@ -343,7 +344,8 @@ func (h *Handler) handleDepartmentPattern(ctx context.Context, text string, matc
 
 // handleYearPattern handles year query (學年 XXX).
 func (h *Handler) handleYearPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
-	match := matches[0] // The matched keyword
+	// Use matches[1] to get the keyword without trailing space
+	match := matches[1] // The captured keyword (group 1)
 	searchTerm := bot.ExtractSearchTerm(text, match)
 
 	if searchTerm != "" {
@@ -367,7 +369,8 @@ func (h *Handler) handleYearPattern(ctx context.Context, text string, matches []
 
 // handleStudentPattern handles student name/ID query (學號 XXX).
 func (h *Handler) handleStudentPattern(ctx context.Context, text string, matches []string) []messaging_api.MessageInterface {
-	match := matches[0] // The matched keyword
+	// Use matches[1] to get the keyword without trailing space
+	match := matches[1] // The captured keyword (group 1)
 	searchTerm := bot.ExtractSearchTerm(text, match)
 
 	if searchTerm == "" {

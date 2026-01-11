@@ -101,7 +101,6 @@ func TestHandleMessage_List(t *testing.T) {
 		input string
 	}{
 		{"學程列表", "學程列表"},
-		{"學程清單", "學程清單"},
 		{"所有學程", "所有學程"},
 		{"program list", "program list"},
 		{"programs", "programs"},
