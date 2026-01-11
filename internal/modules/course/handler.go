@@ -223,19 +223,6 @@ func (h *Handler) GetSemesterCache() *SemesterCache {
 	return h.semesterCache
 }
 
-// formatSemesterList formats semester pairs for logging (e.g., "113-2, 113-1, 112-2, 112-1")
-func formatSemesterList(years, terms []int) string {
-	if len(years) == 0 {
-		return ""
-	}
-	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("%d-%d", years[0], terms[0]))
-	for i := 1; i < len(years); i++ {
-		builder.WriteString(fmt.Sprintf(", %d-%d", years[i], terms[i]))
-	}
-	return builder.String()
-}
-
 // hasQueryExpander returns true if query expander is available.
 func (h *Handler) hasQueryExpander() bool {
 	return h.queryExpander != nil

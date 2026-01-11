@@ -198,7 +198,7 @@ func TestGetWarmupProbeStart(t *testing.T) {
 
 	year, term := GetWarmupProbeStart()
 
-	// Should return current ROC year, term 2
+	// Should always return current ROC year, term 2
 	now := time.Now()
 	expectedYear := now.Year() - 1911
 
@@ -209,7 +209,7 @@ func TestGetWarmupProbeStart(t *testing.T) {
 		t.Errorf("Expected term 2, got %d", term)
 	}
 
-	t.Logf("Warmup probe start: %d-%d", year, term)
+	t.Logf("Warmup probe start: %d-%d (always current year, term 2)", year, term)
 }
 
 // TestGenerateProbeSequence tests probe sequence generation

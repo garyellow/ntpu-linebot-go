@@ -162,11 +162,13 @@ func generateSemestersBackward(startYear, startTerm, count int) ([]int, []int) {
 }
 
 // GetWarmupProbeStart returns the starting semester for warmup probing.
-// Warmup should start from current ROC year term 2 and probe backwards
-// until it finds 4 semesters with actual data.
+// Always starts from current ROC year, term 2, and probes backwards until
+// it finds 4 semesters with actual data. This ensures we get the most recent
+// available semesters even if future semesters don't have data yet.
 //
 // Example: In January 2026 (ROC 115), returns (115, 2) as the start point.
 // Warmup will then probe: 115-2 → 115-1 → 114-2 → 114-1 → ... until 4 found.
+// If 115-2 has no data, it continues to find the next available semester.
 func GetWarmupProbeStart() (year, term int) {
 	now := time.Now()
 	currentYear := now.Year() - 1911 // Convert AD to ROC year

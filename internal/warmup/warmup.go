@@ -540,16 +540,12 @@ func probeSemestersWithData(ctx context.Context, client *scraper.Client, log *lo
 	return foundSemesters, nil
 }
 
-// probeSemesterHasData checks if a semester has course data by scraping with a single education code.
+// probeSemesterHasData checks if a semester has course data using a lightweight probe.
+// Uses ntpu.ProbeCoursesExist() which only queries a single education code (U = undergraduate)
+// to minimize HTTP requests (1 request vs 4 when using ScrapeCourses with empty title).
 // Returns true if any courses are found, false otherwise.
 func probeSemesterHasData(ctx context.Context, client *scraper.Client, year, term int) (bool, error) {
-	// Use ScrapeCourses with a single education code (U = undergraduate)
-	// This is a lightweight probe - we just need to know if data exists
-	courses, err := ntpu.ScrapeCourses(ctx, client, year, term, "")
-	if err != nil {
-		return false, err
-	}
-	return len(courses) > 0, nil
+	return ntpu.ProbeCoursesExist(ctx, client, year, term)
 }
 
 // formatSemesters formats semester list for logging
