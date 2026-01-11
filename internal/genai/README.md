@@ -70,15 +70,20 @@ internal/genai/
 | 函式名稱 | 模組 | 說明 |
 |---------|------|------|
 | `course_search` | course | 課程/教師名稱搜尋 |
+| `course_extended` | course | 延伸課程搜尋 (更多學期) |
+| `course_historical` | course | 歷史課程搜尋 (指定學年) |
 | `course_smart` | course | 課程智慧搜尋 |
 | `course_uid` | course | 課號查詢 |
 | `id_search` | id | 學生姓名搜尋 |
 | `id_student_id` | id | 學號查詢 |
-| `id_department` | id | 科系代碼查詢 |
+| `id_year` | id | 學年查詢 (查詢該學年學生) |
+| `id_department` | id | 科系搜尋 (查詢該系學生) |
+| `id_dept_codes` | id | 科系代碼列表查詢 |
 | `contact_search` | contact | 聯絡資訊搜尋 |
 | `contact_emergency` | contact | 緊急電話 |
 | `program_list` | program | 列出所有學程 |
 | `program_search` | program | 搜尋學程 |
+| `program_courses` | program | 查詢學程課程 |
 | `help` | help | 使用說明 |
 | `direct_reply` | direct_reply | 直接回覆（閒聊、澄清、離題詢問）|
 

@@ -192,6 +192,18 @@ func TestDispatchIntent_ParamValidation(t *testing.T) {
 			params:      map[string]string{},
 			errContains: "unknown intent",
 		},
+		{
+			name:        "year intent missing year",
+			intent:      IntentYear,
+			params:      map[string]string{},
+			errContains: "missing required parameter: year",
+		},
+		{
+			name:        "year intent empty year",
+			intent:      IntentYear,
+			params:      map[string]string{"year": ""},
+			errContains: "missing required parameter: year",
+		},
 	}
 
 	// Minimal handler for param validation tests
@@ -239,6 +251,24 @@ func TestDispatchIntent_Integration(t *testing.T) {
 			name:         "search intent with name",
 			intent:       IntentSearch,
 			params:       map[string]string{"name": "王小明"},
+			wantMessages: true,
+		},
+		{
+			name:         "year intent valid",
+			intent:       IntentYear,
+			params:       map[string]string{"year": "112"},
+			wantMessages: true,
+		},
+		{
+			name:         "dept codes intent bachelor",
+			intent:       IntentDeptCodes,
+			params:       map[string]string{"degree": "bachelor"},
+			wantMessages: true,
+		},
+		{
+			name:         "dept codes intent default",
+			intent:       IntentDeptCodes,
+			params:       map[string]string{},
 			wantMessages: true,
 		},
 	}

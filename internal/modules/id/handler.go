@@ -234,6 +234,8 @@ const (
 	IntentSearch     = "search"     // Student name search
 	IntentStudentID  = "student_id" // Direct student ID lookup
 	IntentDepartment = "department" // Department name query
+	IntentYear       = "year"       // Academic year query
+	IntentDeptCodes  = "dept_codes" // Department code list query
 )
 
 // DispatchIntent handles NLU-parsed intents for the ID module.
@@ -243,6 +245,8 @@ const (
 //   - "search": requires "name" param, calls handleStudentNameQuery
 //   - "student_id": requires "student_id" param, calls handleStudentIDQuery
 //   - "department": requires "department" param, calls handleUnifiedDepartmentQuery
+//   - "year": requires "year" param, calls handleYearQuery
+//   - "dept_codes": optional "degree" param, calls handleDepartmentCodesByDegree
 //
 // Returns error if intent is unknown or required parameters are missing.
 func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[string]string) ([]messaging_api.MessageInterface, error) {
@@ -278,6 +282,32 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 		}
 
 		return h.handleUnifiedDepartmentQuery(department), nil
+
+	case IntentYear:
+		year, ok := params["year"]
+		if !ok || year == "" {
+			return nil, fmt.Errorf("%w: year", domerrors.ErrMissingParameter)
+		}
+		if h.logger != nil {
+			h.logger.WithModule(ModuleName).Debugf("Dispatching ID intent: %s, year: %s", intent, year)
+		}
+		return h.handleYearQuery(year), nil
+
+	case IntentDeptCodes:
+		degreeStr := params["degree"]
+		var degree DegreeType
+		switch degreeStr {
+		case "master":
+			degree = DegreeMaster
+		case "phd":
+			degree = DegreePhD
+		default:
+			degree = DegreeBachelor
+		}
+		if h.logger != nil {
+			h.logger.WithModule(ModuleName).Debugf("Dispatching ID intent: %s, degree: %s", intent, degree)
+		}
+		return h.handleDepartmentCodesByDegree(degree), nil
 
 	default:
 		return nil, fmt.Errorf("%w: %s", domerrors.ErrUnknownIntent, intent)

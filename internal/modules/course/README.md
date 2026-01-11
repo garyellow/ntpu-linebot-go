@@ -38,9 +38,11 @@
 #### 5. **NLU 自然語言查詢**（需要 LLM API Key）
 - **Intent Functions**：
   - `course_search` - 精確搜尋（課名/教師）
+  - `course_extended` - 延伸搜尋（更多學期）
+  - `course_historical` - 歷史搜尋（指定學年）
   - `course_smart` - 智慧搜尋（語意需求）
   - `course_uid` - 課號查詢
-- **範例**：「微積分的課有哪些」、「想學 AI」、「U0001 是什麼課」
+- **範例**：「微積分的課有哪些」、「找更多學期的微積分」、「110 學年度的程式設計」、「想學 AI」、「U0001 是什麼課」
 
 ### 搜尋限制
 - **最大結果數**：40 筆（`MaxCoursesPerSearch`）

@@ -876,6 +876,36 @@ func TestDispatchIntent_ParamValidation(t *testing.T) {
 			errContains: "missing required parameter: uid",
 		},
 		{
+			name:        "extended intent missing keyword",
+			intent:      IntentExtended,
+			params:      map[string]string{},
+			errContains: "missing required parameter: keyword",
+		},
+		{
+			name:        "extended intent empty keyword",
+			intent:      IntentExtended,
+			params:      map[string]string{"keyword": ""},
+			errContains: "missing required parameter: keyword",
+		},
+		{
+			name:        "historical intent missing year",
+			intent:      IntentHistorical,
+			params:      map[string]string{"keyword": "微積分"},
+			errContains: "missing required parameter: year",
+		},
+		{
+			name:        "historical intent missing keyword",
+			intent:      IntentHistorical,
+			params:      map[string]string{"year": "110"},
+			errContains: "missing required parameter: keyword",
+		},
+		{
+			name:        "historical intent invalid year",
+			intent:      IntentHistorical,
+			params:      map[string]string{"year": "abc", "keyword": "微積分"},
+			errContains: "invalid year format",
+		},
+		{
 			name:        "unknown intent",
 			intent:      "unknown",
 			params:      map[string]string{},
@@ -933,6 +963,18 @@ func TestDispatchIntent_Integration(t *testing.T) {
 			name:         "uid intent with valid uid",
 			intent:       IntentUID,
 			params:       map[string]string{"uid": "1141U0001"},
+			wantMessages: true,
+		},
+		{
+			name:         "extended intent with keyword",
+			intent:       IntentExtended,
+			params:       map[string]string{"keyword": "微積分"},
+			wantMessages: true,
+		},
+		{
+			name:         "historical intent with year and keyword",
+			intent:       IntentHistorical,
+			params:       map[string]string{"year": "110", "keyword": "微積分"},
 			wantMessages: true,
 		},
 		// Smart search requires BM25Index setup, tested separately

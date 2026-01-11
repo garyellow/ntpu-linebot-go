@@ -27,7 +27,7 @@ import "google.golang.org/genai"
 // BuildIntentFunctions returns the function declarations for NLU intent parsing.
 // These functions represent the available intents the parser can recognize.
 //
-// Total: 12 functions across 6 modules
+// Total: 17 functions across 6 modules
 func BuildIntentFunctions() []*genai.FunctionDeclaration {
 	return []*genai.FunctionDeclaration{
 		// ============================================
@@ -75,6 +75,38 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 				Required: []string{"uid"},
 			},
 		},
+		{
+			Name:        "course_extended",
+			Description: "在更多歷史學期中搜尋課程。當最近學期找不到想要的課程時使用。",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"keyword": {
+						Type:        genai.TypeString,
+						Description: "課程名稱或教師姓名。範例：「微積分」「程式設計」",
+					},
+				},
+				Required: []string{"keyword"},
+			},
+		},
+		{
+			Name:        "course_historical",
+			Description: "查詢特定學年度的課程。使用者明確指定學年度時使用。",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"year": {
+						Type:        genai.TypeString,
+						Description: "學年度，民國年 3 位數。範例：「110」「112」",
+					},
+					"keyword": {
+						Type:        genai.TypeString,
+						Description: "課程名稱或教師姓名。範例：「微積分」「王小明」",
+					},
+				},
+				Required: []string{"year", "keyword"},
+			},
+		},
 
 		// ============================================
 		// 2. ID Module (學生查詢)
@@ -119,6 +151,33 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 					},
 				},
 				Required: []string{"department"},
+			},
+		},
+		{
+			Name:        "id_year",
+			Description: "依學年度查詢學生。僅支援 94-112 學年度完整資料。",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"year": {
+						Type:        genai.TypeString,
+						Description: "學年度，民國年 3 位數。範例：「112」「110」「100」",
+					},
+				},
+				Required: []string{"year"},
+			},
+		},
+		{
+			Name:        "id_dept_codes",
+			Description: "顯示系代碼對照表。依學制類型分類顯示所有系所代碼。",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"degree": {
+						Type:        genai.TypeString,
+						Description: "學制類型：bachelor（學士班）、master（碩士班）、phd（博士班）。預設 bachelor。",
+					},
+				},
 			},
 		},
 
@@ -173,6 +232,20 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 				Required: []string{"query"},
 			},
 		},
+		{
+			Name:        "program_courses",
+			Description: "查詢特定學程包含的課程。",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"program_name": {
+						Type:        genai.TypeString,
+						Description: "學程名稱。範例：「人工智慧學程」「永續發展學程」「智慧財產權學程」",
+					},
+				},
+				Required: []string{"program_name"},
+			},
+		},
 
 		// ============================================
 		// 5. Usage Module (配額查詢)
@@ -225,19 +298,24 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 // Order: Course → ID → Contact → Program → Usage → Help → Direct
 var IntentModuleMap = map[string][2]string{
 	// Course Module
-	"course_search": {"course", "search"},
-	"course_smart":  {"course", "smart"},
-	"course_uid":    {"course", "uid"},
+	"course_search":     {"course", "search"},
+	"course_smart":      {"course", "smart"},
+	"course_uid":        {"course", "uid"},
+	"course_extended":   {"course", "extended"},
+	"course_historical": {"course", "historical"},
 	// ID Module
 	"id_search":     {"id", "search"},
 	"id_student_id": {"id", "student_id"},
 	"id_department": {"id", "department"},
+	"id_year":       {"id", "year"},
+	"id_dept_codes": {"id", "dept_codes"},
 	// Contact Module
 	"contact_search":    {"contact", "search"},
 	"contact_emergency": {"contact", "emergency"},
 	// Program Module
-	"program_list":   {"program", "list"},
-	"program_search": {"program", "search"},
+	"program_list":    {"program", "list"},
+	"program_search":  {"program", "search"},
+	"program_courses": {"program", "courses"},
 	// Usage Module
 	"usage_query": {"usage", "query"},
 	// Help
@@ -253,17 +331,22 @@ var IntentModuleMap = map[string][2]string{
 // Order: Course → ID → Contact → Program → Direct
 var ParamKeyMap = map[string]string{
 	// Course Module
-	"course_search": "keyword",
-	"course_smart":  "query",
-	"course_uid":    "uid",
+	"course_search":     "keyword",
+	"course_smart":      "query",
+	"course_uid":        "uid",
+	"course_extended":   "keyword",
+	"course_historical": "keyword", // Also has "year" param, but keyword is primary
 	// ID Module
 	"id_search":     "name",
 	"id_student_id": "student_id",
 	"id_department": "department",
+	"id_year":       "year",
+	"id_dept_codes": "degree",
 	// Contact Module
 	"contact_search": "query",
 	// Program Module
-	"program_search": "query",
+	"program_search":  "query",
+	"program_courses": "program_name",
 	// Direct Reply
 	"direct_reply": "message",
 }
