@@ -171,8 +171,11 @@ for _, r := range results {
 }
 
 // 配合 Query Expansion
-llmCfg := genai.DefaultLLMConfig()
-llmCfg.Gemini.APIKey = geminiAPIKey
+llmCfg := genai.LLMConfig{
+    Gemini: genai.ProviderConfig{APIKey: geminiAPIKey},
+    Providers: []genai.Provider{genai.ProviderGemini},
+    RetryConfig: genai.RetryConfig{MaxAttempts: 2},
+}
 expander, _ := genai.CreateQueryExpander(ctx, llmCfg)
 expanded, _ := expander.Expand(ctx, "AWS")
 // "AWS" → "AWS Amazon Web Services 雲端服務 雲端運算"

@@ -93,7 +93,13 @@ internal/genai/
 import "ntpu-linebot/internal/genai"
 
 // 透過工廠函數建立 (自動配置故障轉移)
-llmConfig := genai.DefaultLLMConfig(geminiKey, groqKey)
+llmConfig := genai.LLMConfig{
+    Gemini: genai.ProviderConfig{APIKey: geminiKey},
+    Groq: genai.ProviderConfig{APIKey: groqKey},
+    Cerebras: genai.ProviderConfig{APIKey: cerebrasKey},
+    Providers: []genai.Provider{genai.ProviderGemini, genai.ProviderGroq, genai.ProviderCerebras},
+    RetryConfig: genai.RetryConfig{MaxAttempts: 2, InitialDelay: 500*time.Millisecond, MaxDelay: 3*time.Second},
+}
 parser, err := genai.CreateIntentParser(ctx, llmConfig)
 if err != nil {
     return err
@@ -146,7 +152,13 @@ if err != nil {
 import "ntpu-linebot/internal/genai"
 
 // 透過工廠函數建立 (自動配置故障轉移)
-llmConfig := genai.DefaultLLMConfig(geminiKey, groqKey)
+llmConfig := genai.LLMConfig{
+    Gemini: genai.ProviderConfig{APIKey: geminiKey},
+    Groq: genai.ProviderConfig{APIKey: groqKey},
+    Cerebras: genai.ProviderConfig{APIKey: cerebrasKey},
+    Providers: []genai.Provider{genai.ProviderGemini, genai.ProviderGroq, genai.ProviderCerebras},
+    RetryConfig: genai.RetryConfig{MaxAttempts: 2, InitialDelay: 500*time.Millisecond, MaxDelay: 3*time.Second},
+}
 expander, err := genai.CreateQueryExpander(ctx, llmConfig)
 if err != nil {
     return err
@@ -250,7 +262,7 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 ### 常用查詢
 
 ```promql
-# Gemini vs Groq 成功率比較
+# Provider 成功率比較 (Gemini, Groq, Cerebras)
 sum(rate(ntpu_llm_total{status="success"}[5m])) by (provider)
 / sum(rate(ntpu_llm_total[5m])) by (provider)
 
