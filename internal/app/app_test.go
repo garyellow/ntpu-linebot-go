@@ -450,7 +450,7 @@ func TestReadinessCheck_WarmupWaitDisabled(t *testing.T) {
 	router.GET("/readyz", app.readinessCheck)
 
 	// Even though readinessState is NOT ready (default),
-	// WarmupGating=false should cause it to bypass the check and return 200 (assuming DB is up)
+	// WaitForWarmup=false should cause it to bypass the check and return 200 (assuming DB is up)
 	if app.readinessState.IsReady() {
 		t.Fatal("Expected readinessState to be initially false")
 	}

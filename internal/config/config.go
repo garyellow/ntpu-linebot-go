@@ -221,6 +221,9 @@ func (c *Config) Validate() error {
 	if c.ScraperMaxRetries < 0 {
 		errs = append(errs, fmt.Errorf("SCRAPER_MAX_RETRIES cannot be negative, got %d", c.ScraperMaxRetries))
 	}
+	if c.WaitForWarmup && c.WarmupGracePeriod <= 0 {
+		errs = append(errs, fmt.Errorf("WARMUP_GRACE_PERIOD must be positive when WAIT_FOR_WARMUP is enabled, got %v", c.WarmupGracePeriod))
+	}
 
 	if len(errs) > 0 {
 		return errors.Join(errs...)
@@ -268,12 +271,22 @@ func getFloatEnv(key string, defaultValue float64) float64 {
 
 // getBoolEnv retrieves boolean environment variable with fallback to default value.
 // Accepts "true", "1", "yes" (case-insensitive) as true values.
+// Accepts "false", "0", "no" (case-insensitive) as false values.
+// Returns defaultValue for empty or unrecognized values.
 func getBoolEnv(key string, defaultValue bool) bool {
-	if value := os.Getenv(key); value != "" {
-		lower := strings.ToLower(value)
-		return lower == "true" || lower == "1" || lower == "yes"
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
 	}
-	return defaultValue
+	lower := strings.ToLower(value)
+	switch lower {
+	case "true", "1", "yes":
+		return true
+	case "false", "0", "no":
+		return false
+	default:
+		return defaultValue
+	}
 }
 
 // getModelsEnv parses comma-separated model list from environment variable.

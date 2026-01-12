@@ -128,6 +128,39 @@ func TestValidate(t *testing.T) {
 			wantErr:     true,
 			errContains: "SCRAPER_MAX_RETRIES",
 		},
+		{
+			name: "WaitForWarmup with zero grace period",
+			cfg: &Config{
+				LineChannelToken:  "token",
+				LineChannelSecret: "secret",
+				Port:              "10000",
+				DataDir:           "/data",
+				CacheTTL:          168 * time.Hour,
+				ScraperTimeout:    60 * time.Second,
+				ScraperMaxRetries: 3,
+				WaitForWarmup:     true,
+				WarmupGracePeriod: 0,
+				Bot:               newTestBotConfig(),
+			},
+			wantErr:     true,
+			errContains: "WARMUP_GRACE_PERIOD",
+		},
+		{
+			name: "WaitForWarmup with valid grace period",
+			cfg: &Config{
+				LineChannelToken:  "token",
+				LineChannelSecret: "secret",
+				Port:              "10000",
+				DataDir:           "/data",
+				CacheTTL:          168 * time.Hour,
+				ScraperTimeout:    60 * time.Second,
+				ScraperMaxRetries: 3,
+				WaitForWarmup:     true,
+				WarmupGracePeriod: 10 * time.Minute,
+				Bot:               newTestBotConfig(),
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -250,7 +283,7 @@ func TestGetBoolEnv(t *testing.T) {
 			key:          "TEST_BOOL",
 			value:        "invalid",
 			defaultValue: true,
-			want:         false, // invalid string is not "true", "1", or "yes"
+			want:         true, // unrecognized values return default
 		},
 	}
 

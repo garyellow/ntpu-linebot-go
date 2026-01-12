@@ -7,11 +7,12 @@ import (
 
 // ReadinessState manages service readiness state for initial startup warmup.
 // It tracks whether the first warmup has completed or if the timeout has elapsed.
-// Thread-safe via atomic operations.
+// Thread-safe for concurrent reads after initialization. The ready field uses
+// atomic operations; startTime and timeout are immutable after construction.
 type ReadinessState struct {
 	ready     atomic.Bool
-	startTime time.Time
-	timeout   time.Duration
+	startTime time.Time     // Immutable after construction
+	timeout   time.Duration // Immutable after construction
 }
 
 // ReadinessStatus contains the current readiness state for API responses.
