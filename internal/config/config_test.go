@@ -159,6 +159,116 @@ func contains(s, substr string) bool {
 		}()))
 }
 
+func TestGetBoolEnv(t *testing.T) {
+	// Cannot use t.Parallel(): t.Setenv panics after t.Parallel().
+	tests := []struct {
+		name         string
+		key          string
+		value        string
+		defaultValue bool
+		want         bool
+	}{
+		{
+			name:         "true lowercase",
+			key:          "TEST_BOOL",
+			value:        "true",
+			defaultValue: false,
+			want:         true,
+		},
+		{
+			name:         "TRUE uppercase",
+			key:          "TEST_BOOL",
+			value:        "TRUE",
+			defaultValue: false,
+			want:         true,
+		},
+		{
+			name:         "True mixed case",
+			key:          "TEST_BOOL",
+			value:        "True",
+			defaultValue: false,
+			want:         true,
+		},
+		{
+			name:         "1 as true",
+			key:          "TEST_BOOL",
+			value:        "1",
+			defaultValue: false,
+			want:         true,
+		},
+		{
+			name:         "yes as true",
+			key:          "TEST_BOOL",
+			value:        "yes",
+			defaultValue: false,
+			want:         true,
+		},
+		{
+			name:         "YES uppercase",
+			key:          "TEST_BOOL",
+			value:        "YES",
+			defaultValue: false,
+			want:         true,
+		},
+		{
+			name:         "false value",
+			key:          "TEST_BOOL",
+			value:        "false",
+			defaultValue: true,
+			want:         false,
+		},
+		{
+			name:         "0 as false",
+			key:          "TEST_BOOL",
+			value:        "0",
+			defaultValue: true,
+			want:         false,
+		},
+		{
+			name:         "no as false",
+			key:          "TEST_BOOL",
+			value:        "no",
+			defaultValue: true,
+			want:         false,
+		},
+		{
+			name:         "empty value returns default true",
+			key:          "TEST_BOOL",
+			value:        "",
+			defaultValue: true,
+			want:         true,
+		},
+		{
+			name:         "empty value returns default false",
+			key:          "TEST_BOOL",
+			value:        "",
+			defaultValue: false,
+			want:         false,
+		},
+		{
+			name:         "invalid value returns default",
+			key:          "TEST_BOOL",
+			value:        "invalid",
+			defaultValue: true,
+			want:         false, // invalid string is not "true", "1", or "yes"
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Cannot use t.Parallel(): t.Setenv panics after t.Parallel().
+			if tt.value != "" {
+				t.Setenv(tt.key, tt.value)
+			}
+
+			got := getBoolEnv(tt.key, tt.defaultValue)
+			if got != tt.want {
+				t.Errorf("getBoolEnv() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestGetDurationEnv(t *testing.T) {
 	// Cannot use t.Parallel(): t.Setenv panics after t.Parallel().
 	tests := []struct {

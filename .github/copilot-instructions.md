@@ -348,11 +348,16 @@ task compose:up       # Start monitoring stack (Prometheus/Grafana, see deployme
 - In-memory SQLite (`:memory:`) via `setupTestDB()` helper
 
 **Environment variables** (`.env`):
-- **Required**: `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN`
-- **Optional**: `GEMINI_API_KEY`, `GROQ_API_KEY`, `CEREBRAS_API_KEY` (enables NLU + Query Expansion with multi-provider fallback), `DATA_DIR` (default: `./data` on Windows, `/data` on Linux/Mac)
-- **LLM Configuration**: `LLM_PROVIDERS` (comma-separated provider list, default: gemini,groq,cerebras), model override env vars (see `internal/config/config.go`)
+- **Required**: `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`
+- **LLM** (Optional): `GEMINI_API_KEY`, `GROQ_API_KEY`, `CEREBRAS_API_KEY`, `LLM_PROVIDERS`, `*_INTENT_MODELS`, `*_EXPANDER_MODELS`
+- **Server**: `PORT`, `LOG_LEVEL`, `SHUTDOWN_TIMEOUT`
+- **Data**: `DATA_DIR` (default: `./data` on Windows, `/data` on Linux/Mac), `CACHE_TTL`
+- **Scraper**: `SCRAPER_TIMEOUT`, `SCRAPER_MAX_RETRIES`
+- **Rate Limits**: `USER_RATE_BURST`, `USER_RATE_REFILL`, `LLM_RATE_BURST`, `LLM_RATE_REFILL`, `LLM_RATE_DAILY`, `GLOBAL_RATE_RPS`
+- **Startup**: `WAIT_FOR_WARMUP` (default: `false`), `WARMUP_GRACE_PERIOD` (default: `10m`)
+- **Metrics**: `METRICS_USERNAME`, `METRICS_PASSWORD`
 
-Production warmup runs automatically on server startup (non-blocking). Database migration handled by `storage.New()`.
+See `.env.example` for full documentation. Production: set `WAIT_FOR_WARMUP=true` to ensure data is ready before accepting traffic.
 
 ## Error Handling
 

@@ -108,8 +108,23 @@ docker run -d \
 |------|------|
 | `/webhook` | LINE Webhook URL |
 | `/livez` | Liveness（進程存活）|
-| `/readyz` | Readiness（服務就緒）|
+| `/readyz` | Readiness（服務就緒 - 可配置等待 Warmup）|
 | `/metrics` | Prometheus 指標 |
+
+### 常見問題
+
+**Q: 為什麼剛啟動時 `/webhook` 回傳 503？**
+A: 當 `WAIT_FOR_WARMUP=true` 時，服務會等待 initial warmup 完成（約 2-5 分鐘）：
+- `/readyz` 回傳 503
+- `/webhook` 回傳 503（LINE 會自動重試）
+- 這是為了避免在資料不完整時處理請求。
+- **預設行為**（`WAIT_FOR_WARMUP=false`）：不等待 warmup，資料庫連線後立即 Ready。
+
+**Q: Warmup 卡住怎麼辦？**
+A: 系統設有 grace period（`WARMUP_GRACE_PERIOD`，預設 10 分鐘）。即使 warmup 未完成，超過後也會強制開放流量，避免永久無法服務。此設定僅當 `WAIT_FOR_WARMUP=true` 時生效。
+
+**Q: 如何啟用 warmup 等待？**
+A: 設定 `WAIT_FOR_WARMUP=true`。可搭配 `WARMUP_GRACE_PERIOD` 調整等待時間（預設 10m）。
 
 ---
 

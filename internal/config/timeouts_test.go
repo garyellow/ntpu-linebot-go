@@ -68,6 +68,27 @@ func TestDatabaseTimeouts(t *testing.T) {
 	}
 }
 
+// TestSmartSearchTimeouts verifies smart search and readiness timeout constants
+func TestSmartSearchTimeouts(t *testing.T) {
+	tests := []struct {
+		name     string
+		got      time.Duration
+		expected time.Duration
+	}{
+		{"SmartSearchTimeout", SmartSearchTimeout, 30 * time.Second},
+		{"ReadinessCheckTimeout", ReadinessCheckTimeout, 3 * time.Second},
+		{"ReadinessWarmupTimeout", ReadinessWarmupTimeout, 10 * time.Minute},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.got != tt.expected {
+				t.Errorf("%s = %v, want %v", tt.name, tt.got, tt.expected)
+			}
+		})
+	}
+}
+
 // TestBackgroundJobIntervals verifies background job intervals
 func TestBackgroundJobIntervals(t *testing.T) {
 	tests := []struct {
