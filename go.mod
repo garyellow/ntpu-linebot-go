@@ -9,7 +9,7 @@ require (
 	github.com/iwilltry42/bm25-go v0.0.0-20240909111832-a928590cc9da
 	github.com/joho/godotenv v1.5.1
 	github.com/line/line-bot-sdk-go/v8 v8.18.0
-	github.com/openai/openai-go/v3 v3.15.0
+	github.com/openai/openai-go/v3 v3.16.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.19.0
