@@ -1,14 +1,13 @@
 # NTPU LineBot
 
 <p align="center">
+  <a href="https://stats.uptimerobot.com/OqI3euBWoF"><img src="https://img.shields.io/uptimerobot/status/m802132556-5a95fc71d4f9260bdcd036db?logo=line&logoColor=white" alt="Status"></a>
   <a href="https://github.com/garyellow/ntpu-linebot-go/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/garyellow/ntpu-linebot-go/ci.yml?branch=main&label=CI&logo=github" alt="CI"></a>
-  <a href="https://stats.uptimerobot.com/OqI3euBWoF"><img src="https://img.shields.io/uptimerobot/status/m795331349-bc2923cffedbf48e2a93c6f9?style=flat&label=Uptime" alt="Uptime"></a>
   <a href="https://goreportcard.com/report/github.com/garyellow/ntpu-linebot-go"><img src="https://goreportcard.com/badge/github.com/garyellow/ntpu-linebot-go" alt="Go Report Card"></a>
   <a href="https://pkg.go.dev/github.com/garyellow/ntpu-linebot-go"><img src="https://pkg.go.dev/badge/github.com/garyellow/ntpu-linebot-go.svg" alt="Go Reference"></a>
   <a href="https://go.dev/dl/"><img src="https://img.shields.io/github/go-mod/go-version/garyellow/ntpu-linebot-go?logo=go&logoColor=white" alt="Go Version"></a>
-  <a href="https://hub.docker.com/r/garyellow/ntpu-linebot-go"><img src="https://img.shields.io/docker/pulls/garyellow/ntpu-linebot-go?logo=docker&logoColor=white" alt="Docker Pulls"></a>
-  <a href="https://github.com/garyellow/ntpu-linebot-go/pkgs/container/ntpu-linebot-go"><img src="https://img.shields.io/badge/GHCR-latest-blue?logo=github&logoColor=white" alt="GHCR"></a>
-  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
+  <a href="https://hub.docker.com/r/garyellow/ntpu-linebot-go"><img src="https://img.shields.io/docker/v/garyellow/ntpu-linebot-go?logo=docker&logoColor=white" alt="Docker Version"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/github/license/garyellow/ntpu-linebot-go" alt="License"></a>
 </p>
 
 <p align="center">
