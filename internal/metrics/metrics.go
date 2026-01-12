@@ -70,7 +70,7 @@ type Metrics struct {
 	CacheSize       *prometheus.GaugeVec   // current entries by module
 
 	// ============================================
-	// LLM (Gemini/Groq API - RED Method)
+	// LLM (Gemini/Groq/Cerebras API - RED Method)
 	// NLU intent parsing, Query Expansion
 	// ============================================
 	LLMTotal           *prometheus.CounterVec   // requests by provider, operation, and status
@@ -191,7 +191,7 @@ func New(registry *prometheus.Registry) *Metrics {
 				Name: "ntpu_llm_total",
 				Help: "Total LLM API requests",
 			},
-			// provider: gemini, groq
+			// provider: gemini, groq, cerebras
 			// operation: nlu (intent parsing), expander (query expansion)
 			// status: success, error, rate_limit, quota_exhausted
 			[]string{"provider", "operation", "status"},
@@ -207,7 +207,7 @@ func New(registry *prometheus.Registry) *Metrics {
 				// Slow: > 2s (complex or retry)
 				Buckets: []float64{0.1, 0.25, 0.5, 1, 2, 5, 10},
 			},
-			// provider: gemini, groq
+			// provider: gemini, groq, cerebras
 			// operation: nlu, expander
 			[]string{"provider", "operation"},
 		),
@@ -217,8 +217,8 @@ func New(registry *prometheus.Registry) *Metrics {
 				Name: "ntpu_llm_fallback_total",
 				Help: "Total LLM provider fallback events",
 			},
-			// from_provider: gemini, groq (primary that failed)
-			// to_provider: gemini, groq (fallback used)
+			// from_provider: gemini, groq, cerebras (primary that failed)
+			// to_provider: gemini, groq, cerebras (fallback used)
 			// operation: nlu, expander
 			[]string{"from_provider", "to_provider", "operation"},
 		),
@@ -233,8 +233,8 @@ func New(registry *prometheus.Registry) *Metrics {
 				// Slow: > 2s (multiple retries)
 				Buckets: []float64{0.1, 0.5, 1, 2, 5, 10},
 			},
-			// from_provider: gemini, groq (primary that failed)
-			// to_provider: gemini, groq (fallback used)
+			// from_provider: gemini, groq, cerebras (primary that failed)
+			// to_provider: gemini, groq, cerebras (fallback used)
 			// operation: nlu, expander
 			[]string{"from_provider", "to_provider", "operation"},
 		),
@@ -376,7 +376,7 @@ func (m *Metrics) SetCacheSize(module string, size int) {
 // ============================================
 
 // RecordLLM records an LLM API request.
-// provider: gemini, groq
+// provider: gemini, groq, cerebras
 // operation: nlu (intent parsing), expander (query expansion)
 // status: success, error, rate_limit, quota_exhausted
 func (m *Metrics) RecordLLM(provider, operation, status string, duration float64) {

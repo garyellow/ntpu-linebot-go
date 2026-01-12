@@ -1,4 +1,4 @@
-// Package genai provides integration with LLM APIs (Gemini and Groq).
+// Package genai provides integration with LLM APIs (Gemini, Groq, and Cerebras).
 // This file contains retry logic with exponential backoff and jitter.
 package genai
 

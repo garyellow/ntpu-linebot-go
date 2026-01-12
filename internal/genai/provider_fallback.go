@@ -1,4 +1,4 @@
-// Package genai provides integration with LLM APIs (Gemini and Groq).
+// Package genai provides integration with LLM APIs (Gemini, Groq, and Cerebras).
 // This file contains the fallback wrapper for cross-provider failover.
 package genai
 

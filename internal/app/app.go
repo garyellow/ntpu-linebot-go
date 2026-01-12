@@ -105,14 +105,13 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 			log.WithError(err).Warn("Query expander initialization failed")
 		}
 		if intentParser != nil || queryExpander != nil {
-			providers := []string{}
-			if cfg.GeminiAPIKey != "" {
-				providers = append(providers, "gemini")
+			// Get configured providers from LLM config
+			providers := llmCfg.ConfiguredProviders()
+			providerNames := make([]string, len(providers))
+			for i, p := range providers {
+				providerNames[i] = p.String()
 			}
-			if cfg.GroqAPIKey != "" {
-				providers = append(providers, "groq")
-			}
-			log.WithField("providers", providers).Info("LLM features enabled")
+			log.WithField("providers", providerNames).Info("LLM features enabled")
 		}
 	}
 
