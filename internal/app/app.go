@@ -52,8 +52,9 @@ type Application struct {
 	queryExpander  genai.QueryExpander // Interface type for multi-provider support
 	llmLimiter     *ratelimit.KeyedLimiter
 	userLimiter    *ratelimit.KeyedLimiter
-	semesterCache  *course.SemesterCache // Shared cache for semester data (updated by warmup)
-	wg             sync.WaitGroup        // Track background goroutines for graceful shutdown
+	semesterCache  *course.SemesterCache  // Shared cache for semester data (updated by warmup)
+	readinessState *warmup.ReadinessState // Tracks initial warmup completion for readiness
+	wg             sync.WaitGroup         // Track background goroutines for graceful shutdown
 }
 
 // Initialize creates and initializes a new application with all dependencies.
@@ -194,6 +195,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		llmLimiter:     llmLimiter,
 		userLimiter:    userLimiter,
 		semesterCache:  semesterCache,
+		readinessState: warmup.NewReadinessState(cfg.WarmupGracePeriod),
 	}
 
 	router.GET("/", app.redirectToGitHub)
@@ -201,7 +203,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	router.HEAD("/livez", app.livenessCheck)
 	router.GET("/readyz", app.readinessCheck)
 	router.HEAD("/readyz", app.readinessCheck)
-	router.POST("/webhook", webhookHandler.Handle)
+	router.POST("/webhook", app.readinessMiddleware(), webhookHandler.Handle)
 	router.GET("/metrics",
 		metricsAuthMiddleware(cfg.MetricsUsername, cfg.MetricsPassword),
 		gin.WrapH(promhttp.HandlerFor(registry, promhttp.HandlerOpts{})))
@@ -292,6 +294,23 @@ func (a *Application) getFeatures() map[string]bool {
 func (a *Application) readinessCheck(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), config.ReadinessCheckTimeout)
 	defer cancel()
+
+	// Check warmup state first (for initial startup) - only if waiting for warmup is enabled
+	if a.cfg.WaitForWarmup && !a.readinessState.IsReady() {
+		status := a.readinessState.Status()
+		a.logger.WithField("elapsed_seconds", status.ElapsedSeconds).
+			WithField("timeout_seconds", status.TimeoutSeconds).
+			Debug("Readiness check: warmup in progress")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status": "not ready",
+			"reason": status.Reason,
+			"progress": gin.H{
+				"elapsed_seconds": status.ElapsedSeconds,
+				"timeout_seconds": status.TimeoutSeconds,
+			},
+		})
+		return
+	}
 
 	// Check database connectivity
 	if err := a.db.Ping(ctx); err != nil {
@@ -624,6 +643,14 @@ func (a *Application) performProactiveWarmup(ctx context.Context, warmID bool) {
 	}
 
 	stats, err := warmup.Run(warmupCtx, a.db, a.scraperClient, a.logger, opts)
+
+	// Mark service as ready after initial warmup (regardless of success/failure)
+	// This is only done for the first warmup (startup), not daily refreshes
+	if warmID {
+		a.readinessState.MarkReady()
+		a.logger.Info("Service marked as ready after initial warmup")
+	}
+
 	if err != nil {
 		a.logger.WithError(err).Error("Proactive warmup failed")
 		return
@@ -685,6 +712,29 @@ func (a *Application) recordCacheSizeMetrics(ctx context.Context) {
 
 	if a.bm25Index != nil {
 		a.metrics.SetIndexSize("bm25", a.bm25Index.Count())
+	}
+}
+
+// readinessMiddleware returns 503 Service Unavailable during initial warmup.
+// This ensures webhook requests are rejected until the service is fully ready.
+// LINE Platform will automatically retry failed webhooks, so this is safe.
+// Only active when WaitForWarmup is enabled in config.
+func (a *Application) readinessMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if a.cfg.WaitForWarmup && !a.readinessState.IsReady() {
+			status := a.readinessState.Status()
+			a.logger.WithField("elapsed_seconds", status.ElapsedSeconds).
+				Debug("Webhook rejected: warmup in progress")
+			// Set Retry-After header to hint LINE when to retry
+			c.Header("Retry-After", "60")
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error":       "service warming up",
+				"retry_after": 60,
+			})
+			c.Abort()
+			return
+		}
+		c.Next()
 	}
 }
 

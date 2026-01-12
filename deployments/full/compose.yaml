@@ -35,9 +35,11 @@ services:
       # Server Configuration
       - PORT=${PORT:-10000}
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      - SHUTDOWN_TIMEOUT=${SHUTDOWN_TIMEOUT:-30s}
+
+      # Data Configuration
       - DATA_DIR=${DATA_DIR:-/data}
       - CACHE_TTL=${CACHE_TTL:-168h}
-      - SHUTDOWN_TIMEOUT=${SHUTDOWN_TIMEOUT:-30s}
 
       # Scraper Configuration
       - SCRAPER_TIMEOUT=${SCRAPER_TIMEOUT:-60s}
@@ -54,7 +56,11 @@ services:
       - LLM_RATE_DAILY=${LLM_RATE_DAILY:-180}
       - GLOBAL_RATE_RPS=${GLOBAL_RATE_RPS:-100}
 
-      # Metrics Auth (empty password = disabled for internal network)
+      # Startup Configuration
+      - WAIT_FOR_WARMUP=${WAIT_FOR_WARMUP:-false}
+      - WARMUP_GRACE_PERIOD=${WARMUP_GRACE_PERIOD:-10m}
+
+      # Metrics Authentication (empty password = disabled for internal network)
       - METRICS_USERNAME=${METRICS_USERNAME:-prometheus}
       - METRICS_PASSWORD=${METRICS_PASSWORD:-}
     deploy:

@@ -18,30 +18,26 @@ import (
 
 // Config holds all application configuration
 type Config struct {
-	// LINE Bot Configuration
+	// LINE Bot Configuration (Required)
 	LineChannelToken  string
 	LineChannelSecret string
 
-	// LLM Configuration
-	GeminiAPIKey   string // Gemini API key for NLU and Query Expansion features
-	GroqAPIKey     string // Groq API key (OpenAI-compatible provider)
-	CerebrasAPIKey string // Cerebras API key (OpenAI-compatible provider)
-
-	// LLM Model Configuration (optional, defaults apply if empty)
-	// Each slice contains models in fallback order: first is primary, rest are fallbacks
-	GeminiIntentModels     []string // Gemini models for intent parsing (comma-separated fallback chain)
-	GeminiExpanderModels   []string // Gemini models for query expansion (comma-separated fallback chain)
-	GroqIntentModels       []string // Groq models for intent parsing (comma-separated fallback chain)
-	GroqExpanderModels     []string // Groq models for query expansion (comma-separated fallback chain)
-	CerebrasIntentModels   []string // Cerebras models for intent parsing (comma-separated fallback chain)
-	CerebrasExpanderModels []string // Cerebras models for query expansion (comma-separated fallback chain)
+	// LLM API Keys (Optional - at least one required for NLU features)
+	GeminiAPIKey   string
+	GroqAPIKey     string
+	CerebrasAPIKey string
 
 	// LLM Provider Configuration
 	LLMProviders []string // Ordered list of LLM providers for fallback (default: "gemini,groq,cerebras")
 
-	// Metrics Authentication
-	MetricsUsername string // Username for /metrics endpoint Basic Auth (default: "prometheus")
-	MetricsPassword string // Password for /metrics endpoint Basic Auth (empty = no auth)
+	// LLM Model Configuration (optional, defaults apply if empty)
+	// Each slice contains models in fallback order: first is primary, rest are fallbacks
+	GeminiIntentModels     []string
+	GeminiExpanderModels   []string
+	GroqIntentModels       []string
+	GroqExpanderModels     []string
+	CerebrasIntentModels   []string
+	CerebrasExpanderModels []string
 
 	// Server Configuration
 	Port            string
@@ -57,40 +53,48 @@ type Config struct {
 	ScraperMaxRetries int
 	ScraperBaseURLs   map[string][]string
 
-	// Bot Configuration (embedded)
+	// Bot Configuration (embedded - includes Webhook and Rate Limit settings)
 	Bot BotConfig
+
+	// Startup Configuration
+	WaitForWarmup     bool          // If true, wait for warmup completion before accepting traffic (default: false)
+	WarmupGracePeriod time.Duration // Grace period to wait for warmup when WaitForWarmup=true (default: 10m)
+
+	// Metrics Authentication
+	MetricsUsername string // Username for /metrics endpoint Basic Auth (default: "prometheus")
+	MetricsPassword string // Password for /metrics endpoint Basic Auth (empty = no auth)
 }
 
-// BotConfig holds bot-specific configuration
+// BotConfig holds bot-specific configuration (Webhook, Rate Limits, LINE API Constraints)
 type BotConfig struct {
-	// Timeouts
-	WebhookTimeout time.Duration // Timeout for webhook bot processing (see config/timeouts.go)
+	// Webhook Configuration
+	WebhookTimeout time.Duration // Timeout for webhook bot processing (default: 60s)
 
-	// Rate Limits (Token Bucket Algorithm - Per-User)
-	UserRateBurst  float64 // Maximum burst tokens per user (default: 15)
-	UserRateRefill float64 // Tokens refilled per second (default: 0.1 = 1 per 10s)
+	// Rate Limits - Per-User (Token Bucket Algorithm)
+	UserRateBurst  float64 // Burst capacity (default: 15)
+	UserRateRefill float64 // Refill rate per second (default: 0.1 = 1 per 10s)
 
-	// LLM Rate Limits (Multi-Layer: Hourly + Daily - Per-User)
-	LLMRateBurst  float64 // Maximum burst tokens per user for LLM (default: 60)
-	LLMRateRefill float64 // LLM tokens refilled per hour per user (default: 30)
-	LLMRateDaily  int     // Maximum LLM requests per day per user (default: 180, 0 = disabled)
+	// Rate Limits - Per-User LLM (Multi-Layer: Hourly + Daily)
+	LLMRateBurst  float64 // Burst capacity for LLM (default: 60)
+	LLMRateRefill float64 // Refill rate per hour (default: 30)
+	LLMRateDaily  int     // Daily limit (default: 180, 0 = disabled)
 
-	GlobalRateRPS float64 // Global rate limit in requests per second (default: 100)
+	// Rate Limits - Global
+	GlobalRateRPS float64 // Global rate limit in RPS (default: 100)
 
-	// LINE API Constraints
-	MaxMessagesPerReply int // Maximum messages per reply (LINE API limit: 5)
-	MaxEventsPerWebhook int // Maximum events per webhook (default: 100)
-	MinReplyTokenLength int // Minimum reply token length (default: 10)
-	MaxMessageLength    int // Maximum message length (LINE API limit: 20000)
-	MaxPostbackDataSize int // Maximum postback data size (LINE API limit: 300)
+	// LINE API Constraints (hard-coded, not configurable)
+	MaxMessagesPerReply int // LINE API limit: 5
+	MaxEventsPerWebhook int // Default: 100
+	MinReplyTokenLength int // Default: 10
+	MaxMessageLength    int // LINE API limit: 20000
+	MaxPostbackDataSize int // LINE API limit: 300
 
-	// Business Limits
-	MaxCoursesPerSearch int // Maximum courses per search (default: 40)
-
-	MaxStudentsPerSearch int // Maximum students per search (default: 400)
-	MaxContactsPerSearch int // Maximum contacts per search (default: 100)
-	ValidYearStart       int // Valid year range start (default: 95)
-	ValidYearEnd         int // Valid year range end (default: 112)
+	// Business Limits (hard-coded, not configurable)
+	MaxCoursesPerSearch  int // Default: 40
+	MaxStudentsPerSearch int // Default: 400
+	MaxContactsPerSearch int // Default: 100
+	ValidYearStart       int // Default: 95
+	ValidYearEnd         int // Default: 112
 }
 
 // Load reads configuration from environment variables
@@ -100,30 +104,25 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		// LINE Bot Configuration
+		// LINE Bot Configuration (Required)
 		LineChannelToken:  getEnv("LINE_CHANNEL_ACCESS_TOKEN", ""),
 		LineChannelSecret: getEnv("LINE_CHANNEL_SECRET", ""),
 
-		// LLM Configuration
+		// LLM API Keys
 		GeminiAPIKey:   getEnv("GEMINI_API_KEY", ""),
 		GroqAPIKey:     getEnv("GROQ_API_KEY", ""),
 		CerebrasAPIKey: getEnv("CEREBRAS_API_KEY", ""),
 
+		// LLM Provider Configuration
+		LLMProviders: getProvidersEnv("LLM_PROVIDERS", []string{"gemini", "groq", "cerebras"}),
+
 		// LLM Model Configuration (empty = use defaults from genai package)
-		// Comma-separated list: first is primary, rest are fallbacks
 		GeminiIntentModels:     getModelsEnv("GEMINI_INTENT_MODELS"),
 		GeminiExpanderModels:   getModelsEnv("GEMINI_EXPANDER_MODELS"),
 		GroqIntentModels:       getModelsEnv("GROQ_INTENT_MODELS"),
 		GroqExpanderModels:     getModelsEnv("GROQ_EXPANDER_MODELS"),
 		CerebrasIntentModels:   getModelsEnv("CEREBRAS_INTENT_MODELS"),
 		CerebrasExpanderModels: getModelsEnv("CEREBRAS_EXPANDER_MODELS"),
-
-		// LLM Provider Configuration
-		LLMProviders: getProvidersEnv("LLM_PROVIDERS", []string{"gemini", "groq", "cerebras"}),
-
-		// Metrics Authentication
-		MetricsUsername: getEnv("METRICS_USERNAME", "prometheus"),
-		MetricsPassword: getEnv("METRICS_PASSWORD", ""),
 
 		// Server Configuration
 		Port:            getEnv("PORT", "10000"),
@@ -132,13 +131,11 @@ func Load() (*Config, error) {
 
 		// Data Configuration
 		DataDir:  getEnv("DATA_DIR", getDefaultDataDir()),
-		CacheTTL: getDurationEnv("CACHE_TTL", 168*time.Hour), // TTL: 7 days
+		CacheTTL: getDurationEnv("CACHE_TTL", 168*time.Hour), // 7 days
 
 		// Scraper Configuration
 		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", ScraperRequest),
-		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 10), // Max 10 retries with exponential backoff (1s initial)
-		// IP first for faster scraping (avoids DNS lookup)
-		// URLs generated for users are hard-coded to domain in scrapers
+		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 10),
 		ScraperBaseURLs: map[string][]string{
 			"lms": {
 				"http://120.126.197.52",
@@ -152,27 +149,40 @@ func Load() (*Config, error) {
 			},
 		},
 
-		// Bot Configuration
+		// Bot Configuration (Webhook + Rate Limits + LINE API Constraints)
 		Bot: BotConfig{
-			WebhookTimeout:      getDurationEnv("WEBHOOK_TIMEOUT", WebhookProcessing),
-			UserRateBurst:       getFloatEnv("USER_RATE_BURST", 15.0),
-			UserRateRefill:      getFloatEnv("USER_RATE_REFILL", 0.1), // 1 per 10s
-			LLMRateBurst:        getFloatEnv("LLM_RATE_BURST", 60.0),
-			LLMRateRefill:       getFloatEnv("LLM_RATE_REFILL", 30.0),
-			LLMRateDaily:        getIntEnv("LLM_RATE_DAILY", 180),
-			GlobalRateRPS:       getFloatEnv("GLOBAL_RATE_RPS", 100.0),
+			// Webhook
+			WebhookTimeout: getDurationEnv("WEBHOOK_TIMEOUT", WebhookProcessing),
+			// Rate Limits - Per-User
+			UserRateBurst:  getFloatEnv("USER_RATE_BURST", 15.0),
+			UserRateRefill: getFloatEnv("USER_RATE_REFILL", 0.1),
+			// Rate Limits - Per-User LLM
+			LLMRateBurst:  getFloatEnv("LLM_RATE_BURST", 60.0),
+			LLMRateRefill: getFloatEnv("LLM_RATE_REFILL", 30.0),
+			LLMRateDaily:  getIntEnv("LLM_RATE_DAILY", 180),
+			// Rate Limits - Global
+			GlobalRateRPS: getFloatEnv("GLOBAL_RATE_RPS", 100.0),
+			// LINE API Constraints (hard-coded)
 			MaxMessagesPerReply: LINEMaxMessagesPerReply,
 			MaxEventsPerWebhook: 100,
 			MinReplyTokenLength: 10,
 			MaxMessageLength:    LINEMaxTextMessageLength,
 			MaxPostbackDataSize: LINEMaxPostbackDataLength,
-			MaxCoursesPerSearch: 40,
-
+			// Business Limits (hard-coded)
+			MaxCoursesPerSearch:  40,
 			MaxStudentsPerSearch: 400,
 			MaxContactsPerSearch: 100,
 			ValidYearStart:       95,
 			ValidYearEnd:         112,
 		},
+
+		// Startup Configuration
+		WaitForWarmup:     getBoolEnv("WAIT_FOR_WARMUP", false),
+		WarmupGracePeriod: getDurationEnv("WARMUP_GRACE_PERIOD", 10*time.Minute),
+
+		// Metrics Authentication
+		MetricsUsername: getEnv("METRICS_USERNAME", "prometheus"),
+		MetricsPassword: getEnv("METRICS_PASSWORD", ""),
 	}
 
 	// Validate configuration
@@ -210,6 +220,9 @@ func (c *Config) Validate() error {
 	}
 	if c.ScraperMaxRetries < 0 {
 		errs = append(errs, fmt.Errorf("SCRAPER_MAX_RETRIES cannot be negative, got %d", c.ScraperMaxRetries))
+	}
+	if c.WaitForWarmup && c.WarmupGracePeriod <= 0 {
+		errs = append(errs, fmt.Errorf("WARMUP_GRACE_PERIOD must be positive when WAIT_FOR_WARMUP is enabled, got %v", c.WarmupGracePeriod))
 	}
 
 	if len(errs) > 0 {
@@ -254,6 +267,26 @@ func getFloatEnv(key string, defaultValue float64) float64 {
 		}
 	}
 	return defaultValue
+}
+
+// getBoolEnv retrieves boolean environment variable with fallback to default value.
+// Accepts "true", "1", "yes" (case-insensitive) as true values.
+// Accepts "false", "0", "no" (case-insensitive) as false values.
+// Returns defaultValue for empty or unrecognized values.
+func getBoolEnv(key string, defaultValue bool) bool {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	lower := strings.ToLower(value)
+	switch lower {
+	case "true", "1", "yes":
+		return true
+	case "false", "0", "no":
+		return false
+	default:
+		return defaultValue
+	}
 }
 
 // getModelsEnv parses comma-separated model list from environment variable.

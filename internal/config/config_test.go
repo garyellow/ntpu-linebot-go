@@ -128,6 +128,39 @@ func TestValidate(t *testing.T) {
 			wantErr:     true,
 			errContains: "SCRAPER_MAX_RETRIES",
 		},
+		{
+			name: "WaitForWarmup with zero grace period",
+			cfg: &Config{
+				LineChannelToken:  "token",
+				LineChannelSecret: "secret",
+				Port:              "10000",
+				DataDir:           "/data",
+				CacheTTL:          168 * time.Hour,
+				ScraperTimeout:    60 * time.Second,
+				ScraperMaxRetries: 3,
+				WaitForWarmup:     true,
+				WarmupGracePeriod: 0,
+				Bot:               newTestBotConfig(),
+			},
+			wantErr:     true,
+			errContains: "WARMUP_GRACE_PERIOD",
+		},
+		{
+			name: "WaitForWarmup with valid grace period",
+			cfg: &Config{
+				LineChannelToken:  "token",
+				LineChannelSecret: "secret",
+				Port:              "10000",
+				DataDir:           "/data",
+				CacheTTL:          168 * time.Hour,
+				ScraperTimeout:    60 * time.Second,
+				ScraperMaxRetries: 3,
+				WaitForWarmup:     true,
+				WarmupGracePeriod: 10 * time.Minute,
+				Bot:               newTestBotConfig(),
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -157,6 +190,116 @@ func contains(s, substr string) bool {
 			}
 			return false
 		}()))
+}
+
+func TestGetBoolEnv(t *testing.T) {
+	// Cannot use t.Parallel(): t.Setenv panics after t.Parallel().
+	tests := []struct {
+		name         string
+		key          string
+		value        string
+		defaultValue bool
+		want         bool
+	}{
+		{
+			name:         "true lowercase",
+			key:          "TEST_BOOL",
+			value:        "true",
+			defaultValue: false,
+			want:         true,
+		},
+		{
+			name:         "TRUE uppercase",
+			key:          "TEST_BOOL",
+			value:        "TRUE",
+			defaultValue: false,
+			want:         true,
+		},
+		{
+			name:         "True mixed case",
+			key:          "TEST_BOOL",
+			value:        "True",
+			defaultValue: false,
+			want:         true,
+		},
+		{
+			name:         "1 as true",
+			key:          "TEST_BOOL",
+			value:        "1",
+			defaultValue: false,
+			want:         true,
+		},
+		{
+			name:         "yes as true",
+			key:          "TEST_BOOL",
+			value:        "yes",
+			defaultValue: false,
+			want:         true,
+		},
+		{
+			name:         "YES uppercase",
+			key:          "TEST_BOOL",
+			value:        "YES",
+			defaultValue: false,
+			want:         true,
+		},
+		{
+			name:         "false value",
+			key:          "TEST_BOOL",
+			value:        "false",
+			defaultValue: true,
+			want:         false,
+		},
+		{
+			name:         "0 as false",
+			key:          "TEST_BOOL",
+			value:        "0",
+			defaultValue: true,
+			want:         false,
+		},
+		{
+			name:         "no as false",
+			key:          "TEST_BOOL",
+			value:        "no",
+			defaultValue: true,
+			want:         false,
+		},
+		{
+			name:         "empty value returns default true",
+			key:          "TEST_BOOL",
+			value:        "",
+			defaultValue: true,
+			want:         true,
+		},
+		{
+			name:         "empty value returns default false",
+			key:          "TEST_BOOL",
+			value:        "",
+			defaultValue: false,
+			want:         false,
+		},
+		{
+			name:         "invalid value returns default",
+			key:          "TEST_BOOL",
+			value:        "invalid",
+			defaultValue: true,
+			want:         true, // unrecognized values return default
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Cannot use t.Parallel(): t.Setenv panics after t.Parallel().
+			if tt.value != "" {
+				t.Setenv(tt.key, tt.value)
+			}
+
+			got := getBoolEnv(tt.key, tt.defaultValue)
+			if got != tt.want {
+				t.Errorf("getBoolEnv() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
 
 func TestGetDurationEnv(t *testing.T) {
