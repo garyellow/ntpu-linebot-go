@@ -133,7 +133,7 @@ type Handler struct {
   - 課程資訊：課號、教師、時間、地點
   - 重要欄位（教師、時間）使用 `CarouselInfoRowStyleMultiLine()`：`maxLines: 2` + `shrink-to-fit`
 - **Footer**：
-  - 「查看詳細」按鈕（顏色與 header 同步）
+  - 「詳細資訊」按鈕（顏色與 header 同步）
 
 ### 詳情頁（Course Detail）
 - **Colored Header**（藍色）：課程名稱

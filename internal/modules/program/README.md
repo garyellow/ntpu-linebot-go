@@ -126,7 +126,7 @@ CREATE TABLE course_programs (
   - 第一列：課程類型標籤（文字色與 header 一致）
   - 課程資訊：課號、教師、學期、時間
 - **Footer**：
-  - 「查看詳細」按鈕 → 跳轉課程詳情
+  - 「詳細資訊」按鈕 → 跳轉課程詳情
 
 ### 學程列表（Programs for Course）
 - **Bubble List**：包含該課程的學程列表
@@ -162,7 +162,7 @@ Course Detail
 Program List (for this course)
     ↓ (查看課程按鈕)
 Program Courses
-    ↓ (查看詳細按鈕)
+    ↓ (詳細資訊按鈕)
 Course Detail (返回)
 ```
 
