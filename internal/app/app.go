@@ -358,7 +358,7 @@ func (a *Application) getCacheStats(ctx context.Context) map[string]int {
 //  1. Receive shutdown signal (SIGINT/SIGTERM)
 //  2. Cancel context → signal background jobs to stop
 //  3. Wait for background jobs to complete (warmup, cleanup, etc.)
-//  4. Close resources (database, HTTP server, API clients)
+//  4. Close resources in order (HTTP server, webhook handler, API clients, database, rate limiters)
 //
 // This order prevents "sql: database is closed" errors during warmup/cleanup operations.
 // Previous bug: Resources were closed before background jobs finished, causing transaction failures.
@@ -379,8 +379,10 @@ func (a *Application) Run() error {
 
 	// Step 2: Wait for all background goroutines to finish
 	a.logger.Info("Waiting for background jobs to finish...")
+	start := time.Now()
 	a.wg.Wait()
-	a.logger.Info("All background jobs completed")
+	a.logger.WithField("duration_ms", time.Since(start).Milliseconds()).
+		Info("All background jobs completed")
 
 	// Step 3: Perform graceful shutdown (HTTP server, resources)
 	return a.shutdown()
