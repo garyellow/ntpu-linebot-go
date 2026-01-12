@@ -861,7 +861,7 @@ func (h *Handler) formatContactResultsWithSearch(ctx context.Context, contacts [
 				displayText := lineutil.FormatLabel("查詢成員", c.Name, 40)
 				row4Buttons = append(row4Buttons,
 					lineutil.NewFlexButton(
-						lineutil.NewPostbackActionWithDisplayText("👥 查看成員", displayText, fmt.Sprintf("contact:members%s%s", bot.PostbackSplitChar, c.Name)),
+						lineutil.NewPostbackActionWithDisplayText("👥 成員列表", displayText, fmt.Sprintf("contact:members%s%s", bot.PostbackSplitChar, c.Name)),
 					).WithStyle("primary").WithColor(bodyLabel.Color).WithHeight("sm"))
 			}
 

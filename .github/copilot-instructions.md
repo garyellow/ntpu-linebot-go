@@ -190,9 +190,9 @@ lineutil.NewFlexMessage(altText, contents)       // Flex Message
 lineutil.NewQuickReply(items)                    // Quick Reply (max 13)
 
 // Quick Reply Presets (use these for consistency)
-lineutil.QuickReplyMainNav()        // 課程→學號→聯絡→緊急→說明 (welcome, help)
-lineutil.QuickReplyMainNavCompact() // 課程→學號→聯絡→說明 (errors, rate limit)
-lineutil.QuickReplyMainFeatures()   // 課程→學號→聯絡→緊急 (instruction messages)
+lineutil.QuickReplyMainNav()        // 課程→學程→學號→聯絡→緊急→說明→回報 (welcome, help)
+lineutil.QuickReplyMainNavCompact() // 課程→學程→學號→聯絡→說明→回報 (errors, rate limit)
+lineutil.QuickReplyMainFeatures()   // 課程→學程→學號→聯絡→緊急→回報 (instruction messages)
 lineutil.QuickReplyContactNav()     // 聯絡→緊急→說明 (contact module)
 lineutil.QuickReplyStudentNav()     // 學號→學年→系代碼→說明 (id module)
 lineutil.QuickReplyCourseNav(bool)  // 課程→找課(if smart)→說明 (course module)
@@ -227,7 +227,7 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
   - `ColorButtonDanger` `#DC2626` (紅色) - 緊急操作 (緊急電話) - 4.7:1
   - `ColorWarning` `#D97706` (琥珀色) - 警告訊息 (配額達上限、限流提示) - 4.5:1
   - `ColorButtonExternal` `#3B82F6` (明亮藍) - 外部連結 (課程大綱、Dcard、選課大全、網站) - 4.6:1
-  - `ColorButtonInternal` `#7C3AED` (紫色) - 內部指令/Postback (詳細資訊、教師課程、查看成員、查詢學號) - 4.6:1
+  - `ColorButtonInternal` `#7C3AED` (紫色) - 內部指令/Postback (詳細資訊、教師課程、成員列表、查詢學號) - 4.6:1
   - `ColorSuccess` `#059669` (青綠) - 成功狀態 (操作完成提示、確認訊息) - 4.5:1
   - `ColorDanger` `#E02D41` (深紅) - 危險狀態文字 (錯誤訊息、緊急聯絡標記) - 4.5:1
 - **Header 顏色** (Colored Header 背景色 - 所有顏色符合 WCAG AA):
@@ -264,7 +264,7 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
   - Header 使用 `NewColoredHeader()` 創建帶背景色的標題 (藍色/青綠色)
   - Body 第一列使用 `NewBodyLabel()` 顯示類型標籤 (文字顏色與 header 背景色一致)
   - 類型標籤: `🏢 組織單位` (明亮藍色), `👤 個人聯絡` (青色)
-  - **Footer 按鈕**: 「查看成員」按鈕顏色與 header 同步 (`bodyLabel.Color`)，增強視覺協調性
+  - **Footer 按鈕**: 「成員列表」按鈕顏色與 header 同步 (`bodyLabel.Color`)，增強視覺協調性
   - **視覺效果**: Header 背景色 = Body Label 文字色 = Footer 按鈕色，與課程輪播保持一致
 - 詳情頁 (所有模組): Colored Header (名稱) → Body (標籤 + 資訊) → Footer
   - **統一設計**: 所有模組 (Course/Contact/ID/Emergency) 都使用 `NewColoredHeader()` 呈現主要資訊
