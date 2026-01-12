@@ -405,7 +405,7 @@ func (h *Handler) formatProgramCoursesResponse(programName string, requiredCours
 //	│ 👨‍🏫 授課教師：王教授     │
 //	│ ⏰ 上課時間：一1-2       │
 //	├──────────────────────────┤
-//	│     [查看詳細]           │  <- Footer button (external to course)
+//	│     [詳細資訊]           │  <- Footer button (external to course)
 //	└──────────────────────────┘
 func (h *Handler) buildProgramCourseBubble(pc storage.ProgramCourse, isRequired bool) *lineutil.FlexBubble {
 	// Determine colors and labels based on course type
@@ -457,12 +457,12 @@ func (h *Handler) buildProgramCourseBubble(pc storage.ProgramCourse, isRequired 
 	}
 
 	// Note: Location info is omitted for program course bubbles to keep display compact
-	// Users can view full details by clicking "查看詳細"
+	// Users can view full details by clicking "詳細資訊"
 
 	// Footer: View course detail button (display course title, not UID)
 	viewDetailBtn := lineutil.NewFlexButton(
 		lineutil.NewPostbackActionWithDisplayText(
-			"📄 查看詳細",
+			"📄 詳細資訊",
 			lineutil.FormatLabel("查詢課程", pc.Course.Title, 40),
 			"course:"+pc.Course.UID,
 		),

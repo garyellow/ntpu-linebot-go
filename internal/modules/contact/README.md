@@ -102,7 +102,7 @@ type Contact struct {
   - 第一列：`NewBodyLabel()` 類型標籤（文字色與 header 一致）
   - 聯絡資訊：職稱、單位、電話/分機、Email
 - **Footer**：
-  - 組織：「查看成員」按鈕（Postback）
+  - 組織：「成員列表」按鈕（Postback）
   - 個人：「撥打電話」按鈕（URI action）
 
 ### 聯絡人詳情（Contact Detail）
@@ -179,7 +179,7 @@ emergencyKeywords = []string{
 
 ## Postback 處理
 
-### 查看成員（View Members）
+### 成員列表（View Members）
 - **Postback**：`contact:members$[組織 UID]`
 - **處理**：
   ```go
