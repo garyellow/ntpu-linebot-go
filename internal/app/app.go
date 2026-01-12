@@ -61,10 +61,8 @@ type Application struct {
 func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	log := logger.New(cfg.LogLevel)
 
-	// Set the custom logger as the default slog logger.
-	// This allows package-level slog.*Context() calls to automatically extract
-	// context values (userID, chatID, requestID) via the ContextHandler.
-	// Reference: https://betterstack.com/community/guides/logging/golang-contextual-logging/
+	// Set as default logger to enable context value extraction (userID, chatID, requestID)
+	// via ContextHandler in package-level slog.*Context() calls.
 	slog.SetDefault(log.Logger)
 
 	log.Info("Initializing application...")
@@ -225,12 +223,10 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 func buildLLMConfig(cfg *config.Config) genai.LLMConfig {
 	llmCfg := genai.DefaultLLMConfig()
 
-	// Set API keys
 	llmCfg.Gemini.APIKey = cfg.GeminiAPIKey
 	llmCfg.Groq.APIKey = cfg.GroqAPIKey
 	llmCfg.Cerebras.APIKey = cfg.CerebrasAPIKey
 
-	// Override model chains if provided in config (supports comma-separated lists)
 	if len(cfg.GeminiIntentModels) > 0 {
 		llmCfg.Gemini.IntentModels = cfg.GeminiIntentModels
 	}
@@ -249,8 +245,6 @@ func buildLLMConfig(cfg *config.Config) genai.LLMConfig {
 	if len(cfg.CerebrasExpanderModels) > 0 {
 		llmCfg.Cerebras.ExpanderModels = cfg.CerebrasExpanderModels
 	}
-
-	// Set provider order from config
 	if len(cfg.LLMProviders) > 0 {
 		providers := make([]genai.Provider, 0, len(cfg.LLMProviders))
 		for _, p := range cfg.LLMProviders {
@@ -312,7 +306,6 @@ func (a *Application) readinessCheck(c *gin.Context) {
 		return
 	}
 
-	// Check database connectivity
 	if err := a.db.Ping(ctx); err != nil {
 		a.logger.WithError(err).Warn("Readiness check failed: database unavailable")
 		c.JSON(http.StatusServiceUnavailable, gin.H{
@@ -322,7 +315,6 @@ func (a *Application) readinessCheck(c *gin.Context) {
 		return
 	}
 
-	// Get cache statistics
 	cacheStats := a.getCacheStats(ctx)
 
 	c.JSON(http.StatusOK, gin.H{
@@ -336,7 +328,6 @@ func (a *Application) readinessCheck(c *gin.Context) {
 func (a *Application) getCacheStats(ctx context.Context) map[string]int {
 	stats := make(map[string]int)
 
-	// Query each cache table count, log errors for observability
 	if count, err := a.db.CountStudents(ctx); err == nil {
 		stats["students"] = count
 	} else {
@@ -362,28 +353,42 @@ func (a *Application) getCacheStats(ctx context.Context) map[string]int {
 }
 
 // Run starts the HTTP server and background jobs.
+//
+// Graceful shutdown sequence (critical for data integrity):
+//  1. Receive shutdown signal (SIGINT/SIGTERM)
+//  2. Cancel context → signal background jobs to stop
+//  3. Wait for background jobs to complete (warmup, cleanup, etc.)
+//  4. Close resources in order (HTTP server, webhook handler, API clients, database, rate limiters)
+//
+// This order prevents "sql: database is closed" errors during warmup/cleanup operations.
+// Previous bug: Resources were closed before background jobs finished, causing transaction failures.
 func (a *Application) Run() error {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() // Ensure context is always canceled
 
 	a.startBackgroundJobs(ctx)
 	a.startHTTPServer()
 
 	// Wait for shutdown signal
-	err := a.waitForShutdown()
+	sig := a.waitForShutdownSignal()
 
-	// Cancel context to stop all background jobs
+	a.logger.WithField("signal", sig.String()).Info("Received shutdown signal")
+
+	// Step 1: Cancel context to signal all background jobs to stop
 	cancel()
 
-	// Wait for all background goroutines to finish
+	// Step 2: Wait for all background goroutines to finish
 	a.logger.Info("Waiting for background jobs to finish...")
+	start := time.Now()
 	a.wg.Wait()
-	a.logger.Info("All background jobs completed")
+	a.logger.WithField("duration_ms", time.Since(start).Milliseconds()).
+		Info("All background jobs completed")
 
-	return err
+	// Step 3: Perform graceful shutdown (HTTP server, resources)
+	return a.shutdown()
 }
 
-// startBackgroundJobs starts all background goroutines.
-// Each goroutine is tracked via WaitGroup for graceful shutdown.
+// startBackgroundJobs starts all background goroutines tracked by WaitGroup.
 func (a *Application) startBackgroundJobs(ctx context.Context) {
 	a.wg.Go(func() {
 		a.cacheCleanup(ctx)
@@ -409,22 +414,19 @@ func (a *Application) startHTTPServer() {
 	}()
 }
 
-// waitForShutdown blocks until shutdown signal is received.
-func (a *Application) waitForShutdown() error {
+// waitForShutdownSignal blocks until SIGINT/SIGTERM is received.
+func (a *Application) waitForShutdownSignal() os.Signal {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	sig := <-quit
-
-	a.logger.WithField("signal", sig.String()).Info("Received shutdown signal")
-	return a.shutdown()
+	return <-quit
 }
 
-// shutdown performs graceful shutdown in the following order:
+// shutdown performs graceful shutdown of HTTP server and resources.
+// This method should be called AFTER background jobs have been stopped and completed.
+// Shutdown order:
 // 1. Stop accepting new HTTP requests
 // 2. Wait for in-flight HTTP requests to complete
-// 3. Signal background jobs to stop (via context cancellation in Run())
-// 4. Wait for background jobs to finish (via WaitGroup in Run())
-// 5. Close resources (DB, API clients, rate limiters)
+// 3. Close resources (DB, API clients, rate limiters)
 func (a *Application) shutdown() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), a.cfg.ShutdownTimeout)
 	defer cancel()
@@ -468,8 +470,7 @@ func (a *Application) shutdown() error {
 	return nil
 }
 
-// cacheCleanup runs daily cache cleanup at 4:00 AM Taiwan time.
-// Exits cleanly when context is canceled during shutdown.
+// cacheCleanup runs daily at 4:00 AM Taiwan time, exits on context cancellation.
 func (a *Application) cacheCleanup(ctx context.Context) {
 	a.logger.Debug("Cache cleanup job started")
 	defer a.logger.Debug("Cache cleanup job stopped")
@@ -510,9 +511,6 @@ func (a *Application) runCacheCleanup(ctx context.Context) {
 
 	var totalDeleted int64
 
-	// Note: Students and stickers don't expire - they are only loaded once on startup,
-	// so no cleanup needed for them
-
 	if deleted, err := a.db.DeleteExpiredContacts(ctx, a.cfg.CacheTTL); err != nil {
 		a.logger.WithError(err).Error("Failed to cleanup expired contacts")
 	} else {
@@ -543,7 +541,6 @@ func (a *Application) runCacheCleanup(ctx context.Context) {
 		totalDeleted += deleted
 	}
 
-	// VACUUM to reclaim space
 	if _, err := a.db.Writer().Exec("VACUUM"); err != nil {
 		a.logger.WithError(err).Warn("Failed to VACUUM database")
 	}
@@ -558,7 +555,7 @@ func (a *Application) runCacheCleanup(ctx context.Context) {
 	}
 }
 
-// refreshStickers loads stickers once on startup (no periodic refresh).
+// refreshStickers loads stickers once on startup.
 func (a *Application) refreshStickers(ctx context.Context) {
 	a.logger.Debug("Sticker refresh job started")
 	defer a.logger.Debug("Sticker refresh job stopped")
@@ -644,8 +641,6 @@ func (a *Application) performProactiveWarmup(ctx context.Context, warmID bool) {
 
 	stats, err := warmup.Run(warmupCtx, a.db, a.scraperClient, a.logger, opts)
 
-	// Mark service as ready after initial warmup (regardless of success/failure)
-	// This is only done for the first warmup (startup), not daily refreshes
 	if warmID {
 		a.readinessState.MarkReady()
 		a.logger.Info("Service marked as ready after initial warmup")
@@ -672,7 +667,7 @@ func (a *Application) performProactiveWarmup(ctx context.Context, warmID bool) {
 	}
 }
 
-// updateCacheSizeMetrics periodically updates cache size metrics.
+// updateCacheSizeMetrics periodically records cache size to Prometheus.
 func (a *Application) updateCacheSizeMetrics(ctx context.Context) {
 	a.logger.Debug("Cache metrics job started")
 	defer a.logger.Debug("Cache metrics job stopped")
@@ -715,17 +710,14 @@ func (a *Application) recordCacheSizeMetrics(ctx context.Context) {
 	}
 }
 
-// readinessMiddleware returns 503 Service Unavailable during initial warmup.
-// This ensures webhook requests are rejected until the service is fully ready.
-// LINE Platform will automatically retry failed webhooks, so this is safe.
-// Only active when WaitForWarmup is enabled in config.
+// readinessMiddleware rejects webhook requests with 503 until initial warmup completes.
+// LINE Platform will automatically retry, ensuring eventual delivery.
 func (a *Application) readinessMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if a.cfg.WaitForWarmup && !a.readinessState.IsReady() {
 			status := a.readinessState.Status()
 			a.logger.WithField("elapsed_seconds", status.ElapsedSeconds).
 				Debug("Webhook rejected: warmup in progress")
-			// Set Retry-After header to hint LINE when to retry
 			c.Header("Retry-After", "60")
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"error":       "service warming up",
@@ -751,13 +743,8 @@ func securityHeadersMiddleware() gin.HandlerFunc {
 	}
 }
 
-// loggingMiddleware logs HTTP requests with appropriate log levels.
-// Follows industry for HTTP status code logging:
-// - 5xx: Error (server issues requiring immediate attention)
-// - 4xx: Warn (client errors, except 404 which is common noise)
-// - 404: Debug (common probes: robots.txt, favicon.ico, security.txt)
-// - 3xx: Debug (redirects are normal behavior)
-// - 2xx: Debug (successful requests)
+// loggingMiddleware logs HTTP requests with status-based log levels:
+// 5xx=Error, 4xx=Warn, 404=Debug, 3xx/2xx=Debug.
 func loggingMiddleware(log *logger.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
@@ -775,18 +762,13 @@ func loggingMiddleware(log *logger.Logger) gin.HandlerFunc {
 			WithField("duration_ms", duration.Milliseconds()).
 			WithField("ip", c.ClientIP())
 
-		// Log level selection based on status code
 		if status >= 500 {
 			entry.Error("Server error")
 		} else if status >= 400 && status != 404 {
-			// 400, 401, 403, etc. - potential security issues or misconfigurations
 			entry.Warn("Client error")
 		} else if status == 404 {
-			// 404s are common from health checkers, security scanners, and bots
-			// Use Prometheus metrics for monitoring 404 patterns instead
 			entry.Debug("Not found")
 		} else {
-			// 2xx success and 3xx redirects
 			entry.Debug("Request")
 		}
 	}
