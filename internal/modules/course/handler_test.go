@@ -456,7 +456,7 @@ func TestHandlePostback_WithPrefix(t *testing.T) {
 	// The UID extraction should work, so we expect either cache miss or success
 	// If UID extraction failed, it would return "invalid format" message
 	if len(messages) > 0 {
-		if msg, ok := messages[0].(*messaging_api.TextMessage); ok {
+		if msg, ok := messages[0].(*messaging_api.TextMessageV2); ok {
 			if msg.Text != "" && !containsString(msg.Text, "格式錯誤") && !containsString(msg.Text, "invalid format") {
 				t.Logf("UID extraction successful, response: %s", truncateString(msg.Text, 50))
 			} else if containsString(msg.Text, "格式錯誤") || containsString(msg.Text, "invalid format") {
@@ -465,7 +465,7 @@ func TestHandlePostback_WithPrefix(t *testing.T) {
 		}
 	}
 	if len(messages) > 0 {
-		if textMsg, ok := messages[0].(*messaging_api.TextMessage); ok {
+		if textMsg, ok := messages[0].(*messaging_api.TextMessageV2); ok {
 			if textMsg.Text != "" && !strings.Contains(textMsg.Text, "找不到") && !strings.Contains(textMsg.Text, "查無") {
 				// If not a "not found" message, something went wrong with UID extraction
 				t.Logf("Extracted UID correctly, response: %s", textMsg.Text)
@@ -1056,7 +1056,7 @@ func TestHistoricalPattern_WesternYearConversion(t *testing.T) {
 			if tt.expectROC < 90 {
 				// Check that message contains error about year being too early
 				msg := msgs[0]
-				if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+				if textMsg, ok := msg.(*messaging_api.TextMessageV2); ok {
 					if !strings.Contains(textMsg.Text, "年份過早") && !strings.Contains(textMsg.Text, "課程系統") {
 						t.Errorf("Expected error message for year %d, got: %s", tt.expectROC, textMsg.Text)
 					}
@@ -1311,7 +1311,7 @@ func TestHandleTeacherCourseSearch(t *testing.T) {
 		t.Error("Expected error message for teacher course search with no results, got none")
 	}
 	// Verify it's the "no results" message
-	if textMsg, ok := msgs[0].(*messaging_api.TextMessage); ok {
+	if textMsg, ok := msgs[0].(*messaging_api.TextMessageV2); ok {
 		if !strings.Contains(textMsg.Text, "查無") {
 			t.Errorf("Expected 'no results' message, got: %s", textMsg.Text)
 		}

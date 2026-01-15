@@ -1192,7 +1192,7 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 		}
 		minCachedAt := lineutil.MinCachedAt(cachedAts...)
 		if minCachedAt > 0 {
-			if lastMsg, ok := messages[len(messages)-1].(*messaging_api.TextMessage); ok {
+			if lastMsg, ok := messages[len(messages)-1].(*messaging_api.TextMessageV2); ok {
 				lastMsg.Text += lineutil.FormatCacheTimeFooter(minCachedAt)
 			}
 		}
@@ -1540,7 +1540,7 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 	if err != nil {
 		log.WithError(err).Error("Failed to search students by year and department")
 		msg := lineutil.ErrorMessageWithDetailAndSender("查詢學生名單時發生問題", sender)
-		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+		if textMsg, ok := msg.(*messaging_api.TextMessageV2); ok {
 			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 				lineutil.QuickReplyYearAction(),
 				lineutil.QuickReplyDeptCodeAction(),
@@ -1561,7 +1561,7 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 			log.WithError(err).Errorf("Failed to scrape students for year %d dept %s", year, deptCode)
 			h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 			msg := lineutil.ErrorMessageWithDetailAndSender("查詢學生名單時發生問題，可能是學校網站暫時無法存取", sender)
-			if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+			if textMsg, ok := msg.(*messaging_api.TextMessageV2); ok {
 				textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 					lineutil.QuickReplyRetryAction(fmt.Sprintf("學年 %d", year)),
 					lineutil.QuickReplyYearAction(),

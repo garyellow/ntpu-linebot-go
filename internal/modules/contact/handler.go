@@ -484,7 +484,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 			log.WithError(err).Errorf("Failed to scrape contacts for: %s", searchTerm)
 			h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 			msg := lineutil.ErrorMessageWithDetailAndSender("無法取得聯絡資料，可能是網路問題或資料來源暫時無法使用", sender)
-			if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+			if textMsg, ok := msg.(*messaging_api.TextMessageV2); ok {
 				textMsg.QuickReply = lineutil.NewQuickReply(append(
 					lineutil.QuickReplyErrorRecovery("聯絡 "+searchTerm),
 					lineutil.QuickReplyEmergencyAction(),
@@ -539,7 +539,7 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 		log.WithError(err).Error("Failed to query organization members from cache")
 		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		msg := lineutil.ErrorMessageWithDetailAndSender("查詢成員時發生問題", sender)
-		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+		if textMsg, ok := msg.(*messaging_api.TextMessageV2); ok {
 			textMsg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyContactNav())
 		}
 		return []messaging_api.MessageInterface{msg}
