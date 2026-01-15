@@ -844,8 +844,7 @@ func SetQuoteToken(msg messaging_api.MessageInterface, quoteToken string) messag
 		return msg
 	}
 
-	switch m := msg.(type) {
-	case *messaging_api.TextMessageV2:
+	if m, ok := msg.(*messaging_api.TextMessageV2); ok {
 		m.QuoteToken = quoteToken
 	}
 

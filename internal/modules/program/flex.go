@@ -316,8 +316,8 @@ func (h *Handler) buildProgramBubble(program storage.Program) *lineutil.FlexBubb
 		// DisplayText: {Name} 有哪些課？ (question style)
 		displayText := program.Name + " 有哪些課？"
 		if len([]rune(displayText)) > 40 {
-			// Static chars: " 有哪些課？" (7) = 7
-			displayText = lineutil.TruncateRunes(program.Name, 33) + " 有哪些課？"
+			// Static chars: " 有哪些課？" = 6 runes, 40 - 6 = 34
+			displayText = lineutil.TruncateRunes(program.Name, 34) + " 有哪些課？"
 		}
 		viewCoursesBtn := lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText(

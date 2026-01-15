@@ -801,9 +801,7 @@ func (h *Handler) formatContactResultsWithSearch(ctx context.Context, contacts [
 					// DisplayText: {Name} 有哪些課？ (question style)
 					displayText := c.Name + " 有哪些課？"
 					if len([]rune(displayText)) > 40 {
-						// Truncate name if too long to fit in 40 chars total
-						// Static chars: " 有哪些課？" (6) = 6
-						// Max name length: 40 - 6 = 34
+						// Static chars: " 有哪些課？" = 6 runes, 40 - 6 = 34
 						safeName := lineutil.TruncateRunes(c.Name, 34)
 						displayText = safeName + " 有哪些課？"
 					}
@@ -861,7 +859,7 @@ func (h *Handler) formatContactResultsWithSearch(ctx context.Context, contacts [
 				// DisplayText: {Name} 有誰？ (question style)
 				displayText := c.Name + " 有誰？"
 				if len([]rune(displayText)) > 40 {
-					// Static chars: " 有誰？" (4) = 4
+					// Static chars: " 有誰？" = 4 runes, 40 - 4 = 36
 					displayText = lineutil.TruncateRunes(c.Name, 36) + " 有誰？"
 				}
 				row4Buttons = append(row4Buttons,
