@@ -337,9 +337,9 @@ func TestHandleDepartmentCodesByDegree(t *testing.T) {
 				t.Fatal("Expected response message")
 			}
 			// Verify text message contains expected title
-			textMsg, ok := msgs[0].(*messaging_api.TextMessage)
+			textMsg, ok := msgs[0].(*messaging_api.TextMessageV2)
 			if !ok {
-				t.Fatal("Expected TextMessage")
+				t.Fatal("Expected TextMessageV2")
 			}
 			if !strings.Contains(textMsg.Text, tt.wantTitle) {
 				t.Errorf("Response should contain %q, got: %s", tt.wantTitle, textMsg.Text)

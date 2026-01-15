@@ -484,7 +484,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 			log.WithError(err).Errorf("Failed to scrape contacts for: %s", searchTerm)
 			h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 			msg := lineutil.ErrorMessageWithDetailAndSender("無法取得聯絡資料，可能是網路問題或資料來源暫時無法使用", sender)
-			if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+			if textMsg, ok := msg.(*messaging_api.TextMessageV2); ok {
 				textMsg.QuickReply = lineutil.NewQuickReply(append(
 					lineutil.QuickReplyErrorRecovery("聯絡 "+searchTerm),
 					lineutil.QuickReplyEmergencyAction(),
@@ -539,7 +539,7 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 		log.WithError(err).Error("Failed to query organization members from cache")
 		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		msg := lineutil.ErrorMessageWithDetailAndSender("查詢成員時發生問題", sender)
-		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+		if textMsg, ok := msg.(*messaging_api.TextMessageV2); ok {
 			textMsg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyContactNav())
 		}
 		return []messaging_api.MessageInterface{msg}
@@ -798,14 +798,12 @@ func (h *Handler) formatContactResultsWithSearch(ctx context.Context, contacts [
 				matchingCourses, err := h.db.SearchCoursesByTeacher(ctx, c.Name)
 				if err == nil && len(matchingCourses) > 0 {
 					// Add 授課課程 button
-					// DisplayText: 搜尋 {Name} 近期課程
-					displayText := "搜尋 " + c.Name + " 近期課程"
+					// DisplayText: {Name} 有哪些課？ (question style)
+					displayText := c.Name + " 有哪些課？"
 					if len([]rune(displayText)) > 40 {
-						// Truncate name if too long to fit in 40 chars total
-						// Static chars: "搜尋 " (3) + " 近期課程" (5) = 8
-						// Max name length: 40 - 8 = 32
-						safeName := lineutil.TruncateRunes(c.Name, 32)
-						displayText = "搜尋 " + safeName + " 近期課程"
+						// Static chars: " 有哪些課？" = 6 runes, 40 - 6 = 34
+						safeName := lineutil.TruncateRunes(c.Name, 34)
+						displayText = safeName + " 有哪些課？"
 					}
 					row0Buttons = append(row0Buttons,
 						lineutil.NewFlexButton(
@@ -858,7 +856,12 @@ func (h *Handler) formatContactResultsWithSearch(ctx context.Context, contacts [
 			// Button color syncs with header for visual harmony
 			var row4Buttons []*lineutil.FlexButton
 			if c.Type == "organization" {
-				displayText := lineutil.FormatLabel("查詢成員", c.Name, 40)
+				// DisplayText: {Name} 有誰？ (question style)
+				displayText := c.Name + " 有誰？"
+				if len([]rune(displayText)) > 40 {
+					// Static chars: " 有誰？" = 4 runes, 40 - 4 = 36
+					displayText = lineutil.TruncateRunes(c.Name, 36) + " 有誰？"
+				}
 				row4Buttons = append(row4Buttons,
 					lineutil.NewFlexButton(
 						lineutil.NewPostbackActionWithDisplayText("👥 成員列表", displayText, fmt.Sprintf("contact:members%s%s", bot.PostbackSplitChar, c.Name)),

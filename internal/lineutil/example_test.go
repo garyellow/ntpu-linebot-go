@@ -8,12 +8,12 @@ import (
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
-// ExampleNewTextMessageWithConsistentSender demonstrates creating a text message with sender information.
+// ExampleNewTextMessageWithConsistentSender demonstrates creating a text message (v2) with sender information.
 func ExampleNewTextMessageWithConsistentSender() {
 	sender := &messaging_api.Sender{Name: "小幫手", IconUrl: "https://example.com/avatar.png"}
 	msg := lineutil.NewTextMessageWithConsistentSender("Hello, World!", sender)
 	fmt.Printf("%T", msg)
-	// Output: *messaging_api.TextMessage
+	// Output: *messaging_api.TextMessageV2
 }
 
 // ExampleNewCarouselTemplate demonstrates creating a carousel with multiple columns.
@@ -107,5 +107,5 @@ func ExampleErrorMessageWithSender() {
 	sender := &messaging_api.Sender{Name: "系統小幫手", IconUrl: "https://example.com/avatar.png"}
 	msg := lineutil.ErrorMessageWithSender(err, sender)
 	fmt.Printf("%T", msg)
-	// Output: *messaging_api.TextMessage
+	// Output: *messaging_api.TextMessageV2
 }

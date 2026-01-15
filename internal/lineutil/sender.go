@@ -13,8 +13,8 @@ import (
 // Usage:
 //
 //	sender := lineutil.GetSender("NTPU 小工具", stickerManager)
-//	msg1 := &messaging_api.TextMessage{Text: "訊息1", Sender: sender}
-//	msg2 := &messaging_api.TextMessage{Text: "訊息2", Sender: sender}
+//	msg1 := &messaging_api.TextMessageV2{Text: "訊息1", Sender: sender}
+//	msg2 := &messaging_api.TextMessageV2{Text: "訊息2", Sender: sender}
 func GetSender(name string, stickerManager *sticker.Manager) *messaging_api.Sender {
 	iconURL := stickerManager.GetRandomSticker()
 	return &messaging_api.Sender{
@@ -23,17 +23,12 @@ func GetSender(name string, stickerManager *sticker.Manager) *messaging_api.Send
 	}
 }
 
-// NewTextMessageWithConsistentSender creates a text message using a pre-created sender.
+// NewTextMessageWithConsistentSender creates a text message (v2) using a pre-created sender.
 // This is preferred over NewTextMessageWithSender when multiple messages need the same sender.
-//
-// The text parameter is the message content.
-// LINE API limits: max 5000 characters per text message
-func NewTextMessageWithConsistentSender(text string, sender *messaging_api.Sender) *messaging_api.TextMessage {
-	// Validate and truncate if necessary (LINE API limit: 5000 chars)
-	// TruncateRunes handles rune counting correctly
+// LINE API limits: max 5000 characters per text message.
+func NewTextMessageWithConsistentSender(text string, sender *messaging_api.Sender) *messaging_api.TextMessageV2 {
 	text = TruncateRunes(text, 5000)
-
-	return &messaging_api.TextMessage{
+	return &messaging_api.TextMessageV2{
 		Text:   text,
 		Sender: sender,
 	}
@@ -84,7 +79,7 @@ func ErrorMessageWithDetailAndSender(userMessage string, sender *messaging_api.S
 // If no quickReplies are provided, it falls back to retry/help pattern.
 //
 // This is the preferred error message function as it provides actionable next steps.
-func ErrorMessageWithQuickReply(userMessage string, sender *messaging_api.Sender, retryText string, quickReplies ...QuickReplyItem) *messaging_api.TextMessage {
+func ErrorMessageWithQuickReply(userMessage string, sender *messaging_api.Sender, retryText string, quickReplies ...QuickReplyItem) *messaging_api.TextMessageV2 {
 	msg := NewTextMessageWithConsistentSender(errorDetailPrefix+userMessage+errorDetailSuffix, sender)
 	if len(quickReplies) > 0 {
 		msg.QuickReply = NewQuickReply(quickReplies)
@@ -105,7 +100,7 @@ func ErrorMessageWithQuickReply(userMessage string, sender *messaging_api.Sender
 //   - itemType: What was being searched (e.g., "課程", "聯絡資料", "學生")
 //   - suggestions: Optional suggestion lines (will be formatted as bullet points)
 //   - sender: The sender to use for the message
-func NotFoundMessage(searchTerm, itemType string, suggestions []string, sender *messaging_api.Sender) *messaging_api.TextMessage {
+func NotFoundMessage(searchTerm, itemType string, suggestions []string, sender *messaging_api.Sender) *messaging_api.TextMessageV2 {
 	var builder strings.Builder
 	if searchTerm != "" {
 		builder.WriteString("🔍 查無包含「")
@@ -134,7 +129,7 @@ func NotFoundMessage(searchTerm, itemType string, suggestions []string, sender *
 
 // SystemErrorMessage creates a friendly system error message with recovery options.
 // Used when something unexpected goes wrong during processing.
-func SystemErrorMessage(operation string, sender *messaging_api.Sender) *messaging_api.TextMessage {
+func SystemErrorMessage(operation string, sender *messaging_api.Sender) *messaging_api.TextMessageV2 {
 	msg := NewTextMessageWithConsistentSender(
 		"😅 "+operation+"時發生了一點問題\n\n"+
 			"這可能是暫時性的，建議：\n"+
@@ -150,7 +145,7 @@ func SystemErrorMessage(operation string, sender *messaging_api.Sender) *messagi
 
 // NetworkErrorMessage creates an error message for network-related issues.
 // Used when scraping or external API calls fail.
-func NetworkErrorMessage(target string, sender *messaging_api.Sender) *messaging_api.TextMessage {
+func NetworkErrorMessage(target string, sender *messaging_api.Sender) *messaging_api.TextMessageV2 {
 	msg := NewTextMessageWithConsistentSender(
 		"🌐 無法連線到"+target+"\n\n"+
 			"可能原因：\n"+

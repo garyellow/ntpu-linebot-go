@@ -149,9 +149,9 @@ func TestHandleMessage_ListSplit(t *testing.T) {
 
 	// Verify it's a text message and not too long
 	if len(msgs) > 0 {
-		txtMsg, ok := msgs[0].(*messaging_api.TextMessage)
+		txtMsg, ok := msgs[0].(*messaging_api.TextMessageV2)
 		if !ok {
-			t.Fatalf("Message is not a TextMessage, got %T", msgs[0])
+			t.Fatalf("Message is not a TextMessageV2, got %T", msgs[0])
 		}
 		if utf8.RuneCountInString(txtMsg.Text) > 5000 {
 			t.Errorf("Message too long: %d runes (LINE limit is 5000)", utf8.RuneCountInString(txtMsg.Text))

@@ -63,17 +63,14 @@ func NewImageMessage(originalContentURL, previewImageURL string) messaging_api.M
 	}
 }
 
-// NewTextMessage creates a simple text message without sender information.
-// The text parameter is the message content.
-// LINE API limits: max 5000 characters per text message
-func NewTextMessage(text string) *messaging_api.TextMessage {
-	// Validate and truncate if necessary (LINE API limit: 5000 characters, not bytes)
+// NewTextMessage creates a simple text message (v2) without sender information.
+// LINE API limits: max 5000 characters per text message.
+func NewTextMessage(text string) *messaging_api.TextMessageV2 {
 	runes := []rune(text)
 	if len(runes) > MaxTextMessageLength {
-		text = TruncateRunes(text, MaxTextMessageLength-3) // Leave room for "..."
+		text = TruncateRunes(text, MaxTextMessageLength-3)
 	}
-
-	return &messaging_api.TextMessage{
+	return &messaging_api.TextMessageV2{
 		Text: text,
 	}
 }
@@ -288,14 +285,14 @@ func NewFlexMessage(altText string, contents messaging_api.FlexContainerInterfac
 // SetSender sets the Sender field on a message.
 // This is a helper function to add consistent sender information to any message type.
 // Returns the same message for method chaining.
-// Supports: TextMessage, FlexMessage, TemplateMessage, ImageMessage
+// Supports: TextMessageV2, FlexMessage, TemplateMessage, ImageMessage
 func SetSender(msg messaging_api.MessageInterface, sender *messaging_api.Sender) messaging_api.MessageInterface {
 	if sender == nil {
 		return msg
 	}
 
 	switch m := msg.(type) {
-	case *messaging_api.TextMessage:
+	case *messaging_api.TextMessageV2:
 		m.Sender = sender
 	case *messaging_api.FlexMessage:
 		m.Sender = sender
@@ -824,7 +821,7 @@ func AddQuickReplyToMessages(messages []messaging_api.MessageInterface, items ..
 	lastMsg := messages[len(messages)-1]
 	qr := NewQuickReply(items)
 	switch m := lastMsg.(type) {
-	case *messaging_api.TextMessage:
+	case *messaging_api.TextMessageV2:
 		m.QuickReply = qr
 	case *messaging_api.FlexMessage:
 		m.QuickReply = qr
@@ -839,7 +836,7 @@ func AddQuickReplyToMessages(messages []messaging_api.MessageInterface, items ..
 // This enables the bot's reply to visually reference the user's original message.
 // Returns the same message for method chaining.
 //
-// Supported message types: TextMessage only (LINE API limitation).
+// Supported message types: TextMessageV2.
 // FlexMessage and other types do not support QuoteToken.
 // For unsupported message types, this function is a no-op.
 func SetQuoteToken(msg messaging_api.MessageInterface, quoteToken string) messaging_api.MessageInterface {
@@ -847,7 +844,7 @@ func SetQuoteToken(msg messaging_api.MessageInterface, quoteToken string) messag
 		return msg
 	}
 
-	if m, ok := msg.(*messaging_api.TextMessage); ok {
+	if m, ok := msg.(*messaging_api.TextMessageV2); ok {
 		m.QuoteToken = quoteToken
 	}
 
@@ -858,8 +855,8 @@ func SetQuoteToken(msg messaging_api.MessageInterface, quoteToken string) messag
 // Quote reply is only applied when there is exactly one message, as multiple
 // messages with quote reply can look cluttered and reduce readability.
 //
-// Note: Only TextMessage supports QuoteToken. If the message is a FlexMessage
-// or other type, this is a no-op. Consider prepending a TextMessage if quote context
+// Note: Only TextMessageV2 supports QuoteToken. If the message is a FlexMessage
+// or other type, this is a no-op. Consider prepending a TextMessageV2 if quote context
 // is critical for non-text responses.
 //
 // If the slice is empty, has multiple messages, or the quote token is empty, this is a no-op.

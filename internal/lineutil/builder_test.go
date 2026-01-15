@@ -304,9 +304,9 @@ func TestErrorMessage(t *testing.T) {
 	sender := &messaging_api.Sender{Name: "系統小幫手", IconUrl: "https://example.com/avatar.png"}
 	msg := ErrorMessageWithSender(err, sender)
 
-	textMsg, ok := msg.(*messaging_api.TextMessage)
+	textMsg, ok := msg.(*messaging_api.TextMessageV2)
 	if !ok {
-		t.Fatal("Expected *messaging_api.TextMessage")
+		t.Fatal("Expected *messaging_api.TextMessageV2")
 	}
 
 	// Critical: Must NOT expose technical details

@@ -996,8 +996,8 @@ func (h *Handler) handleYearSearchConfirm(yearStr string) []messaging_api.Messag
 
 	// Create college group selection template with clear guidance
 	actions := []messaging_api.ActionInterface{
-		lineutil.NewPostbackActionWithDisplayText("文法商", fmt.Sprintf("搜尋 %s 學年度文法商學院群", yearStr), fmt.Sprintf("id:文法商%s%s", bot.PostbackSplitChar, yearStr)),
-		lineutil.NewPostbackActionWithDisplayText("公社電資", fmt.Sprintf("搜尋 %s 學年度公社電資學院群", yearStr), fmt.Sprintf("id:公社電資%s%s", bot.PostbackSplitChar, yearStr)),
+		lineutil.NewPostbackActionWithDisplayText("文法商", fmt.Sprintf("%s 學年度文法商？", yearStr), fmt.Sprintf("id:文法商%s%s", bot.PostbackSplitChar, yearStr)),
+		lineutil.NewPostbackActionWithDisplayText("公社電資", fmt.Sprintf("%s 學年度公社電資？", yearStr), fmt.Sprintf("id:公社電資%s%s", bot.PostbackSplitChar, yearStr)),
 	}
 
 	msg := lineutil.NewButtonsTemplateWithImage(
@@ -1192,7 +1192,7 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 		}
 		minCachedAt := lineutil.MinCachedAt(cachedAts...)
 		if minCachedAt > 0 {
-			if lastMsg, ok := messages[len(messages)-1].(*messaging_api.TextMessage); ok {
+			if lastMsg, ok := messages[len(messages)-1].(*messaging_api.TextMessageV2); ok {
 				lastMsg.Text += lineutil.FormatCacheTimeFooter(minCachedAt)
 			}
 		}
@@ -1334,16 +1334,16 @@ func (h *Handler) handleCollegeGroupSelection(group, year string) []messaging_ap
 	if group == "文法商" {
 		collegeList = "📖 人文：中文、應外、歷史\n⚖️ 法律：法學、司法、財法\n💼 商學：企管、金融、會計、統計、休運"
 		actions = []messaging_api.ActionInterface{
-			lineutil.NewPostbackActionWithDisplayText("📖 人文學院", fmt.Sprintf("搜尋 %s 學年度人文學院", year), fmt.Sprintf("id:人文學院%s%s", bot.PostbackSplitChar, year)),
-			lineutil.NewPostbackActionWithDisplayText("⚖️ 法律學院", fmt.Sprintf("搜尋 %s 學年度法律學院", year), fmt.Sprintf("id:法律學院%s%s", bot.PostbackSplitChar, year)),
-			lineutil.NewPostbackActionWithDisplayText("💼 商學院", fmt.Sprintf("搜尋 %s 學年度商學院", year), fmt.Sprintf("id:商學院%s%s", bot.PostbackSplitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("📖 人文學院", fmt.Sprintf("%s 學年度人文學院？", year), fmt.Sprintf("id:人文學院%s%s", bot.PostbackSplitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("⚖️ 法律學院", fmt.Sprintf("%s 學年度法律學院？", year), fmt.Sprintf("id:法律學院%s%s", bot.PostbackSplitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("💼 商學院", fmt.Sprintf("%s 學年度商學院？", year), fmt.Sprintf("id:商學院%s%s", bot.PostbackSplitChar, year)),
 		}
 	} else { // 公社電資
 		collegeList = "🏛️ 公共事務：公行、不動、財政\n👥 社科：經濟、社學、社工\n💻 電資：電機、資工、通訊"
 		actions = []messaging_api.ActionInterface{
-			lineutil.NewPostbackActionWithDisplayText("🏛️ 公共事務學院", fmt.Sprintf("搜尋 %s 學年度公共事務學院", year), fmt.Sprintf("id:公共事務學院%s%s", bot.PostbackSplitChar, year)),
-			lineutil.NewPostbackActionWithDisplayText("👥 社會科學學院", fmt.Sprintf("搜尋 %s 學年度社會科學學院", year), fmt.Sprintf("id:社會科學學院%s%s", bot.PostbackSplitChar, year)),
-			lineutil.NewPostbackActionWithDisplayText("💻 電機資訊學院", fmt.Sprintf("搜尋 %s 學年度電機資訊學院", year), fmt.Sprintf("id:電機資訊學院%s%s", bot.PostbackSplitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("🏛️ 公共事務學院", fmt.Sprintf("%s 學年度公共事務學院？", year), fmt.Sprintf("id:公共事務學院%s%s", bot.PostbackSplitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("👥 社會科學學院", fmt.Sprintf("%s 學年度社會科學學院？", year), fmt.Sprintf("id:社會科學學院%s%s", bot.PostbackSplitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("💻 電機資訊學院", fmt.Sprintf("%s 學年度電機資訊學院？", year), fmt.Sprintf("id:電機資訊學院%s%s", bot.PostbackSplitChar, year)),
 		}
 	}
 
@@ -1426,15 +1426,15 @@ func (h *Handler) buildDepartmentSelectionTemplate(year, imageURL string, depart
 			continue
 		}
 
-		displayText := fmt.Sprintf("搜尋%s學年度", year)
+		displayText := fmt.Sprintf("%s學年度", year)
 		if isLaw {
 			displayText += "法律系"
 		}
 		displayText += ntpu.DepartmentNames[deptCode]
 		if isLaw {
-			displayText += "組"
+			displayText += "組？"
 		} else {
-			displayText += "系"
+			displayText += "系？"
 		}
 
 		label := deptName
@@ -1540,7 +1540,7 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 	if err != nil {
 		log.WithError(err).Error("Failed to search students by year and department")
 		msg := lineutil.ErrorMessageWithDetailAndSender("查詢學生名單時發生問題", sender)
-		if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+		if textMsg, ok := msg.(*messaging_api.TextMessageV2); ok {
 			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 				lineutil.QuickReplyYearAction(),
 				lineutil.QuickReplyDeptCodeAction(),
@@ -1561,7 +1561,7 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 			log.WithError(err).Errorf("Failed to scrape students for year %d dept %s", year, deptCode)
 			h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 			msg := lineutil.ErrorMessageWithDetailAndSender("查詢學生名單時發生問題，可能是學校網站暫時無法存取", sender)
-			if textMsg, ok := msg.(*messaging_api.TextMessage); ok {
+			if textMsg, ok := msg.(*messaging_api.TextMessageV2); ok {
 				textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 					lineutil.QuickReplyRetryAction(fmt.Sprintf("學年 %d", year)),
 					lineutil.QuickReplyYearAction(),
