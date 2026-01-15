@@ -798,14 +798,14 @@ func (h *Handler) formatContactResultsWithSearch(ctx context.Context, contacts [
 				matchingCourses, err := h.db.SearchCoursesByTeacher(ctx, c.Name)
 				if err == nil && len(matchingCourses) > 0 {
 					// Add 授課課程 button
-					// DisplayText: 搜尋 {Name} 近期課程
-					displayText := "搜尋 " + c.Name + " 近期課程"
+					// DisplayText: {Name} 有哪些課？ (question style)
+					displayText := c.Name + " 有哪些課？"
 					if len([]rune(displayText)) > 40 {
 						// Truncate name if too long to fit in 40 chars total
-						// Static chars: "搜尋 " (3) + " 近期課程" (5) = 8
-						// Max name length: 40 - 8 = 32
-						safeName := lineutil.TruncateRunes(c.Name, 32)
-						displayText = "搜尋 " + safeName + " 近期課程"
+						// Static chars: " 有哪些課？" (6) = 6
+						// Max name length: 40 - 6 = 34
+						safeName := lineutil.TruncateRunes(c.Name, 34)
+						displayText = safeName + " 有哪些課？"
 					}
 					row0Buttons = append(row0Buttons,
 						lineutil.NewFlexButton(
@@ -858,7 +858,12 @@ func (h *Handler) formatContactResultsWithSearch(ctx context.Context, contacts [
 			// Button color syncs with header for visual harmony
 			var row4Buttons []*lineutil.FlexButton
 			if c.Type == "organization" {
-				displayText := lineutil.FormatLabel("查詢成員", c.Name, 40)
+				// DisplayText: {Name} 有誰？ (question style)
+				displayText := c.Name + " 有誰？"
+				if len([]rune(displayText)) > 40 {
+					// Static chars: " 有誰？" (4) = 4
+					displayText = lineutil.TruncateRunes(c.Name, 36) + " 有誰？"
+				}
 				row4Buttons = append(row4Buttons,
 					lineutil.NewFlexButton(
 						lineutil.NewPostbackActionWithDisplayText("👥 成員列表", displayText, fmt.Sprintf("contact:members%s%s", bot.PostbackSplitChar, c.Name)),

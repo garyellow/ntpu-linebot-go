@@ -1405,9 +1405,12 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 	if len(programs) > 0 {
 		var programDisplayText string
 		if len(programs) == 1 {
-			programDisplayText = lineutil.FormatLabel("查看學程", programs[0].ProgramName, 40)
+			programDisplayText = programs[0].ProgramName + " 是什麼？"
+			if len([]rune(programDisplayText)) > 40 {
+				programDisplayText = lineutil.TruncateRunes(programs[0].ProgramName, 34) + " 是什麼？"
+			}
 		} else {
-			programDisplayText = fmt.Sprintf("查看 %d 個相關學程", len(programs))
+			programDisplayText = "相關學程有哪些？"
 		}
 		allButtons = append(allButtons, lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText(
@@ -1420,7 +1423,10 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 
 	// Button 4: 聯繫教師 (if teacher has matching contacts)
 	if hasMatchingContacts && teacherName != "" {
-		displayText := lineutil.FormatLabel("查詢教師聯繫方式", teacherName, 40)
+		displayText := teacherName + " 的聯繫方式？"
+		if len([]rune(displayText)) > 40 {
+			displayText = lineutil.TruncateRunes(teacherName, 33) + " 的聯繫方式？"
+		}
 		allButtons = append(allButtons, lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText(
 				"📞 聯繫教師",
@@ -1440,10 +1446,10 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 		}
 
 		// Button 6: 教師課程
-		displayText := "搜尋 " + teacherName + " 近期課程"
+		displayText := teacherName + " 還有哪些課？"
 		if len([]rune(displayText)) > 40 {
-			safeName := lineutil.TruncateRunes(teacherName, 32)
-			displayText = "搜尋 " + safeName + " 近期課程"
+			safeName := lineutil.TruncateRunes(teacherName, 33)
+			displayText = safeName + " 還有哪些課？"
 		}
 		allButtons = append(allButtons, lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText(
@@ -1680,9 +1686,12 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 			body.AddInfoRow("⏰", "上課時間", timeStr, lineutil.CarouselInfoRowStyleMultiLine())
 		}
 
-		// Footer with "View Detail" button - displayText shows course title
+		// Footer with "View Detail" button - displayText shows course title as question
 		// Button color syncs with header for visual harmony
-		displayText := lineutil.FormatLabel("查詢課程資訊", course.Title, 40)
+		displayText := course.Title + " 的詳細資訊？"
+		if len([]rune(displayText)) > 40 {
+			displayText = lineutil.TruncateRunes(course.Title, 33) + " 的詳細資訊？"
+		}
 		// Use course: prefix for proper postback routing
 		footer := lineutil.NewFlexBox("vertical",
 			lineutil.NewFlexButton(
@@ -2050,9 +2059,12 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 		body.AddInfoRow("⏰", "上課時間", timeStr, lineutil.CarouselInfoRowStyleMultiLine())
 	}
 
-	// Footer with "View Detail" button
+	// Footer with "View Detail" button - displayText shows course title as question
 	// Button color syncs with header for visual harmony
-	displayText := lineutil.FormatLabel("查詢課程資訊", course.Title, 40)
+	displayText := course.Title + " 的詳細資訊？"
+	if len([]rune(displayText)) > 40 {
+		displayText = lineutil.TruncateRunes(course.Title, 33) + " 的詳細資訊？"
+	}
 	footer := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText("📝 詳細資訊", displayText, "course:"+course.UID),

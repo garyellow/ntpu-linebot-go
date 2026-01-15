@@ -313,10 +313,16 @@ func (h *Handler) buildProgramBubble(program storage.Program) *lineutil.FlexBubb
 	// Row 2: View courses button (internal) - only if courses exist
 	// Stacked vertically: distinct row
 	if totalCourses > 0 {
+		// DisplayText: {Name} 有哪些課？ (question style)
+		displayText := program.Name + " 有哪些課？"
+		if len([]rune(displayText)) > 40 {
+			// Static chars: " 有哪些課？" (7) = 7
+			displayText = lineutil.TruncateRunes(program.Name, 33) + " 有哪些課？"
+		}
 		viewCoursesBtn := lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText(
 				"📚 "+PostbackViewCoursesLabel,
-				lineutil.FormatLabel("查看課程", program.Name, 40),
+				displayText,
 				PostbackPrefix+"courses"+bot.PostbackSplitChar+program.Name,
 			),
 		).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm")
@@ -459,11 +465,16 @@ func (h *Handler) buildProgramCourseBubble(pc storage.ProgramCourse, isRequired 
 	// Note: Location info is omitted for program course bubbles to keep display compact
 	// Users can view full details by clicking "詳細資訊"
 
-	// Footer: View course detail button (display course title, not UID)
+	// Footer: View course detail button - displayText shows course title as question
+	// DisplayText: {Title} 的詳細資訊？ (question style)
+	displayText := pc.Course.Title + " 的詳細資訊？"
+	if len([]rune(displayText)) > 40 {
+		displayText = lineutil.TruncateRunes(pc.Course.Title, 33) + " 的詳細資訊？"
+	}
 	viewDetailBtn := lineutil.NewFlexButton(
 		lineutil.NewPostbackActionWithDisplayText(
 			"📄 詳細資訊",
-			lineutil.FormatLabel("查詢課程", pc.Course.Title, 40),
+			displayText,
 			"course:"+pc.Course.UID,
 		),
 	).WithStyle("primary").WithColor(headerColor).WithHeight("sm")
