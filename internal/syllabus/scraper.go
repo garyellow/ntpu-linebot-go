@@ -78,19 +78,6 @@ func (s *Scraper) ScrapeCourseDetail(ctx context.Context, course *storage.Course
 	}, nil
 }
 
-// ScrapeSyllabus extracts syllabus content from a course's detail URL.
-// Returns structured fields (objectives, outline, schedule) or error if URL is invalid.
-// Empty syllabi are valid - use Fields.IsEmpty to check.
-//
-// Deprecated: Use ScrapeCourseDetail instead to also get program requirements.
-func (s *Scraper) ScrapeSyllabus(ctx context.Context, course *storage.Course) (*Fields, error) {
-	result, err := s.ScrapeCourseDetail(ctx, course)
-	if err != nil {
-		return nil, err
-	}
-	return result.Fields, nil
-}
-
 // parseSyllabusPage extracts syllabus fields from HTML document.
 // Handles multiple page formats and returns empty fields if parsing fails.
 func parseSyllabusPage(doc *goquery.Document) *Fields {
