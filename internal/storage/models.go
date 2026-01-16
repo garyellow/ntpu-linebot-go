@@ -41,19 +41,18 @@ type ProgramRequirement struct {
 
 // Course represents a course record
 type Course struct {
-	UID         string               `json:"uid"`
-	Year        int                  `json:"year"`
-	Term        int                  `json:"term"`
-	No          string               `json:"no"`
-	Title       string               `json:"title"`
-	Teachers    []string             `json:"teachers"`
-	TeacherURLs []string             `json:"teacher_urls,omitzero"`
-	Times       []string             `json:"times"`
-	Locations   []string             `json:"locations"`
-	DetailURL   string               `json:"detail_url,omitzero"`
-	Note        string               `json:"note,omitzero"`
-	Programs    []ProgramRequirement `json:"programs,omitzero"` // Academic programs this course belongs to
-	CachedAt    int64                `json:"cached_at"`
+	UID         string   `json:"uid"`
+	Year        int      `json:"year"`
+	Term        int      `json:"term"`
+	No          string   `json:"no"`
+	Title       string   `json:"title"`
+	Teachers    []string `json:"teachers"`
+	TeacherURLs []string `json:"teacher_urls,omitzero"`
+	Times       []string `json:"times"`
+	Locations   []string `json:"locations"`
+	DetailURL   string   `json:"detail_url,omitzero"`
+	Note        string   `json:"note,omitzero"`
+	CachedAt    int64    `json:"cached_at"`
 }
 
 // Program represents an academic program (學程) with course statistics.

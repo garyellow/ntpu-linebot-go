@@ -446,14 +446,9 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 				Warn("Failed to cleanup historical courses (non-critical)")
 		}
 
-		// Save course-program relationships
-		if err := db.SaveCourseProgramsBatch(ctx, courses); err != nil {
-			log.WithError(err).
-				WithField("year", sem.Year).
-				WithField("term", sem.Term).
-				Warn("Failed to save course programs batch")
-			// Continue even if program save fails - course data is still valid
-		}
+		// Note: Course-program relationships are now populated by syllabus warmup
+		// via ScrapeCourseDetail() which extracts complete program data from
+		// the course detail page (queryguide), not from the list page.
 
 		stats.Courses.Add(int64(len(courses)))
 		log.WithField("year", sem.Year).
@@ -651,22 +646,29 @@ processLoop:
 					continue
 				}
 
-				// Scrape syllabus content
-				fields, err := syllabusScraper.ScrapeSyllabus(ctx, &course)
+				// Scrape course detail (syllabus + program requirements)
+				result, err := syllabusScraper.ScrapeCourseDetail(ctx, &course)
 				if err != nil {
-					log.WithError(err).WithField("uid", course.UID).Debug("Failed to scrape syllabus")
+					log.WithError(err).WithField("uid", course.UID).Debug("Failed to scrape course detail")
 					errorCount++
 					continue
 				}
 
-				// Skip empty syllabi
-				if fields.IsEmpty() {
+				// Save program requirements to database (always, even if syllabus is empty)
+				if len(result.Programs) > 0 {
+					if err := db.SaveCoursePrograms(ctx, course.UID, result.Programs); err != nil {
+						log.WithError(err).WithField("uid", course.UID).Debug("Failed to save course programs")
+					}
+				}
+
+				// Skip empty syllabi for indexing (but programs were already saved above)
+				if result.Fields.IsEmpty() {
 					skippedCount++
 					continue
 				}
 
 				// Compute content hash
-				contentForHash := fields.Objectives + "\n" + fields.Outline + "\n" + fields.Schedule
+				contentForHash := result.Fields.Objectives + "\n" + result.Fields.Outline + "\n" + result.Fields.Schedule
 				contentHash := syllabus.ComputeContentHash(contentForHash)
 
 				// Check if content has changed
@@ -687,9 +689,9 @@ processLoop:
 					Term:        course.Term,
 					Title:       course.Title,
 					Teachers:    course.Teachers,
-					Objectives:  fields.Objectives,
-					Outline:     fields.Outline,
-					Schedule:    fields.Schedule,
+					Objectives:  result.Fields.Objectives,
+					Outline:     result.Fields.Outline,
+					Schedule:    result.Fields.Schedule,
 					ContentHash: contentHash,
 				}
 

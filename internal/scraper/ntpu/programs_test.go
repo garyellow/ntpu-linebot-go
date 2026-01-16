@@ -9,6 +9,8 @@ import (
 
 func TestCleanProgramName(t *testing.T) {
 	t.Parallel()
+	// Note: cleanProgramName now only handles LMS page cleanup (removing annotations).
+	// Program names from course detail pages (queryguide) are already complete and don't need normalization.
 	tests := []struct {
 		name     string
 		input    string
@@ -23,16 +25,6 @@ func TestCleanProgramName(t *testing.T) {
 			name:     "Preserve 微學程",
 			input:    "金融科技學士微學程",
 			expected: "金融科技學士微學程",
-		},
-		{
-			name:     "Missing 學分 - normalize and apply alias",
-			input:    "英語商學碩士學程",
-			expected: "英語授課商學碩士學分學程",
-		},
-		{
-			name:     "Missing 學分 with annotation",
-			input:    "調查方法與資料分析學程(更名)",
-			expected: "調查方法與資料分析學分學程",
 		},
 		{
 			name:     "Rename annotation",
@@ -50,34 +42,19 @@ func TestCleanProgramName(t *testing.T) {
 			expected: "創新創業學士學分學程",
 		},
 		{
-			name:     "Trailing whitespace with missing 學分",
-			input:    "財務金融碩士學程  ",
-			expected: "財務金融碩士學分學程",
-		},
-		{
 			name:     "Leading whitespace",
 			input:    "  金融科技學士學分學程",
+			expected: "金融科技學士學分學程",
+		},
+		{
+			name:     "Trailing whitespace",
+			input:    "金融科技學士學分學程  ",
 			expected: "金融科技學士學分學程",
 		},
 		{
 			name:     "Garbage after 學程",
 			input:    "金融科技學士學分學程abc",
 			expected: "金融科技學士學分學程",
-		},
-		{
-			name:     "Alias mapping - 英語商學學士",
-			input:    "英語商學學士學程",
-			expected: "英語授課商學學士學分學程",
-		},
-		{
-			name:     "Alias mapping - 人工智慧英語學士學分學程",
-			input:    "人工智慧英語學士學分學程",
-			expected: "人工智慧英語授課學士學分學程",
-		},
-		{
-			name:     "Alias mapping - 人工智慧英語學士微學程",
-			input:    "人工智慧英語學士微學程",
-			expected: "人工智慧英語授課學士微學程",
 		},
 	}
 

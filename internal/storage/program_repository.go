@@ -72,68 +72,6 @@ func (db *DB) SaveCoursePrograms(ctx context.Context, courseUID string, programs
 	return nil
 }
 
-// SaveCourseProgramsBatch saves course-program relationships for multiple courses.
-// This is more efficient than calling SaveCoursePrograms multiple times.
-func (db *DB) SaveCourseProgramsBatch(ctx context.Context, courses []*Course) error {
-	// Filter courses that have program relationships
-	var coursesWithPrograms []*Course
-	for _, c := range courses {
-		if len(c.Programs) > 0 {
-			coursesWithPrograms = append(coursesWithPrograms, c)
-		}
-	}
-
-	if len(coursesWithPrograms) == 0 {
-		return nil
-	}
-
-	tx, err := db.writer.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	cachedAt := time.Now().Unix()
-
-	// Prepare statements
-	deleteStmt, err := tx.PrepareContext(ctx, "DELETE FROM course_programs WHERE course_uid = ?")
-	if err != nil {
-		return fmt.Errorf("prepare delete statement: %w", err)
-	}
-	defer func() { _ = deleteStmt.Close() }()
-
-	insertStmt, err := tx.PrepareContext(ctx, `
-		INSERT OR REPLACE INTO course_programs (course_uid, program_name, course_type, cached_at)
-		VALUES (?, ?, ?, ?)
-	`)
-	if err != nil {
-		return fmt.Errorf("prepare insert statement: %w", err)
-	}
-	defer func() { _ = insertStmt.Close() }()
-
-	for _, course := range coursesWithPrograms {
-		// Delete existing relationships
-		_, err = deleteStmt.ExecContext(ctx, course.UID)
-		if err != nil {
-			return fmt.Errorf("delete existing course programs for %s: %w", course.UID, err)
-		}
-
-		// Insert new relationships
-		for _, p := range course.Programs {
-			_, err = insertStmt.ExecContext(ctx, course.UID, p.ProgramName, p.CourseType, cachedAt)
-			if err != nil {
-				return fmt.Errorf("insert course program for %s: %w", course.UID, err)
-			}
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
-	}
-
-	return nil
-}
-
 // SyncPrograms synchronizes program metadata (name + category + URL) from static data.
 // Uses INSERT OR REPLACE to upsert program information.
 func (db *DB) SyncPrograms(ctx context.Context, programs []struct{ Name, Category, URL string }) error {

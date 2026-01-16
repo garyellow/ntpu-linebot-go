@@ -117,7 +117,7 @@ LINE Webhook → Gin Handler
 - **Course ordering**: Required (必修) first, elective (選修) after, then by semester (newest first)
 - **NLU intents**: `list` (no params), `search` (query), `courses` (programName)
 - **Course detail integration**: "相關學程" button shows programs containing the course
-- **Data source**: Parsed from course "應修系級" + "必選修別" fields (filters items ending with "學程"), normalized via `cleanProgramName()` (adds "學分" suffix and applies alias mapping for course system abbreviations)
+- **Data source**: Extracted from course detail page (queryguide) during syllabus warmup; program names are complete and accurate (no normalization needed)
 - **Flex Message design**: Colored headers (blue for programs, green/cyan for courses by type)
 
 **All modules**:
@@ -448,18 +448,25 @@ Fallback → getHelpMessage() + Warning Log
 
 ## Syllabus Module
 
-**CRITICAL: Syllabus scraping is ONLY performed during warmup - never in real-time user queries**
+**CRITICAL: Syllabus and program data scraping is ONLY performed during warmup - never in real-time user queries**
 
 **Warmup Behavior** (`internal/warmup/warmup.go:warmupSyllabusModule()`):
 1. Identify most recent 2 semesters with cached course data via `GetDistinctRecentSemesters(ctx, 2)`
 2. Load courses from those 2 semesters only via `GetCoursesByYearTerm(ctx, year, term)`
-3. Scrape syllabus for each course via `syllabus.ScrapeSyllabus(ctx, course)`
+3. Scrape course detail page via `syllabus.ScrapeCourseDetail(ctx, course)` - returns both syllabus content AND program requirements
 4. Use SHA256 content hash for incremental updates (skip if content unchanged)
-5. Save to database and rebuild BM25 index
+5. Save syllabus to database, save course-program relationships via `SaveCoursePrograms()`
+6. Rebuild BM25 index
+
+**Data Extraction from Course Detail Page (queryguide)**:
+- **Syllabus content**: Concatenated from 課程目標/課程概述/教學方式 fields
+- **Program requirements**: Parsed from "應修系級" (Major) field, extracting items ending with "學程"
+- **Why queryguide?**: List pages (queryByKeyword) have incomplete/abbreviated program names; detail pages have complete, accurate names
 
 **User Query Behavior**:
 - Smart search (`找課`) uses BM25 index built from cached syllabi (read-only)
 - Course detail queries show cached syllabus if available (read-only)
+- Program queries use course-program relationships populated during warmup (read-only)
 - NO scraping occurs during user queries - all data is pre-cached
 
 **Cache Strategy**:
@@ -470,9 +477,9 @@ Fallback → getHelpMessage() + Warning Log
 
 **Data Flow**:
 ```
-Warmup (3:00 AM) → Scrape Syllabi (2 semesters) → Save to DB → Rebuild BM25
-                                                      ↓
-User Query (`找課`) → BM25 Search (read-only) → Return cached results
+Warmup (3:00 AM) → ScrapeCourseDetail (2 semesters) → Save Syllabus + Programs → Rebuild BM25
+                                                              ↓
+User Query (`找課`/`學程`) → BM25/SQL Search (read-only) → Return cached results
 ```
 
 ## Key File Locations
@@ -489,5 +496,5 @@ User Query (`找課`) → BM25 Search (read-only) → Return cached results
 - **Smart search**: `internal/rag/bm25.go` (BM25 index with Chinese tokenization, read-only during queries)
 - **Query expander**: `internal/genai/gemini_expander.go` / `internal/genai/openai_expander.go` (LLM-based query expansion for Gemini/Groq/Cerebras)
 - **NLU intent parser**: `internal/genai/gemini_intent.go` / `internal/genai/openai_intent.go` (Function Calling with Close method for Gemini/Groq/Cerebras)
-- **Syllabus scraper**: `internal/syllabus/scraper.go` (ONLY called by warmup module)
+- **Syllabus scraper**: `internal/syllabus/scraper.go` (extracts syllabus AND program requirements from course detail pages, ONLY called by warmup module)
 - **Timeout constants**: `internal/config/timeouts.go` (all timeout/interval constants)
