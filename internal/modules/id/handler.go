@@ -996,8 +996,8 @@ func (h *Handler) handleYearSearchConfirm(yearStr string) []messaging_api.Messag
 
 	// Create college group selection template with clear guidance
 	actions := []messaging_api.ActionInterface{
-		lineutil.NewPostbackActionWithDisplayText("文法商", fmt.Sprintf("%s 學年度文法商？", yearStr), fmt.Sprintf("id:文法商%s%s", bot.PostbackSplitChar, yearStr)),
-		lineutil.NewPostbackActionWithDisplayText("公社電資", fmt.Sprintf("%s 學年度公社電資？", yearStr), fmt.Sprintf("id:公社電資%s%s", bot.PostbackSplitChar, yearStr)),
+		lineutil.NewPostbackActionWithDisplayText("文法商", fmt.Sprintf("查詢 %s 學年度文法商", yearStr), fmt.Sprintf("id:文法商%s%s", bot.PostbackSplitChar, yearStr)),
+		lineutil.NewPostbackActionWithDisplayText("公社電資", fmt.Sprintf("查詢 %s 學年度公社電資", yearStr), fmt.Sprintf("id:公社電資%s%s", bot.PostbackSplitChar, yearStr)),
 	}
 
 	msg := lineutil.NewButtonsTemplateWithImage(
@@ -1334,16 +1334,16 @@ func (h *Handler) handleCollegeGroupSelection(group, year string) []messaging_ap
 	if group == "文法商" {
 		collegeList = "📖 人文：中文、應外、歷史\n⚖️ 法律：法學、司法、財法\n💼 商學：企管、金融、會計、統計、休運"
 		actions = []messaging_api.ActionInterface{
-			lineutil.NewPostbackActionWithDisplayText("📖 人文學院", fmt.Sprintf("%s 學年度人文學院？", year), fmt.Sprintf("id:人文學院%s%s", bot.PostbackSplitChar, year)),
-			lineutil.NewPostbackActionWithDisplayText("⚖️ 法律學院", fmt.Sprintf("%s 學年度法律學院？", year), fmt.Sprintf("id:法律學院%s%s", bot.PostbackSplitChar, year)),
-			lineutil.NewPostbackActionWithDisplayText("💼 商學院", fmt.Sprintf("%s 學年度商學院？", year), fmt.Sprintf("id:商學院%s%s", bot.PostbackSplitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("📖 人文學院", fmt.Sprintf("查詢 %s 學年度人文學院", year), fmt.Sprintf("id:人文學院%s%s", bot.PostbackSplitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("⚖️ 法律學院", fmt.Sprintf("查詢 %s 學年度法律學院", year), fmt.Sprintf("id:法律學院%s%s", bot.PostbackSplitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("💼 商學院", fmt.Sprintf("查詢 %s 學年度商學院", year), fmt.Sprintf("id:商學院%s%s", bot.PostbackSplitChar, year)),
 		}
 	} else { // 公社電資
 		collegeList = "🏛️ 公共事務：公行、不動、財政\n👥 社科：經濟、社學、社工\n💻 電資：電機、資工、通訊"
 		actions = []messaging_api.ActionInterface{
-			lineutil.NewPostbackActionWithDisplayText("🏛️ 公共事務學院", fmt.Sprintf("%s 學年度公共事務學院？", year), fmt.Sprintf("id:公共事務學院%s%s", bot.PostbackSplitChar, year)),
-			lineutil.NewPostbackActionWithDisplayText("👥 社會科學學院", fmt.Sprintf("%s 學年度社會科學學院？", year), fmt.Sprintf("id:社會科學學院%s%s", bot.PostbackSplitChar, year)),
-			lineutil.NewPostbackActionWithDisplayText("💻 電機資訊學院", fmt.Sprintf("%s 學年度電機資訊學院？", year), fmt.Sprintf("id:電機資訊學院%s%s", bot.PostbackSplitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("🏛️ 公共事務學院", fmt.Sprintf("查詢 %s 學年度公共事務學院", year), fmt.Sprintf("id:公共事務學院%s%s", bot.PostbackSplitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("👥 社會科學學院", fmt.Sprintf("查詢 %s 學年度社會科學學院", year), fmt.Sprintf("id:社會科學學院%s%s", bot.PostbackSplitChar, year)),
+			lineutil.NewPostbackActionWithDisplayText("💻 電機資訊學院", fmt.Sprintf("查詢 %s 學年度電機資訊學院", year), fmt.Sprintf("id:電機資訊學院%s%s", bot.PostbackSplitChar, year)),
 		}
 	}
 

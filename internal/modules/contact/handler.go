@@ -798,12 +798,12 @@ func (h *Handler) formatContactResultsWithSearch(ctx context.Context, contacts [
 				matchingCourses, err := h.db.SearchCoursesByTeacher(ctx, c.Name)
 				if err == nil && len(matchingCourses) > 0 {
 					// Add 授課課程 button
-					// DisplayText: {Name} 有哪些課？ (question style)
-					displayText := c.Name + " 有哪些課？"
+					// DisplayText: 查看 {Name} 授課課程 (declarative style)
+					displayText := "查看 " + c.Name + " 授課課程"
 					if len([]rune(displayText)) > 40 {
-						// Static chars: " 有哪些課？" = 6 runes, 40 - 6 = 34
-						safeName := lineutil.TruncateRunes(c.Name, 34)
-						displayText = safeName + " 有哪些課？"
+						// Static chars: "查看 " + " 授課課程" = 8 runes, 40 - 8 = 32
+						safeName := lineutil.TruncateRunes(c.Name, 32)
+						displayText = "查看 " + safeName + " 授課課程"
 					}
 					row0Buttons = append(row0Buttons,
 						lineutil.NewFlexButton(
@@ -856,11 +856,11 @@ func (h *Handler) formatContactResultsWithSearch(ctx context.Context, contacts [
 			// Button color syncs with header for visual harmony
 			var row4Buttons []*lineutil.FlexButton
 			if c.Type == "organization" {
-				// DisplayText: {Name} 有誰？ (question style)
-				displayText := c.Name + " 有誰？"
+				// DisplayText: 查看 {Name} 成員 (declarative style)
+				displayText := "查看 " + c.Name + " 成員"
 				if len([]rune(displayText)) > 40 {
-					// Static chars: " 有誰？" = 4 runes, 40 - 4 = 36
-					displayText = lineutil.TruncateRunes(c.Name, 36) + " 有誰？"
+					// Static chars: "查看 " + " 成員" = 5 runes, 40 - 5 = 35
+					displayText = "查看 " + lineutil.TruncateRunes(c.Name, 35) + " 成員"
 				}
 				row4Buttons = append(row4Buttons,
 					lineutil.NewFlexButton(
