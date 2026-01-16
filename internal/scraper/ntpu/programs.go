@@ -194,10 +194,36 @@ func extractProgramsFromPage(doc *goquery.Document, seen map[string]bool, catego
 	return results, hasNext
 }
 
+// programAliases maps abbreviated program names (from course system) to official LMS names.
+// Course system sometimes uses shortened names that don't match LMS exactly.
+var programAliases = map[string]string{
+	// 課程系統簡稱 → 學程官方名稱
+	"英語商學碩士學分學程":   "英語授課商學碩士學分學程",
+	"英語商學學士學分學程":   "英語授課商學學士學分學程",
+	"人工智慧英語學士學分學程": "人工智慧英語授課學士學分學程",
+	"人工智慧英語學士微學程":  "人工智慧英語授課學士微學程",
+	"鑑識學分學程":       "資本市場鑑識學分學程",
+}
+
 func cleanProgramName(name string) string {
 	// Find first "學程" and truncate (removes any annotations after the program name)
 	if idx := strings.Index(name, "學程"); idx >= 0 {
 		name = name[:idx+len("學程")]
 	}
-	return strings.TrimSpace(name)
+	name = strings.TrimSpace(name)
+
+	// Normalize: course system sometimes has incomplete names (e.g., "英語商學碩士學程")
+	// All valid programs must end with "學分學程" or "微學程"
+	if strings.HasSuffix(name, "學程") &&
+		!strings.HasSuffix(name, "學分學程") &&
+		!strings.HasSuffix(name, "微學程") {
+		name = name[:len(name)-len("學程")] + "學分學程"
+	}
+
+	// Apply alias mapping for names that differ between course system and LMS
+	if official, ok := programAliases[name]; ok {
+		name = official
+	}
+
+	return name
 }

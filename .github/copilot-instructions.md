@@ -117,7 +117,7 @@ LINE Webhook → Gin Handler
 - **Course ordering**: Required (必修) first, elective (選修) after, then by semester (newest first)
 - **NLU intents**: `list` (no params), `search` (query), `courses` (programName)
 - **Course detail integration**: "相關學程" button shows programs containing the course
-- **Data source**: Parsed from course "應修系級" + "必選修別" fields (filters items ending with "學程")
+- **Data source**: Parsed from course "應修系級" + "必選修別" fields (filters items ending with "學程"), normalized via `cleanProgramName()` (adds "學分" suffix and applies alias mapping for course system abbreviations)
 - **Flex Message design**: Colored headers (blue for programs, green/cyan for courses by type)
 
 **All modules**:

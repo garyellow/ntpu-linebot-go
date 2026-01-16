@@ -15,9 +15,24 @@ func TestCleanProgramName(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "Normal name",
+			name:     "Normal name with 學分學程",
 			input:    "金融科技學士學分學程",
 			expected: "金融科技學士學分學程",
+		},
+		{
+			name:     "Preserve 微學程",
+			input:    "金融科技學士微學程",
+			expected: "金融科技學士微學程",
+		},
+		{
+			name:     "Missing 學分 - normalize and apply alias",
+			input:    "英語商學碩士學程",
+			expected: "英語授課商學碩士學分學程",
+		},
+		{
+			name:     "Missing 學分 with annotation",
+			input:    "調查方法與資料分析學程(更名)",
+			expected: "調查方法與資料分析學分學程",
 		},
 		{
 			name:     "Rename annotation",
@@ -35,9 +50,9 @@ func TestCleanProgramName(t *testing.T) {
 			expected: "創新創業學士學分學程",
 		},
 		{
-			name:     "Trailing whitespace",
-			input:    "金融科技學士學分學程  ",
-			expected: "金融科技學士學分學程",
+			name:     "Trailing whitespace with missing 學分",
+			input:    "財務金融碩士學程  ",
+			expected: "財務金融碩士學分學程",
 		},
 		{
 			name:     "Leading whitespace",
@@ -48,6 +63,21 @@ func TestCleanProgramName(t *testing.T) {
 			name:     "Garbage after 學程",
 			input:    "金融科技學士學分學程abc",
 			expected: "金融科技學士學分學程",
+		},
+		{
+			name:     "Alias mapping - 英語商學學士",
+			input:    "英語商學學士學程",
+			expected: "英語授課商學學士學分學程",
+		},
+		{
+			name:     "Alias mapping - 人工智慧英語學士學分學程",
+			input:    "人工智慧英語學士學分學程",
+			expected: "人工智慧英語授課學士學分學程",
+		},
+		{
+			name:     "Alias mapping - 人工智慧英語學士微學程",
+			input:    "人工智慧英語學士微學程",
+			expected: "人工智慧英語授課學士微學程",
 		},
 	}
 
@@ -64,11 +94,11 @@ func TestCleanProgramName(t *testing.T) {
 
 func TestExtractProgramsFromPage_Uniqueness(t *testing.T) {
 	t.Parallel()
-	// Simulate HTML with a program link
+	// Simulate HTML with a program link (use valid suffix to test normalization)
 	html := `
 	<html>
 		<body>
-			<a href="board.php?courseID=28286&f=doc&cid=123" target="_blank">Duplicate Program 學程</a>
+			<a href="board.php?courseID=28286&f=doc&cid=123" target="_blank">測試用學分學程</a>
 		</body>
 	</html>
 	`
@@ -85,8 +115,8 @@ func TestExtractProgramsFromPage_Uniqueness(t *testing.T) {
 	if len(resultsA) != 1 {
 		t.Fatalf("Expected 1 result for Category A, got %d", len(resultsA))
 	}
-	if resultsA[0].Name != "Duplicate Program 學程" {
-		t.Errorf("Expected name 'Duplicate Program 學程', got '%s'", resultsA[0].Name)
+	if resultsA[0].Name != "測試用學分學程" {
+		t.Errorf("Expected name '測試用學分學程', got '%s'", resultsA[0].Name)
 	}
 	if resultsA[0].Category != "Category A" {
 		t.Errorf("Expected category 'Category A', got '%s'", resultsA[0].Category)
@@ -97,7 +127,7 @@ func TestExtractProgramsFromPage_Uniqueness(t *testing.T) {
 	html2 := `
 	<html>
 		<body>
-			<a href="board.php?courseID=28286&f=doc&cid=456" target="_blank">Duplicate Program 學程</a>
+			<a href="board.php?courseID=28286&f=doc&cid=456" target="_blank">測試用學分學程</a>
 		</body>
 	</html>
 	`
@@ -109,8 +139,8 @@ func TestExtractProgramsFromPage_Uniqueness(t *testing.T) {
 	if len(resultsB) != 1 {
 		t.Fatalf("Expected 1 result for Category B, got %d", len(resultsB))
 	}
-	if resultsB[0].Name != "Duplicate Program 學程" {
-		t.Errorf("Expected name 'Duplicate Program 學程', got '%s'", resultsB[0].Name)
+	if resultsB[0].Name != "測試用學分學程" {
+		t.Errorf("Expected name '測試用學分學程', got '%s'", resultsB[0].Name)
 	}
 	if resultsB[0].Category != "Category B" {
 		t.Errorf("Expected category 'Category B', got '%s'", resultsB[0].Category)
