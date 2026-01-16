@@ -9,15 +9,22 @@ import (
 
 func TestCleanProgramName(t *testing.T) {
 	t.Parallel()
+	// Note: cleanProgramName now only handles LMS page cleanup (removing annotations).
+	// Program names from course detail pages (queryguide) are already complete and don't need normalization.
 	tests := []struct {
 		name     string
 		input    string
 		expected string
 	}{
 		{
-			name:     "Normal name",
+			name:     "Normal name with 學分學程",
 			input:    "金融科技學士學分學程",
 			expected: "金融科技學士學分學程",
+		},
+		{
+			name:     "Preserve 微學程",
+			input:    "金融科技學士微學程",
+			expected: "金融科技學士微學程",
 		},
 		{
 			name:     "Rename annotation",
@@ -35,13 +42,13 @@ func TestCleanProgramName(t *testing.T) {
 			expected: "創新創業學士學分學程",
 		},
 		{
-			name:     "Trailing whitespace",
-			input:    "金融科技學士學分學程  ",
+			name:     "Leading whitespace",
+			input:    "  金融科技學士學分學程",
 			expected: "金融科技學士學分學程",
 		},
 		{
-			name:     "Leading whitespace",
-			input:    "  金融科技學士學分學程",
+			name:     "Trailing whitespace",
+			input:    "金融科技學士學分學程  ",
 			expected: "金融科技學士學分學程",
 		},
 		{
@@ -64,11 +71,11 @@ func TestCleanProgramName(t *testing.T) {
 
 func TestExtractProgramsFromPage_Uniqueness(t *testing.T) {
 	t.Parallel()
-	// Simulate HTML with a program link
+	// Simulate HTML with a program link (use valid suffix to test normalization)
 	html := `
 	<html>
 		<body>
-			<a href="board.php?courseID=28286&f=doc&cid=123" target="_blank">Duplicate Program 學程</a>
+			<a href="board.php?courseID=28286&f=doc&cid=123" target="_blank">測試用學分學程</a>
 		</body>
 	</html>
 	`
@@ -85,8 +92,8 @@ func TestExtractProgramsFromPage_Uniqueness(t *testing.T) {
 	if len(resultsA) != 1 {
 		t.Fatalf("Expected 1 result for Category A, got %d", len(resultsA))
 	}
-	if resultsA[0].Name != "Duplicate Program 學程" {
-		t.Errorf("Expected name 'Duplicate Program 學程', got '%s'", resultsA[0].Name)
+	if resultsA[0].Name != "測試用學分學程" {
+		t.Errorf("Expected name '測試用學分學程', got '%s'", resultsA[0].Name)
 	}
 	if resultsA[0].Category != "Category A" {
 		t.Errorf("Expected category 'Category A', got '%s'", resultsA[0].Category)
@@ -97,7 +104,7 @@ func TestExtractProgramsFromPage_Uniqueness(t *testing.T) {
 	html2 := `
 	<html>
 		<body>
-			<a href="board.php?courseID=28286&f=doc&cid=456" target="_blank">Duplicate Program 學程</a>
+			<a href="board.php?courseID=28286&f=doc&cid=456" target="_blank">測試用學分學程</a>
 		</body>
 	</html>
 	`
@@ -109,8 +116,8 @@ func TestExtractProgramsFromPage_Uniqueness(t *testing.T) {
 	if len(resultsB) != 1 {
 		t.Fatalf("Expected 1 result for Category B, got %d", len(resultsB))
 	}
-	if resultsB[0].Name != "Duplicate Program 學程" {
-		t.Errorf("Expected name 'Duplicate Program 學程', got '%s'", resultsB[0].Name)
+	if resultsB[0].Name != "測試用學分學程" {
+		t.Errorf("Expected name '測試用學分學程', got '%s'", resultsB[0].Name)
 	}
 	if resultsB[0].Category != "Category B" {
 		t.Errorf("Expected category 'Category B', got '%s'", resultsB[0].Category)

@@ -194,6 +194,9 @@ func extractProgramsFromPage(doc *goquery.Document, seen map[string]bool, catego
 	return results, hasNext
 }
 
+// cleanProgramName cleans up program names from LMS pages.
+// Removes annotations like "(112-1更名，原名：...)" or "★跨校..." that appear after the program name.
+// The cleaned name should match the official LMS program name exactly.
 func cleanProgramName(name string) string {
 	// Find first "學程" and truncate (removes any annotations after the program name)
 	if idx := strings.Index(name, "學程"); idx >= 0 {

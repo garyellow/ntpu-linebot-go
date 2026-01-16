@@ -353,3 +353,134 @@ func TestNewScraper(t *testing.T) {
 		t.Error("NewScraper(nil) returned nil, expected valid scraper")
 	}
 }
+
+func TestParseProgramsFromDetailPage(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name         string
+		html         string
+		wantCount    int
+		wantPrograms []string
+		wantNotIncl  []string
+	}{
+		{
+			name:      "empty HTML",
+			html:      `<html><body></body></html>`,
+			wantCount: 0,
+		},
+		{
+			name: "single program",
+			html: `<html><body><table><tr>
+				<td class="font-g13">
+					應修系級 Major:<b class="font-c15">商業智慧與大數據分析學士學分學程 &nbsp;</b>
+				</td>
+			</tr></table></body></html>`,
+			wantCount:    1,
+			wantPrograms: []string{"商業智慧與大數據分析學士學分學程"},
+		},
+		{
+			name: "multiple programs with departments",
+			html: `<html><body><table><tr>
+				<td class="font-g13">
+					應修系級 Major:<b class="font-c15">統計學系3 ,統計學系4 ,資本市場鑑識學士學分學程 &nbsp;,商業智慧與大數據分析學士學分學程 &nbsp;,商業資料分析學士學分學程 &nbsp;,資料拓析學士學分學程 &nbsp;,金融科技與量化金融學士學分學程 &nbsp;,調查方法與資料分析學士學分學程 &nbsp;,經濟資料科學學士微學程 &nbsp;,資料拓析學士學分微學程 &nbsp;,金融科技與量化金融學士微學程 &nbsp;,商業人工智慧學士微學程 &nbsp;,</b>
+				</td>
+			</tr></table></body></html>`,
+			wantCount: 10,
+			wantPrograms: []string{
+				"資本市場鑑識學士學分學程",
+				"商業智慧與大數據分析學士學分學程",
+				"商業資料分析學士學分學程",
+				"資料拓析學士學分學程",
+				"金融科技與量化金融學士學分學程",
+				"調查方法與資料分析學士學分學程",
+				"經濟資料科學學士微學程",
+				"資料拓析學士學分微學程",
+				"金融科技與量化金融學士微學程",
+				"商業人工智慧學士微學程",
+			},
+			wantNotIncl: []string{"統計學系3", "統計學系4"}, // departments should be excluded
+		},
+		{
+			name: "programs with HTML entities",
+			html: `<html><body><table><tr>
+				<td class="font-g13">
+					應修系級 Major:<b class="font-c15">商業資料分析學士學分學程&nbsp;,資料拓析學士微學程&nbsp;</b>
+				</td>
+			</tr></table></body></html>`,
+			wantCount: 2,
+			wantPrograms: []string{
+				"商業資料分析學士學分學程",
+				"資料拓析學士微學程",
+			},
+		},
+		{
+			name: "no programs - only departments",
+			html: `<html><body><table><tr>
+				<td class="font-g13">
+					應修系級 Major:<b class="font-c15">資訊工程學系1 ,資訊工程學系2 ,電機工程學系3</b>
+				</td>
+			</tr></table></body></html>`,
+			wantCount: 0,
+		},
+		{
+			name: "programs with embedded HTML",
+			html: `<html><body><table><tr>
+				<td class="font-g13">
+					應修系級 Major:<b class="font-c15">統計學系3 <a href="#">有擋修</a>,統計學系4 <a href="#">有擋修</a>,資本市場鑑識學士學分學程 &nbsp;</b>
+				</td>
+			</tr></table></body></html>`,
+			wantCount:    1,
+			wantPrograms: []string{"資本市場鑑識學士學分學程"},
+			wantNotIncl:  []string{"統計學系", "有擋修"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := goquery.NewDocumentFromReader(strings.NewReader(tt.html))
+			if err != nil {
+				t.Fatalf("Failed to parse HTML: %v", err)
+			}
+
+			programs := parseProgramsFromDetailPage(doc)
+
+			if len(programs) != tt.wantCount {
+				t.Errorf("Got %d programs, want %d", len(programs), tt.wantCount)
+				for i, p := range programs {
+					t.Logf("  Program %d: %s", i+1, p.ProgramName)
+				}
+			}
+
+			// Check expected programs are included
+			for _, want := range tt.wantPrograms {
+				found := false
+				for _, p := range programs {
+					if p.ProgramName == want {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("Expected program %q not found", want)
+				}
+			}
+
+			// Check excluded items are not included
+			for _, notWant := range tt.wantNotIncl {
+				for _, p := range programs {
+					if strings.Contains(p.ProgramName, notWant) {
+						t.Errorf("Program %q should not be included (contains %q)", p.ProgramName, notWant)
+					}
+				}
+			}
+
+			// Check all programs have default course type
+			for _, p := range programs {
+				if p.CourseType != "選" {
+					t.Errorf("Program %q has CourseType %q, want \"選\"", p.ProgramName, p.CourseType)
+				}
+			}
+		})
+	}
+}

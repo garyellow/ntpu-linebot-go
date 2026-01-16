@@ -9,9 +9,9 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 )
 
-// TestScrapeSyllabus_RealPage tests scraping against a real NTPU course page
+// TestScrapeCourseDetail_RealPage tests scraping against a real NTPU course page
 // This is an integration test that requires network access
-func TestScrapeSyllabus_RealPage(t *testing.T) {
+func TestScrapeCourseDetail_RealPage(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
@@ -33,10 +33,11 @@ func TestScrapeSyllabus_RealPage(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	fields, err := s.ScrapeSyllabus(ctx, course)
+	result, err := s.ScrapeCourseDetail(ctx, course)
 	if err != nil {
-		t.Fatalf("ScrapeSyllabus failed: %v", err)
+		t.Fatalf("ScrapeCourseDetail failed: %v", err)
 	}
+	fields := result.Fields
 
 	t.Logf("=== Scraped Syllabus Fields ===")
 	t.Logf("Objectives (%d chars): %s", len(fields.Objectives), truncateForLog(fields.Objectives, 200))
@@ -76,8 +77,8 @@ func TestScrapeSyllabus_RealPage(t *testing.T) {
 	t.Logf("Generated content length: %d characters", len(content))
 }
 
-// TestScrapeSyllabus_DistinctSections verifies that each section is parsed independently
-func TestScrapeSyllabus_DistinctSections(t *testing.T) {
+// TestScrapeCourseDetail_DistinctSections verifies that each section is parsed independently
+func TestScrapeCourseDetail_DistinctSections(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
@@ -98,10 +99,11 @@ func TestScrapeSyllabus_DistinctSections(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	fields, err := s.ScrapeSyllabus(ctx, course)
+	result, err := s.ScrapeCourseDetail(ctx, course)
 	if err != nil {
-		t.Fatalf("ScrapeSyllabus failed: %v", err)
+		t.Fatalf("ScrapeCourseDetail failed: %v", err)
 	}
+	fields := result.Fields
 
 	// Create a map to check for duplicates
 	sections := map[string]string{

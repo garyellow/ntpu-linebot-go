@@ -17,9 +17,10 @@ import (
 var (
 	reSpaces   = regexp.MustCompile(`[ \t]+`)
 	reNewlines = regexp.MustCompile(`\n{3,}`)
+	reHTMLTags = regexp.MustCompile(`<[^>]*>`)
 )
 
-// Scraper extracts syllabus content from course detail pages
+// Scraper extracts syllabus content and program requirements from course detail pages
 type Scraper struct {
 	client *scraper.Client
 }
@@ -29,42 +30,52 @@ func NewScraper(client *scraper.Client) *Scraper {
 	return &Scraper{client: client}
 }
 
-// ScrapeSyllabus extracts syllabus content from a course's detail URL.
-// Returns structured fields (objectives, outline, schedule) or error if URL is invalid.
-// Empty syllabi are valid - use Fields.IsEmpty to check.
-func (s *Scraper) ScrapeSyllabus(ctx context.Context, course *storage.Course) (*Fields, error) {
+// ScrapeResult contains all data extracted from a course detail page
+type ScrapeResult struct {
+	Fields   *Fields                      // Syllabus content (objectives, outline, schedule)
+	Programs []storage.ProgramRequirement // Academic programs this course belongs to
+}
+
+// ScrapeCourseDetail extracts syllabus content AND program requirements from a course's detail URL.
+// Returns structured fields and program list, or error if URL is invalid.
+// This is the primary method for extracting course detail data.
+func (s *Scraper) ScrapeCourseDetail(ctx context.Context, course *storage.Course) (*ScrapeResult, error) {
 	if course.DetailURL == "" {
 		return nil, fmt.Errorf("course %s has no detail URL", course.UID)
 	}
 
 	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("context canceled before scraping syllabus: %w", err)
+		return nil, fmt.Errorf("context canceled before scraping: %w", err)
 	}
 
 	start := time.Now()
-	slog.DebugContext(ctx, "scraping syllabus",
+	slog.DebugContext(ctx, "scraping course detail",
 		"uid", course.UID,
 		"detail_url", course.DetailURL)
 
 	doc, err := s.client.GetDocument(ctx, course.DetailURL)
 	if err != nil {
-		slog.WarnContext(ctx, "failed to scrape syllabus",
+		slog.WarnContext(ctx, "failed to scrape course detail",
 			"uid", course.UID,
 			"detail_url", course.DetailURL,
 			"duration_ms", time.Since(start).Milliseconds(),
 			"error", err)
-		return nil, fmt.Errorf("failed to fetch syllabus for %s: %w", course.UID, err)
+		return nil, fmt.Errorf("failed to fetch course detail for %s: %w", course.UID, err)
 	}
 
 	fields := parseSyllabusPage(doc)
+	programs := parseProgramsFromDetailPage(doc)
 
-	slog.DebugContext(ctx, "syllabus scraped successfully",
+	slog.DebugContext(ctx, "course detail scraped successfully",
 		"uid", course.UID,
-		"is_empty", fields.IsEmpty(),
-		"content_length", len(fields.ContentForIndexing(course.Title)),
+		"syllabus_empty", fields.IsEmpty(),
+		"programs_count", len(programs),
 		"duration_ms", time.Since(start).Milliseconds())
 
-	return fields, nil
+	return &ScrapeResult{
+		Fields:   fields,
+		Programs: programs,
+	}, nil
 }
 
 // parseSyllabusPage extracts syllabus fields from HTML document.
@@ -244,4 +255,65 @@ func cleanContent(s string) string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+// parseProgramsFromDetailPage extracts program requirements from the course detail page.
+// The detail page (queryguide) contains complete and accurate program names in the Major field.
+// Format: "應修系級 Major:<b class="font-c15">統計學系3 ...,商業智慧與大數據分析學士學分學程 ...</b>"
+// Programs are comma-separated, only items ending with "學程" are included.
+func parseProgramsFromDetailPage(doc *goquery.Document) []storage.ProgramRequirement {
+	programs := make([]storage.ProgramRequirement, 0)
+
+	// Find the Major field - it contains both departments and programs
+	// The detail page shows: "應修系級 Major:" followed by <b class="font-c15">content</b>
+	doc.Find("td.font-g13").Each(func(i int, td *goquery.Selection) {
+		text := td.Text()
+
+		// Look for the Major/應修系級 field
+		if !strings.Contains(text, "Major:") && !strings.Contains(text, "應修系級") {
+			return
+		}
+
+		// Extract content from <b class="font-c15">
+		bold := td.Find("b.font-c15")
+		if bold.Length() == 0 {
+			return
+		}
+
+		// Get the HTML content and split by comma
+		content, _ := bold.Html()
+		if content == "" {
+			content = bold.Text()
+		}
+
+		// Split by comma (programs and departments are comma-separated)
+		parts := strings.Split(content, ",")
+
+		for _, part := range parts {
+			// Clean up: remove HTML tags, &nbsp;, whitespace
+			part = reHTMLTags.ReplaceAllString(part, "")
+			part = strings.ReplaceAll(part, "&nbsp;", "")
+			part = strings.ReplaceAll(part, "\u00a0", "") // non-breaking space
+			part = strings.TrimSpace(part)
+
+			// Only include items ending with "學程"
+			if !strings.HasSuffix(part, "學程") {
+				continue
+			}
+
+			// Skip empty or invalid entries
+			if part == "" || part == "學程" {
+				continue
+			}
+
+			// All programs from detail page use "選" (elective) as default
+			// The detail page doesn't specify required/elective per program
+			programs = append(programs, storage.ProgramRequirement{
+				ProgramName: part,
+				CourseType:  "選",
+			})
+		}
+	})
+
+	return programs
 }

@@ -568,11 +568,11 @@ func (h *Handler) handleCourseProgramsList(ctx context.Context, courseUID string
 
 	// Always use Flex carousel for related programs (allows unlimited rows via LINE API)
 	// This provides a consistent UI experience regardless of program count
-	return h.formatCourseProgramsAsCarousel(ctx, courseName, programs)
+	return h.formatCourseProgramsAsCarousel(ctx, programs)
 }
 
 // formatCourseProgramsAsCarousel formats course programs as Flex carousel.
-func (h *Handler) formatCourseProgramsAsCarousel(ctx context.Context, courseName string, programs []storage.ProgramRequirement) []messaging_api.MessageInterface {
+func (h *Handler) formatCourseProgramsAsCarousel(ctx context.Context, programs []storage.ProgramRequirement) []messaging_api.MessageInterface {
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	// Get recent 2 semesters for consistent course count filtering
@@ -601,14 +601,8 @@ func (h *Handler) formatCourseProgramsAsCarousel(ctx context.Context, courseName
 		bubbles = append(bubbles, *bubble.FlexBubble)
 	}
 
-	// Build carousel with header text
-	headerMsg := lineutil.NewTextMessageWithConsistentSender(
-		fmt.Sprintf("🎓 課程「%s」的相關學程\n\n共 %d 個學程，點擊下方卡片查看詳細資訊", courseName, len(programs)),
-		sender,
-	)
-
-	carouselMessages := lineutil.BuildCarouselMessages("相關學程", bubbles, sender)
-	messages := append([]messaging_api.MessageInterface{headerMsg}, carouselMessages...)
+	// Build carousel (no header text - carousel is self-explanatory)
+	messages := lineutil.BuildCarouselMessages("相關學程", bubbles, sender)
 
 	// Add quick reply to last message
 	if len(messages) > 0 {

@@ -313,11 +313,11 @@ func (h *Handler) buildProgramBubble(program storage.Program) *lineutil.FlexBubb
 	// Row 2: View courses button (internal) - only if courses exist
 	// Stacked vertically: distinct row
 	if totalCourses > 0 {
-		// DisplayText: {Name} 有哪些課？ (question style)
-		displayText := program.Name + " 有哪些課？"
+		// DisplayText: 查看 {Name} 課程 (declarative style)
+		displayText := "查看 " + program.Name + " 課程"
 		if len([]rune(displayText)) > 40 {
-			// Static chars: " 有哪些課？" = 6 runes, 40 - 6 = 34
-			displayText = lineutil.TruncateRunes(program.Name, 34) + " 有哪些課？"
+			// Static chars: "查看 " + " 課程" = 5 runes, 40 - 5 = 35
+			displayText = "查看 " + lineutil.TruncateRunes(program.Name, 35) + " 課程"
 		}
 		viewCoursesBtn := lineutil.NewFlexButton(
 			lineutil.NewPostbackActionWithDisplayText(
@@ -465,11 +465,11 @@ func (h *Handler) buildProgramCourseBubble(pc storage.ProgramCourse, isRequired 
 	// Note: Location info is omitted for program course bubbles to keep display compact
 	// Users can view full details by clicking "詳細資訊"
 
-	// Footer: View course detail button - displayText shows course title as question
-	// DisplayText: {Title} 的詳細資訊？ (question style)
-	displayText := pc.Course.Title + " 的詳細資訊？"
+	// Footer: View course detail button - displayText shows declarative action
+	// DisplayText: 查看 {Title} 詳細資訊 (declarative style)
+	displayText := "查看 " + pc.Course.Title + " 詳細資訊"
 	if len([]rune(displayText)) > 40 {
-		displayText = lineutil.TruncateRunes(pc.Course.Title, 33) + " 的詳細資訊？"
+		displayText = "查看 " + lineutil.TruncateRunes(pc.Course.Title, 33) + " 詳細資訊"
 	}
 	viewDetailBtn := lineutil.NewFlexButton(
 		lineutil.NewPostbackActionWithDisplayText(

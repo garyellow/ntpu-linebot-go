@@ -71,23 +71,27 @@ type Handler struct {
 
 ### 資料來源
 
-學程資料**不是獨立抓取**，而是從課程資料解析：
+學程資料從**課程大綱頁面 (queryguide)** 提取，於 syllabus warmup 時同步：
 
 ```
-Course.應修系級 欄位
+Syllabus Warmup (Daily 3:00 AM)
+    ↓
+ScrapeCourseDetail() - 課程大綱頁面
+    ↓
+parseProgramsFromDetailPage() - 解析應修系級 Major 欄位
     ↓ (過濾)
 以「學程」結尾的項目
-    ↓ (解析)
-program_name + course_type (必修/選修)
     ↓ (存入)
-course_programs 表
+SaveCoursePrograms() → course_programs 表
 ```
 
-**範例**：
-```
-應修系級：「資訊工程學系3A」、「人工智慧學程」
-→ 提取：「人工智慧學程」
-→ 存入：program_name="人工智慧學程", course_type="必修"
+**為何使用課程大綱頁面**：
+- 課程列表頁 (queryByKeyword) 的應修系級欄位有不完整/縮寫的學程名稱
+- 課程大綱頁 (queryguide) 的 Major 欄位有完整且準確的學程名稱
+
+**範例**（課程大綱頁 HTML）：
+```html
+應修系級 Major:<b class="font-c15">統計學系3, 商業智慧與大數據分析學士學分學程, ...</b>
 ```
 
 ## 資料庫設計
@@ -212,9 +216,11 @@ Probe Semesters (scraper)
     ↓
 Refresh Courses (course module)
     ↓
-Parse 應修系級 → Extract Programs
+Syllabus Warmup (most recent 2 semesters)
     ↓
-Update course_programs table
+ScrapeCourseDetail() → Extract Syllabus + Programs
+    ↓
+SaveCoursePrograms() → course_programs table
     ↓
 semesterCache.Update() (shared)
 ```
@@ -245,13 +251,13 @@ semesterCache.Update() (shared)
 ## 限制與注意事項
 
 ### 資料來源限制
-- **依賴課程資料**：學程資料來自課程的 `應修系級` 欄位
-- **無獨立抓取**：不從學程網頁抓取
+- **依賴課程大綱頁面**：學程資料從 queryguide 頁面的 Major 欄位提取
+- **Syllabus Warmup 同步**：於 syllabus warmup 時提取（需要 LLM API Key）
 - **解析規則**：只提取以「學程」結尾的項目
 
 ### 資料品質
-- **完整性**：取決於課程資料的 `應修系級` 欄位品質
-- **時效性**：與課程資料同步更新（每日 3:00 AM）
+- **完整性**：課程大綱頁面有完整且準確的學程名稱
+- **時效性**：每日 3:00 AM 同步更新（最近 2 學期）
 - **覆蓋範圍**：只包含有開課的學程
 
 ## 相關文件

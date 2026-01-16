@@ -299,8 +299,9 @@ func parseCoursesPage(ctx context.Context, doc *goquery.Document, year, term int
 		// Extract course number (field 3)
 		no := strings.TrimSpace(tds.Eq(3).Text())
 
-		// Extract program requirements from field 5 (應修系級) and field 6 (必選修別)
-		programs := parseProgramFields(tds.Eq(5), tds.Eq(6))
+		// Note: Program requirements are now extracted from course detail page (queryguide)
+		// by syllabus.Scraper.ScrapeCourseDetail() during warmup, not from the list page.
+		// The list page's field 5 (應修系級) has incomplete/abbreviated data.
 
 		// Extract title, detail URL, note, location (field 7)
 		title, detailURL, note, location := parseTitleField(tds.Eq(7))
@@ -348,7 +349,6 @@ func parseCoursesPage(ctx context.Context, doc *goquery.Document, year, term int
 			Locations:   locations,
 			DetailURL:   fullDetailURL,
 			Note:        note,
-			Programs:    programs,
 			CachedAt:    cachedAt,
 		}
 
@@ -440,76 +440,4 @@ func parseTimeLocationField(td *goquery.Selection) (times []string, locations []
 	})
 
 	return
-}
-
-// parseProgramFields parses field 5 (應修系級) and field 6 (必選修別) to extract program requirements.
-// Only items ending with "學程" are included (e.g., "智慧財產權學士學分學程", "智慧財產權學士微學程").
-// Each row in field 5 corresponds to a row in field 6.
-//
-// HTML format:
-//
-//	Field 5: <p align="left">智慧財產權學士學分學程 &nbsp;<br>電機系1 &nbsp;<br></p>
-//	Field 6: 必<br>必<br>
-func parseProgramFields(deptCol, typeCol *goquery.Selection) []storage.ProgramRequirement {
-	programs := make([]storage.ProgramRequirement, 0)
-
-	// Get raw HTML and split by <br> to get individual items
-	// Field 5: 應修系級 - contains department/program names
-	field5HTML, _ := deptCol.Html()
-	field5Items := splitByBR(field5HTML)
-
-	// Field 6: 必選修別 - contains course types (必/選/通/etc.)
-	field6HTML, _ := typeCol.Html()
-	field6Items := splitByBR(field6HTML)
-
-	// Match items from both fields
-	for i, item := range field5Items {
-		// Clean up the item: remove &nbsp;, trim whitespace
-		item = strings.ReplaceAll(item, "&nbsp;", "")
-		item = strings.ReplaceAll(item, "\u00a0", "") // non-breaking space
-		item = strings.TrimSpace(item)
-
-		// Only include items ending with "學程"
-		if !strings.HasSuffix(item, "學程") {
-			continue
-		}
-
-		// Get corresponding course type (default to "選" if not available)
-		courseType := "選"
-		if i < len(field6Items) {
-			courseType = strings.TrimSpace(field6Items[i])
-			if courseType == "" {
-				courseType = "選"
-			}
-		}
-
-		programs = append(programs, storage.ProgramRequirement{
-			ProgramName: cleanProgramName(item),
-			CourseType:  courseType,
-		})
-	}
-
-	return programs
-}
-
-// splitByBR splits HTML content by <br> tags and returns cleaned text items.
-func splitByBR(html string) []string {
-	// Remove <p> tags and other wrapper elements
-	html = regexp.MustCompile(`<p[^>]*>`).ReplaceAllString(html, "")
-	html = strings.ReplaceAll(html, "</p>", "")
-
-	// Split by <br> variants: <br>, <br/>, <br />
-	parts := regexp.MustCompile(`<br\s*/?>`).Split(html, -1)
-
-	items := make([]string, 0, len(parts))
-	for _, part := range parts {
-		// Strip any remaining HTML tags
-		part = regexp.MustCompile(`<[^>]*>`).ReplaceAllString(part, "")
-		part = strings.TrimSpace(part)
-		if part != "" {
-			items = append(items, part)
-		}
-	}
-
-	return items
 }
