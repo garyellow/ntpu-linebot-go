@@ -297,7 +297,7 @@ func parseProgramsFromDetailPage(doc *goquery.Document) []storage.ProgramRequire
 			// Clean up: remove HTML tags, decode HTML entities, trim whitespace
 			part = reHTMLTags.ReplaceAllString(part, "")
 			part = html.UnescapeString(part)              // decode &nbsp;, &amp;, &lt;, etc.
-			part = strings.ReplaceAll(part, "\u00a0", "") // remove non-breaking space (decoded from &nbsp;)
+			part = strings.ReplaceAll(part, "\u00a0", "") // remove decoded non-breaking space character (from &nbsp;)
 			part = strings.TrimSpace(part)
 
 			// Only include items ending with "學程"
