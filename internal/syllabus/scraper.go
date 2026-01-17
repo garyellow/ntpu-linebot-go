@@ -259,35 +259,47 @@ func cleanContent(s string) string {
 
 // parseProgramsFromDetailPage extracts program requirements from the course detail page.
 // The detail page (queryguide) contains complete and accurate program names in the Major field.
-// Format: "應修系級 Major:<b class="font-c15">統計學系3 ...,商業智慧與大數據分析學士學分學程 ...</b>"
+// Format: "應修系級 Major：<b class="font-c15">資工系3 ,商業智慧與大數據分析學士學分學程 ,...</b>"
 // Programs are comma-separated, only items ending with "學程" are included.
 func parseProgramsFromDetailPage(doc *goquery.Document) []storage.ProgramRequirement {
 	programs := make([]storage.ProgramRequirement, 0)
 
-	// Find the Major field - it contains both departments and programs
-	// The detail page shows: "應修系級 Major:" followed by <b class="font-c15">content</b>
+	// Find the td.font-g13 element that contains course information
 	doc.Find("td.font-g13").Each(func(i int, td *goquery.Selection) {
-		text := td.Text()
-
-		// Look for the Major/應修系級 field
-		if !strings.Contains(text, "Major:") && !strings.Contains(text, "應修系級") {
+		// Get the full HTML content of the td element
+		html, err := td.Html()
+		if err != nil {
 			return
 		}
 
-		// Extract content from <b class="font-c15">
-		bold := td.Find("b.font-c15")
-		if bold.Length() == 0 {
-			return
+		// Look for the Major field pattern in the HTML
+		// Format: 應修系級 Major：<b class="font-c15">...</b>
+		majorPatterns := []string{"Major：<b class=\"font-c15\">", "Major:<b class=\"font-c15\">"}
+
+		var majorContent string
+		for _, pattern := range majorPatterns {
+			idx := strings.Index(html, pattern)
+			if idx == -1 {
+				continue
+			}
+
+			// Extract content between the pattern and the closing </b> tag
+			startIdx := idx + len(pattern)
+			endIdx := strings.Index(html[startIdx:], "</b>")
+			if endIdx == -1 {
+				continue
+			}
+
+			majorContent = html[startIdx : startIdx+endIdx]
+			break
 		}
 
-		// Get the HTML content and split by comma
-		content, _ := bold.Html()
-		if content == "" {
-			content = bold.Text()
+		if majorContent == "" {
+			return
 		}
 
 		// Split by comma (programs and departments are comma-separated)
-		parts := strings.Split(content, ",")
+		parts := strings.Split(majorContent, ",")
 
 		for _, part := range parts {
 			// Clean up: remove HTML tags, &nbsp;, whitespace
