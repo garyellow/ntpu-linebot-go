@@ -2,6 +2,7 @@ package syllabus
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -202,7 +203,7 @@ func TestScrapeCourseDetail_Programs(t *testing.T) {
 
 	// Verify no departments are included (should only have items ending with "學程")
 	for _, prog := range result.Programs {
-		if !containsAny(prog.ProgramName, []string{"學程"}) {
+		if !strings.HasSuffix(prog.ProgramName, "學程") {
 			t.Errorf("Program %q does not end with '學程' - parsing may be broken", prog.ProgramName)
 		}
 	}

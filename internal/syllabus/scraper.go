@@ -3,6 +3,7 @@ package syllabus
 import (
 	"context"
 	"fmt"
+	"html"
 	"log/slog"
 	"regexp"
 	"strings"
@@ -18,6 +19,10 @@ var (
 	reSpaces   = regexp.MustCompile(`[ \t]+`)
 	reNewlines = regexp.MustCompile(`\n{3,}`)
 	reHTMLTags = regexp.MustCompile(`<[^>]*>`)
+	// Matches "Major：" or "Major:" followed by <b> tag with font-c15 class
+	// Uses non-greedy match to capture content until </b>
+	// Handles variations: different quote styles, extra spaces, attribute order
+	reMajorField = regexp.MustCompile(`(?i)Major[：:]\s*<b[^>]*class\s*=\s*["']?font-c15["']?[^>]*>(.*?)</b>`)
 )
 
 // Scraper extracts syllabus content and program requirements from course detail pages
@@ -265,35 +270,22 @@ func parseProgramsFromDetailPage(doc *goquery.Document) []storage.ProgramRequire
 	programs := make([]storage.ProgramRequirement, 0)
 
 	// Find the td.font-g13 element that contains course information
+	// The first td.font-g13 contains basic course info including Major field
 	doc.Find("td.font-g13").Each(func(i int, td *goquery.Selection) {
 		// Get the full HTML content of the td element
-		html, err := td.Html()
+		htmlContent, err := td.Html()
 		if err != nil {
 			return
 		}
 
-		// Look for the Major field pattern in the HTML
-		// Format: 應修系級 Major：<b class="font-c15">...</b>
-		majorPatterns := []string{"Major：<b class=\"font-c15\">", "Major:<b class=\"font-c15\">"}
-
-		var majorContent string
-		for _, pattern := range majorPatterns {
-			idx := strings.Index(html, pattern)
-			if idx == -1 {
-				continue
-			}
-
-			// Extract content between the pattern and the closing </b> tag
-			startIdx := idx + len(pattern)
-			endIdx := strings.Index(html[startIdx:], "</b>")
-			if endIdx == -1 {
-				continue
-			}
-
-			majorContent = html[startIdx : startIdx+endIdx]
-			break
+		// Use regex to extract Major field content
+		// This handles variations like extra spaces, different quote styles
+		matches := reMajorField.FindStringSubmatch(htmlContent)
+		if len(matches) < 2 {
+			return
 		}
 
+		majorContent := matches[1]
 		if majorContent == "" {
 			return
 		}
@@ -302,10 +294,10 @@ func parseProgramsFromDetailPage(doc *goquery.Document) []storage.ProgramRequire
 		parts := strings.Split(majorContent, ",")
 
 		for _, part := range parts {
-			// Clean up: remove HTML tags, &nbsp;, whitespace
+			// Clean up: remove HTML tags, decode HTML entities, trim whitespace
 			part = reHTMLTags.ReplaceAllString(part, "")
-			part = strings.ReplaceAll(part, "&nbsp;", "")
-			part = strings.ReplaceAll(part, "\u00a0", "") // non-breaking space
+			part = html.UnescapeString(part)              // decode &nbsp;, &amp;, &lt;, etc.
+			part = strings.ReplaceAll(part, "\u00a0", "") // remove non-breaking space (decoded from &nbsp;)
 			part = strings.TrimSpace(part)
 
 			// Only include items ending with "學程"
