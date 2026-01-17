@@ -2,6 +2,7 @@ package syllabus
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -140,6 +141,73 @@ func TestScrapeCourseDetail_DistinctSections(t *testing.T) {
 }
 
 // Helper functions
+
+// TestScrapeCourseDetail_Programs tests that programs are correctly extracted from course detail pages
+func TestScrapeCourseDetail_Programs(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	baseURLs := map[string][]string{
+		"lms": {"https://lms.ntpu.edu.tw"},
+		"sea": {"https://sea.cc.ntpu.edu.tw"},
+	}
+	client := scraper.NewClient(30*time.Second, 3, baseURLs)
+	s := NewScraper(client)
+
+	// Test with the algorithms course (演算法) which has multiple programs
+	course := &storage.Course{
+		UID:       "1141U3556",
+		DetailURL: "https://sea.cc.ntpu.edu.tw/pls/dev_stud/course_query.queryguide?g_serial=U3556&g_year=114&g_term=1&show_info=all",
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	result, err := s.ScrapeCourseDetail(ctx, course)
+	if err != nil {
+		t.Fatalf("ScrapeCourseDetail failed: %v", err)
+	}
+
+	t.Logf("=== Extracted Programs ===")
+	t.Logf("Total programs found: %d", len(result.Programs))
+
+	for i, prog := range result.Programs {
+		t.Logf("  Program %d: %s (type: %s)", i+1, prog.ProgramName, prog.CourseType)
+	}
+
+	// Validate that we found programs
+	if len(result.Programs) == 0 {
+		t.Error("Expected to find programs, but got none")
+	}
+
+	// Expected programs for 演算法 course (may change over time, but some should be present)
+	expectedPrograms := []string{
+		"商業智慧與大數據分析學士學分學程",
+		"資料拓析學士學分學程",
+		"人工智慧學士學分學程",
+	}
+
+	for _, expected := range expectedPrograms {
+		found := false
+		for _, prog := range result.Programs {
+			if prog.ProgramName == expected {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Logf("Warning: Expected program %q not found (may have changed)", expected)
+		}
+	}
+
+	// Verify no departments are included (should only have items ending with "學程")
+	for _, prog := range result.Programs {
+		if !strings.HasSuffix(prog.ProgramName, "學程") {
+			t.Errorf("Program %q does not end with '學程' - parsing may be broken", prog.ProgramName)
+		}
+	}
+}
 
 func truncateForLog(s string, maxLen int) string {
 	if len(s) <= maxLen {

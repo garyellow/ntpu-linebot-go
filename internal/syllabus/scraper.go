@@ -3,6 +3,7 @@ package syllabus
 import (
 	"context"
 	"fmt"
+	"html"
 	"log/slog"
 	"regexp"
 	"strings"
@@ -18,6 +19,10 @@ var (
 	reSpaces   = regexp.MustCompile(`[ \t]+`)
 	reNewlines = regexp.MustCompile(`\n{3,}`)
 	reHTMLTags = regexp.MustCompile(`<[^>]*>`)
+	// Matches "Major：" or "Major:" followed by <b> tag with font-c15 class
+	// Uses non-greedy match to capture content until </b>
+	// Handles variations: different quote styles, extra spaces, attribute order
+	reMajorField = regexp.MustCompile(`(?i)Major[：:]\s*<b[^>]*class\s*=\s*["']?font-c15["']?[^>]*>(.*?)</b>`)
 )
 
 // Scraper extracts syllabus content and program requirements from course detail pages
@@ -259,41 +264,40 @@ func cleanContent(s string) string {
 
 // parseProgramsFromDetailPage extracts program requirements from the course detail page.
 // The detail page (queryguide) contains complete and accurate program names in the Major field.
-// Format: "應修系級 Major:<b class="font-c15">統計學系3 ...,商業智慧與大數據分析學士學分學程 ...</b>"
+// Format: "應修系級 Major：<b class="font-c15">資工系3 ,商業智慧與大數據分析學士學分學程 ,...</b>"
 // Programs are comma-separated, only items ending with "學程" are included.
 func parseProgramsFromDetailPage(doc *goquery.Document) []storage.ProgramRequirement {
 	programs := make([]storage.ProgramRequirement, 0)
 
-	// Find the Major field - it contains both departments and programs
-	// The detail page shows: "應修系級 Major:" followed by <b class="font-c15">content</b>
+	// Find the td.font-g13 element that contains course information
+	// The first td.font-g13 contains basic course info including Major field
 	doc.Find("td.font-g13").Each(func(i int, td *goquery.Selection) {
-		text := td.Text()
-
-		// Look for the Major/應修系級 field
-		if !strings.Contains(text, "Major:") && !strings.Contains(text, "應修系級") {
+		// Get the full HTML content of the td element
+		htmlContent, err := td.Html()
+		if err != nil {
 			return
 		}
 
-		// Extract content from <b class="font-c15">
-		bold := td.Find("b.font-c15")
-		if bold.Length() == 0 {
+		// Use regex to extract Major field content
+		// This handles variations like extra spaces, different quote styles
+		matches := reMajorField.FindStringSubmatch(htmlContent)
+		if len(matches) < 2 {
 			return
 		}
 
-		// Get the HTML content and split by comma
-		content, _ := bold.Html()
-		if content == "" {
-			content = bold.Text()
+		majorContent := matches[1]
+		if majorContent == "" {
+			return
 		}
 
 		// Split by comma (programs and departments are comma-separated)
-		parts := strings.Split(content, ",")
+		parts := strings.Split(majorContent, ",")
 
 		for _, part := range parts {
-			// Clean up: remove HTML tags, &nbsp;, whitespace
+			// Clean up: remove HTML tags, decode HTML entities, trim whitespace
 			part = reHTMLTags.ReplaceAllString(part, "")
-			part = strings.ReplaceAll(part, "&nbsp;", "")
-			part = strings.ReplaceAll(part, "\u00a0", "") // non-breaking space
+			part = html.UnescapeString(part)              // decode &nbsp;, &amp;, &lt;, etc.
+			part = strings.ReplaceAll(part, "\u00a0", "") // remove decoded non-breaking space character (from &nbsp;)
 			part = strings.TrimSpace(part)
 
 			// Only include items ending with "學程"
