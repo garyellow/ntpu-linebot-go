@@ -39,6 +39,14 @@ type ProgramRequirement struct {
 	CourseType  string `json:"course_type"`  // Requirement type: "必" (required), "選" (elective), etc.
 }
 
+// RawProgramReq represents a program requirement from the course list page.
+// Contains potentially abbreviated name and the required/elective type.
+// This is a transient type used during warmup for matching with full program names.
+type RawProgramReq struct {
+	Name       string // Potentially abbreviated program/department name from list page
+	CourseType string // "必" (required) or "選" (elective)
+}
+
 // Course represents a course record
 type Course struct {
 	UID         string   `json:"uid"`
@@ -53,6 +61,11 @@ type Course struct {
 	DetailURL   string   `json:"detail_url,omitzero"`
 	Note        string   `json:"note,omitzero"`
 	CachedAt    int64    `json:"cached_at"`
+
+	// RawProgramReqs stores raw program requirements from the course list page.
+	// This is a transient field used only during warmup processing.
+	// Not persisted to database; populated by course_scraper, consumed by syllabus scraper.
+	RawProgramReqs []RawProgramReq `json:"-"`
 }
 
 // Program represents an academic program (學程) with course statistics.

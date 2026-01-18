@@ -3,6 +3,7 @@ package ntpu
 import (
 	"context"
 	"fmt"
+	"html"
 	"log/slog"
 	"net/url"
 	"regexp"
@@ -27,8 +28,12 @@ const (
 // allEducationCodes contains education level codes (U=大學部, M=碩士班, N=碩士在職專班, P=博士班)
 var allEducationCodes = []string{"U", "M", "N", "P"}
 
-// Classroom regex patterns
-var classroomRegex = regexp.MustCompile(`(?:教室|上課地點)[:：為](.*?)(?:$|[ .，。；【])`)
+// Regex patterns for parsing course list page
+var (
+	classroomRegex = regexp.MustCompile(`(?:教室|上課地點)[:：為](.*?)(?:$|[ .，。；【])`)
+	reBRTag        = regexp.MustCompile(`(?i)<br\s*/?>`)
+	reHTMLTags     = regexp.MustCompile(`<[^>]*>`)
+)
 
 // ScrapeCoursesByYear scrapes ALL courses for a given year (both semesters)
 // This is a convenience wrapper around ScrapeCourses with term=0 and empty title
@@ -299,9 +304,10 @@ func parseCoursesPage(ctx context.Context, doc *goquery.Document, year, term int
 		// Extract course number (field 3)
 		no := strings.TrimSpace(tds.Eq(3).Text())
 
-		// Note: Program requirements are now extracted from course detail page (queryguide)
-		// by syllabus.Scraper.ScrapeCourseDetail() during warmup, not from the list page.
-		// The list page's field 5 (應修系級) has incomplete/abbreviated data.
+		// Extract raw program requirements from columns 5 (應修系級) and 6 (必選修別)
+		// These are paired 1:1 by <br> tags in each column.
+		// Used by syllabus scraper to match with full program names from detail page.
+		rawProgramReqs := parseMajorAndTypeFields(tds.Eq(5), tds.Eq(6))
 
 		// Extract title, detail URL, note, location (field 7)
 		title, detailURL, note, location := parseTitleField(tds.Eq(7))
@@ -338,18 +344,19 @@ func parseCoursesPage(ctx context.Context, doc *goquery.Document, year, term int
 		}
 
 		course := &storage.Course{
-			UID:         uid,
-			Year:        year,
-			Term:        rowTerm,
-			No:          no,
-			Title:       title,
-			Teachers:    teachers,
-			TeacherURLs: teacherURLs,
-			Times:       times,
-			Locations:   locations,
-			DetailURL:   fullDetailURL,
-			Note:        note,
-			CachedAt:    cachedAt,
+			UID:            uid,
+			Year:           year,
+			Term:           rowTerm,
+			No:             no,
+			Title:          title,
+			Teachers:       teachers,
+			TeacherURLs:    teacherURLs,
+			Times:          times,
+			Locations:      locations,
+			DetailURL:      fullDetailURL,
+			Note:           note,
+			CachedAt:       cachedAt,
+			RawProgramReqs: rawProgramReqs,
 		}
 
 		courses = append(courses, course)
@@ -440,4 +447,92 @@ func parseTimeLocationField(td *goquery.Selection) (times []string, locations []
 	})
 
 	return
+}
+
+// parseMajorAndTypeFields extracts program/department requirements from columns 5 and 6.
+// Column 5 (應修系級) and Column 6 (必選修別) are paired by <br> tags.
+// Returns slice of RawProgramReq with (name, type) pairs.
+func parseMajorAndTypeFields(majorTD, typeTD *goquery.Selection) []storage.RawProgramReq {
+	// Get HTML content and split by <br>
+	majorHTML, _ := majorTD.Html()
+	typeHTML, _ := typeTD.Html()
+
+	// Split by <br> tag (case insensitive)
+	majorParts := splitByBR(majorHTML)
+	typeParts := splitByBR(typeHTML)
+
+	// Pair them up (use shorter length to avoid index out of bounds)
+	n := minInt(len(majorParts), len(typeParts))
+	result := make([]storage.RawProgramReq, 0, n)
+	for i := range n {
+		name := cleanMajorName(majorParts[i])
+		courseType := cleanCourseType(typeParts[i])
+
+		if name == "" || courseType == "" {
+			continue
+		}
+
+		result = append(result, storage.RawProgramReq{
+			Name:       name,
+			CourseType: courseType,
+		})
+	}
+
+	return result
+}
+
+// splitByBR splits HTML content by <br> tags (handles <br>, <br/>, <br />).
+func splitByBR(htmlContent string) []string {
+	// Replace all <br> variants with a delimiter
+	normalized := reBRTag.ReplaceAllString(htmlContent, "\n")
+
+	parts := strings.Split(normalized, "\n")
+	var result []string
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
+}
+
+// cleanMajorName removes HTML tags, &nbsp;, and extra whitespace from a major/program name.
+func cleanMajorName(s string) string {
+	// Remove HTML tags (e.g., <a>, <img> for prerequisites)
+	s = reHTMLTags.ReplaceAllString(s, "")
+	// Decode HTML entities (&nbsp;, &amp;, etc.)
+	s = html.UnescapeString(s)
+	// Remove non-breaking space character (from &nbsp;)
+	s = strings.ReplaceAll(s, "\u00a0", "")
+	// Remove common inline annotations from list page
+	for _, token := range []string{"有擋修", "有限制"} {
+		s = strings.ReplaceAll(s, token, "")
+	}
+	// Trim whitespace
+	return strings.TrimSpace(s)
+}
+
+// cleanCourseType extracts course type (必/選) from a string.
+func cleanCourseType(s string) string {
+	s = strings.TrimSpace(s)
+	// Remove any HTML tags
+	s = reHTMLTags.ReplaceAllString(s, "")
+	s = strings.TrimSpace(s)
+
+	// Accept variations like "必修"/"選修"
+	if strings.Contains(s, "必") {
+		return "必"
+	}
+	if strings.Contains(s, "選") {
+		return "選"
+	}
+	return ""
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

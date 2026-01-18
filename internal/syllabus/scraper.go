@@ -42,7 +42,10 @@ type ScrapeResult struct {
 }
 
 // ScrapeCourseDetail extracts syllabus content AND program requirements from a course's detail URL.
-// Returns structured fields and program list, or error if URL is invalid.
+// Uses dual-source fusion for program requirements:
+//   - Full program names come from the detail page (accurate)
+//   - Required/elective types come from course.RawProgramReqs (list page) via fuzzy matching
+//
 // This is the primary method for extracting course detail data.
 func (s *Scraper) ScrapeCourseDetail(ctx context.Context, course *storage.Course) (*ScrapeResult, error) {
 	if course.DetailURL == "" {
@@ -69,12 +72,20 @@ func (s *Scraper) ScrapeCourseDetail(ctx context.Context, course *storage.Course
 	}
 
 	fields := parseSyllabusPage(doc)
-	programs := parseProgramsFromDetailPage(doc)
+
+	// Get full program names from detail page (accurate source)
+	fullProgramNames := parseProgramNamesFromDetailPage(doc)
+
+	// Match with raw requirements from list page to get correct course types
+	// This implements dual-source fusion: accurate names + correct types
+	programs := MatchProgramTypes(fullProgramNames, course.RawProgramReqs)
 
 	slog.DebugContext(ctx, "course detail scraped successfully",
 		"uid", course.UID,
 		"syllabus_empty", fields.IsEmpty(),
-		"programs_count", len(programs),
+		"full_names_count", len(fullProgramNames),
+		"matched_programs", len(programs),
+		"raw_reqs_count", len(course.RawProgramReqs),
 		"duration_ms", time.Since(start).Milliseconds())
 
 	return &ScrapeResult{
@@ -262,12 +273,12 @@ func cleanContent(s string) string {
 	return strings.Join(lines, "\n")
 }
 
-// parseProgramsFromDetailPage extracts program requirements from the course detail page.
+// parseProgramNamesFromDetailPage extracts program names from the course detail page.
 // The detail page (queryguide) contains complete and accurate program names in the Major field.
 // Format: "應修系級 Major：<b class="font-c15">資工系3 ,商業智慧與大數據分析學士學分學程 ,...</b>"
-// Programs are comma-separated, only items ending with "學程" are included.
-func parseProgramsFromDetailPage(doc *goquery.Document) []storage.ProgramRequirement {
-	programs := make([]storage.ProgramRequirement, 0)
+// Returns only program names (items ending with "學程"); course type is determined by matcher.
+func parseProgramNamesFromDetailPage(doc *goquery.Document) []string {
+	var programs []string
 
 	// Find the td.font-g13 element that contains course information
 	// The first td.font-g13 contains basic course info including Major field
@@ -310,12 +321,7 @@ func parseProgramsFromDetailPage(doc *goquery.Document) []storage.ProgramRequire
 				continue
 			}
 
-			// All programs from detail page use "選" (elective) as default
-			// The detail page doesn't specify required/elective per program
-			programs = append(programs, storage.ProgramRequirement{
-				ProgramName: part,
-				CourseType:  "選",
-			})
+			programs = append(programs, part)
 		}
 	})
 

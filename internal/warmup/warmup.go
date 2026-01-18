@@ -51,6 +51,12 @@ type Options struct {
 	SemesterCache *course.SemesterCache // Shared cache to update after warmup
 }
 
+// courseProgramMap stores raw program requirements keyed by course UID.
+// Populated during course warmup, consumed during syllabus warmup.
+// This enables dual-source fusion: accurate program names from syllabus page +
+// correct required/elective types from course list page.
+type courseProgramMap map[string][]storage.RawProgramReq
+
 // Run executes daily cache refresh: contact, course, program (always), syllabus (if HasLLMKey).
 func Run(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, opts Options) (*Stats, error) {
 	stats := &Stats{}
@@ -68,8 +74,9 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, log *logge
 
 	g, ctx := errgroup.WithContext(ctx)
 
-	// Channel to signal course completion (for syllabus dependency)
-	courseDone := make(chan struct{})
+	// Channel to pass raw program requirements from course warmup to syllabus warmup
+	// This enables dual-source fusion: accurate names from syllabus + correct types from list
+	programMapChan := make(chan courseProgramMap, 1)
 
 	g.Go(func() error {
 		if err := warmupContactModule(ctx, db, client, log, stats, opts.Metrics); err != nil {
@@ -80,10 +87,16 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, log *logge
 	})
 
 	g.Go(func() error {
-		defer close(courseDone)
-		if err := warmupCourseModule(ctx, db, client, log, stats, opts.Metrics, opts.SemesterCache); err != nil {
+		defer close(programMapChan)
+		programMap, err := warmupCourseModule(ctx, db, client, log, stats, opts.Metrics, opts.SemesterCache)
+		if err != nil {
 			log.WithError(err).Error("Course module warmup failed")
 			return fmt.Errorf("course module: %w", err)
+		}
+		// Send program map to syllabus warmup
+		select {
+		case programMapChan <- programMap:
+		case <-ctx.Done():
 		}
 		return nil
 	})
@@ -109,17 +122,24 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, log *logge
 
 	if hasSyllabus {
 		g.Go(func() error {
+			// Wait for course warmup to complete and get program map
+			var programMap courseProgramMap
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-courseDone:
+			case pm, ok := <-programMapChan:
+				if !ok {
+					// Channel closed without sending, course warmup may have failed
+					return nil
+				}
+				programMap = pm
 			}
 
 			if opts.BM25Index == nil {
 				return nil
 			}
 
-			if err := warmupSyllabusModule(ctx, db, client, opts.BM25Index, log, stats, opts.Metrics); err != nil {
+			if err := warmupSyllabusModule(ctx, db, client, opts.BM25Index, log, stats, opts.Metrics, programMap); err != nil {
 				log.WithError(err).Error("Syllabus module warmup failed")
 				return fmt.Errorf("syllabus: %w", err)
 			}
@@ -380,7 +400,9 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 // warmupCourseModule warms course cache for the 4 most recent semesters.
 // Probes actual data source (scraper) to find semesters with data.
 // Updates SemesterCache after successful warmup.
-func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics, semesterCache *course.SemesterCache) error {
+// Returns courseProgramMap for syllabus warmup to use in dual-source fusion.
+func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics, semesterCache *course.SemesterCache) (courseProgramMap, error) {
+	programMap := make(courseProgramMap)
 	startTime := time.Now()
 	defer func() {
 		if m != nil {
@@ -393,12 +415,12 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 	// Probe semesters to find 4 with actual data
 	semesters, err := probeSemestersWithData(ctx, client, log)
 	if err != nil {
-		return fmt.Errorf("failed to probe semesters: %w", err)
+		return programMap, fmt.Errorf("failed to probe semesters: %w", err)
 	}
 
 	if len(semesters) == 0 {
 		log.Warn("No semesters with data found during probing")
-		return nil
+		return programMap, nil
 	}
 
 	// Each semester makes 4 requests (U/M/N/P education codes)
@@ -412,7 +434,7 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 	for _, sem := range semesters {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("course module canceled: %w", ctx.Err())
+			return programMap, fmt.Errorf("course module canceled: %w", ctx.Err())
 		default:
 		}
 
@@ -425,6 +447,14 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 				WithField("term", sem.Term).
 				Warn("Failed to scrape courses for semester")
 			continue
+		}
+
+		// Collect raw program requirements for syllabus warmup (dual-source fusion)
+		// This enables accurate program names + correct required/elective types
+		for _, c := range courses {
+			if len(c.RawProgramReqs) > 0 {
+				programMap[c.UID] = c.RawProgramReqs
+			}
 		}
 
 		// Save using batch operation to reduce lock contention
@@ -446,14 +476,11 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 				Warn("Failed to cleanup historical courses (non-critical)")
 		}
 
-		// Note: Course-program relationships are now populated by syllabus warmup
-		// via ScrapeCourseDetail() which extracts complete program data from
-		// the course detail page (queryguide), not from the list page.
-
 		stats.Courses.Add(int64(len(courses)))
 		log.WithField("year", sem.Year).
 			WithField("term", sem.Term).
 			WithField("count", len(courses)).
+			WithField("program_reqs_collected", len(programMap)).
 			WithField("total_cached", stats.Courses.Load()).
 			Info("Courses cached for semester")
 	}
@@ -467,9 +494,10 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 
 	log.WithField("total_courses", stats.Courses.Load()).
 		WithField("semesters_processed", len(semesters)).
+		WithField("program_map_size", len(programMap)).
 		Info("Course module warmup complete")
 
-	return nil
+	return programMap, nil
 }
 
 // probeSemestersWithData probes the course system to find 4 semesters with actual data.
@@ -561,9 +589,9 @@ func formatSemesters(semesters []course.Semester) string {
 // warmupSyllabusModule warms syllabus cache and BM25 index
 // ONLY processes courses from the most recent 2 semesters (with cached data)
 // Uses content hash for incremental updates - only re-scrapes changed syllabi
-// Other semesters are not processed to reduce scraping load
+// programMap provides raw program requirements from course list page for dual-source fusion
 // Optimization: Processes courses in batches to reduce peak memory usage
-func warmupSyllabusModule(ctx context.Context, db *storage.DB, client *scraper.Client, bm25Index *rag.BM25Index, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
+func warmupSyllabusModule(ctx context.Context, db *storage.DB, client *scraper.Client, bm25Index *rag.BM25Index, log *logger.Logger, stats *Stats, m *metrics.Metrics, programMap courseProgramMap) error {
 	startTime := time.Now()
 	defer func() {
 		if m != nil {
@@ -644,6 +672,12 @@ processLoop:
 				if course.DetailURL == "" {
 					skippedCount++
 					continue
+				}
+
+				// Attach raw program requirements from course list page (dual-source fusion)
+				// This enables accurate program names from syllabus + correct types from list
+				if rawReqs, ok := programMap[course.UID]; ok {
+					course.RawProgramReqs = rawReqs
 				}
 
 				// Scrape course detail (syllabus + program requirements)
