@@ -111,7 +111,9 @@ return handler.HandleMessage(ctx, rawText)
   - 查看學程課程（必修在前、選修在後）
   - 課程相關學程查詢（課程詳情頁「相關學程」按鈕）
 - **搜尋策略**：SQL LIKE (program_name) + 模糊 ContainsAllRunes (program_name)
-- **資料來源**：從課程大綱頁面 (queryguide) 的 Major 欄位提取（篩選以「學程」結尾的項目）
+- **資料來源**：雙來源融合
+  - 課程列表頁 (queryByKeyword) 提供必/選修
+  - 課程大綱頁 (queryguide) 提供完整學程名稱
 - **Postback 前綴**：`program:`
 - **Sender 名稱**：學程小幫手
 

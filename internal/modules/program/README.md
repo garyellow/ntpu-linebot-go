@@ -9,7 +9,7 @@
 #### 1. **學程列表**
 - **關鍵字**：`學程` / `所有學程` / `學程列表`
 - **顯示**：所有可修讀學程（依類別分組）
-- **來源**：從課程資料解析（`應修系級` 欄位）
+- **來源**：課程列表 + 課程大綱雙來源融合（名稱準確 + 必/選修正確）
 
 #### 2. **學程搜尋**
 - **關鍵字**：`學程 [關鍵字]`
@@ -69,25 +69,33 @@ type Handler struct {
 }
 ```
 
-### 資料來源
+### 資料來源（雙來源融合）
 
-學程資料從**課程大綱頁面 (queryguide)** 提取，於 syllabus warmup 時同步：
+學程資料採 **課程列表 + 課程大綱** 的雙來源融合，於 warmup 時同步：
 
 ```
-Syllabus Warmup (Daily 3:00 AM)
+Course Warmup (Daily 3:00 AM)
     ↓
-ScrapeCourseDetail() - 課程大綱頁面
+ScrapeCourses() - 課程列表頁 (queryByKeyword)
     ↓
-parseProgramsFromDetailPage() - 解析應修系級 Major 欄位
-    ↓ (過濾)
-以「學程」結尾的項目
-    ↓ (存入)
+parseMajorAndTypeFields() - 擷取「應修系級」+「必選修別」(原始名稱 + 必/選)
+    ↓
+RawProgramReqs (UID → []{name,type})
+
+Syllabus Warmup (Daily 3:00 AM, after course warmup)
+    ↓
+ScrapeCourseDetail() - 課程大綱頁面 (queryguide)
+    ↓
+parseProgramNamesFromDetailPage() - 完整學程名稱 (Major 欄位)
+    ↓
+MatchProgramTypes() - 模糊比對，將「必/選」對齊到完整名稱
+    ↓
 SaveCoursePrograms() → course_programs 表
 ```
 
-**為何使用課程大綱頁面**：
-- 課程列表頁 (queryByKeyword) 的應修系級欄位有不完整/縮寫的學程名稱
-- 課程大綱頁 (queryguide) 的 Major 欄位有完整且準確的學程名稱
+**為何使用雙來源**：
+- 課程列表頁 (queryByKeyword) 的應修系級欄位 **有必/選修資訊**，但名稱可能縮寫或不完整
+- 課程大綱頁 (queryguide) 的 Major 欄位 **名稱完整且準確**，但不提供學程必/選修
 
 **範例**（課程大綱頁 HTML）：
 ```html
@@ -251,12 +259,14 @@ semesterCache.Update() (shared)
 ## 限制與注意事項
 
 ### 資料來源限制
-- **依賴課程大綱頁面**：學程資料從 queryguide 頁面的 Major 欄位提取
-- **Syllabus Warmup 同步**：於 syllabus warmup 時提取（需要 LLM API Key）
-- **解析規則**：只提取以「學程」結尾的項目
+- **雙來源融合**：學程名稱來自課程大綱頁，必/選修來自課程列表頁
+- **Warmup 依賴**：需先完成 course warmup 才能帶入必/選修，再由 syllabus warmup 做匹配
+- **啟用條件**：syllabus warmup 需設定 LLM API Key 才會啟用
+- **解析規則**：只提取以「學程」結尾的項目（排除系所）
 
 ### 資料品質
-- **完整性**：課程大綱頁面有完整且準確的學程名稱
+- **完整性**：課程大綱頁面提供完整且準確的學程名稱
+- **正確性**：必/選修以課程列表頁為準（避免大綱缺欄位）
 - **時效性**：每日 3:00 AM 同步更新（最近 2 學期）
 - **覆蓋範圍**：只包含有開課的學程
 

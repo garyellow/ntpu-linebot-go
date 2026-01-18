@@ -354,7 +354,7 @@ func TestNewScraper(t *testing.T) {
 	}
 }
 
-func TestParseProgramsFromDetailPage(t *testing.T) {
+func TestParseProgramNamesFromDetailPage(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name         string
@@ -443,12 +443,12 @@ func TestParseProgramsFromDetailPage(t *testing.T) {
 				t.Fatalf("Failed to parse HTML: %v", err)
 			}
 
-			programs := parseProgramsFromDetailPage(doc)
+			programs := parseProgramNamesFromDetailPage(doc)
 
 			if len(programs) != tt.wantCount {
 				t.Errorf("Got %d programs, want %d", len(programs), tt.wantCount)
 				for i, p := range programs {
-					t.Logf("  Program %d: %s", i+1, p.ProgramName)
+					t.Logf("  Program %d: %s", i+1, p)
 				}
 			}
 
@@ -456,7 +456,7 @@ func TestParseProgramsFromDetailPage(t *testing.T) {
 			for _, want := range tt.wantPrograms {
 				found := false
 				for _, p := range programs {
-					if p.ProgramName == want {
+					if p == want {
 						found = true
 						break
 					}
@@ -469,16 +469,9 @@ func TestParseProgramsFromDetailPage(t *testing.T) {
 			// Check excluded items are not included
 			for _, notWant := range tt.wantNotIncl {
 				for _, p := range programs {
-					if strings.Contains(p.ProgramName, notWant) {
-						t.Errorf("Program %q should not be included (contains %q)", p.ProgramName, notWant)
+					if strings.Contains(p, notWant) {
+						t.Errorf("Program %q should not be included (contains %q)", p, notWant)
 					}
-				}
-			}
-
-			// Check all programs have default course type
-			for _, p := range programs {
-				if p.CourseType != "選" {
-					t.Errorf("Program %q has CourseType %q, want \"選\"", p.ProgramName, p.CourseType)
 				}
 			}
 		})

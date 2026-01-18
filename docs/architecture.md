@@ -233,7 +233,10 @@ User Query → Bot Module → Repository Layer
      * 搜尋學程
      * 查看學程課程（必修/選修分類，限最近 2 學期）
      * 課程相關學程查詢
-   - 資料來源：從課程大綱頁面 (queryguide) 提取 Major 欄位中以「學程」結尾的項目
+     - 資料來源：雙來源融合
+         * 課程列表頁 (queryByKeyword) 提供「必/選修」
+         * 課程大綱頁 (queryguide) 提供完整學程名稱
+         * warmup 時模糊比對整合後寫入 course_programs
    - 學期範圍：最近 2 個有資料的學期（與智慧搜尋一致）
 
 ## 設計模式
