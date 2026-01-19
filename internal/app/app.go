@@ -798,10 +798,6 @@ func loggingMiddleware(baseCtx context.Context, log *logger.Logger) gin.HandlerF
 			WithField("duration_ms", duration.Milliseconds()).
 			WithField("client_ip", c.ClientIP())
 
-		if requestID != "" {
-			entry = entry.WithRequestID(requestID)
-		}
-
 		if status >= 500 {
 			entry.ErrorContext(reqCtx, "HTTP request failed")
 		} else if status >= 400 && status != 404 {

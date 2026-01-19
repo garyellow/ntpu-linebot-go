@@ -212,5 +212,15 @@ func (l *Logger) withContextFields(ctx context.Context) *Logger {
 		logger = logger.WithRequestID(requestID)
 	}
 
+	// Add LINE webhook event ID if present
+	if eventID := ctxutil.GetEventID(ctx); eventID != "" {
+		logger = logger.WithField("event_id", eventID)
+	}
+
+	// Add LINE message ID if present
+	if messageID := ctxutil.GetMessageID(ctx); messageID != "" {
+		logger = logger.WithField("message_id", messageID)
+	}
+
 	return logger
 }

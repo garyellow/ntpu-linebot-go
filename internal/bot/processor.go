@@ -100,7 +100,7 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 
 	// Check rate limit early to avoid unnecessary processing
 	// This happens AFTER extracting quoteToken so rate limit messages can quote the user
-	if allowed, rateLimitMsg := p.checkUserRateLimit(event.Source, GetChatID(event.Source)); !allowed {
+	if allowed, rateLimitMsg := p.checkUserRateLimit(ctx, event.Source, GetChatID(event.Source)); !allowed {
 		lineutil.SetQuoteTokenToFirst(rateLimitMsg, ctxutil.GetQuoteToken(ctx))
 		return rateLimitMsg, nil
 	}
@@ -109,7 +109,7 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 	if event.Message.GetType() == "sticker" {
 		if IsPersonalChat(event.Source) {
 			p.logger.WithField("message_type", "sticker").InfoContext(ctx, "Received direct message")
-			msgs := p.handleStickerMessage(event)
+			msgs := p.handleStickerMessage(ctx, event)
 			lineutil.SetQuoteTokenToFirst(msgs, ctxutil.GetQuoteToken(ctx))
 			return msgs, nil
 		}
@@ -128,18 +128,17 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 	}
 
 	text := textMsg.Text
-	if IsPersonalChat(event.Source) {
-		p.logger.WithField("message_type", "text").WithField("text_length", len(text)).InfoContext(ctx, "Received direct message")
-	}
+	p.logger.WithField("message_type", "text").
+		WithField("text", text).
+		InfoContext(ctx, "Received text message")
 
 	// Validate text length (LINE API allows up to config.LINEMaxTextMessageLength characters)
 	if len(text) == 0 {
 		return nil, nil // Empty message, ignore
 	}
 	if len(text) > config.LINEMaxTextMessageLength {
-		p.logger.WithField("text_length", len(text)).
-			WithField("limit", config.LINEMaxTextMessageLength).
-			Warn("Text message exceeds LINE length limit")
+		p.logger.WithField("limit", config.LINEMaxTextMessageLength).
+			WarnContext(ctx, "Text message exceeds LINE length limit")
 		sender := lineutil.GetSender("NTPU 小工具", p.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
 			fmt.Sprintf("❌ 訊息內容過長\n\n訊息長度超過 %d 字元，請縮短後重試。", config.LINEMaxTextMessageLength),
@@ -161,7 +160,7 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 	if slices.ContainsFunc(helpKeywords, func(k string) bool {
 		return strings.EqualFold(text, k)
 	}) {
-		p.logger.Debug("User requested help/instruction")
+		p.logger.InfoContext(ctx, "User requested help/instruction")
 		msgs := p.getDetailedInstructionMessages()
 		lineutil.SetQuoteTokenToFirst(msgs, ctxutil.GetQuoteToken(ctx))
 		return msgs, nil
@@ -195,13 +194,13 @@ func (p *Processor) ProcessPostback(ctx context.Context, event webhook.PostbackE
 
 	// Validate postback data
 	if len(data) == 0 {
-		p.logger.Debug("Empty postback data")
+		p.logger.DebugContext(ctx, "Empty postback data")
 		return nil, nil
 	}
 	if len(data) > config.LINEMaxPostbackDataLength {
-		p.logger.WithField("data_length", len(data)).
+		p.logger.WithField("data", data).
 			WithField("limit", config.LINEMaxPostbackDataLength).
-			Warn("Postback data exceeds LINE length limit")
+			WarnContext(ctx, "Postback data exceeds LINE length limit")
 		sender := lineutil.GetSender("NTPU 小工具", p.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender("❌ 操作資料異常\n\n請使用下方按鈕重新操作", sender)
 		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNavCompact())
@@ -210,14 +209,18 @@ func (p *Processor) ProcessPostback(ctx context.Context, event webhook.PostbackE
 
 	// Sanitize postback data
 	data = strings.TrimSpace(data)
+	if len(data) == 0 {
+		p.logger.DebugContext(ctx, "Empty postback data after trim")
+		return nil, nil
+	}
 
-	p.logger.WithField("data", data).Info("Received postback")
+	p.logger.WithField("data", data).InfoContext(ctx, "Received postback")
 
 	// Check for help keywords FIRST (before dispatching to bot modules)
 	if slices.ContainsFunc(helpKeywords, func(k string) bool {
 		return strings.EqualFold(data, k)
 	}) {
-		p.logger.Debug("User requested help/instruction via postback")
+		p.logger.InfoContext(ctx, "User requested help/instruction via postback")
 		return p.getDetailedInstructionMessages(), nil
 	}
 
@@ -239,8 +242,9 @@ func (p *Processor) ProcessPostback(ctx context.Context, event webhook.PostbackE
 
 // ProcessFollow handles a follow event.
 // Returns a Flex Message welcome card with Quick Reply for better UX.
-func (p *Processor) ProcessFollow(event webhook.FollowEvent) ([]messaging_api.MessageInterface, error) {
-	p.logger.Info("Follow event received")
+func (p *Processor) ProcessFollow(ctx context.Context, event webhook.FollowEvent) ([]messaging_api.MessageInterface, error) {
+	ctx = p.injectContextValues(ctx, event.Source)
+	p.logger.InfoContext(ctx, "Follow event received")
 
 	sender := lineutil.GetSender("NTPU 小工具", p.stickerManager)
 
@@ -252,8 +256,9 @@ func (p *Processor) ProcessFollow(event webhook.FollowEvent) ([]messaging_api.Me
 
 // ProcessJoin handles a join event.
 // Returns a Flex Message welcome card with Quick Reply for better UX.
-func (p *Processor) ProcessJoin(event webhook.JoinEvent) ([]messaging_api.MessageInterface, error) {
-	p.logger.Info("Join event received")
+func (p *Processor) ProcessJoin(ctx context.Context, event webhook.JoinEvent) ([]messaging_api.MessageInterface, error) {
+	ctx = p.injectContextValues(ctx, event.Source)
+	p.logger.InfoContext(ctx, "Join event received")
 
 	sender := lineutil.GetSender("NTPU 小工具", p.stickerManager)
 
@@ -387,14 +392,14 @@ func (p *Processor) handleUnmatchedMessage(ctx context.Context, source webhook.S
 // With forced function calling (ANY/required mode), the model always returns a function call.
 func (p *Processor) handleWithNLU(ctx context.Context, text string, source webhook.SourceInterface, chatID string) ([]messaging_api.MessageInterface, error) {
 	// Check LLM rate limit before making API call
-	if allowed, rateLimitMsg := p.checkLLMRateLimit(source, chatID); !allowed {
+	if allowed, rateLimitMsg := p.checkLLMRateLimit(ctx, source, chatID); !allowed {
 		return rateLimitMsg, nil
 	}
 
 	result, err := p.intentParser.Parse(ctx, text)
 
 	if err != nil {
-		p.logger.WithError(err).Warn("NLU intent parsing failed")
+		p.logger.WithError(err).WarnContext(ctx, "NLU intent parsing failed")
 		// Metrics are recorded by FallbackIntentParser
 		return p.getHelpMessage(FallbackNLUFailed), nil
 	}
@@ -407,7 +412,7 @@ func (p *Processor) handleWithNLU(ctx context.Context, text string, source webho
 	p.logger.WithField("module", result.Module).
 		WithField("intent", result.Intent).
 		WithField("params", result.Params).
-		Debug("NLU intent parsed")
+		InfoContext(ctx, "NLU intent parsed")
 	// Metrics are recorded by FallbackIntentParser
 
 	return p.dispatchIntent(ctx, result)
@@ -423,7 +428,7 @@ func (p *Processor) dispatchIntent(ctx context.Context, result *genai.ParseResul
 	if result.Module == "direct_reply" {
 		message, ok := result.Params["message"]
 		if !ok || message == "" {
-			p.logger.Warn("direct_reply missing message parameter")
+			p.logger.WarnContext(ctx, "direct_reply missing message parameter")
 			return p.getHelpMessage(FallbackGeneric), nil
 		}
 		sender := lineutil.GetSender("NTPU 小工具", p.stickerManager)
@@ -434,25 +439,25 @@ func (p *Processor) dispatchIntent(ctx context.Context, result *genai.ParseResul
 
 	handler := p.registry.GetHandler(result.Module)
 	if handler == nil {
-		p.logger.WithField("module", result.Module).Warn("Unknown module from NLU")
+		p.logger.WithField("module", result.Module).WarnContext(ctx, "Unknown module from NLU")
 		return p.getHelpMessage(FallbackUnknownModule), nil
 	}
 
 	if nluHandler, ok := handler.(NLUHandler); ok {
 		msgs, err := nluHandler.DispatchIntent(ctx, result.Intent, result.Params)
 		if err != nil {
-			p.logger.WithError(err).WithField("intent", result.Intent).Warn("Dispatch failed")
+			p.logger.WithError(err).WithField("intent", result.Intent).WarnContext(ctx, "Dispatch failed")
 			return p.getHelpMessage(FallbackDispatchFailed), nil
 		}
 		return msgs, nil
 	}
 
-	p.logger.WithField("module", result.Module).Warn("Handler does not support NLU")
+	p.logger.WithField("module", result.Module).WarnContext(ctx, "Handler does not support NLU")
 	return p.getHelpMessage(FallbackDispatchFailed), nil
 }
 
 // checkUserRateLimit checks if the user has exceeded their rate limit.
-func (p *Processor) checkUserRateLimit(source webhook.SourceInterface, chatID string) (bool, []messaging_api.MessageInterface) {
+func (p *Processor) checkUserRateLimit(ctx context.Context, source webhook.SourceInterface, chatID string) (bool, []messaging_api.MessageInterface) {
 	if chatID == "" {
 		return true, nil
 	}
@@ -461,11 +466,7 @@ func (p *Processor) checkUserRateLimit(source webhook.SourceInterface, chatID st
 		return true, nil
 	}
 
-	logChatID := chatID
-	if len(chatID) > 8 {
-		logChatID = chatID[:8] + "..."
-	}
-	p.logger.WithField("chat_id", logChatID).Warn("User rate limit exceeded")
+	p.logger.WarnContext(ctx, "User rate limit exceeded")
 
 	if IsPersonalChat(source) {
 		sender := lineutil.GetSender("NTPU 小工具", p.stickerManager)
@@ -482,7 +483,7 @@ func (p *Processor) checkUserRateLimit(source webhook.SourceInterface, chatID st
 }
 
 // checkLLMRateLimit checks if the user has exceeded their LLM API rate limit.
-func (p *Processor) checkLLMRateLimit(source webhook.SourceInterface, chatID string) (bool, []messaging_api.MessageInterface) {
+func (p *Processor) checkLLMRateLimit(ctx context.Context, source webhook.SourceInterface, chatID string) (bool, []messaging_api.MessageInterface) {
 	if chatID == "" || p.llmLimiter == nil {
 		return true, nil
 	}
@@ -491,11 +492,7 @@ func (p *Processor) checkLLMRateLimit(source webhook.SourceInterface, chatID str
 		return true, nil
 	}
 
-	logChatID := chatID
-	if len(chatID) > 8 {
-		logChatID = chatID[:8] + "..."
-	}
-	p.logger.WithField("chat_id", logChatID).Warn("LLM rate limit exceeded")
+	p.logger.WarnContext(ctx, "LLM rate limit exceeded")
 
 	if IsPersonalChat(source) {
 		sender := lineutil.GetSender("NTPU 小工具", p.stickerManager)
@@ -510,8 +507,8 @@ func (p *Processor) checkLLMRateLimit(source webhook.SourceInterface, chatID str
 }
 
 // handleStickerMessage processes sticker messages
-func (p *Processor) handleStickerMessage(_ webhook.MessageEvent) []messaging_api.MessageInterface {
-	p.logger.Info("Sticker message received; replying with random sticker")
+func (p *Processor) handleStickerMessage(ctx context.Context, _ webhook.MessageEvent) []messaging_api.MessageInterface {
+	p.logger.InfoContext(ctx, "Sticker message received; replying with random sticker")
 
 	stickerURL := p.stickerManager.GetRandomSticker()
 	sender := lineutil.GetSender("貼圖小幫手", p.stickerManager)

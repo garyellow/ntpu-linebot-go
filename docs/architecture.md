@@ -204,6 +204,17 @@ User Query → Bot Module → Repository Layer
 - **Warn**：可恢復或異常輸入（長度超限、無效資料、超時但仍可回覆）。
 - **Error**：功能失敗或無法處理的錯誤。
 
+**關聯欄位（所有 user-action 皆帶）**：
+
+- `event_id`：LINE `webhookEventId`（主關聯鍵）。
+- `message_id`：LINE `message.id`（若為 message event）。
+- `user_id`、`chat_id`：來源識別。
+
+**避免過度記錄**：
+
+- 使用者輸入僅在入口記錄 `text`（單一位置，避免重複）。
+- Postback 的 `data` 僅在入口記錄一次；若超長則以 Warn 記錄並停止處理。
+
 ## 模組架構
 
 ### Bot 模組總覽

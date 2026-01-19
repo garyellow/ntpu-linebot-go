@@ -78,7 +78,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	// Check for quota explanation request
 	if strings.EqualFold(strings.TrimSpace(text), quotaExplainKeyword) {
 		log.WithField("query_type", "quota_explanation").
-			Debug("Handling usage query")
+			InfoContext(ctx, "Handling usage query")
 		var sender *messaging_api.Sender
 		if h.stickerManager != nil {
 			sender = lineutil.GetSender(senderName, h.stickerManager)
@@ -87,7 +87,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	}
 
 	log.WithField("query_type", "usage_status").
-		Debug("Handling usage query")
+		InfoContext(ctx, "Handling usage query")
 
 	// Get user ID from context for per-user quota lookup
 	userID := getUserIDFromContext(ctx)

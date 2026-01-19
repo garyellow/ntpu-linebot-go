@@ -78,16 +78,17 @@ func NewHandler(cfg HandlerConfig) (*Handler, error) {
 
 // Handle is the Gin handler for the webhook endpoint
 func (h *Handler) Handle(c *gin.Context) {
+	reqCtx := c.Request.Context()
 	// 1. Parse request
 	cb, err := webhook.ParseRequest(h.channelSecret, c.Request)
 	if err != nil {
 		if errors.Is(err, webhook.ErrInvalidSignature) {
 			h.metrics.RecordWebhookBatch("invalid_signature")
-			h.logger.Warn("Invalid webhook signature")
+			h.logger.WarnContext(reqCtx, "Invalid webhook signature")
 			c.Status(http.StatusBadRequest)
 		} else {
 			h.metrics.RecordWebhookBatch("parse_error")
-			h.logger.WithError(err).Error("Failed to parse webhook request")
+			h.logger.WithError(err).ErrorContext(reqCtx, "Failed to parse webhook request")
 			c.Status(http.StatusInternalServerError)
 		}
 		return
@@ -104,7 +105,7 @@ func (h *Handler) Handle(c *gin.Context) {
 	if len(cb.Events) > h.maxEventsPerWebhook {
 		h.logger.WithField("event_count", len(cb.Events)).
 			WithField("limit", h.maxEventsPerWebhook).
-			Warn("Too many events in webhook batch; truncating")
+			WarnContext(reqCtx, "Too many events in webhook batch; truncating")
 		cb.Events = cb.Events[:h.maxEventsPerWebhook] // Limit to prevent DoS
 	}
 
@@ -136,13 +137,13 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 
 	eventID, eventTimestamp, isRedelivery := extractEventMeta(event)
 	if eventID != "" {
-		ctx = ctxutil.WithRequestID(ctx, eventID)
+		ctx = ctxutil.WithEventID(ctx, eventID)
+	}
+	if messageID := extractMessageID(event); messageID != "" {
+		ctx = ctxutil.WithMessageID(ctx, messageID)
 	}
 
 	log := h.logger
-	if eventID != "" {
-		log = log.WithRequestID(eventID)
-	}
 	if isRedelivery != nil {
 		log = log.WithField("is_redelivery", *isRedelivery)
 	}
@@ -154,7 +155,7 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 	// Skip for group chats without @mention or stickers in groups (no response)
 	if h.shouldShowLoading(event) {
 		if loadErr := h.showLoadingAnimation(event); loadErr != nil {
-			log.WithError(loadErr).Warn("Failed to show loading animation")
+			log.WithError(loadErr).WarnContext(ctx, "Failed to show loading animation")
 		}
 	}
 
@@ -167,13 +168,13 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 		messages, err = h.processor.ProcessPostback(ctx, e)
 	case webhook.FollowEvent:
 		eventType = "follow"
-		messages, err = h.processor.ProcessFollow(e)
+		messages, err = h.processor.ProcessFollow(ctx, e)
 	case webhook.JoinEvent:
 		eventType = "join"
-		messages, err = h.processor.ProcessJoin(e)
+		messages, err = h.processor.ProcessJoin(ctx, e)
 	default:
 		// Unsupported event type, skip
-		log.WithField("event_type", fmt.Sprintf("%T", e)).Debug("Unsupported event type")
+		log.WithField("event_type", fmt.Sprintf("%T", e)).DebugContext(ctx, "Unsupported event type")
 		return
 	}
 
@@ -182,7 +183,7 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 	status := "success"
 	if err != nil {
 		status = "error"
-		log.WithError(err).WithField("event_type", eventType).Error("Failed to handle event")
+		log.WithError(err).WithField("event_type", eventType).ErrorContext(ctx, "Failed to handle event")
 	}
 	h.metrics.RecordWebhook(eventType, status, durationSeconds)
 
@@ -191,7 +192,7 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 		if len(messages) > h.maxMessagesPerReply {
 			log.WithField("message_count", len(messages)).
 				WithField("limit", h.maxMessagesPerReply).
-				Warn("Message count exceeds limit; truncating")
+				WarnContext(ctx, "Message count exceeds limit; truncating")
 			messages = messages[:h.maxMessagesPerReply-1]
 			sender := lineutil.GetSender("NTPU 小工具", h.stickerManager)
 			msg := lineutil.NewTextMessageWithConsistentSender(
@@ -204,19 +205,19 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 
 		replyToken := h.getReplyToken(event)
 		if replyToken == "" {
-			log.Debug("Empty reply token, skipping reply")
+			log.DebugContext(ctx, "Empty reply token, skipping reply")
 			return
 		}
 
 		// Validate reply token format
 		if len(replyToken) < h.minReplyTokenLength {
-			log.WithField("token_length", len(replyToken)).Debug("Invalid reply token format")
+			log.DebugContext(ctx, "Invalid reply token format")
 			return
 		}
 
 		// Check global rate limit
 		if !h.rateLimiter.Allow() {
-			log.Warn("Global rate limit exceeded; waiting")
+			log.WarnContext(ctx, "Global rate limit exceeded; waiting")
 			h.metrics.RecordRateLimiterDrop("global")
 			h.rateLimiter.WaitSimple()
 		}
@@ -229,11 +230,11 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 		); err != nil {
 			errMsg := err.Error()
 			if strings.Contains(errMsg, "Invalid reply token") {
-				log.WithError(err).Debug("Reply token already used or invalid")
+				log.WithError(err).DebugContext(ctx, "Reply token already used or invalid")
 			} else if strings.Contains(errMsg, "rate limit") {
-				log.WithError(err).Error("Rate limit exceeded")
+				log.WithError(err).ErrorContext(ctx, "Rate limit exceeded")
 			} else {
-				log.WithError(err).WithField("reply_token", replyToken[:8]+"...").Error("Failed to send reply")
+				log.WithError(err).ErrorContext(ctx, "Failed to send reply")
 			}
 			h.metrics.RecordWebhook(eventType, "reply_error", time.Since(eventStart).Seconds())
 		}
@@ -245,7 +246,7 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 		WithField("status", status).
 		WithField("event_duration_ms", eventDurationMs).
 		WithField("batch_duration_ms", batchDurationMs).
-		Info("Event processed")
+		InfoContext(ctx, "Event processed")
 }
 
 func extractEventMeta(event webhook.EventInterface) (string, int64, *bool) {
@@ -260,6 +261,32 @@ func extractEventMeta(event webhook.EventInterface) (string, int64, *bool) {
 		return e.WebhookEventId, e.Timestamp, boolPtr(e.DeliveryContext)
 	default:
 		return "", 0, nil
+	}
+}
+
+func extractMessageID(event webhook.EventInterface) string {
+	switch e := event.(type) {
+	case webhook.MessageEvent:
+		switch m := e.Message.(type) {
+		case webhook.TextMessageContent:
+			return m.Id
+		case webhook.StickerMessageContent:
+			return m.Id
+		case webhook.ImageMessageContent:
+			return m.Id
+		case webhook.VideoMessageContent:
+			return m.Id
+		case webhook.AudioMessageContent:
+			return m.Id
+		case webhook.FileMessageContent:
+			return m.Id
+		case webhook.LocationMessageContent:
+			return m.Id
+		default:
+			return ""
+		}
+	default:
+		return ""
 	}
 }
 
