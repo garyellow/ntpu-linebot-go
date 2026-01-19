@@ -82,9 +82,11 @@ func (h *Handler) Handle(c *gin.Context) {
 	cb, err := webhook.ParseRequest(h.channelSecret, c.Request)
 	if err != nil {
 		if errors.Is(err, webhook.ErrInvalidSignature) {
+			h.metrics.RecordWebhookBatch("invalid_signature")
 			h.logger.Warn("Invalid webhook signature")
 			c.Status(http.StatusBadRequest)
 		} else {
+			h.metrics.RecordWebhookBatch("parse_error")
 			h.logger.WithError(err).Error("Failed to parse webhook request")
 			c.Status(http.StatusInternalServerError)
 		}
@@ -96,7 +98,7 @@ func (h *Handler) Handle(c *gin.Context) {
 
 	// 3. Process events asynchronously
 	start := time.Now()
-	h.metrics.RecordWebhook("batch", "received", 0)
+	h.metrics.RecordWebhookBatch("accepted")
 
 	// Validate event count (max events per webhook per LINE API spec)
 	if len(cb.Events) > h.maxEventsPerWebhook {

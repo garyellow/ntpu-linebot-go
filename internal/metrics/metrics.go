@@ -49,8 +49,10 @@ type Metrics struct {
 	// Webhook (LINE Bot Core - RED Method)
 	// Primary service entry point
 	// ============================================
+	// Batch: incoming webhook requests (HTTP)
+	WebhookBatchTotal *prometheus.CounterVec
 	// Rate: requests per second by event type
-	// Errors: tracked via status label (success/error/rate_limited)
+	// Errors: tracked via status label (success/error/reply_error)
 	// Duration: processing time from receive to reply
 	WebhookTotal    *prometheus.CounterVec
 	WebhookDuration *prometheus.HistogramVec
@@ -114,13 +116,22 @@ func New(registry *prometheus.Registry) *Metrics {
 		// ============================================
 		// Webhook metrics
 		// ============================================
+		WebhookBatchTotal: promauto.With(registry).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "ntpu_webhook_batch_total",
+				Help: "Total webhook batches received",
+			},
+			// status: accepted, invalid_signature, parse_error
+			[]string{"status"},
+		),
+
 		WebhookTotal: promauto.With(registry).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "ntpu_webhook_total",
 				Help: "Total webhook events processed",
 			},
 			// event_type: message, postback, follow, join
-			// status: success, error, rate_limited
+			// status: success, error, reply_error
 			[]string{"event_type", "status"},
 		),
 
@@ -146,7 +157,7 @@ func New(registry *prometheus.Registry) *Metrics {
 				Help: "Total scraper requests to NTPU systems",
 			},
 			// module: id, contact, course, syllabus
-			// status: success, error, timeout, not_found, smart_fallback
+			// status: success, error, timeout, not_found
 			[]string{"module", "status"},
 		),
 
@@ -170,7 +181,7 @@ func New(registry *prometheus.Registry) *Metrics {
 				Name: "ntpu_cache_operations_total",
 				Help: "Total cache operations (hits and misses)",
 			},
-			// module: students, contacts, courses, syllabi, stickers
+			// module: students, contacts, courses, syllabi, program, stickers
 			// result: hit, miss
 			[]string{"module", "result"},
 		),
@@ -248,7 +259,7 @@ func New(registry *prometheus.Registry) *Metrics {
 				Help: "Total smart search requests",
 			},
 			// type: bm25, disabled
-			// status: success, error, no_results
+			// status: success, error, no_results, skipped
 			[]string{"type", "status"},
 		),
 
@@ -319,8 +330,8 @@ func New(registry *prometheus.Registry) *Metrics {
 				// Jobs can run for minutes (warmup) to seconds (cleanup)
 				Buckets: []float64{1, 10, 30, 60, 120, 300, 600, 1800},
 			},
-			// job: warmup, cleanup
-			// module: id, contact, course, syllabus, total (for warmup)
+			// job: warmup, cache_cleanup, sticker_refresh
+			// module: id, contact, course, syllabus, total, all
 			[]string{"job", "module"},
 		),
 	}
@@ -332,9 +343,15 @@ func New(registry *prometheus.Registry) *Metrics {
 // Webhook helpers
 // ============================================
 
+// RecordWebhookBatch records a webhook batch (HTTP request).
+// status: accepted, invalid_signature, parse_error
+func (m *Metrics) RecordWebhookBatch(status string) {
+	m.WebhookBatchTotal.WithLabelValues(status).Inc()
+}
+
 // RecordWebhook records a webhook event.
 // eventType: message, postback, follow, join
-// status: success, error, rate_limited
+// status: success, error, reply_error
 func (m *Metrics) RecordWebhook(eventType, status string, duration float64) {
 	m.WebhookTotal.WithLabelValues(eventType, status).Inc()
 	m.WebhookDuration.WithLabelValues(eventType).Observe(duration)

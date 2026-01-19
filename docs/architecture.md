@@ -530,15 +530,16 @@ if len(data) > 300 {
 **關鍵指標**:
 ```
 # 請求量 (RED Method)
+ntpu_webhook_batch_total{status}
 ntpu_webhook_total{event_type, status}
 ntpu_scraper_total{module, status}
-ntpu_llm_total{operation, status}
+ntpu_llm_total{provider, operation, status}
 ntpu_search_total{type, status}
 
 # 延遲
 ntpu_webhook_duration_seconds{event_type}
 ntpu_scraper_duration_seconds{module}
-ntpu_llm_duration_seconds{operation}
+ntpu_llm_duration_seconds{provider, operation}
 ntpu_search_duration_seconds{type}
 
 # 快取 (USE Method)
@@ -548,6 +549,10 @@ ntpu_cache_size{module}
 # 其他
 ntpu_index_size{index}  # BM25 索引大小
 ntpu_rate_limiter_dropped_total{limiter}
+ntpu_rate_limiter_users
+ntpu_llm_rate_limiter_users
+ntpu_llm_fallback_total{from_provider, to_provider, operation}
+ntpu_llm_fallback_latency_seconds{from_provider, to_provider, operation}
 ntpu_job_duration_seconds{job, module}
 ```
 

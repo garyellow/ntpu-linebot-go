@@ -22,6 +22,7 @@ func TestNew(t *testing.T) {
 		check func() bool
 	}{
 		// Webhook metrics
+		{"WebhookBatchTotal", func() bool { return m.WebhookBatchTotal != nil }},
 		{"WebhookTotal", func() bool { return m.WebhookTotal != nil }},
 		{"WebhookDuration", func() bool { return m.WebhookDuration != nil }},
 
@@ -46,6 +47,7 @@ func TestNew(t *testing.T) {
 		// Rate limiter metrics
 		{"RateLimiterDropped", func() bool { return m.RateLimiterDropped != nil }},
 		{"RateLimiterUsers", func() bool { return m.RateLimiterUsers != nil }},
+		{"LLMRateLimiterUsers", func() bool { return m.LLMRateLimiterUsers != nil }},
 
 		// Job metrics
 		{"JobDuration", func() bool { return m.JobDuration != nil }},
@@ -94,6 +96,17 @@ func TestRecordWebhook(t *testing.T) {
 
 	for _, tc := range testCases {
 		m.RecordWebhook(tc.eventType, tc.status, tc.duration)
+	}
+}
+
+func TestRecordWebhookBatch(t *testing.T) {
+	t.Parallel()
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	statuses := []string{"accepted", "invalid_signature", "parse_error"}
+	for _, status := range statuses {
+		m.RecordWebhookBatch(status)
 	}
 }
 

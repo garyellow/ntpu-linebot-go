@@ -718,7 +718,7 @@ func (a *Application) recordCacheSizeMetrics(ctx context.Context) {
 	a.metrics.SetCacheSize("contacts", contactCount)
 	a.metrics.SetCacheSize("courses", courseCount)
 	a.metrics.SetCacheSize("syllabi", syllabiCount)
-	a.metrics.SetCacheSize("programs", programCount)
+	a.metrics.SetCacheSize("program", programCount)
 	a.metrics.SetCacheSize("stickers", stickerCount)
 
 	if a.bm25Index != nil {
