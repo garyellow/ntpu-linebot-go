@@ -17,6 +17,7 @@ const (
 type AsyncOptions struct {
 	BufferSize   int
 	FlushTimeout time.Duration
+	OnDrop       func(total uint64)
 }
 
 type asyncRecord struct {
@@ -31,6 +32,7 @@ type asyncWorker struct {
 	closed       atomic.Bool
 	wg           sync.WaitGroup
 	ignored      atomic.Uint64
+	onDrop       func(total uint64)
 }
 
 func newAsyncWorker(opts AsyncOptions) *asyncWorker {
@@ -46,6 +48,7 @@ func newAsyncWorker(opts AsyncOptions) *asyncWorker {
 	w := &asyncWorker{
 		ch:           make(chan asyncRecord, bufferSize),
 		flushTimeout: flushTimeout,
+		onDrop:       opts.OnDrop,
 	}
 	w.wg.Add(1)
 	go w.run()
@@ -66,8 +69,15 @@ func (w *asyncWorker) enqueue(ctx context.Context, record slog.Record, handler s
 	select {
 	case w.ch <- asyncRecord{ctx: ctx, record: record, handler: handler}:
 	default:
-		w.ignored.Add(1)
+		newIgnored := w.ignored.Add(1)
+		if w.onDrop != nil {
+			w.onDrop(newIgnored)
+		}
 	}
+}
+
+func (w *asyncWorker) dropped() uint64 {
+	return w.ignored.Load()
 }
 
 func (w *asyncWorker) shutdown(ctx context.Context) error {
@@ -98,13 +108,16 @@ func (w *asyncWorker) shutdown(ctx context.Context) error {
 type AsyncHandler struct {
 	worker  *asyncWorker
 	handler slog.Handler
+	owner   bool
 }
 
-// NewAsyncHandler creates a new async handler with a shared worker.
+// NewAsyncHandler creates a new async handler with its own worker.
+// Derived handlers created via WithAttrs/WithGroup share the same worker.
 func NewAsyncHandler(handler slog.Handler, opts AsyncOptions) *AsyncHandler {
 	return &AsyncHandler{
 		worker:  newAsyncWorker(opts),
 		handler: handler,
+		owner:   true,
 	}
 }
 
@@ -127,6 +140,7 @@ func (h *AsyncHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return &AsyncHandler{
 		worker:  h.worker,
 		handler: h.handler.WithAttrs(attrs),
+		owner:   false,
 	}
 }
 
@@ -135,13 +149,22 @@ func (h *AsyncHandler) WithGroup(name string) slog.Handler {
 	return &AsyncHandler{
 		worker:  h.worker,
 		handler: h.handler.WithGroup(name),
+		owner:   false,
 	}
 }
 
 // Shutdown flushes pending logs up to the configured timeout.
 func (h *AsyncHandler) Shutdown(ctx context.Context) error {
-	if h == nil || h.worker == nil {
+	if h == nil || h.worker == nil || !h.owner {
 		return nil
 	}
 	return h.worker.shutdown(ctx)
+}
+
+// DroppedCount returns the total number of dropped log records.
+func (h *AsyncHandler) DroppedCount() uint64 {
+	if h == nil || h.worker == nil {
+		return 0
+	}
+	return h.worker.dropped()
 }

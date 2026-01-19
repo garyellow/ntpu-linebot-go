@@ -188,7 +188,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(securityHeadersMiddleware())
-	router.Use(loggingMiddleware(log))
+	router.Use(loggingMiddleware(ctx, log))
 
 	app := &Application{
 		cfg:            cfg,
@@ -761,11 +761,17 @@ func securityHeadersMiddleware() gin.HandlerFunc {
 
 // loggingMiddleware logs HTTP requests with status-based log levels:
 // 5xx=Error, 4xx=Warn, 404=Debug, 3xx/2xx=Debug.
-func loggingMiddleware(log *logger.Logger) gin.HandlerFunc {
+func loggingMiddleware(baseCtx context.Context, log *logger.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
 		method := c.Request.Method
+
+		//nolint:contextcheck // Use request-scoped context for cancellation and tracing.
+		reqCtx := c.Request.Context()
+		if reqCtx == nil {
+			reqCtx = baseCtx
+		}
 
 		requestID := c.GetHeader("X-Request-Id")
 		if requestID == "" {
@@ -778,15 +784,14 @@ func loggingMiddleware(log *logger.Logger) gin.HandlerFunc {
 			requestID = c.GetHeader("X-Correlation-ID")
 		}
 		if requestID != "" {
-			ctx := ctxutil.WithRequestID(c.Request.Context(), requestID)
-			c.Request = c.Request.WithContext(ctx)
+			reqCtx = ctxutil.WithRequestID(reqCtx, requestID)
+			c.Request = c.Request.WithContext(reqCtx)
 		}
 
 		c.Next()
 
 		duration := time.Since(start)
 		status := c.Writer.Status()
-
 		entry := log.WithField("http_method", method).
 			WithField("http_path", path).
 			WithField("http_status", status).
@@ -798,13 +803,13 @@ func loggingMiddleware(log *logger.Logger) gin.HandlerFunc {
 		}
 
 		if status >= 500 {
-			entry.Error("HTTP request failed")
+			entry.ErrorContext(reqCtx, "HTTP request failed")
 		} else if status >= 400 && status != 404 {
-			entry.Warn("HTTP request rejected")
+			entry.WarnContext(reqCtx, "HTTP request rejected")
 		} else if status == 404 {
-			entry.Debug("HTTP request not found")
+			entry.DebugContext(reqCtx, "HTTP request not found")
 		} else {
-			entry.Debug("HTTP request completed")
+			entry.DebugContext(reqCtx, "HTTP request completed")
 		}
 	}
 }
