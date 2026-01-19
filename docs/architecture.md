@@ -204,6 +204,17 @@ User Query → Bot Module → Repository Layer
 - **Warn**：可恢復或異常輸入（長度超限、無效資料、超時但仍可回覆）。
 - **Error**：功能失敗或無法處理的錯誤。
 
+**關聯欄位（所有 user-action 皆帶）**：
+
+- `event_id`：LINE `webhookEventId`（主關聯鍵）。
+- `message_id`：LINE `message.id`（若為 message event）。
+- `user_id`、`chat_id`：來源識別。
+
+**避免過度記錄**：
+
+- 使用者輸入僅在入口記錄 `text`（單一位置，避免重複）。
+- Postback 的 `data` 僅在入口記錄一次；若超長則以 Warn 記錄並停止處理。
+
 ## 模組架構
 
 ### Bot 模組總覽
@@ -530,15 +541,16 @@ if len(data) > 300 {
 **關鍵指標**:
 ```
 # 請求量 (RED Method)
+ntpu_webhook_batch_total{status}
 ntpu_webhook_total{event_type, status}
 ntpu_scraper_total{module, status}
-ntpu_llm_total{operation, status}
+ntpu_llm_total{provider, operation, status}
 ntpu_search_total{type, status}
 
 # 延遲
 ntpu_webhook_duration_seconds{event_type}
 ntpu_scraper_duration_seconds{module}
-ntpu_llm_duration_seconds{operation}
+ntpu_llm_duration_seconds{provider, operation}
 ntpu_search_duration_seconds{type}
 
 # 快取 (USE Method)
@@ -548,6 +560,10 @@ ntpu_cache_size{module}
 # 其他
 ntpu_index_size{index}  # BM25 索引大小
 ntpu_rate_limiter_dropped_total{limiter}
+ntpu_rate_limiter_users
+ntpu_llm_rate_limiter_users
+ntpu_llm_fallback_total{from_provider, to_provider, operation}
+ntpu_llm_fallback_latency_seconds{from_provider, to_provider, operation}
 ntpu_job_duration_seconds{job, module}
 ```
 

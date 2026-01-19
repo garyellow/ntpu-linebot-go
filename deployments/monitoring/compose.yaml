@@ -1,9 +1,8 @@
-# Monitoring Only Deployment (No Exposed Ports)
-# Use this with access/compose.yaml (nginx gateway) for on-demand port access
-# See README.md for usage instructions
+# Monitoring-only deployment (ports closed)
+# Use access/compose.yaml to open ports when needed
 
 services:
-  # Init container to generate prometheus.yml from template
+  # Init: generate prometheus.yml from template
   prometheus-init:
     image: busybox:latest
     container_name: ntpu-prometheus-init
@@ -28,7 +27,7 @@ services:
         echo "  METRICS_USERNAME: $$METRICS_USERNAME"
     restart: "no"
 
-  # Prometheus - NO exposed ports (use nginx gateway)
+  # Prometheus (no exposed ports)
   prometheus:
     image: prom/prometheus:latest
     container_name: ntpu-prometheus-mon
@@ -71,7 +70,7 @@ services:
       prometheus-init:
         condition: service_completed_successfully
 
-  # Alertmanager - NO exposed ports (use nginx gateway)
+  # Alertmanager (no exposed ports)
   alertmanager:
     image: prom/alertmanager:latest
     container_name: ntpu-alertmanager-mon
@@ -105,7 +104,7 @@ services:
       retries: 3
       start_period: 20s
 
-  # Grafana - NO exposed ports (use nginx gateway)
+  # Grafana (no exposed ports)
   grafana:
     image: grafana/grafana:latest
     container_name: ntpu-grafana-mon

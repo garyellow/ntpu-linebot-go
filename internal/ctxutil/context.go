@@ -12,6 +12,8 @@ const (
 	userIDKey     contextKey = "ctxutil.userID"
 	chatIDKey     contextKey = "ctxutil.chatID"
 	requestIDKey  contextKey = "ctxutil.requestID"
+	eventIDKey    contextKey = "ctxutil.eventID"
+	messageIDKey  contextKey = "ctxutil.messageID"
 	quoteTokenKey contextKey = "ctxutil.quoteToken" //nolint:gosec // G101: False positive - this is a context key name, not a credential
 )
 
@@ -94,6 +96,40 @@ func MustGetRequestID(ctx context.Context) string {
 	return requestID
 }
 
+// WithEventID adds a LINE webhook event ID to the context.
+// This is the webhookEventId from LINE, useful for correlation.
+func WithEventID(ctx context.Context, eventID string) context.Context {
+	return context.WithValue(ctx, eventIDKey, eventID)
+}
+
+// GetEventID retrieves the LINE webhook event ID from the context.
+// Returns the event ID if found, empty string otherwise.
+func GetEventID(ctx context.Context) string {
+	if v := ctx.Value(eventIDKey); v != nil {
+		if eventID, ok := v.(string); ok && eventID != "" {
+			return eventID
+		}
+	}
+	return ""
+}
+
+// WithMessageID adds a LINE message ID to the context.
+// Applies to message events; used for tracing message content fetches.
+func WithMessageID(ctx context.Context, messageID string) context.Context {
+	return context.WithValue(ctx, messageIDKey, messageID)
+}
+
+// GetMessageID retrieves the LINE message ID from the context.
+// Returns the message ID if found, empty string otherwise.
+func GetMessageID(ctx context.Context) string {
+	if v := ctx.Value(messageIDKey); v != nil {
+		if messageID, ok := v.(string); ok && messageID != "" {
+			return messageID
+		}
+	}
+	return ""
+}
+
 // PreserveTracing creates a detached context that preserves tracing values.
 // The new context is independent of the parent's cancellation and deadlines.
 //
@@ -113,6 +149,12 @@ func PreserveTracing(ctx context.Context) context.Context {
 	}
 	if requestID, ok := GetRequestID(ctx); ok && requestID != "" {
 		newCtx = WithRequestID(newCtx, requestID)
+	}
+	if eventID := GetEventID(ctx); eventID != "" {
+		newCtx = WithEventID(newCtx, eventID)
+	}
+	if messageID := GetMessageID(ctx); messageID != "" {
+		newCtx = WithMessageID(newCtx, messageID)
 	}
 	if quoteToken := GetQuoteToken(ctx); quoteToken != "" {
 		newCtx = WithQuoteToken(newCtx, quoteToken)

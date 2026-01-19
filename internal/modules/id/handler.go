@@ -258,7 +258,10 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: name", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching ID intent: %s, name: %s", intent, name)
+			h.logger.WithModule(ModuleName).
+				WithField("intent", intent).
+				WithField("name", name).
+				InfoContext(ctx, "Dispatching ID intent")
 		}
 		return h.handleStudentNameQuery(ctx, name), nil
 
@@ -268,7 +271,10 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: student_id", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching ID intent: %s, student_id: %s", intent, studentID)
+			h.logger.WithModule(ModuleName).
+				WithField("intent", intent).
+				WithField("student_id", studentID).
+				InfoContext(ctx, "Dispatching ID intent")
 		}
 		return h.handleStudentIDQuery(ctx, studentID), nil
 
@@ -278,7 +284,10 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: department", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching ID intent: %s, department: %s", intent, department)
+			h.logger.WithModule(ModuleName).
+				WithField("intent", intent).
+				WithField("department", department).
+				InfoContext(ctx, "Dispatching ID intent")
 		}
 
 		return h.handleUnifiedDepartmentQuery(department), nil
@@ -289,7 +298,10 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: year", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching ID intent: %s, year: %s", intent, year)
+			h.logger.WithModule(ModuleName).
+				WithField("intent", intent).
+				WithField("year", year).
+				InfoContext(ctx, "Dispatching ID intent")
 		}
 		return h.handleYearQuery(year), nil
 
@@ -305,7 +317,10 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			degree = DegreeBachelor
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching ID intent: %s, degree: %s", intent, degree)
+			h.logger.WithModule(ModuleName).
+				WithField("intent", intent).
+				WithField("degree", degree).
+				InfoContext(ctx, "Dispatching ID intent")
 		}
 		return h.handleDepartmentCodesByDegree(degree), nil
 
@@ -343,7 +358,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
-	log.Infof("Handling ID message: %s", text)
+	log.InfoContext(ctx, "Handling ID message")
 
 	// Find matching pattern
 	matcher := h.findMatcher(text)
@@ -359,14 +374,17 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		matches = []string{text} // For custom matchers, just pass the text
 	}
 
-	log.Debugf("Pattern matched: %s (priority %d)", matcher.name, matcher.priority)
+	log.WithField("pattern", matcher.name).
+		WithField("priority", matcher.priority).
+		DebugContext(ctx, "Pattern matched")
 
 	// Call handler - must return non-empty per PatternHandler contract
 	result := matcher.handler(ctx, text, matches)
 
 	// Defensive check: handlers should never return nil/empty when pattern matched
 	if len(result) == 0 {
-		log.Errorf("Handler %s violated contract: returned empty for matched pattern", matcher.name)
+		log.WithField("pattern", matcher.name).
+			ErrorContext(ctx, "Pattern handler returned empty result")
 		// Return generic error to user
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
@@ -494,7 +512,7 @@ func (h *Handler) handleStudentPattern(ctx context.Context, text string, matches
 // HandlePostback handles postback events for the ID module
 func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(ModuleName)
-	log.Infof("Handling ID postback: %s", data)
+	log.InfoContext(ctx, "Handling ID postback")
 
 	// Strip module prefix if present (registry passes original data)
 	data = strings.TrimPrefix(data, "id:")
@@ -1040,7 +1058,7 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	// Check cache first
 	student, err := h.db.GetStudentByID(ctx, studentID)
 	if err != nil {
-		log.WithError(err).Error("Failed to query cache")
+		log.WithError(err).ErrorContext(ctx, "Failed to query cache")
 		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		return []messaging_api.MessageInterface{
 			lineutil.ErrorMessageWithQuickReply("查詢學號時發生問題", sender, "學號 "+studentID),
@@ -1050,17 +1068,21 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	if student != nil {
 		// Cache hit
 		h.metrics.RecordCacheHit(ModuleName)
-		log.Debugf("Cache hit for student ID: %s", studentID)
+		log.WithField("student_id", studentID).
+			DebugContext(ctx, "Student cache hit")
 		return h.formatStudentResponse(student)
 	}
 
 	// Cache miss - scrape from website
 	h.metrics.RecordCacheMiss(ModuleName)
-	log.Infof("Cache miss for student ID: %s, scraping...", studentID)
+	log.WithField("student_id", studentID).
+		InfoContext(ctx, "Student cache miss; scraping")
 
 	student, err = ntpu.ScrapeStudentByID(ctx, h.scraper, studentID)
 	if err != nil {
-		log.WithError(err).Errorf("Failed to scrape student ID: %s", studentID)
+		log.WithError(err).
+			WithField("student_id", studentID).
+			ErrorContext(ctx, "Failed to scrape student by ID")
 		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 
 		// Check if the student ID belongs to year 113 (incomplete data)
@@ -1089,7 +1111,7 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 
 	// Save to cache
 	if err := h.db.SaveStudent(ctx, student); err != nil {
-		log.WithError(err).Warn("Failed to save student to cache")
+		log.WithError(err).WarnContext(ctx, "Failed to save student to cache")
 	}
 
 	h.metrics.RecordScraperRequest(ModuleName, "success", time.Since(startTime).Seconds())
@@ -1118,7 +1140,7 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	// Returns total count and limited results (up to 400)
 	result, err := h.db.SearchStudentsByName(ctx, name)
 	if err != nil {
-		log.WithError(err).Error("Failed to search students by name")
+		log.WithError(err).ErrorContext(ctx, "Failed to search students by name")
 		return []messaging_api.MessageInterface{
 			lineutil.ErrorMessageWithQuickReply("搜尋姓名時發生問題", sender, "學號 "+name),
 		}
@@ -1519,7 +1541,7 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 
 	students, err := h.db.GetStudentsByDepartment(ctx, queryDeptName, year)
 	if err != nil {
-		log.WithError(err).Error("Failed to search students by year and department")
+		log.WithError(err).ErrorContext(ctx, "Failed to search students by year and department")
 		msg := lineutil.ErrorMessageWithDetailAndSender("查詢學生名單時發生問題", sender)
 		if textMsg, ok := msg.(*messaging_api.TextMessageV2); ok {
 			textMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -1533,13 +1555,18 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 
 	// If not found in cache, try scraping
 	if len(students) == 0 {
-		log.Infof("Cache miss for department selection: %d %s, scraping...", year, deptCode)
+		log.WithField("year", year).
+			WithField("dept_code", deptCode).
+			InfoContext(ctx, "Department selection cache miss; scraping")
 		h.metrics.RecordCacheMiss(ModuleName)
 		startTime := time.Now()
 
 		scrapedStudents, err := ntpu.ScrapeStudentsByYear(ctx, h.scraper, year, deptCode, ntpu.StudentTypeUndergrad)
 		if err != nil {
-			log.WithError(err).Errorf("Failed to scrape students for year %d dept %s", year, deptCode)
+			log.WithError(err).
+				WithField("year", year).
+				WithField("dept_code", deptCode).
+				ErrorContext(ctx, "Failed to scrape students for year and department")
 			h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 			msg := lineutil.ErrorMessageWithDetailAndSender("查詢學生名單時發生問題，可能是學校網站暫時無法存取", sender)
 			if textMsg, ok := msg.(*messaging_api.TextMessageV2); ok {
@@ -1557,7 +1584,7 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 			// Save to cache and convert to value slice
 			for _, s := range scrapedStudents {
 				if err := h.db.SaveStudent(ctx, s); err != nil {
-					log.WithError(err).Warn("Failed to save student to cache")
+					log.WithError(err).WarnContext(ctx, "Failed to save student to cache")
 				}
 				students = append(students, *s)
 			}

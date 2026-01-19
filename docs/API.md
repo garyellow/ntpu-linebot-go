@@ -230,6 +230,10 @@ GET /metrics
 # TYPE ntpu_webhook_total counter
 ntpu_webhook_total{event_type="message",status="success"} 1234
 
+# HELP ntpu_webhook_batch_total Total webhook batches received
+# TYPE ntpu_webhook_batch_total counter
+ntpu_webhook_batch_total{status="accepted"} 456
+
 # HELP ntpu_webhook_duration_seconds Webhook processing duration in seconds
 # TYPE ntpu_webhook_duration_seconds histogram
 ntpu_webhook_duration_seconds_bucket{event_type="message",le="0.1"} 100
@@ -247,6 +251,7 @@ ntpu_webhook_duration_seconds_count{event_type="message"} 1000
 | 指標名稱 | 類型 | 說明 | Labels |
 |---------|------|------|--------|
 | **Webhook (RED)** | | | |
+| `ntpu_webhook_batch_total` | Counter | Webhook 批次請求總數 | `status` |
 | `ntpu_webhook_total` | Counter | Webhook 事件總數 | `event_type`, `status` |
 | `ntpu_webhook_duration_seconds` | Histogram | Webhook 處理耗時 | `event_type` |
 | **Scraper (RED)** | | | |
@@ -256,16 +261,19 @@ ntpu_webhook_duration_seconds_count{event_type="message"} 1000
 | `ntpu_cache_operations_total` | Counter | 快取操作總數 | `module`, `result` |
 | `ntpu_cache_size` | Gauge | 快取項目數量 | `module` |
 | **LLM (RED)** | | | |
-| `ntpu_llm_total` | Counter | LLM API 請求總數 | `operation`, `status` |
-| `ntpu_llm_duration_seconds` | Histogram | LLM API 請求耗時 | `operation` |
+| `ntpu_llm_total` | Counter | LLM API 請求總數 | `provider`, `operation`, `status` |
+| `ntpu_llm_duration_seconds` | Histogram | LLM API 請求耗時 | `provider`, `operation` |
+| `ntpu_llm_fallback_total` | Counter | LLM 供應商 fallback 次數 | `from_provider`, `to_provider`, `operation` |
+| `ntpu_llm_fallback_latency_seconds` | Histogram | LLM fallback 追加延遲 | `from_provider`, `to_provider`, `operation` |
 | **Search (RED)** | | | |
 | `ntpu_search_total` | Counter | 智慧搜尋請求總數 | `type`, `status` |
-| `ntpu_search_duration_seconds` | Histogram | 搜尋耗時 | `component` |
+| `ntpu_search_duration_seconds` | Histogram | 搜尋耗時 | `type` |
 | `ntpu_search_results` | Histogram | 搜尋結果數量分布 | `type` |
 | `ntpu_index_size` | Gauge | 索引文件數量 | `index` |
 | **Rate Limiter (USE)** | | | |
 | `ntpu_rate_limiter_dropped_total` | Counter | 被丟棄的請求數 | `limiter` |
 | `ntpu_rate_limiter_users` | Gauge | 活動用戶限流器數量 | - |
+| `ntpu_llm_rate_limiter_users` | Gauge | 活動 LLM 限流器數量 | - |
 | **Background Jobs** | | | |
 | `ntpu_job_duration_seconds` | Histogram | 背景任務耗時 | `job`, `module` |
 

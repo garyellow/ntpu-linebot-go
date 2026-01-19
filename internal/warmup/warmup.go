@@ -63,11 +63,11 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, log *logge
 	startTime := time.Now()
 
 	if opts.Reset {
-		log.Info("Resetting cache data...")
+		log.Info("Resetting cache data")
 		if err := resetCache(ctx, db); err != nil {
 			return nil, fmt.Errorf("failed to reset cache: %w", err)
 		}
-		log.Info("Cache reset complete")
+		log.Info("Cache reset completed")
 	}
 
 	hasSyllabus := opts.HasLLMKey
@@ -151,12 +151,12 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, log *logge
 		return stats, fmt.Errorf("warmup: %w", err)
 	}
 
-	log.WithField("duration", time.Since(startTime)).
+	log.WithField("duration_ms", time.Since(startTime).Milliseconds()).
 		WithField("contacts", stats.Contacts.Load()).
 		WithField("courses", stats.Courses.Load()).
 		WithField("programs", stats.Programs.Load()).
 		WithField("syllabi", stats.Syllabi.Load()).
-		Info("Cache warming complete")
+		Info("Cache warming completed")
 
 	return stats, nil
 }
@@ -182,7 +182,7 @@ func RunInBackground(_ context.Context, db *storage.DB, client *scraper.Client, 
 			log.WithField("contacts", stats.Contacts.Load()).
 				WithField("courses", stats.Courses.Load()).
 				WithField("syllabi", stats.Syllabi.Load()).
-				Info("Background cache warming completed successfully")
+				Info("Background cache warming completed")
 		}
 	}()
 }
@@ -277,7 +277,7 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 	var errs []error
 
 	for _, st := range studentTypes {
-		log.WithField("type", st.name).WithField("depts", len(st.depts)).Info("Warming up student type")
+		log.WithField("type", st.name).WithField("dept_count", len(st.depts)).Info("Warming up student type")
 
 		for year := fromYear; year > 100; year-- {
 			for _, dept := range st.depts {
@@ -327,8 +327,8 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 					log.WithField("progress", fmt.Sprintf("%d/%d (%.0f%%)", completed, totalTasks, float64(completed)*100/float64(totalTasks))).
 						WithField("students", studentCount).
 						WithField("type", st.name).
-						WithField("elapsed_min", int(elapsed.Minutes())).
-						WithField("est_remaining_min", int(estimatedRemaining.Minutes())).
+						WithField("elapsed_minutes", int(elapsed.Minutes())).
+						WithField("estimated_remaining_minutes", int(estimatedRemaining.Minutes())).
 						Info("ID module progress")
 				}
 			}
@@ -391,7 +391,7 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 
 	// Log partial success details
 	if len(errs) == 1 {
-		log.WithField("failed_source", errs[0]).Info("Contact module completed with partial success")
+		log.WithField("failed_source_error", errs[0]).Info("Contact module completed with partial success")
 	}
 
 	return nil
@@ -425,8 +425,8 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 
 	// Each semester makes 4 requests (U/M/N/P education codes)
 	estimatedRequests := len(semesters) * 4
-	log.WithField("semesters", formatSemesters(semesters)).
-		WithField("total_semesters", len(semesters)).
+	log.WithField("semester_list", formatSemesters(semesters)).
+		WithField("semester_count", len(semesters)).
 		WithField("estimated_requests", estimatedRequests).
 		Info("Course warmup: fetching courses by semester (data-driven probing)")
 
@@ -488,14 +488,14 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 	// Update shared semester cache after successful warmup
 	if semesterCache != nil {
 		semesterCache.Update(semesters)
-		log.WithField("semesters", formatSemesters(semesters)).
+		log.WithField("semester_list", formatSemesters(semesters)).
 			Info("Updated semester cache with probed semesters")
 	}
 
 	log.WithField("total_courses", stats.Courses.Load()).
 		WithField("semesters_processed", len(semesters)).
 		WithField("program_map_size", len(programMap)).
-		Info("Course module warmup complete")
+		Info("Course module warmup completed")
 
 	return programMap, nil
 }
@@ -557,8 +557,8 @@ func probeSemestersWithData(ctx context.Context, client *scraper.Client, log *lo
 	}
 
 	log.WithField("found", len(foundSemesters)).
-		WithField("semesters", formatSemesters(foundSemesters)).
-		Info("Semester probing complete")
+		WithField("semester_list", formatSemesters(foundSemesters)).
+		Info("Semester probing completed")
 
 	return foundSemesters, nil
 }
@@ -623,7 +623,7 @@ func warmupSyllabusModule(ctx context.Context, db *storage.DB, client *scraper.C
 		totalCourses += count
 	}
 
-	log.WithField("semesters", len(semesters)).
+	log.WithField("semester_count", len(semesters)).
 		WithField("total_courses", totalCourses).
 		Info("Found recent semesters for syllabus warmup")
 
@@ -752,7 +752,7 @@ processLoop:
 						WithField("updated", updatedCount).
 						WithField("skipped", skippedCount).
 						WithField("errors", errorCount).
-						WithField("est_remaining_min", int(estimatedRemaining.Minutes())).
+						WithField("estimated_remaining_minutes", int(estimatedRemaining.Minutes())).
 						Info("Syllabus warmup progress")
 				}
 			}
@@ -782,7 +782,7 @@ processLoop:
 		WithField("skipped", skippedCount).
 		WithField("errors", errorCount).
 		WithField("total_scanned", processedCount).
-		Info("Syllabus module warmup complete")
+		Info("Syllabus module warmup completed")
 
 	return nil
 }

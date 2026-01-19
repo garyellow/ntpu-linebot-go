@@ -23,21 +23,73 @@ docker compose up -d
 
 ## 環境變數
 
-### 必填
+### LINE Bot（必填）
 
 | 變數 | 說明 |
 |------|------|
 | `LINE_CHANNEL_ACCESS_TOKEN` | LINE Bot Access Token |
 | `LINE_CHANNEL_SECRET` | LINE Bot Channel Secret |
 
-### LLM 設定（可選）
+### LLM（可選）
 
 | 變數 | 說明 |
 |------|------|
-| `GEMINI_API_KEY` | Gemini API Key（啟用 NLU 和智慧搜尋）|
-| `GROQ_API_KEY` | Groq API Key（備援 LLM）|
-| `CEREBRAS_API_KEY` | Cerebras API Key（備援 LLM）|
-| `LLM_PROVIDERS` | LLM 提供者鏈（預設：gemini,groq,cerebras）|
+| `GEMINI_API_KEY` | Gemini API Key（啟用 NLU/智慧搜尋）|
+| `GROQ_API_KEY` | Groq API Key |
+| `CEREBRAS_API_KEY` | Cerebras API Key |
+| `LLM_PROVIDERS` | LLM 提供者順序（預設：gemini,groq,cerebras）|
+| `GEMINI_INTENT_MODELS` | Gemini intent 模型鏈 |
+| `GEMINI_EXPANDER_MODELS` | Gemini expander 模型鏈 |
+| `GROQ_INTENT_MODELS` | Groq intent 模型鏈 |
+| `GROQ_EXPANDER_MODELS` | Groq expander 模型鏈 |
+| `CEREBRAS_INTENT_MODELS` | Cerebras intent 模型鏈 |
+| `CEREBRAS_EXPANDER_MODELS` | Cerebras expander 模型鏈 |
+
+### Server
+
+| 變數 | 預設值 | 說明 |
+|------|--------|------|
+| `PORT` | 10000 | 服務埠 |
+| `LOG_LEVEL` | info | 日誌等級 |
+| `SHUTDOWN_TIMEOUT` | 30s | 關閉等待時間 |
+
+### Data
+
+| 變數 | 預設值 | 說明 |
+|------|--------|------|
+| `DATA_DIR` | /data | 資料目錄 |
+| `CACHE_TTL` | 168h | 快取 TTL |
+
+### Scraper
+
+| 變數 | 預設值 | 說明 |
+|------|--------|------|
+| `SCRAPER_TIMEOUT` | 60s | 爬蟲逾時 |
+| `SCRAPER_MAX_RETRIES` | 10 | 最大重試次數 |
+
+### Webhook
+
+| 變數 | 預設值 | 說明 |
+|------|--------|------|
+| `WEBHOOK_TIMEOUT` | 60s | Webhook 逾時 |
+
+### Rate Limit
+
+| 變數 | 預設值 | 說明 |
+|------|--------|------|
+| `USER_RATE_BURST` | 15 | 使用者 burst |
+| `USER_RATE_REFILL` | 0.1 | 使用者 refill/sec |
+| `LLM_RATE_BURST` | 60 | LLM burst |
+| `LLM_RATE_REFILL` | 30 | LLM refill/hr |
+| `LLM_RATE_DAILY` | 180 | LLM 日上限 |
+| `GLOBAL_RATE_RPS` | 100 | 全域 RPS |
+
+### Startup
+
+| 變數 | 預設值 | 說明 |
+|------|--------|------|
+| `WAIT_FOR_WARMUP` | false | 啟動等待 warmup |
+| `WARMUP_GRACE_PERIOD` | 10m | warmup 最長等待 |
 
 ### 日誌整合（可選）
 
@@ -45,16 +97,6 @@ docker compose up -d
 |------|------|
 | `BETTERSTACK_SOURCE_TOKEN` | Better Stack Source Token（空字串=不啟用） |
 | `BETTERSTACK_ENDPOINT` | Better Stack Ingesting Endpoint（可選） |
-
-### 監控設定
-
-| 變數 | 預設值 | 說明 |
-|------|--------|------|
-| `GRAFANA_USER` | admin | Grafana 管理員帳號 |
-| `GRAFANA_PASSWORD` | admin123 | Grafana 管理員密碼 |
-| `GRAFANA_PORT` | 3000 | Grafana 端口 |
-| `PROMETHEUS_PORT` | 9090 | Prometheus 端口 |
-| `ALERTMANAGER_PORT` | 9093 | Alertmanager 端口 |
 
 ### Metrics 驗證
 
@@ -64,6 +106,23 @@ docker compose up -d
 | `METRICS_PASSWORD` | (空) | /metrics 端點密碼（空=停用驗證）|
 
 > **注意**：內部 Docker 網路不需要 metrics 驗證，保持 `METRICS_PASSWORD` 為空即可。
+
+### Docker（可選）
+
+| 變數 | 預設值 | 說明 |
+|------|--------|------|
+| `IMAGE_TAG` | latest | 映像標籤 |
+| `HOST_PORT` | 10000 | 對外映射埠 |
+
+### 監控堆疊
+
+| 變數 | 預設值 | 說明 |
+|------|--------|------|
+| `GRAFANA_USER` | admin | Grafana 管理員帳號 |
+| `GRAFANA_PASSWORD` | admin123 | Grafana 管理員密碼 |
+| `GRAFANA_PORT` | 3000 | Grafana 端口 |
+| `PROMETHEUS_PORT` | 9090 | Prometheus 端口 |
+| `ALERTMANAGER_PORT` | 9093 | Alertmanager 端口 |
 
 ## 常用指令
 

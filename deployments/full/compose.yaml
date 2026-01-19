@@ -1,6 +1,5 @@
-# Full Stack Deployment (No Exposed Monitoring Ports)
-# Use this with access/compose.yaml (nginx gateway) for on-demand port access
-# See README.md for usage instructions
+# Full stack deployment (monitoring ports closed)
+# Use access/compose.yaml to open ports when needed
 
 services:
   ntpu-linebot:
@@ -12,19 +11,17 @@ services:
     volumes:
       - data:/data:rw
     environment:
-      # LINE Bot Configuration (Required)
+      # LINE bot
       - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN:?LINE_CHANNEL_ACCESS_TOKEN is required}
       - LINE_CHANNEL_SECRET=${LINE_CHANNEL_SECRET:?LINE_CHANNEL_SECRET is required}
 
-      # GenAI Configuration (Optional)
+      # LLM keys
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - GROQ_API_KEY=${GROQ_API_KEY:-}
       - CEREBRAS_API_KEY=${CEREBRAS_API_KEY:-}
 
-      # LLM Provider Selection (Optional)
+      # LLM providers/models
       - LLM_PROVIDERS=${LLM_PROVIDERS:-gemini,groq,cerebras}
-
-      # LLM Model Configuration (Optional - comma-separated fallback chain)
       - GEMINI_INTENT_MODELS=${GEMINI_INTENT_MODELS:-}
       - GEMINI_EXPANDER_MODELS=${GEMINI_EXPANDER_MODELS:-}
       - GROQ_INTENT_MODELS=${GROQ_INTENT_MODELS:-}
@@ -32,27 +29,27 @@ services:
       - CEREBRAS_INTENT_MODELS=${CEREBRAS_INTENT_MODELS:-}
       - CEREBRAS_EXPANDER_MODELS=${CEREBRAS_EXPANDER_MODELS:-}
 
-      # Server Configuration
+      # Server
       - PORT=${PORT:-10000}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - SHUTDOWN_TIMEOUT=${SHUTDOWN_TIMEOUT:-30s}
 
-      # Better Stack Logging (Optional)
+      # Better Stack
       - BETTERSTACK_SOURCE_TOKEN=${BETTERSTACK_SOURCE_TOKEN:-}
       - BETTERSTACK_ENDPOINT=${BETTERSTACK_ENDPOINT:-}
 
-      # Data Configuration
+      # Data
       - DATA_DIR=${DATA_DIR:-/data}
       - CACHE_TTL=${CACHE_TTL:-168h}
 
-      # Scraper Configuration
+      # Scraper
       - SCRAPER_TIMEOUT=${SCRAPER_TIMEOUT:-60s}
       - SCRAPER_MAX_RETRIES=${SCRAPER_MAX_RETRIES:-10}
 
-      # Webhook Configuration
+      # Webhook
       - WEBHOOK_TIMEOUT=${WEBHOOK_TIMEOUT:-60s}
 
-      # Rate Limit Configuration
+      # Rate limits
       - USER_RATE_BURST=${USER_RATE_BURST:-15}
       - USER_RATE_REFILL=${USER_RATE_REFILL:-0.1}
       - LLM_RATE_BURST=${LLM_RATE_BURST:-60}
@@ -60,11 +57,11 @@ services:
       - LLM_RATE_DAILY=${LLM_RATE_DAILY:-180}
       - GLOBAL_RATE_RPS=${GLOBAL_RATE_RPS:-100}
 
-      # Startup Configuration
+      # Startup
       - WAIT_FOR_WARMUP=${WAIT_FOR_WARMUP:-false}
       - WARMUP_GRACE_PERIOD=${WARMUP_GRACE_PERIOD:-10m}
 
-      # Metrics Authentication (empty password = disabled for internal network)
+      # Metrics auth (empty password disables)
       - METRICS_USERNAME=${METRICS_USERNAME:-prometheus}
       - METRICS_PASSWORD=${METRICS_PASSWORD:-}
     deploy:

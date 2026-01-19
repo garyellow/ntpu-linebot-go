@@ -175,14 +175,19 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: query", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching contact intent: %s, query: %s", intent, query)
+			h.logger.WithModule(ModuleName).
+				WithField("intent", intent).
+				WithField("query", query).
+				InfoContext(ctx, "Dispatching contact intent")
 		}
 		return h.handleContactSearch(ctx, query), nil
 
 	case IntentEmergency:
 		// Emergency intent doesn't require any parameters
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Info("Dispatching contact intent: emergency")
+			h.logger.WithModule(ModuleName).
+				WithField("intent", IntentEmergency).
+				InfoContext(ctx, "Dispatching contact intent")
 		}
 		return h.handleEmergencyPhones(), nil
 
@@ -222,12 +227,16 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
+	log.InfoContext(ctx, "Handling contact message")
+
 	matcher := h.findMatcher(text)
 	if matcher == nil {
 		return []messaging_api.MessageInterface{}
 	}
 
-	log.Debugf("Route matched: %s (Priority: %d)", matcher.name, matcher.priority)
+	log.WithField("pattern", matcher.name).
+		WithField("priority", matcher.priority).
+		InfoContext(ctx, "Route matched")
 
 	var matches []string
 	if matcher.pattern != nil {
@@ -264,7 +273,7 @@ func (h *Handler) handleEmptySearchTerm() []messaging_api.MessageInterface {
 // HandlePostback handles postback events for the contact module
 func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(ModuleName)
-	log.Infof("Handling contact postback: %s", data)
+	log.InfoContext(ctx, "Handling contact postback")
 
 	// Strip module prefix if present (registry passes original data)
 	data = strings.TrimPrefix(data, "contact:")
@@ -285,7 +294,8 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 		parts := strings.Split(data, bot.PostbackSplitChar)
 		if len(parts) >= 2 {
 			teacherName := parts[1]
-			log.Infof("Handling teacher contact postback for: %s", teacherName)
+			log.WithField("teacher_name", teacherName).
+				InfoContext(ctx, "Handling teacher contact postback")
 			return h.handleContactSearch(ctx, teacherName)
 		}
 	}
@@ -429,7 +439,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	// SQL LIKE searches in: name, title
 	sqlContacts, err := h.db.SearchContactsByName(ctx, searchTerm)
 	if err != nil {
-		log.WithError(err).Error("Failed to search contacts in cache")
+		log.WithError(err).ErrorContext(ctx, "Failed to search contacts in cache")
 		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		return []messaging_api.MessageInterface{
 			lineutil.ErrorMessageWithQuickReply("查詢聯絡資訊時發生問題", sender, "聯絡 "+searchTerm),
@@ -451,24 +461,30 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	// If found in cache, return results
 	if len(contacts) > 0 {
 		h.metrics.RecordCacheHit(ModuleName)
-		log.Infof("Cache hit for contact search: %s (found %d)", searchTerm, len(contacts))
+		log.WithField("search_term", searchTerm).
+			WithField("count", len(contacts)).
+			DebugContext(ctx, "Contact search cache hit")
 		return h.formatContactResultsWithSearch(ctx, contacts, searchTerm)
 	}
 
 	// Cache miss - scrape from website
 	// Try multiple search variants to increase hit rate
 	h.metrics.RecordCacheMiss(ModuleName)
-	log.Infof("Cache miss for contact search: %s, scraping...", searchTerm)
+	log.WithField("search_term", searchTerm).
+		InfoContext(ctx, "Contact search cache miss; scraping")
 
 	// Build search variants (e.g., "資工系" -> also try "資訊工程")
 	searchVariants := h.buildSearchVariants(searchTerm)
 
 	var contactsPtr []*storage.Contact
 	for _, variant := range searchVariants {
-		log.Debugf("Trying search variant: %s", variant)
+		log.WithField("variant", variant).
+			DebugContext(ctx, "Trying contact search variant")
 		result, err := ntpu.ScrapeContacts(ctx, h.scraper, variant)
 		if err != nil {
-			log.WithError(err).Debugf("Failed to scrape contacts for variant: %s", variant)
+			log.WithError(err).
+				WithField("variant", variant).
+				DebugContext(ctx, "Failed to scrape contacts for variant")
 			continue
 		}
 		if len(result) > 0 {
@@ -481,7 +497,9 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 		// Final attempt with original search term
 		result, err := ntpu.ScrapeContacts(ctx, h.scraper, searchTerm)
 		if err != nil {
-			log.WithError(err).Errorf("Failed to scrape contacts for: %s", searchTerm)
+			log.WithError(err).
+				WithField("search_term", searchTerm).
+				ErrorContext(ctx, "Failed to scrape contacts")
 			h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 			msg := lineutil.ErrorMessageWithDetailAndSender("無法取得聯絡資料，可能是網路問題或資料來源暫時無法使用", sender)
 			if textMsg, ok := msg.(*messaging_api.TextMessageV2); ok {
@@ -514,7 +532,9 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	// Save to cache
 	for i := range contacts {
 		if err := h.db.SaveContact(ctx, &contacts[i]); err != nil {
-			log.WithError(err).Warnf("Failed to save contact to cache: %s", contacts[i].Name)
+			log.WithError(err).
+				WithField("contact_name", contacts[i].Name).
+				WarnContext(ctx, "Failed to save contact to cache")
 		}
 	}
 
@@ -530,13 +550,14 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 	startTime := time.Now()
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
-	log.Infof("Handling members query for organization: %s", orgName)
+	log.WithField("organization", orgName).
+		InfoContext(ctx, "Handling organization members query")
 
 	// Step 1: Search cache for members of this organization
 	// Use GetContactsByOrganization for organization-specific queries
 	members, err := h.db.GetContactsByOrganization(ctx, orgName)
 	if err != nil {
-		log.WithError(err).Error("Failed to query organization members from cache")
+		log.WithError(err).ErrorContext(ctx, "Failed to query organization members from cache")
 		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		msg := lineutil.ErrorMessageWithDetailAndSender("查詢成員時發生問題", sender)
 		if textMsg, ok := msg.(*messaging_api.TextMessageV2); ok {
@@ -555,17 +576,22 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 
 	if len(individuals) > 0 {
 		h.metrics.RecordCacheHit(ModuleName)
-		log.Infof("Found %d members in cache for organization: %s", len(individuals), orgName)
+		log.WithField("organization", orgName).
+			WithField("count", len(individuals)).
+			DebugContext(ctx, "Organization members cache hit")
 		return h.formatContactResults(ctx, individuals)
 	}
 
 	// Step 2: Cache miss - try scraping
 	h.metrics.RecordCacheMiss(ModuleName)
-	log.Infof("Cache miss for organization members: %s, scraping...", orgName)
+	log.WithField("organization", orgName).
+		InfoContext(ctx, "Organization members cache miss; scraping")
 
 	scrapedContacts, err := ntpu.ScrapeContacts(ctx, h.scraper, orgName)
 	if err != nil {
-		log.WithError(err).Errorf("Failed to scrape members for: %s", orgName)
+		log.WithError(err).
+			WithField("organization", orgName).
+			ErrorContext(ctx, "Failed to scrape organization members")
 		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(
 			fmt.Sprintf("⚠️ 無法取得「%s」的成員資料\n\n💡 可能原因：\n• 網路問題\n• 該單位尚無成員資料", orgName),
@@ -582,7 +608,9 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 	individuals = make([]storage.Contact, 0)
 	for _, c := range scrapedContacts {
 		if err := h.db.SaveContact(ctx, c); err != nil {
-			log.WithError(err).Warnf("Failed to save contact to cache: %s", c.Name)
+			log.WithError(err).
+				WithField("contact_name", c.Name).
+				WarnContext(ctx, "Failed to save contact to cache")
 		}
 		// Check if this contact belongs to the target organization and is an individual
 		if c.Type == "individual" && (c.Organization == orgName || c.Superior == orgName) {

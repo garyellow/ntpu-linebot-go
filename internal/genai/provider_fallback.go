@@ -76,7 +76,7 @@ func (f *FallbackIntentParser) Parse(ctx context.Context, text string) (*ParseRe
 			"index", i,
 			"error", err,
 			"action", action,
-			"duration", time.Since(start))
+			"duration_ms", time.Since(start).Milliseconds())
 
 		// If error is not recoverable or no more fallbacks, record error and stop
 		if action == ActionFail || i == len(f.parsers)-1 {
@@ -138,7 +138,7 @@ func (f *FallbackIntentParser) parseWithRetry(ctx context.Context, parser Intent
 		slog.DebugContext(ctx, "retrying intent parse",
 			"provider", parser.Provider(),
 			"attempt", attempt+1,
-			"backoff", backoff,
+			"backoff_ms", backoff.Milliseconds(),
 			"error", err)
 
 		select {
@@ -247,7 +247,7 @@ func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (strin
 			"index", i,
 			"error", err,
 			"action", action,
-			"duration", time.Since(start))
+			"duration_ms", time.Since(start).Milliseconds())
 
 		// If error is not recoverable or no more fallbacks, degrade gracefully
 		if action == ActionFail || i == len(f.expanders)-1 {
@@ -302,7 +302,7 @@ func (f *FallbackQueryExpander) expandWithRetry(ctx context.Context, expander Qu
 		slog.DebugContext(ctx, "retrying query expansion",
 			"provider", expander.Provider(),
 			"attempt", attempt+1,
-			"backoff", backoff,
+			"backoff_ms", backoff.Milliseconds(),
 			"error", err)
 
 		select {

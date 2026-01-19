@@ -317,7 +317,7 @@ func parseCoursesPage(ctx context.Context, doc *goquery.Document, year, term int
 			slog.DebugContext(ctx, "skipping course with empty title",
 				"year", year,
 				"term", term,
-				"courseNo", strings.TrimSpace(tds.Eq(3).Text()))
+				"course_no", strings.TrimSpace(tds.Eq(3).Text()))
 			return
 		}
 

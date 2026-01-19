@@ -1,6 +1,5 @@
-# Nginx Gateway for Monitoring Access
-# Provides on-demand access to Grafana, Prometheus, and Alertmanager
-# Usage: docker compose up -d (to expose ports) / docker compose down (to release ports)
+# Nginx gateway for monitoring access
+# docker compose up -d / docker compose down
 
 services:
   nginx-gateway:
