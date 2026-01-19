@@ -164,6 +164,9 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 	case webhook.FollowEvent:
 		eventType = "follow"
 		messages, err = h.processor.ProcessFollow(e)
+	case webhook.JoinEvent:
+		eventType = "join"
+		messages, err = h.processor.ProcessJoin(e)
 	default:
 		// Unsupported event type, skip
 		log.WithField("event_type", fmt.Sprintf("%T", e)).Debug("Unsupported event type")
@@ -242,6 +245,8 @@ func extractEventMeta(event webhook.EventInterface) (string, int64, *bool) {
 		return e.WebhookEventId, e.Timestamp, boolPtr(e.DeliveryContext)
 	case webhook.FollowEvent:
 		return e.WebhookEventId, e.Timestamp, boolPtr(e.DeliveryContext)
+	case webhook.JoinEvent:
+		return e.WebhookEventId, e.Timestamp, boolPtr(e.DeliveryContext)
 	default:
 		return "", 0, nil
 	}
@@ -268,6 +273,9 @@ func (h *Handler) shouldShowLoading(event webhook.EventInterface) bool {
 		return true
 	case webhook.FollowEvent:
 		// Follow gets a response (welcome message)
+		return true
+	case webhook.JoinEvent:
+		// Join gets a response (welcome message)
 		return true
 	default:
 		// Unknown event types - don't show loading
@@ -340,6 +348,8 @@ func (h *Handler) getReplyToken(event webhook.EventInterface) string {
 		return e.ReplyToken
 	case webhook.FollowEvent:
 		return e.ReplyToken
+	case webhook.JoinEvent:
+		return e.ReplyToken
 	default:
 		return ""
 	}
@@ -355,6 +365,8 @@ func (h *Handler) getChatID(event webhook.EventInterface) string {
 	case webhook.PostbackEvent:
 		source = e.Source
 	case webhook.FollowEvent:
+		source = e.Source
+	case webhook.JoinEvent:
 		source = e.Source
 	default:
 		return ""

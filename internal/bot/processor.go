@@ -246,6 +246,19 @@ func (p *Processor) ProcessFollow(event webhook.FollowEvent) ([]messaging_api.Me
 	return []messaging_api.MessageInterface{welcomeMsg}, nil
 }
 
+// ProcessJoin handles a join event.
+// Returns a Flex Message welcome card with Quick Reply for better UX.
+func (p *Processor) ProcessJoin(event webhook.JoinEvent) ([]messaging_api.MessageInterface, error) {
+	p.logger.Info("Bot joined a group or room")
+
+	sender := lineutil.GetSender("NTPU 小工具", p.stickerManager)
+
+	// Build welcome Flex Message
+	welcomeMsg := p.buildWelcomeFlexMessage(p.isNLUEnabled(), sender)
+
+	return []messaging_api.MessageInterface{welcomeMsg}, nil
+}
+
 // buildWelcomeFlexMessage creates a structured welcome message for new users.
 func (p *Processor) buildWelcomeFlexMessage(nluEnabled bool, sender *messaging_api.Sender) messaging_api.MessageInterface {
 	// Hero section with blue theme
