@@ -240,14 +240,17 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		return []messaging_api.MessageInterface{}
 	}
 
-	log.Debugf("Pattern matched: %s (priority %d)", matcher.name, matcher.priority)
+	log.WithField("pattern", matcher.name).
+		WithField("priority", matcher.priority).
+		Debug("Pattern matched")
 
 	// Call handler - must return non-empty per PatternHandler contract
 	result := matcher.handler(ctx, text, matches)
 
 	// Defensive check: handlers should never return nil/empty when pattern matched
 	if len(result) == 0 {
-		log.Errorf("Handler %s violated contract: returned empty for matched pattern", matcher.name)
+		log.WithField("pattern", matcher.name).
+			Error("Pattern handler returned empty result")
 		// Return generic error to user
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
@@ -275,14 +278,17 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 	// Extract action and data
 	parts := strings.SplitN(data[len(PostbackPrefix):], bot.PostbackSplitChar, 2)
 	if len(parts) < 2 {
-		log.Warnf("Invalid postback format: %s", data)
+		log.WithField("postback_data", data).
+			Warn("Invalid postback format")
 		return nil
 	}
 
 	action := parts[0]
 	actionData := parts[1]
 
-	log.Infof("Processing postback: action=%s, data=%s", action, actionData)
+	log.WithField("action", action).
+		WithField("action_data", actionData).
+		Debug("Processing postback")
 
 	switch action {
 	case "courses":
@@ -291,7 +297,8 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 		// Show all programs for a given course UID
 		return h.handleCourseProgramsList(ctx, actionData)
 	default:
-		log.Warnf("Unknown postback action: %s", action)
+		log.WithField("action", action).
+			Warn("Unknown postback action")
 		return nil
 	}
 }
@@ -338,13 +345,16 @@ func (h *Handler) handleProgramList(ctx context.Context) []messaging_api.Message
 	log := h.logger.WithModule(ModuleName)
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
-	log.Info("Handling program list query")
+	log.WithField("query_type", "list").
+		Debug("Handling program query")
 
 	// Get recent 2 semesters for filtering statistics (data-driven)
 	var years, terms []int
 	if h.semesterCache != nil {
 		years, terms = h.semesterCache.GetRecentSemesters()
-		log.Debugf("Using semester filter for program statistics: years=%v, terms=%v", years, terms)
+		log.WithField("years", years).
+			WithField("terms", terms).
+			Debug("Using semester filter for program statistics")
 	}
 
 	// Get all programs from database with semester filter
@@ -369,7 +379,8 @@ func (h *Handler) handleProgramList(ctx context.Context) []messaging_api.Message
 	}
 
 	h.metrics.RecordCacheHit(ModuleName)
-	log.Infof("Found %d programs", len(programs))
+	log.WithField("count", len(programs)).
+		Debug("Program list loaded")
 
 	// Limit results
 	totalCount := len(programs)
@@ -388,13 +399,16 @@ func (h *Handler) handleProgramSearch(ctx context.Context, searchTerm string) []
 	log := h.logger.WithModule(ModuleName)
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
-	log.Infof("Handling program search: %s", searchTerm)
+	log.WithField("search_term", searchTerm).
+		Debug("Handling program search")
 
 	// Get recent 2 semesters for filtering statistics (data-driven)
 	var years, terms []int
 	if h.semesterCache != nil {
 		years, terms = h.semesterCache.GetRecentSemesters()
-		log.Debugf("Using semester filter for program search: years=%v, terms=%v", years, terms)
+		log.WithField("years", years).
+			WithField("terms", terms).
+			Debug("Using semester filter for program search")
 	}
 
 	// Search using SQL LIKE + fuzzy matching (2-tier parallel search)
@@ -442,7 +456,9 @@ func (h *Handler) handleProgramSearch(ctx context.Context, searchTerm string) []
 	}
 
 	h.metrics.RecordCacheHit(ModuleName)
-	log.Infof("Found %d programs for search: %s", len(programs), searchTerm)
+	log.WithField("count", len(programs)).
+		WithField("search_term", searchTerm).
+		Debug("Program search results loaded")
 
 	// Limit results
 	if len(programs) > MaxProgramsPerSearch {
@@ -467,13 +483,16 @@ func (h *Handler) handleProgramCourses(ctx context.Context, programName string) 
 	log := h.logger.WithModule(ModuleName)
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
-	log.Infof("Handling program courses query: %s", programName)
+	log.WithField("program_name", programName).
+		Debug("Handling program courses query")
 
 	// Get recent 2 semesters from semester cache (data-driven)
 	var years, terms []int
 	if h.semesterCache != nil {
 		years, terms = h.semesterCache.GetRecentSemesters()
-		log.Debugf("Using semester filter: years=%v, terms=%v", years, terms)
+		log.WithField("years", years).
+			WithField("terms", terms).
+			Debug("Using semester filter for program courses")
 	} else {
 		// No semester cache available - will return all courses
 		// This should only happen in tests; in production, semesterCache is always set
@@ -506,7 +525,9 @@ func (h *Handler) handleProgramCourses(ctx context.Context, programName string) 
 	}
 
 	h.metrics.RecordCacheHit(ModuleName)
-	log.Infof("Found %d courses for program: %s (2 semesters)", len(programCourses), programName)
+	log.WithField("count", len(programCourses)).
+		WithField("program_name", programName).
+		Debug("Program courses loaded")
 
 	// Separate required and elective courses
 	var requiredCourses, electiveCourses []storage.ProgramCourse
@@ -529,7 +550,9 @@ func (h *Handler) handleProgramCourses(ctx context.Context, programName string) 
 	}
 
 	// For >40 courses, use text list format
-	log.Debugf("Using text list format for %d courses (exceeds carousel limit %d)", totalCourses, MaxCoursesInCarousel)
+	log.WithField("total_courses", totalCourses).
+		WithField("limit", MaxCoursesInCarousel).
+		Debug("Using text list format for program courses")
 	return h.formatProgramCoursesAsTextList(programName, requiredCourses, electiveCourses, originalRequiredCount, originalElectiveCount)
 }
 
@@ -539,13 +562,16 @@ func (h *Handler) handleCourseProgramsList(ctx context.Context, courseUID string
 	log := h.logger.WithModule(ModuleName)
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
-	log.Infof("Handling course programs list for: %s", courseUID)
+	log.WithField("course_uid", courseUID).
+		Debug("Handling course programs list")
 
 	// Get course info to display course name (not just UID)
 	course, err := h.db.GetCourseByUID(ctx, courseUID)
 	courseName := courseUID // Fallback to UID if course not found
 	if err != nil {
-		log.WithError(err).Warnf("Failed to get course info for %s, using UID as fallback", courseUID)
+		log.WithError(err).
+			WithField("course_uid", courseUID).
+			Warn("Failed to load course info; using UID fallback")
 	} else if course != nil {
 		courseName = course.Title
 	}
@@ -572,7 +598,9 @@ func (h *Handler) handleCourseProgramsList(ctx context.Context, courseUID string
 	}
 
 	h.metrics.RecordCacheHit(ModuleName)
-	log.Infof("Found %d programs for course: %s", len(programs), courseUID)
+	log.WithField("count", len(programs)).
+		WithField("course_uid", courseUID).
+		Debug("Course programs loaded")
 
 	// Always use Flex carousel for related programs (allows unlimited rows via LINE API)
 	// This provides a consistent UI experience regardless of program count

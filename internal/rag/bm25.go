@@ -169,7 +169,7 @@ func (idx *BM25Index) Initialize(ctx context.Context, db *storage.DB) error {
 
 	idx.initialized = true
 	idx.logger.WithField("courses", totalCourses).
-		WithField("semesters", len(idx.semesterIndexes)).
+		WithField("semester_count", len(idx.semesterIndexes)).
 		Info("BM25 index initialized (memory optimized)")
 
 	return nil

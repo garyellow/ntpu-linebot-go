@@ -240,6 +240,7 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 	// Log overall processing duration
 	batchDurationMs := time.Since(webhookStart).Milliseconds()
 	log.WithField("event_type", eventType).
+		WithField("status", status).
 		WithField("event_duration_ms", eventDurationMs).
 		WithField("batch_duration_ms", batchDurationMs).
 		Info("Event processed")

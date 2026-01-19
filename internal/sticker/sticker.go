@@ -181,7 +181,7 @@ func (m *Manager) FetchAndSaveStickers(ctx context.Context) error {
 		"total_fetched": len(allStickers),
 		"spy_family":    spyCount,
 		"ichigo":        ichigoCount,
-		"errors":        errorCount,
+		"error_count":   errorCount,
 	}).Info("Sticker fetch completed")
 	return nil
 }
@@ -195,9 +195,9 @@ func (m *Manager) fetchWithRetry(ctx context.Context, url string, fetchFunc func
 			// Exponential backoff: 1s, 2s, 4s
 			backoff := time.Duration(math.Pow(2, float64(attempt))) * time.Second
 			m.logger.WithFields(map[string]any{
-				"attempt": attempt + 1,
-				"url":     url,
-				"backoff": backoff,
+				"attempt":    attempt + 1,
+				"url":        url,
+				"backoff_ms": backoff.Milliseconds(),
 			}).Debug("Retrying sticker fetch")
 			time.Sleep(backoff)
 		}

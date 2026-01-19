@@ -362,18 +362,22 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	matches := matcher.pattern.FindStringSubmatch(text)
 	// Defensive check: MatchString succeeded but FindStringSubmatch may return empty
 	if len(matches) == 0 {
-		log.Warnf("Pattern %s matched but FindStringSubmatch returned empty", matcher.name)
+		log.WithField("pattern", matcher.name).
+			Warn("Pattern matched but no submatches found")
 		return []messaging_api.MessageInterface{}
 	}
 
-	log.Debugf("Pattern matched: %s (priority %d)", matcher.name, matcher.priority)
+	log.WithField("pattern", matcher.name).
+		WithField("priority", matcher.priority).
+		Debug("Pattern matched")
 
 	// Call handler - must return non-empty per PatternHandler contract
 	result := matcher.handler(ctx, text, matches)
 
 	// Defensive check: handlers should never return nil/empty when pattern matched
 	if len(result) == 0 {
-		log.Errorf("Handler %s violated contract: returned empty for matched pattern", matcher.name)
+		log.WithField("pattern", matcher.name).
+			Error("Pattern handler returned empty result")
 		// Return generic error to user
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
@@ -407,7 +411,9 @@ func (h *Handler) handleHistoricalPattern(ctx context.Context, text string, matc
 	// Defensive validation (should not happen if regex is correct)
 	if len(matches) < 4 {
 		log := h.logger.WithModule(ModuleName)
-		log.Errorf("Historical pattern matched but got %d groups (expected 4)", len(matches))
+		log.WithField("group_count", len(matches)).
+			WithField("expected", 4).
+			Error("Historical pattern match returned insufficient groups")
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
 			"⚠️ 查詢格式有誤\n\n正確格式：課程 110 微積分\n（年份可使用民國年或西元年，如 110、2021）",
@@ -437,7 +443,9 @@ func (h *Handler) handleHistoricalPattern(ctx context.Context, text string, matc
 	if year >= 1911 {
 		year = year - 1911
 		log := h.logger.WithModule(ModuleName)
-		log.Debugf("Converted Western year to ROC: %s -> %d", yearStr, year)
+		log.WithField("input_year", yearStr).
+			WithField("roc_year", year).
+			Debug("Converted Western year to ROC")
 	}
 
 	// Validate year is within reasonable range
@@ -569,7 +577,8 @@ func (h *Handler) handleRegularPattern(ctx context.Context, text string, matches
 // HandlePostback handles postback events for the course module
 func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(ModuleName)
-	log.Infof("Handling course postback: %s", data)
+	log.WithField("postback_data", data).
+		Debug("Handling course postback")
 
 	// Strip module prefix if present (registry passes original data)
 	data = strings.TrimPrefix(data, "course:")
@@ -579,7 +588,8 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 		parts := strings.Split(data, bot.PostbackSplitChar)
 		if len(parts) >= 2 {
 			teacherName := parts[1]
-			log.Infof("Handling teacher courses postback for: %s", teacherName)
+			log.WithField("teacher_name", teacherName).
+				Debug("Handling teacher courses postback")
 			return h.handleTeacherCourseSearch(ctx, teacherName)
 		}
 	}
@@ -616,22 +626,30 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 	if course != nil {
 		// Cache hit
 		h.metrics.RecordCacheHit(ModuleName)
-		log.Debugf("Cache hit for course UID: %s", uid)
+		log.WithField("uid", uid).
+			Debug("Course cache hit")
 		return h.formatCourseResponseWithContext(ctx, course)
 	}
 
 	// Cache miss - scrape from website
 	h.metrics.RecordCacheMiss(ModuleName)
-	log.Infof("Cache miss for course UID: %s, scraping...", uid)
+	log.WithField("uid", uid).
+		Info("Course cache miss; scraping course")
 
 	course, err = ntpu.ScrapeCourseByUID(ctx, h.scraper, uid)
 	if err != nil {
 		// Check if it's a context error (timeout/cancellation)
 		if ctx.Err() != nil {
-			log.WithError(err).Warnf("Context error while scraping course UID %s: %v", uid, ctx.Err())
+			log.WithError(err).
+				WithField("uid", uid).
+				WithField("context_error", ctx.Err()).
+				Warn("Course scrape canceled by context")
 			h.metrics.RecordScraperRequest(ModuleName, "timeout", time.Since(startTime).Seconds())
 		} else {
-			log.WithError(err).Errorf("Failed to scrape course UID: %s (error type: %T)", uid, err)
+			log.WithError(err).
+				WithField("uid", uid).
+				WithField("error_type", fmt.Sprintf("%T", err)).
+				Error("Failed to scrape course by UID")
 			h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		}
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🔍 查無此課程編號\n\n課程編號：%s\n💡 請確認編號格式是否正確", uid), sender)
@@ -641,7 +659,8 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 
 	// Check if course was found (prevent nil pointer dereference)
 	if course == nil {
-		log.Warnf("Course UID %s not found after scraping", uid)
+		log.WithField("uid", uid).
+			Debug("Course not found after scraping")
 		h.metrics.RecordScraperRequest(ModuleName, "not_found", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(
 			fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 建議\n• 確認課程編號是否正確\n• 該課程是否有開設", uid),
@@ -670,7 +689,8 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 	// Normalize course number to uppercase
 	courseNo = strings.ToUpper(courseNo)
 
-	log.Infof("Handling course number query: %s", courseNo)
+	log.WithField("course_no", courseNo).
+		Debug("Handling course number query")
 
 	// Get semesters to search from data-driven semester detection
 	searchYears, searchTerms := h.semesterCache.GetRecentSemesters()
@@ -683,20 +703,25 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 
 		course, err := h.db.GetCourseByUID(ctx, uid)
 		if err != nil {
-			log.WithError(err).Warnf("Failed to query cache for UID: %s", uid)
+			log.WithError(err).
+				WithField("uid", uid).
+				Warn("Failed to query course cache by UID")
 			continue
 		}
 
 		if course != nil {
 			h.metrics.RecordCacheHit(ModuleName)
-			log.Debugf("Cache hit for course UID: %s (from course no: %s)", uid, courseNo)
+			log.WithField("uid", uid).
+				WithField("course_no", courseNo).
+				Debug("Course cache hit")
 			return h.formatCourseResponseWithContext(ctx, course)
 		}
 	}
 
 	// Cache miss - try scraping from each semester
 	h.metrics.RecordCacheMiss(ModuleName)
-	log.Infof("Cache miss for course number: %s, scraping...", courseNo)
+	log.WithField("course_no", courseNo).
+		Info("Course cache miss; scraping by course number")
 
 	for i := range searchYears {
 		year := searchYears[i]
@@ -705,7 +730,9 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 
 		course, err := ntpu.ScrapeCourseByUID(ctx, h.scraper, uid)
 		if err != nil {
-			log.WithError(err).Debugf("Course not found for UID: %s", uid)
+			log.WithError(err).
+				WithField("uid", uid).
+				Debug("Course not found for UID")
 			continue
 		}
 
@@ -716,7 +743,9 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 			}
 
 			h.metrics.RecordScraperRequest(ModuleName, "success", time.Since(startTime).Seconds())
-			log.Infof("Found course for UID: %s (from course no: %s)", uid, courseNo)
+			log.WithField("uid", uid).
+				WithField("course_no", courseNo).
+				Debug("Course found by course number")
 			return h.formatCourseResponseWithContext(ctx, course)
 		}
 	}
@@ -776,7 +805,8 @@ func (h *Handler) handleExtendedCourseSearch(ctx context.Context, searchTerm str
 // Uses standard 2-semester range search (recent semesters).
 func (h *Handler) handleTeacherCourseSearch(ctx context.Context, teacherName string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(ModuleName)
-	log.Infof("Searching courses for teacher: %s", teacherName)
+	log.WithField("teacher_name", teacherName).
+		Debug("Searching courses for teacher")
 
 	// Use existing search infrastructure to find courses by teacher
 	courses := h.searchCoursesForTeacher(ctx, teacherName)
@@ -858,7 +888,10 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 	if extended {
 		semesterType = "過去 2 學期"
 	}
-	log.Infof("Handling course search (%s semesters): %s", semesterType, searchTerm)
+	log.WithField("semester_type", semesterType).
+		WithField("search_term", searchTerm).
+		WithField("extended", extended).
+		Debug("Handling course search")
 
 	var courses []storage.Course
 
@@ -911,7 +944,10 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 		term := searchTerms[i]
 		semesterCourses, err := h.db.GetCoursesByYearTerm(ctx, year, term)
 		if err != nil {
-			log.WithError(err).Warnf("Failed to get courses for year %d term %d", year, term)
+			log.WithError(err).
+				WithField("year", year).
+				WithField("term", term).
+				Warn("Failed to load courses for semester")
 			continue
 		}
 
@@ -937,7 +973,9 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 
 	if len(courses) > 0 {
 		h.metrics.RecordCacheHit(ModuleName)
-		log.Infof("Found %d courses in cache for search term: %s", len(courses), searchTerm)
+		log.WithField("count", len(courses)).
+			WithField("search_term", searchTerm).
+			Debug("Course search cache hit")
 		return h.formatCourseListResponseWithOptions(courses, FormatOptions{
 			SearchKeyword:    searchTerm,
 			IsExtendedSearch: extended,
@@ -945,8 +983,9 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 	}
 
 	// Step 3: Cache miss - Try scraping
-	cacheMissMsg := fmt.Sprintf("Cache miss for search term: %s, scraping from %s...", searchTerm, semesterType)
-	log.Info(cacheMissMsg)
+	log.WithField("search_term", searchTerm).
+		WithField("semester_type", semesterType).
+		Info("Course search cache miss; scraping")
 	h.metrics.RecordCacheMiss(ModuleName)
 
 	// Search courses from multiple semesters
@@ -1099,7 +1138,9 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 		return []messaging_api.MessageInterface{msg}
 	}
 
-	log.Infof("Handling historical course search: year=%d, keyword=%s", year, keyword)
+	log.WithField("year", year).
+		WithField("keyword", keyword).
+		Debug("Handling historical course search")
 
 	// Check if the requested year is in the recent/active semesters (Hot Data).
 	// If so, we query the 'courses' table instead of 'historical_courses' to use the pre-warmed cache.
@@ -1126,13 +1167,17 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 
 	// If it's a recent year, redirect to the hot path logic
 	if isRecent {
-		log.Debugf("Requested year %d is recent, using hot cache (courses table)", year)
+		log.WithField("year", year).
+			Debug("Requested year is recent; using hot cache")
 		// Reuse the logic from handleRegularPattern but filtered by year
 		var courses []storage.Course
 		for _, term := range []int{1, 2} {
 			termCourses, err := h.db.GetCoursesByYearTerm(ctx, year, term)
 			if err != nil {
-				log.WithError(err).Warnf("Failed to get courses for year %d term %d", year, term)
+				log.WithError(err).
+					WithField("year", year).
+					WithField("term", term).
+					Warn("Failed to load courses for semester")
 				continue
 			}
 			// Filter by keyword using fuzzy matching (Title or Teacher)
@@ -1171,7 +1216,9 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	// Search by year (returns both semesters) from historical_courses table
 	cachedCourses, err := h.db.SearchHistoricalCoursesByYear(ctx, year)
 	if err != nil {
-		log.WithError(err).Warnf("Failed to get historical courses for year %d", year)
+		log.WithError(err).
+			WithField("year", year).
+			Warn("Failed to load historical courses from cache")
 	}
 
 	var courses []storage.Course
@@ -1198,7 +1245,10 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 
 	if len(courses) > 0 {
 		h.metrics.RecordCacheHit(ModuleName)
-		log.Infof("Found %d historical courses in cache for year=%d, keyword=%s", len(courses), year, keyword)
+		log.WithField("count", len(courses)).
+			WithField("year", year).
+			WithField("keyword", keyword).
+			Debug("Historical course cache hit")
 		// Limit results
 		if len(courses) > MaxCoursesPerSearch {
 			courses = courses[:MaxCoursesPerSearch]
@@ -1208,7 +1258,9 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 
 	// Cache miss - scrape from historical course system
 	h.metrics.RecordCacheMiss(ModuleName)
-	log.Infof("Cache miss for historical course: year=%d, keyword=%s, scraping...", year, keyword)
+	log.WithField("year", year).
+		WithField("keyword", keyword).
+		Info("Historical course cache miss; scraping")
 
 	// Use term=0 to query both semesters at once (more efficient)
 	// Strategy: Dual scrape (Parallel-ish) to catch both Course Title and Teacher Name matches
@@ -1241,7 +1293,9 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 
 	// If both failed, treat as error
 	if errTitle != nil && errTeacher != nil {
-		log.Warn("Both title and teacher scraping failed")
+		log.WithField("year", year).
+			WithField("keyword", keyword).
+			Warn("Both title and teacher scraping failed")
 		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		msg := lineutil.NewTextMessageWithConsistentSender(
 			fmt.Sprintf("🔍 查無 %d 學年度「%s」的課程\n\n請確認\n• 學年度和課程名稱是否正確\n• 該課程是否有開設", year, keyword),
@@ -1253,7 +1307,9 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 		})
 		return []messaging_api.MessageInterface{msg}
 	}
-	log.Infof("Scraped %d historical courses for year=%d", len(scrapedCourses), year)
+	log.WithField("count", len(scrapedCourses)).
+		WithField("year", year).
+		Debug("Historical courses scraped")
 
 	// Save courses to correct table based on recency (Hot vs Cold)
 	for _, course := range scrapedCourses {
@@ -1359,7 +1415,10 @@ func (h *Handler) formatCourseResponseWithContext(ctx context.Context, course *s
 	// Query course programs first to determine available buttons
 	programs, err := h.db.GetCoursePrograms(ctx, course.UID)
 	if err != nil {
-		h.logger.WithModule(ModuleName).WithError(err).Warnf("Failed to get programs for course %s", course.UID)
+		h.logger.WithModule(ModuleName).
+			WithError(err).
+			WithField("uid", course.UID).
+			Warn("Failed to load programs for course")
 	}
 
 	// Build course query URL for 資料來源 button
@@ -1854,7 +1913,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 		"type":     searchType,
 		"original": query,
 		"expanded": expandedQuery,
-	}).Infof("Performing smart search")
+	}).Info("Performing smart search")
 
 	// Perform BM25 search
 	results, err := h.bm25Index.SearchCourses(searchCtx, expandedQuery, 10)

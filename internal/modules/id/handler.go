@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	"github.com/garyellow/ntpu-linebot-go/internal/config"
@@ -358,7 +359,8 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
-	log.Infof("Handling ID message: %s", text)
+	log.WithField("text_length", utf8.RuneCountInString(text)).
+		Debug("Handling ID message")
 
 	// Find matching pattern
 	matcher := h.findMatcher(text)
@@ -374,14 +376,17 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 		matches = []string{text} // For custom matchers, just pass the text
 	}
 
-	log.Debugf("Pattern matched: %s (priority %d)", matcher.name, matcher.priority)
+	log.WithField("pattern", matcher.name).
+		WithField("priority", matcher.priority).
+		Debug("Pattern matched")
 
 	// Call handler - must return non-empty per PatternHandler contract
 	result := matcher.handler(ctx, text, matches)
 
 	// Defensive check: handlers should never return nil/empty when pattern matched
 	if len(result) == 0 {
-		log.Errorf("Handler %s violated contract: returned empty for matched pattern", matcher.name)
+		log.WithField("pattern", matcher.name).
+			Error("Pattern handler returned empty result")
 		// Return generic error to user
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
@@ -509,7 +514,8 @@ func (h *Handler) handleStudentPattern(ctx context.Context, text string, matches
 // HandlePostback handles postback events for the ID module
 func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(ModuleName)
-	log.Infof("Handling ID postback: %s", data)
+	log.WithField("postback_data", data).
+		Debug("Handling ID postback")
 
 	// Strip module prefix if present (registry passes original data)
 	data = strings.TrimPrefix(data, "id:")
@@ -1065,17 +1071,21 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	if student != nil {
 		// Cache hit
 		h.metrics.RecordCacheHit(ModuleName)
-		log.Debugf("Cache hit for student ID: %s", studentID)
+		log.WithField("student_id", studentID).
+			Debug("Student cache hit")
 		return h.formatStudentResponse(student)
 	}
 
 	// Cache miss - scrape from website
 	h.metrics.RecordCacheMiss(ModuleName)
-	log.Infof("Cache miss for student ID: %s, scraping...", studentID)
+	log.WithField("student_id", studentID).
+		Info("Student cache miss; scraping")
 
 	student, err = ntpu.ScrapeStudentByID(ctx, h.scraper, studentID)
 	if err != nil {
-		log.WithError(err).Errorf("Failed to scrape student ID: %s", studentID)
+		log.WithError(err).
+			WithField("student_id", studentID).
+			Error("Failed to scrape student by ID")
 		h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 
 		// Check if the student ID belongs to year 113 (incomplete data)
@@ -1548,13 +1558,18 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 
 	// If not found in cache, try scraping
 	if len(students) == 0 {
-		log.Infof("Cache miss for department selection: %d %s, scraping...", year, deptCode)
+		log.WithField("year", year).
+			WithField("dept_code", deptCode).
+			Info("Department selection cache miss; scraping")
 		h.metrics.RecordCacheMiss(ModuleName)
 		startTime := time.Now()
 
 		scrapedStudents, err := ntpu.ScrapeStudentsByYear(ctx, h.scraper, year, deptCode, ntpu.StudentTypeUndergrad)
 		if err != nil {
-			log.WithError(err).Errorf("Failed to scrape students for year %d dept %s", year, deptCode)
+			log.WithError(err).
+				WithField("year", year).
+				WithField("dept_code", deptCode).
+				Error("Failed to scrape students for year and department")
 			h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 			msg := lineutil.ErrorMessageWithDetailAndSender("查詢學生名單時發生問題，可能是學校網站暫時無法存取", sender)
 			if textMsg, ok := msg.(*messaging_api.TextMessageV2); ok {
