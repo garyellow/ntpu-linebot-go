@@ -1,4 +1,4 @@
-// Package sentry provides Sentry SDK initialization for Better Stack error tracking integration.
+// Package sentry provides Sentry SDK initialization for error tracking integration.
 // It wraps the Sentry Go SDK to simplify configuration and enforce best practices.
 package sentry
 
@@ -14,9 +14,9 @@ import (
 	"github.com/getsentry/sentry-go"
 )
 
-// Config holds Sentry configuration for Better Stack integration.
+// Config holds Sentry configuration.
 type Config struct {
-	// DSN is the Better Stack Sentry DSN (https://TOKEN@HOST/1).
+	// DSN is the Sentry DSN (https://TOKEN@HOST/1).
 	DSN string
 
 	// Environment identifies the deployment environment (e.g., "production", "staging").
@@ -44,7 +44,7 @@ type Config struct {
 	ServiceName string
 }
 
-// Initialize sets up the Sentry SDK with Better Stack configuration.
+// Initialize sets up the Sentry SDK.
 // If DSN is empty, Sentry is disabled and nil is returned.
 func Initialize(cfg Config) error {
 	if cfg.DSN == "" {

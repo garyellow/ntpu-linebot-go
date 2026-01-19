@@ -184,10 +184,10 @@
 若要集中多點部署的日誌，請在 `.env` 設定 `BETTERSTACK_SOURCE_TOKEN`，並可選擇設定 `BETTERSTACK_ENDPOINT`。
 留空字串即不啟用 Better Stack。完整說明請見 [.env.example](.env.example)。
 
-### 錯誤追蹤（Sentry SDK via Better Stack，可選）
+### 錯誤追蹤（Sentry SDK，可選）
 
-本專案使用 Sentry SDK 將錯誤送到 Better Stack Errors。
-請在 `.env` 設定 `SENTRY_DSN`（從 Better Stack Errors → Applications → Data ingestion 取得）：
+本專案使用 Sentry SDK 進行錯誤追蹤。
+請在 `.env` 設定 `SENTRY_DSN`：
 
 - DSN 格式：`https://$APPLICATION_TOKEN@$INGESTING_HOST/1`
 - 可選設定：`SENTRY_ENVIRONMENT`、`SENTRY_RELEASE`、`SENTRY_SAMPLE_RATE`、`SENTRY_TRACES_SAMPLE_RATE`
