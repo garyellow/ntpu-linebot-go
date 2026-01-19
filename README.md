@@ -1,7 +1,7 @@
 # NTPU LineBot
 
 <p align="center">
-  <a href="https://stats.uptimerobot.com/OqI3euBWoF"><img src="https://img.shields.io/uptimerobot/status/m802132556-5a95fc71d4f9260bdcd036db?logo=line&logoColor=white" alt="Status"></a>
+  <a href="https://ntpubot-status.garyellow.app/"><img src="https://img.shields.io/uptimerobot/status/m802132556-5a95fc71d4f9260bdcd036db?logo=line&logoColor=white" alt="Status"></a>
   <a href="https://github.com/garyellow/ntpu-linebot-go/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/garyellow/ntpu-linebot-go/ci.yml?branch=main&label=CI&logo=github" alt="CI"></a>
   <a href="https://goreportcard.com/report/github.com/garyellow/ntpu-linebot-go"><img src="https://goreportcard.com/badge/github.com/garyellow/ntpu-linebot-go" alt="Go Report Card"></a>
   <a href="https://pkg.go.dev/github.com/garyellow/ntpu-linebot-go"><img src="https://pkg.go.dev/badge/github.com/garyellow/ntpu-linebot-go.svg" alt="Go Reference"></a>
@@ -250,7 +250,7 @@ docker compose up -d
 
 ### Prometheus Metrics
 
-`/metrics` 提供 Prometheus 指標，可由外部 Prometheus 直接抓取，不再維護監控堆疊設定。
+`/metrics` 提供 Prometheus 指標，可由外部 Prometheus 直接抓取。
 如需保護端點，設定 `METRICS_USERNAME` 與 `METRICS_PASSWORD`。
 詳細指標與範例請見 [docs/API.md](docs/API.md)。
 

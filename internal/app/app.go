@@ -221,7 +221,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		router.Use(sentrygin.New(sentrygin.Options{
 			Repanic:         true,  // Re-panic after capture for gin.Recovery()
 			WaitForDelivery: false, // Async sending
-			Timeout:         5 * time.Second,
+			Timeout:         config.SentryHTTPTimeout,
 		}))
 	}
 
