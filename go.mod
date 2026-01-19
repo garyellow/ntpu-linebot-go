@@ -11,6 +11,7 @@ require (
 	github.com/line/line-bot-sdk-go/v8 v8.18.0
 	github.com/openai/openai-go/v3 v3.16.0
 	github.com/prometheus/client_golang v1.23.2
+	github.com/samber/slog-betterstack v1.4.2
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.19.0
 	golang.org/x/text v0.33.0
@@ -63,6 +64,8 @@ require (
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	github.com/samber/lo v1.47.0 // indirect
+	github.com/samber/slog-common v0.18.1 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect

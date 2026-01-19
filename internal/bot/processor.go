@@ -108,6 +108,7 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 	// Handle sticker messages - only in personal chats
 	if event.Message.GetType() == "sticker" {
 		if IsPersonalChat(event.Source) {
+			p.logger.WithField("message_type", "sticker").InfoContext(ctx, "Received direct message")
 			msgs := p.handleStickerMessage(event)
 			lineutil.SetQuoteTokenToFirst(msgs, ctxutil.GetQuoteToken(ctx))
 			return msgs, nil
@@ -127,6 +128,9 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 	}
 
 	text := textMsg.Text
+	if IsPersonalChat(event.Source) {
+		p.logger.WithField("message_type", "text").WithField("text_length", len(text)).InfoContext(ctx, "Received direct message")
+	}
 
 	// Validate text length (LINE API allows up to config.LINEMaxTextMessageLength characters)
 	if len(text) == 0 {
