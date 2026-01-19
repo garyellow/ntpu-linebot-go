@@ -348,3 +348,27 @@ func TestGetDurationEnv(t *testing.T) {
 		})
 	}
 }
+
+func TestConfig_HasSentry(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		token  string
+		host   string
+		expect bool
+	}{
+		{"both set", "token", "host", true},
+		{"token only", "token", "", false},
+		{"host only", "", "host", false},
+		{"neither set", "", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := &Config{SentryToken: tt.token, SentryHost: tt.host}
+			if got := cfg.HasSentry(); got != tt.expect {
+				t.Errorf("HasSentry() = %v, want %v", got, tt.expect)
+			}
+		})
+	}
+}

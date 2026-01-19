@@ -48,6 +48,12 @@ type Config struct {
 	BetterStackToken    string
 	BetterStackEndpoint string
 
+	// Sentry Error Tracking (Optional - via Better Stack)
+	SentryToken       string  // Better Stack Errors application token
+	SentryHost        string  // Better Stack Errors ingesting host
+	SentryEnvironment string  // Environment name (e.g., production, staging)
+	SentrySampleRate  float64 // Error sampling rate (0.0-1.0, default: 1.0)
+
 	// Data Configuration
 	DataDir  string        // Data directory for SQLite database
 	CacheTTL time.Duration // TTL: absolute expiration for cache entries (default: 7 days)
@@ -136,6 +142,12 @@ func Load() (*Config, error) {
 		// Better Stack Logging (Optional)
 		BetterStackToken:    getEnv("BETTERSTACK_SOURCE_TOKEN", ""),
 		BetterStackEndpoint: getEnv("BETTERSTACK_ENDPOINT", ""),
+
+		// Sentry Error Tracking (Optional - via Better Stack)
+		SentryToken:       getEnv("SENTRY_TOKEN", ""),
+		SentryHost:        getEnv("SENTRY_HOST", ""),
+		SentryEnvironment: getEnv("SENTRY_ENVIRONMENT", ""),
+		SentrySampleRate:  getFloatEnv("SENTRY_SAMPLE_RATE", 1.0),
 
 		// Data Configuration
 		DataDir:  getEnv("DATA_DIR", getDefaultDataDir()),
@@ -355,4 +367,9 @@ func (c *Config) SQLitePath() string {
 // HasLLMProvider returns true if at least one LLM provider is configured.
 func (c *Config) HasLLMProvider() bool {
 	return c.GeminiAPIKey != "" || c.GroqAPIKey != "" || c.CerebrasAPIKey != ""
+}
+
+// HasSentry returns true if Sentry error tracking is configured.
+func (c *Config) HasSentry() bool {
+	return c.SentryToken != "" && c.SentryHost != ""
 }

@@ -111,6 +111,15 @@ docker run -d \
 | `BETTERSTACK_SOURCE_TOKEN` | Better Stack Source Token（空字串=不啟用） |
 | `BETTERSTACK_ENDPOINT` | Better Stack Ingesting Endpoint |
 
+#### 錯誤追蹤（可選）
+
+| 變數 | 說明 |
+|------|------|
+| `SENTRY_TOKEN` | Better Stack Errors Application Token（空字串=不啟用） |
+| `SENTRY_HOST` | Better Stack Errors Ingesting Host |
+| `SENTRY_ENVIRONMENT` | 環境名稱（如 production, staging） |
+| `SENTRY_SAMPLE_RATE` | 錯誤取樣率（0.0-1.0，預設: 1.0） |
+
 ### 服務端點
 
 | 端點 | 說明 |
