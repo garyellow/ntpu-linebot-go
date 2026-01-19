@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	"github.com/garyellow/ntpu-linebot-go/internal/config"
@@ -249,7 +250,10 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: keyword", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching course intent: %s, keyword: %s", intent, keyword)
+			h.logger.WithModule(ModuleName).
+				WithField("intent", intent).
+				WithField("keyword", keyword).
+				Debug("Dispatching course intent")
 		}
 		return h.handleUnifiedCourseSearch(ctx, keyword), nil
 
@@ -259,7 +263,10 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: query", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching course intent: %s, query: %s", intent, query)
+			h.logger.WithModule(ModuleName).
+				WithField("intent", intent).
+				WithField("query", query).
+				Debug("Dispatching course intent")
 		}
 		return h.handleSmartSearch(ctx, query), nil
 
@@ -269,7 +276,10 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: uid", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching course intent: %s, uid: %s", intent, uid)
+			h.logger.WithModule(ModuleName).
+				WithField("intent", intent).
+				WithField("uid", uid).
+				Debug("Dispatching course intent")
 		}
 		return h.handleCourseUIDQuery(ctx, uid), nil
 
@@ -279,7 +289,10 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: keyword", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching course intent: %s, keyword: %s", intent, keyword)
+			h.logger.WithModule(ModuleName).
+				WithField("intent", intent).
+				WithField("keyword", keyword).
+				Debug("Dispatching course intent")
 		}
 		return h.handleExtendedCourseSearch(ctx, keyword), nil
 
@@ -300,7 +313,11 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 		}
 
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching course intent: %s, year: %d, keyword: %s", intent, year, keyword)
+			h.logger.WithModule(ModuleName).
+				WithField("intent", intent).
+				WithField("year", year).
+				WithField("keyword", keyword).
+				Debug("Dispatching course intent")
 		}
 		return h.handleHistoricalCourseSearch(ctx, year, keyword), nil
 
@@ -332,7 +349,8 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
-	log.Infof("Handling course message: %s", text)
+	log.WithField("text_length", utf8.RuneCountInString(text)).
+		Debug("Handling course message")
 
 	// Find matching pattern
 	matcher := h.findMatcher(text)

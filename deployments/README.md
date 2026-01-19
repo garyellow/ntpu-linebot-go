@@ -97,7 +97,7 @@ docker run -d \
 
 詳見 [.env.example](../.env.example)。
 
-#### 必填（LINE Bot）
+#### LINE Bot（必填）
 
 | 變數 | 說明 |
 |------|------|

@@ -14,6 +14,7 @@ import (
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	"github.com/garyellow/ntpu-linebot-go/internal/config"
+	"github.com/garyellow/ntpu-linebot-go/internal/ctxutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/genai"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
@@ -477,6 +478,10 @@ func (a *Application) shutdown() error {
 		a.userLimiter.Stop()
 	}
 
+	if err := a.logger.Shutdown(shutdownCtx); err != nil {
+		a.logger.WithError(err).Warn("Logger shutdown timed out")
+	}
+
 	a.logger.Info("Shutdown complete")
 	return nil
 }
@@ -762,25 +767,44 @@ func loggingMiddleware(log *logger.Logger) gin.HandlerFunc {
 		path := c.Request.URL.Path
 		method := c.Request.Method
 
+		requestID := c.GetHeader("X-Request-Id")
+		if requestID == "" {
+			requestID = c.GetHeader("X-Request-ID")
+		}
+		if requestID == "" {
+			requestID = c.GetHeader("X-Correlation-Id")
+		}
+		if requestID == "" {
+			requestID = c.GetHeader("X-Correlation-ID")
+		}
+		if requestID != "" {
+			ctx := ctxutil.WithRequestID(c.Request.Context(), requestID)
+			c.Request = c.Request.WithContext(ctx)
+		}
+
 		c.Next()
 
 		duration := time.Since(start)
 		status := c.Writer.Status()
 
-		entry := log.WithField("method", method).
-			WithField("path", path).
-			WithField("status", status).
+		entry := log.WithField("http_method", method).
+			WithField("http_path", path).
+			WithField("http_status", status).
 			WithField("duration_ms", duration.Milliseconds()).
-			WithField("ip", c.ClientIP())
+			WithField("client_ip", c.ClientIP())
+
+		if requestID != "" {
+			entry = entry.WithRequestID(requestID)
+		}
 
 		if status >= 500 {
-			entry.Error("Server error")
+			entry.Error("HTTP request failed")
 		} else if status >= 400 && status != 404 {
-			entry.Warn("Client error")
+			entry.Warn("HTTP request rejected")
 		} else if status == 404 {
-			entry.Debug("Not found")
+			entry.Debug("HTTP request not found")
 		} else {
-			entry.Debug("Request")
+			entry.Debug("HTTP request completed")
 		}
 	}
 }

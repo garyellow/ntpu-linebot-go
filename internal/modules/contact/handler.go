@@ -175,14 +175,19 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: query", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching contact intent: %s, query: %s", intent, query)
+			h.logger.WithModule(ModuleName).
+				WithField("intent", intent).
+				WithField("query", query).
+				Debug("Dispatching contact intent")
 		}
 		return h.handleContactSearch(ctx, query), nil
 
 	case IntentEmergency:
 		// Emergency intent doesn't require any parameters
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Info("Dispatching contact intent: emergency")
+			h.logger.WithModule(ModuleName).
+				WithField("intent", IntentEmergency).
+				Debug("Dispatching contact intent")
 		}
 		return h.handleEmergencyPhones(), nil
 

@@ -258,7 +258,10 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: name", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching ID intent: %s, name: %s", intent, name)
+			h.logger.WithModule(ModuleName).
+				WithField("intent", intent).
+				WithField("name", name).
+				Debug("Dispatching ID intent")
 		}
 		return h.handleStudentNameQuery(ctx, name), nil
 
@@ -268,7 +271,10 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: student_id", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching ID intent: %s, student_id: %s", intent, studentID)
+			h.logger.WithModule(ModuleName).
+				WithField("intent", intent).
+				WithField("student_id", studentID).
+				Debug("Dispatching ID intent")
 		}
 		return h.handleStudentIDQuery(ctx, studentID), nil
 
@@ -278,7 +284,10 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: department", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching ID intent: %s, department: %s", intent, department)
+			h.logger.WithModule(ModuleName).
+				WithField("intent", intent).
+				WithField("department", department).
+				Debug("Dispatching ID intent")
 		}
 
 		return h.handleUnifiedDepartmentQuery(department), nil
@@ -289,7 +298,10 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: year", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching ID intent: %s, year: %s", intent, year)
+			h.logger.WithModule(ModuleName).
+				WithField("intent", intent).
+				WithField("year", year).
+				Debug("Dispatching ID intent")
 		}
 		return h.handleYearQuery(year), nil
 
@@ -305,7 +317,10 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			degree = DegreeBachelor
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching ID intent: %s, degree: %s", intent, degree)
+			h.logger.WithModule(ModuleName).
+				WithField("intent", intent).
+				WithField("degree", degree).
+				Debug("Dispatching ID intent")
 		}
 		return h.handleDepartmentCodesByDegree(degree), nil
 

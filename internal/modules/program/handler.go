@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
@@ -161,7 +162,9 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 	switch intent {
 	case IntentList:
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Info("Dispatching program intent: list")
+			h.logger.WithModule(ModuleName).
+				WithField("intent", IntentList).
+				Debug("Dispatching program intent")
 		}
 		return h.handleProgramList(ctx), nil
 
@@ -171,7 +174,10 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: query", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching program intent: search, query: %s", query)
+			h.logger.WithModule(ModuleName).
+				WithField("intent", IntentSearch).
+				WithField("query", query).
+				Debug("Dispatching program intent")
 		}
 		return h.handleProgramSearch(ctx, query), nil
 
@@ -181,7 +187,10 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: programName", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Infof("Dispatching program intent: courses, programName: %s", programName)
+			h.logger.WithModule(ModuleName).
+				WithField("intent", IntentCourses).
+				WithField("program_name", programName).
+				Debug("Dispatching program intent")
 		}
 		return h.handleProgramCourses(ctx, programName), nil
 
@@ -213,7 +222,8 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
-	log.Infof("Handling program message: %s", text)
+	log.WithField("text_length", utf8.RuneCountInString(text)).
+		Debug("Handling program message")
 
 	// Find matching pattern
 	matcher := h.findMatcher(text)
@@ -225,7 +235,8 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	matches := matcher.pattern.FindStringSubmatch(text)
 	// Defensive check: MatchString succeeded but FindStringSubmatch may return empty
 	if len(matches) == 0 {
-		log.Warnf("Pattern %s matched but FindStringSubmatch returned empty", matcher.name)
+		log.WithField("pattern", matcher.name).
+			Warn("Pattern matched but submatches were empty")
 		return []messaging_api.MessageInterface{}
 	}
 

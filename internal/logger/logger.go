@@ -19,6 +19,7 @@ import (
 // Logger is the application logger
 type Logger struct {
 	*slog.Logger
+	shutdown func(context.Context) error
 }
 
 // Options configures logger outputs and Better Stack integration.
@@ -45,10 +46,12 @@ func NewWithOptions(level string, w io.Writer, opts Options) *Logger {
 
 	jsonHandler := slog.NewJSONHandler(w, &slog.HandlerOptions{
 		Level:       logLevel,
+		AddSource:   true,
 		ReplaceAttr: replaceAttr,
 	})
 
 	handlers := []slog.Handler{jsonHandler}
+	var asyncShutdown func(context.Context) error
 	if opts.BetterStackToken != "" {
 		bsOption := slogbetterstack.Option{
 			Level:       logLevel,
@@ -57,7 +60,9 @@ func NewWithOptions(level string, w io.Writer, opts Options) *Logger {
 			Timeout:     5 * time.Second,
 			ReplaceAttr: replaceAttr,
 		}
-		handlers = append(handlers, bsOption.NewBetterstackHandler())
+		asyncHandler := NewAsyncHandler(bsOption.NewBetterstackHandler(), AsyncOptions{})
+		asyncShutdown = asyncHandler.Shutdown
+		handlers = append(handlers, asyncHandler)
 	}
 
 	var handler slog.Handler
@@ -68,7 +73,7 @@ func NewWithOptions(level string, w io.Writer, opts Options) *Logger {
 	}
 
 	contextHandler := NewContextHandler(handler)
-	return &Logger{Logger: slog.New(contextHandler)}
+	return &Logger{Logger: slog.New(contextHandler), shutdown: asyncShutdown}
 }
 
 func parseLevel(level string) slog.Level {
@@ -178,6 +183,14 @@ func (l *Logger) ErrorContext(ctx context.Context, msg string, args ...any) {
 // DebugContext logs a message at debug level with tracing data from context.
 func (l *Logger) DebugContext(ctx context.Context, msg string, args ...any) {
 	l.withContextFields(ctx).Debug(msg, args...)
+}
+
+// Shutdown flushes any async logging pipelines (best-effort).
+func (l *Logger) Shutdown(ctx context.Context) error {
+	if l == nil || l.shutdown == nil {
+		return nil
+	}
+	return l.shutdown(ctx)
 }
 
 // withContextFields extracts tracing fields from context and returns a logger with those fields.

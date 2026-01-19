@@ -100,7 +100,9 @@ func (h *Handler) Handle(c *gin.Context) {
 
 	// Validate event count (max events per webhook per LINE API spec)
 	if len(cb.Events) > h.maxEventsPerWebhook {
-		h.logger.Warnf("Too many events in single webhook: %d, truncating to %d", len(cb.Events), h.maxEventsPerWebhook)
+		h.logger.WithField("event_count", len(cb.Events)).
+			WithField("limit", h.maxEventsPerWebhook).
+			Warn("Too many events in webhook batch; truncating")
 		cb.Events = cb.Events[:h.maxEventsPerWebhook] // Limit to prevent DoS
 	}
 
@@ -143,7 +145,7 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 		log = log.WithField("is_redelivery", *isRedelivery)
 	}
 	if eventTimestamp > 0 {
-		log = log.WithField("event_timestamp", eventTimestamp)
+		log = log.WithField("event_timestamp_ms", eventTimestamp)
 	}
 
 	// Show loading animation only when response is expected
@@ -173,18 +175,21 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 		return
 	}
 
-	duration := time.Since(eventStart).Seconds()
+	eventDurationMs := time.Since(eventStart).Milliseconds()
+	durationSeconds := float64(eventDurationMs) / 1000.0
 	status := "success"
 	if err != nil {
 		status = "error"
 		log.WithError(err).WithField("event_type", eventType).Error("Failed to handle event")
 	}
-	h.metrics.RecordWebhook(eventType, status, duration)
+	h.metrics.RecordWebhook(eventType, status, durationSeconds)
 
 	if len(messages) > 0 && err == nil {
 		// LINE API restriction: max messages per reply
 		if len(messages) > h.maxMessagesPerReply {
-			log.Warnf("Message count %d exceeds limit, truncating to %d", len(messages), h.maxMessagesPerReply)
+			log.WithField("message_count", len(messages)).
+				WithField("limit", h.maxMessagesPerReply).
+				Warn("Message count exceeds limit; truncating")
 			messages = messages[:h.maxMessagesPerReply-1]
 			sender := lineutil.GetSender("NTPU 小工具", h.stickerManager)
 			msg := lineutil.NewTextMessageWithConsistentSender(
@@ -209,7 +214,7 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 
 		// Check global rate limit
 		if !h.rateLimiter.Allow() {
-			log.Warn("Global rate limit exceeded, waiting...")
+			log.Warn("Global rate limit exceeded; waiting")
 			h.metrics.RecordRateLimiterDrop("global")
 			h.rateLimiter.WaitSimple()
 		}
@@ -233,8 +238,11 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 	}
 
 	// Log overall processing duration
-	totalDuration := time.Since(webhookStart).Seconds()
-	log.WithField("total_duration", totalDuration).WithField("event_type", eventType).Info("Event processed")
+	batchDurationMs := time.Since(webhookStart).Milliseconds()
+	log.WithField("event_type", eventType).
+		WithField("event_duration_ms", eventDurationMs).
+		WithField("batch_duration_ms", batchDurationMs).
+		Info("Event processed")
 }
 
 func extractEventMeta(event webhook.EventInterface) (string, int64, *bool) {
