@@ -27,10 +27,12 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/rag"
 	"github.com/garyellow/ntpu-linebot-go/internal/ratelimit"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
+	internalSentry "github.com/garyellow/ntpu-linebot-go/internal/sentry"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 	"github.com/garyellow/ntpu-linebot-go/internal/warmup"
 	"github.com/garyellow/ntpu-linebot-go/internal/webhook"
+	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
@@ -77,6 +79,33 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	log.Info("Initializing application...")
 	if cfg.BetterStackToken != "" {
 		log.WithField("endpoint", cfg.BetterStackEndpoint).Info("Better Stack logging enabled")
+	}
+
+	// Initialize Sentry for Better Stack error tracking
+	if cfg.HasSentry() {
+		release := cfg.SentryRelease
+		serverName := ""
+		if host, err := os.Hostname(); err == nil && host != "" {
+			serverName = host
+		}
+		env := resolveSentryEnvironment(cfg.SentryEnvironment, cfg.LogLevel)
+		if err := internalSentry.Initialize(internalSentry.Config{
+			DSN:              cfg.SentryDSN,
+			Environment:      env,
+			Release:          release,
+			ServerName:       serverName,
+			SampleRate:       cfg.SentrySampleRate,
+			TracesSampleRate: cfg.SentryTracesSampleRate,
+			HTTPTimeout:      config.SentryHTTPTimeout,
+			Debug:            cfg.LogLevel == "debug",
+			ServiceName:      "ntpu-linebot-go",
+		}); err != nil {
+			log.WithError(err).Warn("Sentry initialization failed")
+		} else {
+			log.WithField("environment", env).
+				WithField("traces_sample_rate", cfg.SentryTracesSampleRate).
+				Info("Sentry error tracking enabled")
+		}
 	}
 
 	db, err := storage.New(ctx, cfg.SQLitePath(), cfg.CacheTTL)
@@ -186,6 +215,16 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
+
+	// Sentry middleware must be first to capture panics before gin.Recovery()
+	if internalSentry.IsEnabled() {
+		router.Use(sentrygin.New(sentrygin.Options{
+			Repanic:         true,  // Re-panic after capture for gin.Recovery()
+			WaitForDelivery: false, // Async sending
+			Timeout:         config.SentryHTTPTimeout,
+		}))
+	}
+
 	router.Use(gin.Recovery())
 	router.Use(securityHeadersMiddleware())
 	router.Use(loggingMiddleware(ctx, log))
@@ -480,6 +519,13 @@ func (a *Application) shutdown() error {
 
 	if err := a.logger.Shutdown(shutdownCtx); err != nil {
 		a.logger.WithError(err).Warn("Logger shutdown timed out")
+	}
+
+	// Flush Sentry events
+	if internalSentry.IsEnabled() {
+		if !internalSentry.Flush(config.SentryFlushTimeout) {
+			a.logger.Warn("Sentry flush timed out")
+		}
 	}
 
 	a.logger.Info("Shutdown complete")
@@ -786,6 +832,9 @@ func loggingMiddleware(baseCtx context.Context, log *logger.Logger) gin.HandlerF
 		if requestID != "" {
 			reqCtx = ctxutil.WithRequestID(reqCtx, requestID)
 			c.Request = c.Request.WithContext(reqCtx)
+			if hub := sentrygin.GetHubFromContext(c); hub != nil {
+				hub.Scope().SetTag("request_id", requestID)
+			}
 		}
 
 		c.Next()
@@ -808,4 +857,14 @@ func loggingMiddleware(baseCtx context.Context, log *logger.Logger) gin.HandlerF
 			entry.DebugContext(reqCtx, "HTTP request completed")
 		}
 	}
+}
+
+func resolveSentryEnvironment(explicit string, logLevel string) string {
+	if explicit != "" {
+		return explicit
+	}
+	if logLevel == "debug" {
+		return "development"
+	}
+	return "production"
 }

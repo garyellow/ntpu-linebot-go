@@ -215,6 +215,13 @@ User Query → Bot Module → Repository Layer
 - 使用者輸入僅在入口記錄 `text`（單一位置，避免重複）。
 - Postback 的 `data` 僅在入口記錄一次；若超長則以 Warn 記錄並停止處理。
 
+## 錯誤追蹤（Sentry SDK via Better Stack）
+
+- 使用 Sentry Go SDK 將錯誤事件送至 Better Stack Errors。
+- 啟用方式：設定 `SENTRY_DSN`（格式：`https://$APPLICATION_TOKEN@$INGESTING_HOST/1`）。
+- 事件保護：預設移除請求標頭/Cookie/Body，並忽略 `context canceled`、`context deadline exceeded` 類型錯誤。
+- 中介層：Gin Middleware 先於 `gin.Recovery()`，可捕捉 panic 與 HTTP 錯誤上下文。
+
 ## 模組架構
 
 ### Bot 模組總覽
@@ -605,7 +612,7 @@ ntpu_job_duration_seconds{job, module}
 
 ## 部署架構
 
-支援四種部署模式，詳見 [deployments/README.md](../deployments/README.md)。
+目前提供單一精簡部署方式，集中在 `deployments/compose.yml`。
 
 ### 僅 Bot
 
@@ -640,68 +647,14 @@ docker run -d -p 10000:10000 \
 docker run -it garyellow/ntpu-linebot-go:alpine sh
 ```
 
-### Bot + 監控
+### Docker Compose
 
-#### Full Stack（Bot + 監控）
-
-Bot 和監控三件套在同一 Docker 網路，適合單機部署。
+以單一容器模式提供部署模板：
 
 ```bash
-cd deployments/full
+cd deployments
 cp .env.example .env
 docker compose up -d
-
-# 存取監控介面
-task access:up    # 開啟
-task access:down  # 關閉（釋放端口）
-```
-
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                          ntpu_bot_network                                │
-│  ┌─────────────┐  ┌────────────┐  ┌──────────┐  ┌──────────────┐         │
-│  │ ntpu-linebot│  │ prometheus │  │ grafana  │  │ alertmanager │         │
-│  │   :10000    │  │ (internal) │  │(internal)│  │ (internal)   │         │
-│  └─────────────┘  └────────────┘  └──────────┘  └──────────────┘         │
-│                          ↑             ↑              ↑                  │
-│                   ┌──────┴─────────────┴──────────────┘                  │
-│              ┌─────────────────┐                                         │
-│              │  nginx-gateway  │ ← on demand (access:up)                 │
-│              │:3000 :9090 :9093│                                         │
-│              └─────────────────┘                                         │
-└──────────────────────────────────────────────────────────────────────────┘
-```
-
-#### Monitoring Only（外部 Bot）
-
-Bot 部署在雲端（Cloud Run、Fly.io 等），監控在本地。使用 HTTPS + Basic Auth 拉取 metrics。
-
-```bash
-# 1. 在雲端 Bot 設定
-METRICS_PASSWORD=your_secure_password
-
-# 2. 本地監控
-cd deployments/monitoring
-cp .env.example .env
-./setup.sh  # 產生 prometheus.yml
-docker compose up -d
-```
-
-```
-┌──────────────────────────────────────┐
-│           Cloud (Bot)                │
-│  ┌────────────────────────────────┐  │
-│  │ ntpu-linebot                   │  │
-│  │ /metrics (HTTPS + Basic Auth)  │  │
-│  └────────────────────────────────┘  │
-└──────────────────────────────────────┘
-                   ↑ HTTPS Pull
-┌──────────────────────────────────────┐
-│        Local (Monitoring)            │
-│  ┌──────────┐ ┌─────────┐ ┌────────┐ │
-│  │prometheus│ │ grafana │ │alertmgr│ │
-│  └──────────┘ └─────────┘ └────────┘ │
-└──────────────────────────────────────┘
 ```
 
 ### Metrics 驗證
@@ -749,6 +702,5 @@ docker compose up -d
 - [Go Concurrency Patterns](https://go.dev/blog/pipelines)
 - [SQLite WAL Mode](https://www.sqlite.org/wal.html)
 - [Prometheus Best Practices](https://prometheus.io/docs/practices/)
-- [Grafana Dashboard Design](https://grafana.com/docs/grafana/latest/dashboards/)
 - [BM25 Algorithm](https://en.wikipedia.org/wiki/Okapi_BM25) - 關鍵字搜尋演算法
 - [Google Gemini API](https://ai.google.dev/gemini-api/docs) - NLU 和 Query Expansion

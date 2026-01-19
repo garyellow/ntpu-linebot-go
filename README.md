@@ -1,7 +1,7 @@
 # NTPU LineBot
 
 <p align="center">
-  <a href="https://stats.uptimerobot.com/OqI3euBWoF"><img src="https://img.shields.io/uptimerobot/status/m802132556-5a95fc71d4f9260bdcd036db?logo=line&logoColor=white" alt="Status"></a>
+  <a href="https://ntpubot-status.garyellow.app/"><img src="https://img.shields.io/uptimerobot/status/m802132556-5a95fc71d4f9260bdcd036db?logo=line&logoColor=white" alt="Status"></a>
   <a href="https://github.com/garyellow/ntpu-linebot-go/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/garyellow/ntpu-linebot-go/ci.yml?branch=main&label=CI&logo=github" alt="CI"></a>
   <a href="https://goreportcard.com/report/github.com/garyellow/ntpu-linebot-go"><img src="https://goreportcard.com/badge/github.com/garyellow/ntpu-linebot-go" alt="Go Report Card"></a>
   <a href="https://pkg.go.dev/github.com/garyellow/ntpu-linebot-go"><img src="https://pkg.go.dev/badge/github.com/garyellow/ntpu-linebot-go.svg" alt="Go Reference"></a>
@@ -168,10 +168,7 @@
 |------|------|------|
 | **僅 Bot** | Go 直接執行 | `go run ./cmd/server` |
 | | Docker Container | `docker run garyellow/ntpu-linebot-go` |
-| **Bot + 監控** | Full Stack | Bot + 監控同 Docker 網路 |
-| | Monitoring Only | Bot 在雲端，監控在本地 |
-
-> 完整部署說明請參閱 [deployments/README.md](deployments/README.md)。
+| | Docker Compose | 使用 deployments/compose.yml |
 
 ### 環境需求
 
@@ -186,6 +183,16 @@
 
 若要集中多點部署的日誌，請在 `.env` 設定 `BETTERSTACK_SOURCE_TOKEN`，並可選擇設定 `BETTERSTACK_ENDPOINT`。
 留空字串即不啟用 Better Stack。完整說明請見 [.env.example](.env.example)。
+
+### 錯誤追蹤（Sentry SDK via Better Stack，可選）
+
+本專案使用 Sentry SDK 將錯誤送到 Better Stack Errors。
+請在 `.env` 設定 `SENTRY_DSN`（從 Better Stack Errors → Applications → Data ingestion 取得）：
+
+- DSN 格式：`https://$APPLICATION_TOKEN@$INGESTING_HOST/1`
+- 可選設定：`SENTRY_ENVIRONMENT`、`SENTRY_RELEASE`、`SENTRY_SAMPLE_RATE`、`SENTRY_TRACES_SAMPLE_RATE`
+
+設定後服務啟動會自動上報錯誤與 panic。完整範例請見 [.env.example](.env.example)。
 
 ### 取得 LINE Bot 憑證
 
@@ -222,10 +229,10 @@ docker run -d -p 10000:10000 \
 docker run -it --rm garyellow/ntpu-linebot-go:alpine sh
 ```
 
-**Full Stack（含監控）：**
+**Docker Compose：**
 
 ```bash
-cd deployments/full
+cd deployments
 cp .env.example .env
 docker compose up -d
 ```
@@ -241,6 +248,12 @@ docker compose up -d
 
 > ⚠️ 本機測試需使用 [ngrok](https://ngrok.com/) 等工具將 localhost 轉發至公網。
 
+### Prometheus Metrics
+
+`/metrics` 提供 Prometheus 指標，可由外部 Prometheus 直接抓取。
+如需保護端點，設定 `METRICS_USERNAME` 與 `METRICS_PASSWORD`。
+詳細指標與範例請見 [docs/API.md](docs/API.md)。
+
 ### 開發指令
 
 ```bash
@@ -253,7 +266,6 @@ task ci               # 完整 CI 流程
 ### 更多文件
 
 - 📐 [架構設計](docs/architecture.md)
-- 📊 [部署說明](deployments/README.md)
 - 🔧 [環境變數](.env.example)
 
 </details>

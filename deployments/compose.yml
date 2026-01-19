@@ -1,0 +1,97 @@
+services:
+  ntpu-linebot:
+    image: garyellow/ntpu-linebot-go:${IMAGE_TAG:-latest}
+    container_name: ntpu-linebot
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-10000}:10000"
+    volumes:
+      - data:/data:rw
+    environment:
+      # LINE bot
+      - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN:?LINE_CHANNEL_ACCESS_TOKEN is required}
+      - LINE_CHANNEL_SECRET=${LINE_CHANNEL_SECRET:?LINE_CHANNEL_SECRET is required}
+
+      # LLM keys
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - CEREBRAS_API_KEY=${CEREBRAS_API_KEY:-}
+
+      # LLM providers/models
+      - LLM_PROVIDERS=${LLM_PROVIDERS:-gemini,groq,cerebras}
+      - GEMINI_INTENT_MODELS=${GEMINI_INTENT_MODELS:-}
+      - GEMINI_EXPANDER_MODELS=${GEMINI_EXPANDER_MODELS:-}
+      - GROQ_INTENT_MODELS=${GROQ_INTENT_MODELS:-}
+      - GROQ_EXPANDER_MODELS=${GROQ_EXPANDER_MODELS:-}
+      - CEREBRAS_INTENT_MODELS=${CEREBRAS_INTENT_MODELS:-}
+      - CEREBRAS_EXPANDER_MODELS=${CEREBRAS_EXPANDER_MODELS:-}
+
+      # Server
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - PORT=${PORT:-10000}
+      - SHUTDOWN_TIMEOUT=${SHUTDOWN_TIMEOUT:-30s}
+
+      # Better Stack
+      - BETTERSTACK_ENDPOINT=${BETTERSTACK_ENDPOINT:-}
+      - BETTERSTACK_SOURCE_TOKEN=${BETTERSTACK_SOURCE_TOKEN:-}
+
+      # Sentry (Better Stack Errors)
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-}
+      - SENTRY_RELEASE=${SENTRY_RELEASE:-}
+      - SENTRY_SAMPLE_RATE=${SENTRY_SAMPLE_RATE:-1.0}
+      - SENTRY_TRACES_SAMPLE_RATE=${SENTRY_TRACES_SAMPLE_RATE:-0.0}
+
+      # Data
+      - CACHE_TTL=${CACHE_TTL:-168h}
+      - DATA_DIR=${DATA_DIR:-/data}
+
+      # Scraper
+      - SCRAPER_MAX_RETRIES=${SCRAPER_MAX_RETRIES:-10}
+      - SCRAPER_TIMEOUT=${SCRAPER_TIMEOUT:-60s}
+
+      # Webhook
+      - WEBHOOK_TIMEOUT=${WEBHOOK_TIMEOUT:-60s}
+
+      # Rate limits
+      - GLOBAL_RATE_RPS=${GLOBAL_RATE_RPS:-100}
+      - USER_RATE_BURST=${USER_RATE_BURST:-15}
+      - USER_RATE_REFILL=${USER_RATE_REFILL:-0.1}
+      - LLM_RATE_BURST=${LLM_RATE_BURST:-60}
+      - LLM_RATE_DAILY=${LLM_RATE_DAILY:-180}
+      - LLM_RATE_REFILL=${LLM_RATE_REFILL:-30}
+
+      # Startup
+      - WARMUP_GRACE_PERIOD=${WARMUP_GRACE_PERIOD:-10m}
+      - WAIT_FOR_WARMUP=${WAIT_FOR_WARMUP:-false}
+
+      # Metrics
+      - METRICS_PASSWORD=${METRICS_PASSWORD:-}
+      - METRICS_USERNAME=${METRICS_USERNAME:-prometheus}
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.2'
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: 50m
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M
+    healthcheck:
+      test: ["CMD", "/app/healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  data:

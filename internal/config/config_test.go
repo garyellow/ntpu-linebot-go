@@ -348,3 +348,24 @@ func TestGetDurationEnv(t *testing.T) {
 		})
 	}
 }
+
+func TestConfig_HasSentry(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		dsn    string
+		expect bool
+	}{
+		{"dsn set", "https://token@errors.betterstack.com/1", true},
+		{"dsn empty", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := &Config{SentryDSN: tt.dsn}
+			if got := cfg.HasSentry(); got != tt.expect {
+				t.Errorf("HasSentry() = %v, want %v", got, tt.expect)
+			}
+		})
+	}
+}
