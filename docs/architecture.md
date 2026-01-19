@@ -215,6 +215,13 @@ User Query → Bot Module → Repository Layer
 - 使用者輸入僅在入口記錄 `text`（單一位置，避免重複）。
 - Postback 的 `data` 僅在入口記錄一次；若超長則以 Warn 記錄並停止處理。
 
+## 錯誤追蹤（Sentry SDK via Better Stack）
+
+- 使用 Sentry Go SDK 將錯誤事件送至 Better Stack Errors。
+- 啟用方式：設定 `SENTRY_DSN`（格式：`https://$APPLICATION_TOKEN@$INGESTING_HOST/1`）。
+- 事件保護：預設移除請求標頭/Cookie/Body，並忽略 `context canceled`、`context deadline exceeded` 類型錯誤。
+- 中介層：Gin Middleware 先於 `gin.Recovery()`，可捕捉 panic 與 HTTP 錯誤上下文。
+
 ## 模組架構
 
 ### Bot 模組總覽

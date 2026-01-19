@@ -22,6 +22,15 @@ const (
 	WebhookHTTPIdle = 120 * time.Second
 )
 
+// Sentry timeouts
+const (
+	// SentryHTTPTimeout is the timeout for sending events to Sentry.
+	SentryHTTPTimeout = 5 * time.Second
+
+	// SentryFlushTimeout is the timeout for flushing buffered Sentry events on shutdown.
+	SentryFlushTimeout = 5 * time.Second
+)
+
 // Scraper timeouts
 const (
 	// ScraperRequest is the timeout for a single HTTP request to NTPU websites.

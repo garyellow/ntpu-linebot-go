@@ -353,19 +353,16 @@ func TestConfig_HasSentry(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name   string
-		token  string
-		host   string
+		dsn    string
 		expect bool
 	}{
-		{"both set", "token", "host", true},
-		{"token only", "token", "", false},
-		{"host only", "", "host", false},
-		{"neither set", "", "", false},
+		{"dsn set", "https://token@errors.betterstack.com/1", true},
+		{"dsn empty", "", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			cfg := &Config{SentryToken: tt.token, SentryHost: tt.host}
+			cfg := &Config{SentryDSN: tt.dsn}
 			if got := cfg.HasSentry(); got != tt.expect {
 				t.Errorf("HasSentry() = %v, want %v", got, tt.expect)
 			}

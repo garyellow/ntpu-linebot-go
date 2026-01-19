@@ -5,6 +5,8 @@ go 1.25.5
 require (
 	github.com/PuerkitoBio/goquery v1.11.0
 	github.com/corpix/uarand v0.2.0
+	github.com/getsentry/sentry-go v0.41.0
+	github.com/getsentry/sentry-go/gin v0.41.0
 	github.com/gin-gonic/gin v1.11.0
 	github.com/iwilltry42/bm25-go v0.0.0-20240909111832-a928590cc9da
 	github.com/joho/godotenv v1.5.1

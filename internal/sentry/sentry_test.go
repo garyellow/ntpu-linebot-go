@@ -5,28 +5,26 @@ import (
 	"time"
 )
 
-func TestInitialize_EmptyToken(t *testing.T) {
-	t.Parallel()
-
-	// Should return nil when token is empty (disabled)
-	err := Initialize(Config{Token: ""})
+func TestInitialize_EmptyDSN(t *testing.T) {
+	// Should return nil when DSN is empty (disabled)
+	err := Initialize(Config{DSN: ""})
 	if err != nil {
-		t.Errorf("Expected nil error for empty token, got %v", err)
+		t.Errorf("Expected nil error for empty DSN, got %v", err)
 	}
 
 	// IsEnabled should return false
 	if IsEnabled() {
-		t.Error("Expected IsEnabled() to return false when token is empty")
+		t.Error("Expected IsEnabled() to return false when DSN is empty")
 	}
 }
 
-func TestInitialize_MissingHost(t *testing.T) {
-	t.Parallel()
-
-	// Should return error when token is set but host is empty
-	err := Initialize(Config{Token: "test-token", Host: ""})
+func TestInitialize_InvalidSampleRate(t *testing.T) {
+	err := Initialize(Config{
+		DSN:        "https://test-token@errors.betterstack.com/1",
+		SampleRate: 1.2,
+	})
 	if err == nil {
-		t.Error("Expected error when host is missing")
+		t.Error("Expected error for invalid sample rate")
 	}
 }
 
@@ -34,10 +32,12 @@ func TestInitialize_ValidConfig(t *testing.T) {
 	// Cannot use t.Parallel() as Sentry uses global state
 
 	err := Initialize(Config{
-		Token:       "test-token",
-		Host:        "errors.betterstack.com",
-		Environment: "test",
-		SampleRate:  1.0,
+		DSN:              "https://test-token@errors.betterstack.com/1",
+		Environment:      "test",
+		SampleRate:       1.0,
+		TracesSampleRate: 0.0,
+		HTTPTimeout:      2 * time.Second,
+		ServiceName:      "ntpu-linebot-go",
 	})
 	if err != nil {
 		t.Errorf("Expected nil error, got %v", err)
@@ -51,25 +51,7 @@ func TestInitialize_ValidConfig(t *testing.T) {
 	Flush(time.Second)
 }
 
-func TestInitialize_DefaultSampleRate(t *testing.T) {
-	// Cannot use t.Parallel() as Sentry uses global state
-
-	// Zero sample rate should default to 1.0
-	err := Initialize(Config{
-		Token:      "test-token-2",
-		Host:       "errors.betterstack.com",
-		SampleRate: 0,
-	})
-	if err != nil {
-		t.Errorf("Expected nil error, got %v", err)
-	}
-
-	Flush(time.Second)
-}
-
 func TestFlush(t *testing.T) {
-	t.Parallel()
-
 	// Flush should complete quickly when there are no events
 	result := Flush(100 * time.Millisecond)
 	if !result {

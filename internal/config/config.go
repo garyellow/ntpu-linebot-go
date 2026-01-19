@@ -49,10 +49,11 @@ type Config struct {
 	BetterStackEndpoint string
 
 	// Sentry Error Tracking (Optional - via Better Stack)
-	SentryToken       string  // Better Stack Errors application token
-	SentryHost        string  // Better Stack Errors ingesting host
-	SentryEnvironment string  // Environment name (e.g., production, staging)
-	SentrySampleRate  float64 // Error sampling rate (0.0-1.0, default: 1.0)
+	SentryDSN              string  // Better Stack Sentry DSN (https://TOKEN@HOST/1)
+	SentryEnvironment      string  // Environment name (e.g., production, staging)
+	SentryRelease          string  // Release version (optional)
+	SentrySampleRate       float64 // Error sampling rate (0.0-1.0, default: 1.0)
+	SentryTracesSampleRate float64 // Traces sampling rate (0.0-1.0, default: 0.0 = disabled)
 
 	// Data Configuration
 	DataDir  string        // Data directory for SQLite database
@@ -144,10 +145,11 @@ func Load() (*Config, error) {
 		BetterStackEndpoint: getEnv("BETTERSTACK_ENDPOINT", ""),
 
 		// Sentry Error Tracking (Optional - via Better Stack)
-		SentryToken:       getEnv("SENTRY_TOKEN", ""),
-		SentryHost:        getEnv("SENTRY_HOST", ""),
-		SentryEnvironment: getEnv("SENTRY_ENVIRONMENT", ""),
-		SentrySampleRate:  getFloatEnv("SENTRY_SAMPLE_RATE", 1.0),
+		SentryDSN:              getEnv("SENTRY_DSN", ""),
+		SentryEnvironment:      getEnv("SENTRY_ENVIRONMENT", ""),
+		SentryRelease:          getEnv("SENTRY_RELEASE", ""),
+		SentrySampleRate:       getFloatEnv("SENTRY_SAMPLE_RATE", 1.0),
+		SentryTracesSampleRate: getFloatEnv("SENTRY_TRACES_SAMPLE_RATE", 0.0),
 
 		// Data Configuration
 		DataDir:  getEnv("DATA_DIR", getDefaultDataDir()),
@@ -237,6 +239,12 @@ func (c *Config) Validate() error {
 	}
 	if c.ScraperTimeout <= 0 {
 		errs = append(errs, fmt.Errorf("SCRAPER_TIMEOUT must be positive, got %v", c.ScraperTimeout))
+	}
+	if c.SentrySampleRate < 0 || c.SentrySampleRate > 1 {
+		errs = append(errs, fmt.Errorf("SENTRY_SAMPLE_RATE must be between 0 and 1, got %v", c.SentrySampleRate))
+	}
+	if c.SentryTracesSampleRate < 0 || c.SentryTracesSampleRate > 1 {
+		errs = append(errs, fmt.Errorf("SENTRY_TRACES_SAMPLE_RATE must be between 0 and 1, got %v", c.SentryTracesSampleRate))
 	}
 	if c.ScraperMaxRetries < 0 {
 		errs = append(errs, fmt.Errorf("SCRAPER_MAX_RETRIES cannot be negative, got %d", c.ScraperMaxRetries))
@@ -371,5 +379,5 @@ func (c *Config) HasLLMProvider() bool {
 
 // HasSentry returns true if Sentry error tracking is configured.
 func (c *Config) HasSentry() bool {
-	return c.SentryToken != "" && c.SentryHost != ""
+	return c.SentryDSN != ""
 }

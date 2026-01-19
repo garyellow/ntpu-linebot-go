@@ -83,21 +83,28 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 
 	// Initialize Sentry for Better Stack error tracking
 	if cfg.HasSentry() {
-		release := "dev"
+		release := cfg.SentryRelease
+		serverName := ""
 		if host, err := os.Hostname(); err == nil && host != "" {
-			release = host // Use hostname as release identifier in dev
+			serverName = host
 		}
+		env := resolveSentryEnvironment(cfg.SentryEnvironment, cfg.LogLevel)
 		if err := internalSentry.Initialize(internalSentry.Config{
-			Token:       cfg.SentryToken,
-			Host:        cfg.SentryHost,
-			Environment: cfg.SentryEnvironment,
-			Release:     release,
-			SampleRate:  cfg.SentrySampleRate,
-			Debug:       cfg.LogLevel == "debug",
+			DSN:              cfg.SentryDSN,
+			Environment:      env,
+			Release:          release,
+			ServerName:       serverName,
+			SampleRate:       cfg.SentrySampleRate,
+			TracesSampleRate: cfg.SentryTracesSampleRate,
+			HTTPTimeout:      config.SentryHTTPTimeout,
+			Debug:            cfg.LogLevel == "debug",
+			ServiceName:      "ntpu-linebot-go",
 		}); err != nil {
 			log.WithError(err).Warn("Sentry initialization failed")
 		} else {
-			log.WithField("environment", cfg.SentryEnvironment).Info("Sentry error tracking enabled")
+			log.WithField("environment", env).
+				WithField("traces_sample_rate", cfg.SentryTracesSampleRate).
+				Info("Sentry error tracking enabled")
 		}
 	}
 
@@ -516,7 +523,7 @@ func (a *Application) shutdown() error {
 
 	// Flush Sentry events
 	if internalSentry.IsEnabled() {
-		if !internalSentry.Flush(2 * time.Second) {
+		if !internalSentry.Flush(config.SentryFlushTimeout) {
 			a.logger.Warn("Sentry flush timed out")
 		}
 	}
@@ -825,6 +832,9 @@ func loggingMiddleware(baseCtx context.Context, log *logger.Logger) gin.HandlerF
 		if requestID != "" {
 			reqCtx = ctxutil.WithRequestID(reqCtx, requestID)
 			c.Request = c.Request.WithContext(reqCtx)
+			if hub := sentrygin.GetHubFromContext(c); hub != nil {
+				hub.Scope().SetTag("request_id", requestID)
+			}
 		}
 
 		c.Next()
@@ -847,4 +857,14 @@ func loggingMiddleware(baseCtx context.Context, log *logger.Logger) gin.HandlerF
 			entry.DebugContext(reqCtx, "HTTP request completed")
 		}
 	}
+}
+
+func resolveSentryEnvironment(explicit string, logLevel string) string {
+	if explicit != "" {
+		return explicit
+	}
+	if logLevel == "debug" {
+		return "development"
+	}
+	return "production"
 }
