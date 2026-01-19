@@ -137,7 +137,7 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 		return nil, nil // Empty message, ignore
 	}
 	if len(text) > config.LINEMaxTextMessageLength {
-		p.logger.Infof("Text message too long: %d characters (limit: %d)", len(text), config.LINEMaxTextMessageLength)
+		p.logger.Warnf("Text message too long: %d characters (limit: %d)", len(text), config.LINEMaxTextMessageLength)
 		sender := lineutil.GetSender("NTPU 小工具", p.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
 			fmt.Sprintf("❌ 訊息內容過長\n\n訊息長度超過 %d 字元，請縮短後重試。", config.LINEMaxTextMessageLength),
@@ -159,7 +159,7 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 	if slices.ContainsFunc(helpKeywords, func(k string) bool {
 		return strings.EqualFold(text, k)
 	}) {
-		p.logger.Debug("User requested help/instruction")
+		p.logger.Info("User requested help/instruction")
 		msgs := p.getDetailedInstructionMessages()
 		lineutil.SetQuoteTokenToFirst(msgs, ctxutil.GetQuoteToken(ctx))
 		return msgs, nil
@@ -197,7 +197,7 @@ func (p *Processor) ProcessPostback(ctx context.Context, event webhook.PostbackE
 		return nil, nil
 	}
 	if len(data) > config.LINEMaxPostbackDataLength {
-		p.logger.Infof("Postback data too long: %d bytes (limit: %d)", len(data), config.LINEMaxPostbackDataLength)
+		p.logger.Warnf("Postback data too long: %d bytes (limit: %d)", len(data), config.LINEMaxPostbackDataLength)
 		sender := lineutil.GetSender("NTPU 小工具", p.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender("❌ 操作資料異常\n\n請使用下方按鈕重新操作", sender)
 		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNavCompact())
@@ -207,13 +207,13 @@ func (p *Processor) ProcessPostback(ctx context.Context, event webhook.PostbackE
 	// Sanitize postback data
 	data = strings.TrimSpace(data)
 
-	p.logger.WithField("data", data).Debug("Received postback")
+	p.logger.WithField("data", data).Info("Received postback")
 
 	// Check for help keywords FIRST (before dispatching to bot modules)
 	if slices.ContainsFunc(helpKeywords, func(k string) bool {
 		return strings.EqualFold(data, k)
 	}) {
-		p.logger.Debug("User requested help/instruction via postback")
+		p.logger.Info("User requested help/instruction via postback")
 		return p.getDetailedInstructionMessages(), nil
 	}
 
@@ -390,7 +390,7 @@ func (p *Processor) handleWithNLU(ctx context.Context, text string, source webho
 	p.logger.WithField("module", result.Module).
 		WithField("intent", result.Intent).
 		WithField("params", result.Params).
-		Debug("NLU intent parsed")
+		Info("NLU intent parsed")
 	// Metrics are recorded by FallbackIntentParser
 
 	return p.dispatchIntent(ctx, result)
@@ -494,7 +494,7 @@ func (p *Processor) checkLLMRateLimit(source webhook.SourceInterface, chatID str
 
 // handleStickerMessage processes sticker messages
 func (p *Processor) handleStickerMessage(_ webhook.MessageEvent) []messaging_api.MessageInterface {
-	p.logger.Debug("Received sticker message, replying with random sticker image")
+	p.logger.Info("Received sticker message, replying with random sticker image")
 
 	stickerURL := p.stickerManager.GetRandomSticker()
 	sender := lineutil.GetSender("貼圖小幫手", p.stickerManager)

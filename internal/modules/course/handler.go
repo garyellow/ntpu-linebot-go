@@ -249,7 +249,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: keyword", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Debugf("Dispatching course intent: %s, keyword: %s", intent, keyword)
+			h.logger.WithModule(ModuleName).Infof("Dispatching course intent: %s, keyword: %s", intent, keyword)
 		}
 		return h.handleUnifiedCourseSearch(ctx, keyword), nil
 
@@ -259,7 +259,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: query", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Debugf("Dispatching course intent: %s, query: %s", intent, query)
+			h.logger.WithModule(ModuleName).Infof("Dispatching course intent: %s, query: %s", intent, query)
 		}
 		return h.handleSmartSearch(ctx, query), nil
 
@@ -269,7 +269,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: uid", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Debugf("Dispatching course intent: %s, uid: %s", intent, uid)
+			h.logger.WithModule(ModuleName).Infof("Dispatching course intent: %s, uid: %s", intent, uid)
 		}
 		return h.handleCourseUIDQuery(ctx, uid), nil
 
@@ -279,7 +279,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: keyword", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Debugf("Dispatching course intent: %s, keyword: %s", intent, keyword)
+			h.logger.WithModule(ModuleName).Infof("Dispatching course intent: %s, keyword: %s", intent, keyword)
 		}
 		return h.handleExtendedCourseSearch(ctx, keyword), nil
 
@@ -300,7 +300,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 		}
 
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Debugf("Dispatching course intent: %s, year: %d, keyword: %s", intent, year, keyword)
+			h.logger.WithModule(ModuleName).Infof("Dispatching course intent: %s, year: %d, keyword: %s", intent, year, keyword)
 		}
 		return h.handleHistoricalCourseSearch(ctx, year, keyword), nil
 
@@ -332,7 +332,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
-	log.Debugf("Handling course message: %s", text)
+	log.Infof("Handling course message: %s", text)
 
 	// Find matching pattern
 	matcher := h.findMatcher(text)
@@ -1137,7 +1137,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 
 	// If it's a recent year, redirect to the hot path logic
 	if isRecent {
-		log.Infof("Requested year %d is recent, using hot cache (courses table)", year)
+		log.Debugf("Requested year %d is recent, using hot cache (courses table)", year)
 		// Reuse the logic from handleRegularPattern but filtered by year
 		var courses []storage.Course
 		for _, term := range []int{1, 2} {
