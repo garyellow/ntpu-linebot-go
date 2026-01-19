@@ -119,7 +119,7 @@ func New(registry *prometheus.Registry) *Metrics {
 				Name: "ntpu_webhook_total",
 				Help: "Total webhook events processed",
 			},
-			// event_type: message, postback, follow
+			// event_type: message, postback, follow, join
 			// status: success, error, rate_limited
 			[]string{"event_type", "status"},
 		),
@@ -333,7 +333,7 @@ func New(registry *prometheus.Registry) *Metrics {
 // ============================================
 
 // RecordWebhook records a webhook event.
-// eventType: message, postback, follow
+// eventType: message, postback, follow, join
 // status: success, error, rate_limited
 func (m *Metrics) RecordWebhook(eventType, status string, duration float64) {
 	m.WebhookTotal.WithLabelValues(eventType, status).Inc()

@@ -108,6 +108,7 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 	// Handle sticker messages - only in personal chats
 	if event.Message.GetType() == "sticker" {
 		if IsPersonalChat(event.Source) {
+			p.logger.WithField("message_type", "sticker").InfoContext(ctx, "Received direct message")
 			msgs := p.handleStickerMessage(event)
 			lineutil.SetQuoteTokenToFirst(msgs, ctxutil.GetQuoteToken(ctx))
 			return msgs, nil
@@ -127,13 +128,16 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 	}
 
 	text := textMsg.Text
+	if IsPersonalChat(event.Source) {
+		p.logger.WithField("message_type", "text").WithField("text_length", len(text)).InfoContext(ctx, "Received direct message")
+	}
 
 	// Validate text length (LINE API allows up to config.LINEMaxTextMessageLength characters)
 	if len(text) == 0 {
 		return nil, nil // Empty message, ignore
 	}
 	if len(text) > config.LINEMaxTextMessageLength {
-		p.logger.Infof("Text message too long: %d characters (limit: %d)", len(text), config.LINEMaxTextMessageLength)
+		p.logger.Warnf("Text message too long: %d characters (limit: %d)", len(text), config.LINEMaxTextMessageLength)
 		sender := lineutil.GetSender("NTPU 小工具", p.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
 			fmt.Sprintf("❌ 訊息內容過長\n\n訊息長度超過 %d 字元，請縮短後重試。", config.LINEMaxTextMessageLength),
@@ -155,7 +159,7 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 	if slices.ContainsFunc(helpKeywords, func(k string) bool {
 		return strings.EqualFold(text, k)
 	}) {
-		p.logger.Debug("User requested help/instruction")
+		p.logger.Info("User requested help/instruction")
 		msgs := p.getDetailedInstructionMessages()
 		lineutil.SetQuoteTokenToFirst(msgs, ctxutil.GetQuoteToken(ctx))
 		return msgs, nil
@@ -193,7 +197,7 @@ func (p *Processor) ProcessPostback(ctx context.Context, event webhook.PostbackE
 		return nil, nil
 	}
 	if len(data) > config.LINEMaxPostbackDataLength {
-		p.logger.Infof("Postback data too long: %d bytes (limit: %d)", len(data), config.LINEMaxPostbackDataLength)
+		p.logger.Warnf("Postback data too long: %d bytes (limit: %d)", len(data), config.LINEMaxPostbackDataLength)
 		sender := lineutil.GetSender("NTPU 小工具", p.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender("❌ 操作資料異常\n\n請使用下方按鈕重新操作", sender)
 		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNavCompact())
@@ -203,13 +207,13 @@ func (p *Processor) ProcessPostback(ctx context.Context, event webhook.PostbackE
 	// Sanitize postback data
 	data = strings.TrimSpace(data)
 
-	p.logger.WithField("data", data).Debug("Received postback")
+	p.logger.WithField("data", data).Info("Received postback")
 
 	// Check for help keywords FIRST (before dispatching to bot modules)
 	if slices.ContainsFunc(helpKeywords, func(k string) bool {
 		return strings.EqualFold(data, k)
 	}) {
-		p.logger.Debug("User requested help/instruction via postback")
+		p.logger.Info("User requested help/instruction via postback")
 		return p.getDetailedInstructionMessages(), nil
 	}
 
@@ -233,6 +237,19 @@ func (p *Processor) ProcessPostback(ctx context.Context, event webhook.PostbackE
 // Returns a Flex Message welcome card with Quick Reply for better UX.
 func (p *Processor) ProcessFollow(event webhook.FollowEvent) ([]messaging_api.MessageInterface, error) {
 	p.logger.Info("New user followed the bot")
+
+	sender := lineutil.GetSender("NTPU 小工具", p.stickerManager)
+
+	// Build welcome Flex Message
+	welcomeMsg := p.buildWelcomeFlexMessage(p.isNLUEnabled(), sender)
+
+	return []messaging_api.MessageInterface{welcomeMsg}, nil
+}
+
+// ProcessJoin handles a join event.
+// Returns a Flex Message welcome card with Quick Reply for better UX.
+func (p *Processor) ProcessJoin(event webhook.JoinEvent) ([]messaging_api.MessageInterface, error) {
+	p.logger.Info("Bot joined a group or room")
 
 	sender := lineutil.GetSender("NTPU 小工具", p.stickerManager)
 
@@ -386,7 +403,7 @@ func (p *Processor) handleWithNLU(ctx context.Context, text string, source webho
 	p.logger.WithField("module", result.Module).
 		WithField("intent", result.Intent).
 		WithField("params", result.Params).
-		Debug("NLU intent parsed")
+		Info("NLU intent parsed")
 	// Metrics are recorded by FallbackIntentParser
 
 	return p.dispatchIntent(ctx, result)
@@ -490,7 +507,7 @@ func (p *Processor) checkLLMRateLimit(source webhook.SourceInterface, chatID str
 
 // handleStickerMessage processes sticker messages
 func (p *Processor) handleStickerMessage(_ webhook.MessageEvent) []messaging_api.MessageInterface {
-	p.logger.Debug("Received sticker message, replying with random sticker image")
+	p.logger.Info("Received sticker message, replying with random sticker image")
 
 	stickerURL := p.stickerManager.GetRandomSticker()
 	sender := lineutil.GetSender("貼圖小幫手", p.stickerManager)

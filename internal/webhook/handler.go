@@ -13,6 +13,7 @@ import (
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	"github.com/garyellow/ntpu-linebot-go/internal/config"
+	"github.com/garyellow/ntpu-linebot-go/internal/ctxutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
@@ -81,7 +82,7 @@ func (h *Handler) Handle(c *gin.Context) {
 	cb, err := webhook.ParseRequest(h.channelSecret, c.Request)
 	if err != nil {
 		if errors.Is(err, webhook.ErrInvalidSignature) {
-			h.logger.Info("Invalid signature")
+			h.logger.Warn("Invalid webhook signature")
 			c.Status(http.StatusBadRequest)
 		} else {
 			h.logger.WithError(err).Error("Failed to parse webhook request")
@@ -99,7 +100,7 @@ func (h *Handler) Handle(c *gin.Context) {
 
 	// Validate event count (max events per webhook per LINE API spec)
 	if len(cb.Events) > h.maxEventsPerWebhook {
-		h.logger.Infof("Too many events in single webhook: %d, truncating", len(cb.Events))
+		h.logger.Warnf("Too many events in single webhook: %d, truncating to %d", len(cb.Events), h.maxEventsPerWebhook)
 		cb.Events = cb.Events[:h.maxEventsPerWebhook] // Limit to prevent DoS
 	}
 
@@ -129,11 +130,27 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 	var eventType string
 	var err error
 
+	eventID, eventTimestamp, isRedelivery := extractEventMeta(event)
+	if eventID != "" {
+		ctx = ctxutil.WithRequestID(ctx, eventID)
+	}
+
+	log := h.logger
+	if eventID != "" {
+		log = log.WithRequestID(eventID)
+	}
+	if isRedelivery != nil {
+		log = log.WithField("is_redelivery", *isRedelivery)
+	}
+	if eventTimestamp > 0 {
+		log = log.WithField("event_timestamp", eventTimestamp)
+	}
+
 	// Show loading animation only when response is expected
 	// Skip for group chats without @mention or stickers in groups (no response)
 	if h.shouldShowLoading(event) {
 		if loadErr := h.showLoadingAnimation(event); loadErr != nil {
-			h.logger.WithError(loadErr).Warn("Failed to show loading animation")
+			log.WithError(loadErr).Warn("Failed to show loading animation")
 		}
 	}
 
@@ -147,9 +164,12 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 	case webhook.FollowEvent:
 		eventType = "follow"
 		messages, err = h.processor.ProcessFollow(e)
+	case webhook.JoinEvent:
+		eventType = "join"
+		messages, err = h.processor.ProcessJoin(e)
 	default:
 		// Unsupported event type, skip
-		h.logger.WithField("event_type", fmt.Sprintf("%T", e)).Debug("Unsupported event type")
+		log.WithField("event_type", fmt.Sprintf("%T", e)).Debug("Unsupported event type")
 		return
 	}
 
@@ -157,14 +177,14 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 	status := "success"
 	if err != nil {
 		status = "error"
-		h.logger.WithError(err).WithField("event_type", eventType).Error("Failed to handle event")
+		log.WithError(err).WithField("event_type", eventType).Error("Failed to handle event")
 	}
 	h.metrics.RecordWebhook(eventType, status, duration)
 
 	if len(messages) > 0 && err == nil {
 		// LINE API restriction: max messages per reply
 		if len(messages) > h.maxMessagesPerReply {
-			h.logger.Warnf("Message count %d exceeds limit, truncating to %d", len(messages), h.maxMessagesPerReply)
+			log.Warnf("Message count %d exceeds limit, truncating to %d", len(messages), h.maxMessagesPerReply)
 			messages = messages[:h.maxMessagesPerReply-1]
 			sender := lineutil.GetSender("NTPU 小工具", h.stickerManager)
 			msg := lineutil.NewTextMessageWithConsistentSender(
@@ -177,19 +197,19 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 
 		replyToken := h.getReplyToken(event)
 		if replyToken == "" {
-			h.logger.Debug("Empty reply token, skipping reply")
+			log.Debug("Empty reply token, skipping reply")
 			return
 		}
 
 		// Validate reply token format
 		if len(replyToken) < h.minReplyTokenLength {
-			h.logger.WithField("token_length", len(replyToken)).Debug("Invalid reply token format")
+			log.WithField("token_length", len(replyToken)).Debug("Invalid reply token format")
 			return
 		}
 
 		// Check global rate limit
 		if !h.rateLimiter.Allow() {
-			h.logger.Warn("Global rate limit exceeded, waiting...")
+			log.Warn("Global rate limit exceeded, waiting...")
 			h.metrics.RecordRateLimiterDrop("global")
 			h.rateLimiter.WaitSimple()
 		}
@@ -202,11 +222,11 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 		); err != nil {
 			errMsg := err.Error()
 			if strings.Contains(errMsg, "Invalid reply token") {
-				h.logger.WithError(err).Debug("Reply token already used or invalid")
+				log.WithError(err).Debug("Reply token already used or invalid")
 			} else if strings.Contains(errMsg, "rate limit") {
-				h.logger.WithError(err).Error("Rate limit exceeded")
+				log.WithError(err).Error("Rate limit exceeded")
 			} else {
-				h.logger.WithError(err).WithField("reply_token", replyToken[:8]+"...").Error("Failed to send reply")
+				log.WithError(err).WithField("reply_token", replyToken[:8]+"...").Error("Failed to send reply")
 			}
 			h.metrics.RecordWebhook(eventType, "reply_error", time.Since(eventStart).Seconds())
 		}
@@ -214,7 +234,30 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 
 	// Log overall processing duration
 	totalDuration := time.Since(webhookStart).Seconds()
-	h.logger.WithField("total_duration", totalDuration).WithField("event_type", eventType).Debug("Event processed")
+	log.WithField("total_duration", totalDuration).WithField("event_type", eventType).Info("Event processed")
+}
+
+func extractEventMeta(event webhook.EventInterface) (string, int64, *bool) {
+	switch e := event.(type) {
+	case webhook.MessageEvent:
+		return e.WebhookEventId, e.Timestamp, boolPtr(e.DeliveryContext)
+	case webhook.PostbackEvent:
+		return e.WebhookEventId, e.Timestamp, boolPtr(e.DeliveryContext)
+	case webhook.FollowEvent:
+		return e.WebhookEventId, e.Timestamp, boolPtr(e.DeliveryContext)
+	case webhook.JoinEvent:
+		return e.WebhookEventId, e.Timestamp, boolPtr(e.DeliveryContext)
+	default:
+		return "", 0, nil
+	}
+}
+
+func boolPtr(ctx *webhook.DeliveryContext) *bool {
+	if ctx == nil {
+		return nil
+	}
+	val := ctx.IsRedelivery
+	return &val
 }
 
 // shouldShowLoading determines if loading animation should be shown for an event.
@@ -230,6 +273,9 @@ func (h *Handler) shouldShowLoading(event webhook.EventInterface) bool {
 		return true
 	case webhook.FollowEvent:
 		// Follow gets a response (welcome message)
+		return true
+	case webhook.JoinEvent:
+		// Join gets a response (welcome message)
 		return true
 	default:
 		// Unknown event types - don't show loading
@@ -302,6 +348,8 @@ func (h *Handler) getReplyToken(event webhook.EventInterface) string {
 		return e.ReplyToken
 	case webhook.FollowEvent:
 		return e.ReplyToken
+	case webhook.JoinEvent:
+		return e.ReplyToken
 	default:
 		return ""
 	}
@@ -317,6 +365,8 @@ func (h *Handler) getChatID(event webhook.EventInterface) string {
 	case webhook.PostbackEvent:
 		source = e.Source
 	case webhook.FollowEvent:
+		source = e.Source
+	case webhook.JoinEvent:
 		source = e.Source
 	default:
 		return ""

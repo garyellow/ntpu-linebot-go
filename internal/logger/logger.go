@@ -10,8 +10,10 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/ctxutil"
+	slogbetterstack "github.com/samber/slog-betterstack"
 )
 
 // Logger is the application logger
@@ -19,53 +21,90 @@ type Logger struct {
 	*slog.Logger
 }
 
+// Options configures logger outputs and Better Stack integration.
+type Options struct {
+	BetterStackToken    string
+	BetterStackEndpoint string
+}
+
 // New creates a new logger instance with JSON formatting
 func New(level string) *Logger {
-	return NewWithWriter(level, os.Stdout)
+	return NewWithOptions(level, os.Stdout, Options{})
 }
 
 // NewWithWriter creates a new logger instance with JSON formatting writing to the provided writer
 func NewWithWriter(level string, w io.Writer) *Logger {
-	var logLevel slog.Level
-	switch level {
-	case "debug":
-		logLevel = slog.LevelDebug
-	case "warn":
-		logLevel = slog.LevelWarn
-	case "error":
-		logLevel = slog.LevelError
-	default:
-		logLevel = slog.LevelInfo
+	return NewWithOptions(level, w, Options{})
+}
+
+// NewWithOptions creates a new logger instance with configurable sinks.
+// When BetterStackToken is provided, logs are also sent to Better Stack.
+func NewWithOptions(level string, w io.Writer, opts Options) *Logger {
+	logLevel := parseLevel(level)
+	replaceAttr := replaceAttrFunc()
+
+	jsonHandler := slog.NewJSONHandler(w, &slog.HandlerOptions{
+		Level:       logLevel,
+		ReplaceAttr: replaceAttr,
+	})
+
+	handlers := []slog.Handler{jsonHandler}
+	if opts.BetterStackToken != "" {
+		bsOption := slogbetterstack.Option{
+			Level:       logLevel,
+			Token:       opts.BetterStackToken,
+			Endpoint:    opts.BetterStackEndpoint,
+			Timeout:     5 * time.Second,
+			ReplaceAttr: replaceAttr,
+		}
+		handlers = append(handlers, bsOption.NewBetterstackHandler())
 	}
 
-	opts := &slog.HandlerOptions{
-		Level: logLevel,
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			if a.Key == slog.TimeKey {
-				a.Key = "timestamp"
-				// slog uses RFC3339Nano by default, which is fine
-			}
-			if a.Key == slog.LevelKey {
-				a.Key = "level"
-				level := a.Value.String()
-				if level == "WARN" {
-					level = "warning"
-				} else {
-					level = strings.ToLower(level)
-				}
-				a.Value = slog.StringValue(level)
-			}
-			if a.Key == slog.MessageKey {
-				a.Key = "message"
-			}
-			return a
-		},
+	var handler slog.Handler
+	if len(handlers) == 1 {
+		handler = handlers[0]
+	} else {
+		handler = NewMultiHandler(handlers...)
 	}
-	// Wrap the base handler with ContextHandler to automatically extract
-	// tracing values (userID, chatID, requestID) from context
-	baseHandler := slog.NewJSONHandler(w, opts)
-	contextHandler := NewContextHandler(baseHandler)
+
+	contextHandler := NewContextHandler(handler)
 	return &Logger{Logger: slog.New(contextHandler)}
+}
+
+func parseLevel(level string) slog.Level {
+	switch level {
+	case "debug":
+		return slog.LevelDebug
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
+}
+
+func replaceAttrFunc() func([]string, slog.Attr) slog.Attr {
+	return func(groups []string, a slog.Attr) slog.Attr {
+		if a.Key == slog.TimeKey {
+			a.Key = "timestamp"
+			// slog uses RFC3339Nano by default, which is fine
+		}
+		if a.Key == slog.LevelKey {
+			a.Key = "level"
+			level := a.Value.String()
+			if level == "WARN" {
+				level = "warning"
+			} else {
+				level = strings.ToLower(level)
+			}
+			a.Value = slog.StringValue(level)
+		}
+		if a.Key == slog.MessageKey {
+			a.Key = "message"
+		}
+		return a
+	}
 }
 
 // WithModule creates a new entry with module field

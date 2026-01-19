@@ -44,6 +44,10 @@ type Config struct {
 	LogLevel        string
 	ShutdownTimeout time.Duration
 
+	// Better Stack Logging (Optional)
+	BetterStackToken    string
+	BetterStackEndpoint string
+
 	// Data Configuration
 	DataDir  string        // Data directory for SQLite database
 	CacheTTL time.Duration // TTL: absolute expiration for cache entries (default: 7 days)
@@ -128,6 +132,10 @@ func Load() (*Config, error) {
 		Port:            getEnv("PORT", "10000"),
 		LogLevel:        getEnv("LOG_LEVEL", "info"),
 		ShutdownTimeout: getDurationEnv("SHUTDOWN_TIMEOUT", 30*time.Second),
+
+		// Better Stack Logging (Optional)
+		BetterStackToken:    getEnv("BETTERSTACK_SOURCE_TOKEN", ""),
+		BetterStackEndpoint: getEnv("BETTERSTACK_ENDPOINT", ""),
 
 		// Data Configuration
 		DataDir:  getEnv("DATA_DIR", getDefaultDataDir()),

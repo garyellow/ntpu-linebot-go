@@ -249,7 +249,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: keyword", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Debugf("Dispatching course intent: %s, keyword: %s", intent, keyword)
+			h.logger.WithModule(ModuleName).Infof("Dispatching course intent: %s, keyword: %s", intent, keyword)
 		}
 		return h.handleUnifiedCourseSearch(ctx, keyword), nil
 
@@ -259,7 +259,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: query", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Debugf("Dispatching course intent: %s, query: %s", intent, query)
+			h.logger.WithModule(ModuleName).Infof("Dispatching course intent: %s, query: %s", intent, query)
 		}
 		return h.handleSmartSearch(ctx, query), nil
 
@@ -269,7 +269,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: uid", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Debugf("Dispatching course intent: %s, uid: %s", intent, uid)
+			h.logger.WithModule(ModuleName).Infof("Dispatching course intent: %s, uid: %s", intent, uid)
 		}
 		return h.handleCourseUIDQuery(ctx, uid), nil
 
@@ -279,7 +279,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: keyword", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Debugf("Dispatching course intent: %s, keyword: %s", intent, keyword)
+			h.logger.WithModule(ModuleName).Infof("Dispatching course intent: %s, keyword: %s", intent, keyword)
 		}
 		return h.handleExtendedCourseSearch(ctx, keyword), nil
 
@@ -300,7 +300,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 		}
 
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Debugf("Dispatching course intent: %s, year: %d, keyword: %s", intent, year, keyword)
+			h.logger.WithModule(ModuleName).Infof("Dispatching course intent: %s, year: %d, keyword: %s", intent, year, keyword)
 		}
 		return h.handleHistoricalCourseSearch(ctx, year, keyword), nil
 
@@ -332,7 +332,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
-	log.Debugf("Handling course message: %s", text)
+	log.Infof("Handling course message: %s", text)
 
 	// Find matching pattern
 	matcher := h.findMatcher(text)
@@ -395,10 +395,7 @@ func (h *Handler) handleHistoricalPattern(ctx context.Context, text string, matc
 			"⚠️ 查詢格式有誤\n\n正確格式：課程 110 微積分\n（年份可使用民國年或西元年，如 110、2021）",
 			sender,
 		)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyCourseAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyCourseNav(h.IsBM25SearchEnabled()))
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -413,10 +410,7 @@ func (h *Handler) handleHistoricalPattern(ctx context.Context, text string, matc
 			"⚠️ 查詢格式有誤\n\n正確格式：課程 110 微積分\n（年份可使用民國年或西元年，如 110、2021）",
 			sender,
 		)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyCourseAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyCourseNav(h.IsBM25SearchEnabled()))
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -438,10 +432,7 @@ func (h *Handler) handleHistoricalPattern(ctx context.Context, text string, matc
 				config.CourseSystemLaunchYear+1911),
 			sender,
 		)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyCourseAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyCourseNav(h.IsBM25SearchEnabled()))
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -474,10 +465,7 @@ func (h *Handler) handleSmartPattern(ctx context.Context, text string, matches [
 				"• 課程 王小明"
 		}
 		msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyCourseAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyCourseNav(h.IsBM25SearchEnabled()))
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -502,10 +490,7 @@ func (h *Handler) handleExtendedPattern(ctx context.Context, text string, matche
 			"📆 需要指定年份？\n" +
 			"使用：「課程 110 微積分」或「課程 2021 微積分」"
 		msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyCourseAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyCourseNav(h.IsBM25SearchEnabled()))
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -539,10 +524,7 @@ func (h *Handler) handleRegularPattern(ctx context.Context, text string, matches
 				"• 課程 2021 微積分（西元年）\n\n" +
 				"💡 直接輸入課號（如 U0001）\n" +
 				"   或完整編號（如 1131U0001）"
-			quickReplyItems = []lineutil.QuickReplyItem{
-				lineutil.QuickReplySmartSearchAction(),
-				lineutil.QuickReplyHelpAction(),
-			}
+			quickReplyItems = lineutil.QuickReplyCourseNav(true)
 		} else {
 			helpText = "📚 課程查詢方式\n\n" +
 				"🔍 精確搜尋（近 2 學期）\n" +
@@ -556,9 +538,7 @@ func (h *Handler) handleRegularPattern(ctx context.Context, text string, matches
 				"• 課程 2021 微積分（西元年）\n\n" +
 				"💡 直接輸入課號（如 U0001）\n" +
 				"   或完整編號（如 1131U0001）"
-			quickReplyItems = []lineutil.QuickReplyItem{
-				lineutil.QuickReplyHelpAction(),
-			}
+			quickReplyItems = lineutil.QuickReplyCourseNav(false)
 		}
 		msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
 		msg.QuickReply = lineutil.NewQuickReply(quickReplyItems)
@@ -637,10 +617,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 			h.metrics.RecordScraperRequest(ModuleName, "error", time.Since(startTime).Seconds())
 		}
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🔍 查無此課程編號\n\n課程編號：%s\n💡 請確認編號格式是否正確", uid), sender)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyCourseAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyCourseNav(h.IsBM25SearchEnabled()))
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -652,10 +629,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 			fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 建議\n• 確認課程編號是否正確\n• 該課程是否有開設", uid),
 			sender,
 		)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyCourseAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyCourseNav(h.IsBM25SearchEnabled()))
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -737,10 +711,7 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 		fmt.Sprintf("🔍 查無課程編號 %s\n\n💡 建議\n• 確認課程編號是否正確（如 U0001）\n• 該課程是否有開設\n• 或使用「課程 課名」搜尋", courseNo),
 		sender,
 	)
-	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		lineutil.QuickReplyCourseAction(),
-		lineutil.QuickReplyHelpAction(),
-	})
+	msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyCourseNav(h.IsBM25SearchEnabled()))
 	return []messaging_api.MessageInterface{msg}
 }
 
@@ -1137,7 +1108,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 
 	// If it's a recent year, redirect to the hot path logic
 	if isRecent {
-		log.Infof("Requested year %d is recent, using hot cache (courses table)", year)
+		log.Debugf("Requested year %d is recent, using hot cache (courses table)", year)
 		// Reuse the logic from handleRegularPattern but filtered by year
 		var courses []storage.Course
 		for _, term := range []int{1, 2} {

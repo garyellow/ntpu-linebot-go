@@ -59,13 +59,24 @@ type Application struct {
 
 // Initialize creates and initializes a new application with all dependencies.
 func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
-	log := logger.New(cfg.LogLevel)
+	log := logger.NewWithOptions(cfg.LogLevel, os.Stdout, logger.Options{
+		BetterStackToken:    cfg.BetterStackToken,
+		BetterStackEndpoint: cfg.BetterStackEndpoint,
+	})
+
+	log = log.WithField("service", "ntpu-linebot-go")
+	if host, err := os.Hostname(); err == nil && host != "" {
+		log = log.WithField("instance_id", host)
+	}
 
 	// Set as default logger to enable context value extraction (userID, chatID, requestID)
 	// via ContextHandler in package-level slog.*Context() calls.
 	slog.SetDefault(log.Logger)
 
 	log.Info("Initializing application...")
+	if cfg.BetterStackToken != "" {
+		log.WithField("endpoint", cfg.BetterStackEndpoint).Info("Better Stack logging enabled")
+	}
 
 	db, err := storage.New(ctx, cfg.SQLitePath(), cfg.CacheTTL)
 	if err != nil {

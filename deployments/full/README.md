@@ -39,6 +39,13 @@ docker compose up -d
 | `CEREBRAS_API_KEY` | Cerebras API Key（備援 LLM）|
 | `LLM_PROVIDERS` | LLM 提供者鏈（預設：gemini,groq,cerebras）|
 
+### 日誌整合（可選）
+
+| 變數 | 說明 |
+|------|------|
+| `BETTERSTACK_SOURCE_TOKEN` | Better Stack Source Token（空字串=不啟用） |
+| `BETTERSTACK_ENDPOINT` | Better Stack Ingesting Endpoint（可選） |
+
 ### 監控設定
 
 | 變數 | 預設值 | 說明 |

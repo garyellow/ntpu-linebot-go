@@ -161,7 +161,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 	switch intent {
 	case IntentList:
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Debug("Dispatching program intent: list")
+			h.logger.WithModule(ModuleName).Info("Dispatching program intent: list")
 		}
 		return h.handleProgramList(ctx), nil
 
@@ -171,7 +171,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: query", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Debugf("Dispatching program intent: search, query: %s", query)
+			h.logger.WithModule(ModuleName).Infof("Dispatching program intent: search, query: %s", query)
 		}
 		return h.handleProgramSearch(ctx, query), nil
 
@@ -181,7 +181,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: programName", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Debugf("Dispatching program intent: courses, programName: %s", programName)
+			h.logger.WithModule(ModuleName).Infof("Dispatching program intent: courses, programName: %s", programName)
 		}
 		return h.handleProgramCourses(ctx, programName), nil
 
@@ -213,7 +213,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
-	log.Debugf("Handling program message: %s", text)
+	log.Infof("Handling program message: %s", text)
 
 	// Find matching pattern
 	matcher := h.findMatcher(text)
@@ -271,7 +271,7 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 	action := parts[0]
 	actionData := parts[1]
 
-	log.Debugf("Processing postback: action=%s, data=%s", action, actionData)
+	log.Infof("Processing postback: action=%s, data=%s", action, actionData)
 
 	switch action {
 	case "courses":
@@ -426,10 +426,7 @@ func (h *Handler) handleProgramSearch(ctx context.Context, searchTerm string) []
 			fmt.Sprintf("🔍 查無「%s」相關學程\n\n💡 建議\n• 使用「學程列表」查看所有學程\n• 嘗試其他關鍵字", searchTerm),
 			sender,
 		)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyProgramListAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyProgramNav())
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -521,7 +518,7 @@ func (h *Handler) handleProgramCourses(ctx context.Context, programName string) 
 	}
 
 	// For >40 courses, use text list format
-	log.Infof("Using text list format for %d courses (exceeds carousel limit %d)", totalCourses, MaxCoursesInCarousel)
+	log.Debugf("Using text list format for %d courses (exceeds carousel limit %d)", totalCourses, MaxCoursesInCarousel)
 	return h.formatProgramCoursesAsTextList(programName, requiredCourses, electiveCourses, originalRequiredCount, originalElectiveCount)
 }
 

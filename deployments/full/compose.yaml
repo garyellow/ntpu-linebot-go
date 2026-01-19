@@ -37,6 +37,10 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - SHUTDOWN_TIMEOUT=${SHUTDOWN_TIMEOUT:-30s}
 
+      # Better Stack Logging (Optional)
+      - BETTERSTACK_SOURCE_TOKEN=${BETTERSTACK_SOURCE_TOKEN:-}
+      - BETTERSTACK_ENDPOINT=${BETTERSTACK_ENDPOINT:-}
+
       # Data Configuration
       - DATA_DIR=${DATA_DIR:-/data}
       - CACHE_TTL=${CACHE_TTL:-168h}

@@ -507,6 +507,13 @@ func TestShouldShowLoading(t *testing.T) {
 			},
 			expected: true,
 		},
+		{
+			name: "join event",
+			event: webhook.JoinEvent{
+				Source: webhook.GroupSource{GroupId: "G123"},
+			},
+			expected: true,
+		},
 	}
 
 	for _, tt := range tests {

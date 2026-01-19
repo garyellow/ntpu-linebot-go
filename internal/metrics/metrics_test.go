@@ -89,6 +89,7 @@ func TestRecordWebhook(t *testing.T) {
 		{"message", "success", 0.5},
 		{"postback", "error", 1.0},
 		{"follow", "rate_limited", 0.1},
+		{"join", "success", 0.2},
 	}
 
 	for _, tc := range testCases {

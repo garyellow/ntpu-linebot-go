@@ -102,6 +102,13 @@ docker run -d \
 | `LINE_CHANNEL_ACCESS_TOKEN` | LINE Bot Access Token |
 | `LINE_CHANNEL_SECRET` | LINE Bot Channel Secret |
 
+可選項目（多點部署集中日誌）：
+
+| 變數 | 說明 |
+|------|------|
+| `BETTERSTACK_SOURCE_TOKEN` | Better Stack Source Token（空字串=不啟用） |
+| `BETTERSTACK_ENDPOINT` | Better Stack Ingesting Endpoint（可選） |
+
 ### 服務端點
 
 | 端點 | 說明 |

@@ -258,7 +258,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: name", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Debugf("Dispatching ID intent: %s, name: %s", intent, name)
+			h.logger.WithModule(ModuleName).Infof("Dispatching ID intent: %s, name: %s", intent, name)
 		}
 		return h.handleStudentNameQuery(ctx, name), nil
 
@@ -268,7 +268,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: student_id", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Debugf("Dispatching ID intent: %s, student_id: %s", intent, studentID)
+			h.logger.WithModule(ModuleName).Infof("Dispatching ID intent: %s, student_id: %s", intent, studentID)
 		}
 		return h.handleStudentIDQuery(ctx, studentID), nil
 
@@ -278,7 +278,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: department", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Debugf("Dispatching ID intent: %s, department: %s", intent, department)
+			h.logger.WithModule(ModuleName).Infof("Dispatching ID intent: %s, department: %s", intent, department)
 		}
 
 		return h.handleUnifiedDepartmentQuery(department), nil
@@ -289,7 +289,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			return nil, fmt.Errorf("%w: year", domerrors.ErrMissingParameter)
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Debugf("Dispatching ID intent: %s, year: %s", intent, year)
+			h.logger.WithModule(ModuleName).Infof("Dispatching ID intent: %s, year: %s", intent, year)
 		}
 		return h.handleYearQuery(year), nil
 
@@ -305,7 +305,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			degree = DegreeBachelor
 		}
 		if h.logger != nil {
-			h.logger.WithModule(ModuleName).Debugf("Dispatching ID intent: %s, degree: %s", intent, degree)
+			h.logger.WithModule(ModuleName).Infof("Dispatching ID intent: %s, degree: %s", intent, degree)
 		}
 		return h.handleDepartmentCodesByDegree(degree), nil
 
@@ -343,7 +343,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
-	log.Debugf("Handling ID message: %s", text)
+	log.Infof("Handling ID message: %s", text)
 
 	// Find matching pattern
 	matcher := h.findMatcher(text)
@@ -433,10 +433,7 @@ func (h *Handler) handleDepartmentPattern(ctx context.Context, text string, matc
 			"🔍 查詢系所資訊\n\n請輸入系名或系代碼：\n例如：「系 資工」或「系代碼 85」\n\n💡 提示：輸入「學士系代碼」查看完整對照表",
 			sender,
 		)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyDeptCodeAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyStudentNav())
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -456,7 +453,7 @@ func (h *Handler) handleYearPattern(ctx context.Context, text string, matches []
 	// No year provided - show guidance message
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	msg := lineutil.NewTextMessageWithConsistentSender(
-		"📅 按學年度查詢學生\n\n請輸入學年度進行查詢\n例如：學年 112、學年 110\n\n📋 查詢流程：\n1️⃣ 選擇學院群（文法商/公社電資）\n2️⃣ 選擇學院\n3️⃣ 選擇系所\n4️⃣ 查看該系所所有學生\n\n⚠️ 僅提供 94-112 學年度完整資料\n（113 年不完整、114 年起無資料 - 數位學苑 2.0 停用）",
+		"📅 按學年度查詢學生\n\n請輸入學年度進行查詢\n例如：學年 112、學年 110\n\n📋 查詢流程：\n1️⃣ 選擇學院群（文法商/公社電資）\n2️⃣ 選擇學院\n3️⃣ 選擇系所\n4️⃣ 查看該系所所有學生\n\n⚠️ 僅提供 94-112 學年度完整資料\n（113 年不完整、114 年起無資料）",
 		sender,
 	)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -464,6 +461,7 @@ func (h *Handler) handleYearPattern(ctx context.Context, text string, matches []
 		{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", config.IDDataYearEnd), fmt.Sprintf("學年 %d", config.IDDataYearEnd))},
 		{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", config.IDDataYearEnd-1), fmt.Sprintf("學年 %d", config.IDDataYearEnd-1))},
 		{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", config.IDDataYearEnd-2), fmt.Sprintf("學年 %d", config.IDDataYearEnd-2))},
+		lineutil.QuickReplyHelpAction(),
 	})
 	return []messaging_api.MessageInterface{msg}
 }
@@ -481,10 +479,7 @@ func (h *Handler) handleStudentPattern(ctx context.Context, text string, matches
 			"🎓 請在關鍵字後輸入查詢內容\n\n例如：\n• 學號 小明\n• 學號 412345678\n\n💡 提示：也可直接輸入 8-9 位學號",
 			sender,
 		)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyYearAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyStudentNav())
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -825,10 +820,7 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 	}
 
 	msg := lineutil.NewTextMessageWithConsistentSender("🔍 查無該系所\n\n請輸入正確的系名\n例如：資工、法律、企管", sender)
-	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		lineutil.QuickReplyDeptCodeAction(),
-		lineutil.QuickReplyHelpAction(),
-	})
+	msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyStudentNav())
 	return []messaging_api.MessageInterface{msg}
 }
 
@@ -891,10 +883,7 @@ func (h *Handler) handleDepartmentCodeQuery(code string) []messaging_api.Message
 	}
 
 	msg := lineutil.NewTextMessageWithConsistentSender("🔍 查無該系代碼\n\n請輸入正確的系代碼\n例如：85（資工系）、31（企管碩/博）", sender)
-	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		lineutil.QuickReplyDeptCodeAction(),
-		lineutil.QuickReplyHelpAction(),
-	})
+	msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyStudentNav())
 	return []messaging_api.MessageInterface{msg}
 }
 
@@ -944,7 +933,7 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 	if year == config.IDDataYearEnd+1 {
 		// Reject 113 queries as data is too sparse for list view
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			"⚠️ 113 學年度資料不完整\n\n因僅極少數學生有資料，故不開放「學年」列表查詢。\n\n💡 若已知學號或姓名，請改用「學號」或「姓名」功能查詢。",
+			"⚠️ 113 學年度資料不完整\n\n因僅少數學生有資料，故不開放「學年」列表查詢。\n\n💡 若已知學號或姓名，請改用「學號」或「姓名」功能查詢。",
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -1080,7 +1069,6 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 			msg := lineutil.NewTextMessageWithConsistentSender(
 				fmt.Sprintf("🔍 查無學號 %s 的資料\n\n"+
 					"⚠️ 113 學年度資料不完整\n"+
-					"僅極少數手動建立數位學苑 2.0 帳號的學生有資料。\n\n"+
 					"📅 完整資料範圍：94-112 學年度",
 					studentID),
 				sender,
@@ -1095,11 +1083,7 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 
 		// Regular not found message
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🔍 查無此學號\n\n學號：%s\n請確認學號格式是否正確", studentID), sender)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyStudentAction(),
-			lineutil.QuickReplyDeptCodeAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyStudentNav())
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -1214,19 +1198,16 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	infoBuilder.WriteString("ℹ️ 系所資訊說明\n")
 	infoBuilder.WriteString("系所資訊由學號推測，可能與實際不符。\n\n")
 	infoBuilder.WriteString("📊 姓名查詢範圍\n")
-	infoBuilder.WriteString("• 學士班/碩博士班：101-112 學年度（完整）\n")
-	infoBuilder.WriteString("• 113 學年度資料不完整（僅極少數學生）\n")
-	infoBuilder.WriteString("• 114 學年度起無資料（數位學苑 2.0 停用）\n\n")
+	infoBuilder.WriteString("• 學士班/碩博士班：101-112 學年度\n")
+	infoBuilder.WriteString("• 113 學年度資料不完整\n")
+	infoBuilder.WriteString("• 114 學年度起無資料\n\n")
 	infoBuilder.WriteString("💡 若找不到學生，可使用「學年」功能按年度查詢")
 
 	infoMsg := lineutil.NewTextMessageWithConsistentSender(infoBuilder.String(), sender)
 	messages = append(messages, infoMsg)
 
 	// Add Quick Reply to the last message (5th message)
-	lineutil.AddQuickReplyToMessages(messages,
-		lineutil.QuickReplyStudentAction(),
-		lineutil.QuickReplyDeptCodeAction(),
-	)
+	lineutil.AddQuickReplyToMessages(messages, lineutil.QuickReplyStudentNav()...)
 
 	return messages
 }
