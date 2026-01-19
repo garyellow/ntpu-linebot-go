@@ -95,19 +95,21 @@ docker run -d \
 
 ### 環境變數
 
-詳見 [.env.example](../.env.example)，必填項目：
+詳見 [.env.example](../.env.example)。
+
+#### 必填（LINE Bot）
 
 | 變數 | 說明 |
 |------|------|
 | `LINE_CHANNEL_ACCESS_TOKEN` | LINE Bot Access Token |
 | `LINE_CHANNEL_SECRET` | LINE Bot Channel Secret |
 
-可選項目（多點部署集中日誌）：
+#### 日誌整合（可選）
 
 | 變數 | 說明 |
 |------|------|
 | `BETTERSTACK_SOURCE_TOKEN` | Better Stack Source Token（空字串=不啟用） |
-| `BETTERSTACK_ENDPOINT` | Better Stack Ingesting Endpoint（可選） |
+| `BETTERSTACK_ENDPOINT` | Better Stack Ingesting Endpoint |
 
 ### 服務端點
 

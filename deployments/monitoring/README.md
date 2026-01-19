@@ -99,11 +99,11 @@ docker compose up -d
 
 | 變數 | 必填 | 說明 |
 |------|------|------|
-| `BOT_HOST` | ✅ | Bot 公開網址（不含 https://）|
-| `METRICS_USERNAME` | ⬚ | Metrics 帳號（預設：prometheus）|
-| `METRICS_PASSWORD` | ✅ | Metrics 密碼 |
-| `GRAFANA_USER` | ⬚ | Grafana 帳號（預設：admin）|
-| `GRAFANA_PASSWORD` | ⬚ | Grafana 密碼（預設：admin123）|
+| `BOT_HOST` | 是 | Bot 公開網址（不含 https://）|
+| `METRICS_USERNAME` | 否 | Metrics 帳號（預設：prometheus）|
+| `METRICS_PASSWORD` | 是 | Metrics 密碼 |
+| `GRAFANA_USER` | 否 | Grafana 帳號（預設：admin）|
+| `GRAFANA_PASSWORD` | 否 | Grafana 密碼（預設：admin123）|
 
 ## 常用指令
 
