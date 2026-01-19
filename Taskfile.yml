@@ -112,88 +112,43 @@ tasks:
     cmds:
       - go run golang.org/x/vuln/cmd/govulncheck@latest -show verbose ./...
 
-  # Docker Compose - Full Stack (Bot + Monitoring)
+  # Docker Compose - Bot Only
   compose:up:
-    desc: Start full stack (Bot + Monitoring)
-    dir: deployments/full
+    desc: Start bot container
+    dir: deployments
     cmds:
       - docker compose up -d
 
   compose:down:
-    desc: Stop full stack
-    dir: deployments/full
+    desc: Stop bot container
+    dir: deployments
     cmds:
       - docker compose down
 
   compose:logs:
-    desc: "View full stack logs (usage: task compose:logs -- SERVICE_NAME)"
-    dir: deployments/full
+    desc: "View container logs (usage: task compose:logs -- SERVICE_NAME)"
+    dir: deployments
     cmds:
       - docker compose logs -f {{.CLI_ARGS}}
 
   compose:update:
-    desc: Update and restart full stack with latest images
-    dir: deployments/full
+    desc: Update and restart with latest image
+    dir: deployments
     cmds:
       - docker compose pull
       - docker compose up -d
 
   compose:ps:
-    desc: List full stack services status
-    dir: deployments/full
+    desc: List compose services status
+    dir: deployments
     cmds:
       - docker compose ps
 
   compose:restart:
     desc: "Restart specific service (usage: task compose:restart -- SERVICE_NAME)"
-    dir: deployments/full
+    dir: deployments
     cmds:
       - docker compose restart {{.CLI_ARGS}}
-
-  # Nginx Gateway for monitoring access
-  access:up:
-    desc: Open monitoring dashboard access (Grafana:3000, Prometheus:9090, Alertmanager:9093)
-    dir: deployments/full/access
-    cmds:
-      - docker compose up -d
-
-  access:down:
-    desc: Close monitoring dashboard access (release ports)
-    dir: deployments/full/access
-    cmds:
-      - docker compose down
-
-  # Docker Compose - Monitoring Only (for external Bot)
-  monitoring:up:
-    desc: Start monitoring stack (for external Bot)
-    dir: deployments/monitoring
-    cmds:
-      - docker compose up -d
-
-  monitoring:down:
-    desc: Stop monitoring stack
-    dir: deployments/monitoring
-    cmds:
-      - docker compose down
-
-  monitoring:logs:
-    desc: "View monitoring logs (usage: task monitoring:logs -- SERVICE_NAME)"
-    dir: deployments/monitoring
-    cmds:
-      - docker compose logs -f {{.CLI_ARGS}}
-
-  # Nginx Gateway for monitoring access
-  monitoring:access:up:
-    desc: Open monitoring dashboard access
-    dir: deployments/monitoring/access
-    cmds:
-      - docker compose up -d
-
-  monitoring:access:down:
-    desc: Close monitoring dashboard access (release ports)
-    dir: deployments/monitoring/access
-    cmds:
-      - docker compose down
 
   # CI Pipeline
   ci:

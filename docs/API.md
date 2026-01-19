@@ -574,12 +574,7 @@ curl -X POST http://localhost:10000/webhook \
 - [Webhook Events](https://developers.line.biz/en/reference/messaging-api/#webhook-event-objects)
 - [Message Types](https://developers.line.biz/en/reference/messaging-api/#message-objects)
 
-### B. Prometheus 監控
-
-- [Prometheus Query Examples](https://prometheus.io/docs/prometheus/latest/querying/examples/)
-- [Grafana Dashboard](http://localhost:3000)
-
-### C. 聯絡方式
+### B. 聯絡方式
 
 - **GitHub Issues**: https://github.com/garyellow/ntpu-linebot-go/issues
 - **維護者**: garyellow

@@ -342,7 +342,7 @@ task lint             # Run golangci-lint (5m timeout)
 task fmt              # Format code and organize imports (goimports)
 task build            # Build binaries to bin/ (CGO_ENABLED=0)
 task clean            # Remove build artifacts (bin/, coverage files)
-task compose:up       # Start monitoring stack (Prometheus/Grafana, see deployments/)
+task compose:up       # Start Docker Compose deployment (bot only)
 ```
 
 **Test patterns**:
