@@ -433,10 +433,7 @@ func (h *Handler) handleDepartmentPattern(ctx context.Context, text string, matc
 			"🔍 查詢系所資訊\n\n請輸入系名或系代碼：\n例如：「系 資工」或「系代碼 85」\n\n💡 提示：輸入「學士系代碼」查看完整對照表",
 			sender,
 		)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyDeptCodeAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyStudentNav())
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -464,6 +461,7 @@ func (h *Handler) handleYearPattern(ctx context.Context, text string, matches []
 		{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", config.IDDataYearEnd), fmt.Sprintf("學年 %d", config.IDDataYearEnd))},
 		{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", config.IDDataYearEnd-1), fmt.Sprintf("學年 %d", config.IDDataYearEnd-1))},
 		{Action: lineutil.NewMessageAction(fmt.Sprintf("📅 查詢 %d 學年度", config.IDDataYearEnd-2), fmt.Sprintf("學年 %d", config.IDDataYearEnd-2))},
+		lineutil.QuickReplyHelpAction(),
 	})
 	return []messaging_api.MessageInterface{msg}
 }
@@ -481,10 +479,7 @@ func (h *Handler) handleStudentPattern(ctx context.Context, text string, matches
 			"🎓 請在關鍵字後輸入查詢內容\n\n例如：\n• 學號 小明\n• 學號 412345678\n\n💡 提示：也可直接輸入 8-9 位學號",
 			sender,
 		)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyYearAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyStudentNav())
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -825,10 +820,7 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 	}
 
 	msg := lineutil.NewTextMessageWithConsistentSender("🔍 查無該系所\n\n請輸入正確的系名\n例如：資工、法律、企管", sender)
-	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		lineutil.QuickReplyDeptCodeAction(),
-		lineutil.QuickReplyHelpAction(),
-	})
+	msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyStudentNav())
 	return []messaging_api.MessageInterface{msg}
 }
 
@@ -891,10 +883,7 @@ func (h *Handler) handleDepartmentCodeQuery(code string) []messaging_api.Message
 	}
 
 	msg := lineutil.NewTextMessageWithConsistentSender("🔍 查無該系代碼\n\n請輸入正確的系代碼\n例如：85（資工系）、31（企管碩/博）", sender)
-	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-		lineutil.QuickReplyDeptCodeAction(),
-		lineutil.QuickReplyHelpAction(),
-	})
+	msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyStudentNav())
 	return []messaging_api.MessageInterface{msg}
 }
 
@@ -1094,11 +1083,7 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 
 		// Regular not found message
 		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf("🔍 查無此學號\n\n學號：%s\n請確認學號格式是否正確", studentID), sender)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyStudentAction(),
-			lineutil.QuickReplyDeptCodeAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyStudentNav())
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -1222,10 +1207,7 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	messages = append(messages, infoMsg)
 
 	// Add Quick Reply to the last message (5th message)
-	lineutil.AddQuickReplyToMessages(messages,
-		lineutil.QuickReplyStudentAction(),
-		lineutil.QuickReplyDeptCodeAction(),
-	)
+	lineutil.AddQuickReplyToMessages(messages, lineutil.QuickReplyStudentNav()...)
 
 	return messages
 }

@@ -426,10 +426,7 @@ func (h *Handler) handleProgramSearch(ctx context.Context, searchTerm string) []
 			fmt.Sprintf("🔍 查無「%s」相關學程\n\n💡 建議\n• 使用「學程列表」查看所有學程\n• 嘗試其他關鍵字", searchTerm),
 			sender,
 		)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
-			lineutil.QuickReplyProgramListAction(),
-			lineutil.QuickReplyHelpAction(),
-		})
+		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyProgramNav())
 		return []messaging_api.MessageInterface{msg}
 	}
 
