@@ -307,7 +307,7 @@ func (h *Handler) buildProgramBubble(program storage.Program) *lineutil.FlexBubb
 	}
 	detailBtn := lineutil.NewFlexButton(
 		lineutil.NewURIAction("📋 學程資訊", programURL),
-	).WithStyle("secondary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm")
+	).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm")
 	footerRows = append(footerRows, detailBtn)
 
 	// Row 2: View courses button (internal) - only if courses exist

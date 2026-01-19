@@ -81,7 +81,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		log.WithField("endpoint", cfg.BetterStackEndpoint).Info("Better Stack logging enabled")
 	}
 
-	// Initialize Sentry for Better Stack error tracking
+	// Initialize Sentry error tracking
 	if cfg.HasSentry() {
 		release := cfg.SentryRelease
 		serverName := ""

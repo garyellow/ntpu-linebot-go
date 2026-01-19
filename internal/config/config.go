@@ -48,8 +48,8 @@ type Config struct {
 	BetterStackToken    string
 	BetterStackEndpoint string
 
-	// Sentry Error Tracking (Optional - via Better Stack)
-	SentryDSN              string  // Better Stack Sentry DSN (https://TOKEN@HOST/1)
+	// Sentry Error Tracking (Optional)
+	SentryDSN              string  // Sentry DSN (https://TOKEN@HOST/1)
 	SentryEnvironment      string  // Environment name (e.g., production, staging)
 	SentryRelease          string  // Release version (optional)
 	SentrySampleRate       float64 // Error sampling rate (0.0-1.0, default: 1.0)
@@ -144,7 +144,7 @@ func Load() (*Config, error) {
 		BetterStackToken:    getEnv("BETTERSTACK_SOURCE_TOKEN", ""),
 		BetterStackEndpoint: getEnv("BETTERSTACK_ENDPOINT", ""),
 
-		// Sentry Error Tracking (Optional - via Better Stack)
+		// Sentry Error Tracking (Optional)
 		SentryDSN:              getEnv("SENTRY_DSN", ""),
 		SentryEnvironment:      getEnv("SENTRY_ENVIRONMENT", ""),
 		SentryRelease:          getEnv("SENTRY_RELEASE", ""),

@@ -20,7 +20,7 @@ func TestInitialize_EmptyDSN(t *testing.T) {
 
 func TestInitialize_InvalidSampleRate(t *testing.T) {
 	err := Initialize(Config{
-		DSN:        "https://test-token@errors.betterstack.com/1",
+		DSN:        "https://test-token@sentry.example.com/1",
 		SampleRate: 1.2,
 	})
 	if err == nil {
@@ -30,7 +30,7 @@ func TestInitialize_InvalidSampleRate(t *testing.T) {
 
 func TestInitialize_InvalidTracesSampleRate(t *testing.T) {
 	err := Initialize(Config{
-		DSN:              "https://test-token@errors.betterstack.com/1",
+		DSN:              "https://test-token@sentry.example.com/1",
 		SampleRate:       1.0,
 		TracesSampleRate: 1.1,
 	})
@@ -43,7 +43,7 @@ func TestInitialize_ValidConfig(t *testing.T) {
 	// Cannot use t.Parallel() as Sentry uses global state
 
 	err := Initialize(Config{
-		DSN:              "https://test-token@errors.betterstack.com/1",
+		DSN:              "https://test-token@sentry.example.com/1",
 		Environment:      "test",
 		SampleRate:       1.0,
 		TracesSampleRate: 0.0,

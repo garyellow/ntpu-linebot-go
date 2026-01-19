@@ -356,7 +356,7 @@ func TestConfig_HasSentry(t *testing.T) {
 		dsn    string
 		expect bool
 	}{
-		{"dsn set", "https://token@errors.betterstack.com/1", true},
+		{"dsn set", "https://token@sentry.example.com/1", true},
 		{"dsn empty", "", false},
 	}
 	for _, tt := range tests {
