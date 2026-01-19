@@ -62,8 +62,8 @@ const (
 	IDNotFoundWithCutoffHint = "🔍 查無「%s」的學號資料\n\n" +
 		"📊 姓名查詢範圍\n" +
 		"• 學士班/碩博士班：101-112 學年度（完整）\n" +
-		"• 113 學年度資料不完整（僅極少數學生）\n" +
-		"• 114 學年度起無資料（數位學苑 2.0 停用）\n\n" +
+		"• 113 學年度資料不完整\n" +
+		"• 114 學年度起無資料\n\n" +
 		"💡 建議：\n" +
 		"• 確認姓名拼寫是否正確\n" +
 		"• 使用「學年」功能按年度查詢"
@@ -72,18 +72,18 @@ const (
 	// Explains why data is missing without using deprecated RIP image.
 	ID113YearEmptyMessage = "🔍 查無 113 學年度「%s」的學生資料\n\n" +
 		"⚠️ 113 學年度資料不完整\n" +
-		"僅極少數手動建立數位學苑 2.0 帳號的學生有資料。\n\n" +
 		"📅 完整資料範圍：94-112 學年度"
 
 	// IDYearTooOldMessage is the message for years before LMS has complete data (90-93).
 	// Friendly message with historical context.
 	IDYearTooOldMessage = "📚 這個年份的資料不完整喔\n\n" +
-		"數位學苑資料從民國 94 年起較完整，\n" +
+		"資料從民國 94 年起較完整，\n" +
 		"請輸入 94-112 學年度的年份。"
 
 	// IDYearBeforeNTPUMessage is the message for years before NTPU existed (< 89).
-	IDYearBeforeNTPUMessage = "🏫 學校都還沒蓋好啦\n\n" +
-		"臺北大學於民國 89 年成立。"
+	IDYearBeforeNTPUMessage = "🌐 數位學苑 2.0 還沒出生呢！\n\n" +
+		"⛏️ 你是考古學家嗎？\n" +
+		"📜 恭喜你挖到校史了\n" + "http://new.ntpu.edu.tw/about/history"
 
 	// IDYearFutureMessage is the message for future years (> current year).
 	IDYearFutureMessage = "🔮 哎呀～你是未來人嗎？"

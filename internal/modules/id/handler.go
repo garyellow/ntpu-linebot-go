@@ -456,7 +456,7 @@ func (h *Handler) handleYearPattern(ctx context.Context, text string, matches []
 	// No year provided - show guidance message
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	msg := lineutil.NewTextMessageWithConsistentSender(
-		"📅 按學年度查詢學生\n\n請輸入學年度進行查詢\n例如：學年 112、學年 110\n\n📋 查詢流程：\n1️⃣ 選擇學院群（文法商/公社電資）\n2️⃣ 選擇學院\n3️⃣ 選擇系所\n4️⃣ 查看該系所所有學生\n\n⚠️ 僅提供 94-112 學年度完整資料\n（113 年不完整、114 年起無資料 - 數位學苑 2.0 停用）",
+		"📅 按學年度查詢學生\n\n請輸入學年度進行查詢\n例如：學年 112、學年 110\n\n📋 查詢流程：\n1️⃣ 選擇學院群（文法商/公社電資）\n2️⃣ 選擇學院\n3️⃣ 選擇系所\n4️⃣ 查看該系所所有學生\n\n⚠️ 僅提供 94-112 學年度完整資料\n（113 年不完整、114 年起無資料）",
 		sender,
 	)
 	msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -944,7 +944,7 @@ func (h *Handler) handleYearQuery(yearStr string) []messaging_api.MessageInterfa
 	if year == config.IDDataYearEnd+1 {
 		// Reject 113 queries as data is too sparse for list view
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			"⚠️ 113 學年度資料不完整\n\n因僅極少數學生有資料，故不開放「學年」列表查詢。\n\n💡 若已知學號或姓名，請改用「學號」或「姓名」功能查詢。",
+			"⚠️ 113 學年度資料不完整\n\n因僅少數學生有資料，故不開放「學年」列表查詢。\n\n💡 若已知學號或姓名，請改用「學號」或「姓名」功能查詢。",
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
@@ -1080,7 +1080,6 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 			msg := lineutil.NewTextMessageWithConsistentSender(
 				fmt.Sprintf("🔍 查無學號 %s 的資料\n\n"+
 					"⚠️ 113 學年度資料不完整\n"+
-					"僅極少數手動建立數位學苑 2.0 帳號的學生有資料。\n\n"+
 					"📅 完整資料範圍：94-112 學年度",
 					studentID),
 				sender,
@@ -1214,9 +1213,9 @@ func (h *Handler) handleStudentNameQuery(ctx context.Context, name string) []mes
 	infoBuilder.WriteString("ℹ️ 系所資訊說明\n")
 	infoBuilder.WriteString("系所資訊由學號推測，可能與實際不符。\n\n")
 	infoBuilder.WriteString("📊 姓名查詢範圍\n")
-	infoBuilder.WriteString("• 學士班/碩博士班：101-112 學年度（完整）\n")
-	infoBuilder.WriteString("• 113 學年度資料不完整（僅極少數學生）\n")
-	infoBuilder.WriteString("• 114 學年度起無資料（數位學苑 2.0 停用）\n\n")
+	infoBuilder.WriteString("• 學士班/碩博士班：101-112 學年度\n")
+	infoBuilder.WriteString("• 113 學年度資料不完整\n")
+	infoBuilder.WriteString("• 114 學年度起無資料\n\n")
 	infoBuilder.WriteString("💡 若找不到學生，可使用「學年」功能按年度查詢")
 
 	infoMsg := lineutil.NewTextMessageWithConsistentSender(infoBuilder.String(), sender)
