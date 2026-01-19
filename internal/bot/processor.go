@@ -338,7 +338,8 @@ func (p *Processor) buildWelcomeFlexMessage(nluEnabled bool, sender *messaging_a
 			WithHeight("sm").
 			WithMargin("sm").FlexButton,
 		lineutil.NewFlexButton(lineutil.NewURIAction("👨‍💻 聯繫作者", "https://linktr.ee/garyellow")).
-			WithStyle("secondary").
+			WithStyle("primary").
+			WithColor(lineutil.ColorButtonExternal).
 			WithHeight("sm").
 			WithMargin("sm").FlexButton,
 	).WithSpacing("none")
