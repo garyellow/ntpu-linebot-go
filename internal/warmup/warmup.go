@@ -1,6 +1,6 @@
-// Package warmup provides background cache warming functionality.
+// Package warmup provides background data refresh functionality.
 //
-// Daily refresh (3:00 AM Taiwan time):
+// Refresh tasks (interval-based):
 //   - contact, course, program: Always refreshed (7-day TTL)
 //   - syllabus: ONLY processes most recent 2 semesters with data (auto-enabled when LLM API key configured)
 //
@@ -31,7 +31,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// Stats tracks cache warming statistics for daily refresh operations.
+// Stats tracks data refresh statistics for refresh operations.
 // All fields use atomic operations for concurrent access.
 // Note: Students are not tracked here as they are only warmed on startup (static data).
 type Stats struct {
@@ -41,14 +41,14 @@ type Stats struct {
 	Syllabi  atomic.Int64
 }
 
-// Options configures cache warming behavior
+// Options configures refresh behavior
 type Options struct {
 	Reset         bool
 	HasLLMKey     bool // Enables syllabus module for smart search
-	WarmID        bool // Enables ID module warmup (static data, startup only, not used in daily refresh)
+	WarmID        bool // Enables ID module warmup (static data, startup only, not used in recurring refresh)
 	Metrics       *metrics.Metrics
 	BM25Index     *rag.BM25Index
-	SemesterCache *course.SemesterCache // Shared cache to update after warmup
+	SemesterCache *course.SemesterCache // Shared cache to update after refresh
 }
 
 // courseProgramMap stores raw program requirements keyed by course UID.
@@ -57,7 +57,7 @@ type Options struct {
 // correct required/elective types from course list page.
 type courseProgramMap map[string][]storage.RawProgramReq
 
-// Run executes daily cache refresh: contact, course, program (always), syllabus (if HasLLMKey).
+// Run executes data refresh: contact, course, program (always), syllabus (if HasLLMKey).
 func Run(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, opts Options) (*Stats, error) {
 	stats := &Stats{}
 	startTime := time.Now()
@@ -156,40 +156,23 @@ func Run(ctx context.Context, db *storage.DB, client *scraper.Client, log *logge
 		WithField("courses", stats.Courses.Load()).
 		WithField("programs", stats.Programs.Load()).
 		WithField("syllabi", stats.Syllabi.Load()).
-		Info("Cache warming completed")
+		Info("Data refresh completed")
 
 	return stats, nil
 }
 
-// RunInBackground executes cache warming asynchronously (non-blocking).
-//
-//nolint:contextcheck // Intentionally using context.Background() for independent background operation
-func RunInBackground(_ context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, opts Options) {
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log.WithField("panic", r).Error("Panic in background cache warming")
-			}
-		}()
-
-		log.WithField("has_llm_key", opts.HasLLMKey).
-			Info("Starting background cache warming")
-
-		stats, err := Run(context.Background(), db, client, log, opts)
-		if err != nil {
-			log.WithError(err).Warn("Background cache warming finished with errors")
-		} else {
-			log.WithField("contacts", stats.Contacts.Load()).
-				WithField("courses", stats.Courses.Load()).
-				WithField("syllabi", stats.Syllabi.Load()).
-				Info("Background cache warming completed")
-		}
-	}()
-}
-
 // resetCache deletes all cached data
 func resetCache(ctx context.Context, db *storage.DB) error {
-	tables := []string{"students", "contacts", "courses"}
+	tables := []string{
+		"students",
+		"contacts",
+		"courses",
+		"historical_courses",
+		"programs",
+		"course_programs",
+		"syllabi",
+		"stickers",
+	}
 	for _, table := range tables {
 		query := fmt.Sprintf("DELETE FROM %s", table)
 		if _, err := db.ExecContext(ctx, query); err != nil {
@@ -199,6 +182,12 @@ func resetCache(ctx context.Context, db *storage.DB) error {
 	// Run VACUUM to reclaim space
 	if _, err := db.ExecContext(ctx, "VACUUM"); err != nil {
 		return fmt.Errorf("failed to vacuum: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+		return fmt.Errorf("failed to checkpoint wal after vacuum: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, "PRAGMA optimize"); err != nil {
+		return fmt.Errorf("failed to optimize: %w", err)
 	}
 	return nil
 }
@@ -245,7 +234,7 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 	startTime := time.Now()
 	defer func() {
 		if m != nil {
-			m.RecordJob("warmup", "id", time.Since(startTime).Seconds())
+			m.RecordJob("refresh", "id", time.Since(startTime).Seconds())
 		}
 	}()
 
@@ -346,7 +335,7 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 	startTime := time.Now()
 	defer func() {
 		if m != nil {
-			m.RecordJob("warmup", "contact", time.Since(startTime).Seconds())
+			m.RecordJob("refresh", "contact", time.Since(startTime).Seconds())
 		}
 	}()
 
@@ -406,7 +395,7 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 	startTime := time.Now()
 	defer func() {
 		if m != nil {
-			m.RecordJob("warmup", "course", time.Since(startTime).Seconds())
+			m.RecordJob("refresh", "course", time.Since(startTime).Seconds())
 		}
 	}()
 
@@ -595,7 +584,7 @@ func warmupSyllabusModule(ctx context.Context, db *storage.DB, client *scraper.C
 	startTime := time.Now()
 	defer func() {
 		if m != nil {
-			m.RecordJob("warmup", "syllabus", time.Since(startTime).Seconds())
+			m.RecordJob("refresh", "syllabus", time.Since(startTime).Seconds())
 		}
 	}()
 
@@ -634,12 +623,14 @@ func warmupSyllabusModule(ctx context.Context, db *storage.DB, client *scraper.C
 	// Create syllabus scraper
 	syllabusScraper := syllabus.NewScraper(client)
 
-	var updatedCount, skippedCount, errorCount, processedCount int
+	var updatedCount, skippedCount, errorCount, processedCount, touchedCount int
 	const batchLoadSize = 100 // Load 100 courses from DB at a time
 	const saveBatchSize = 50  // Save to DB every 50 syllabi
+	const touchBatchSize = 100
 
 	// Buffer for batched saves
 	var newSyllabi []*storage.Syllabus
+	var touchedSyllabi []string
 
 processLoop:
 	for _, sem := range semesters {
@@ -701,8 +692,9 @@ processLoop:
 					continue
 				}
 
-				// Compute content hash
-				contentForHash := result.Fields.Objectives + "\n" + result.Fields.Outline + "\n" + result.Fields.Schedule
+				// Compute content hash (include title/teachers to detect metadata changes)
+				teachersForHash := strings.Join(course.Teachers, ",")
+				contentForHash := course.Title + "\n" + teachersForHash + "\n" + result.Fields.Objectives + "\n" + result.Fields.Outline + "\n" + result.Fields.Schedule
 				contentHash := syllabus.ComputeContentHash(contentForHash)
 
 				// Check if content has changed
@@ -712,7 +704,18 @@ processLoop:
 				}
 
 				if existingHash == contentHash {
+					touchedSyllabi = append(touchedSyllabi, course.UID)
+					touchedCount++
 					skippedCount++
+
+					if len(touchedSyllabi) >= touchBatchSize {
+						if err := db.TouchSyllabiBatch(ctx, touchedSyllabi); err != nil {
+							log.WithError(err).Warn("Failed to touch unchanged syllabi")
+							// Do not increase errorCount for touch failures to avoid masking scraping errors
+						}
+						touchedSyllabi = touchedSyllabi[:0]
+					}
+
 					continue
 				}
 
@@ -769,6 +772,13 @@ processLoop:
 		}
 	}
 
+	// Touch remaining unchanged syllabi
+	if len(touchedSyllabi) > 0 {
+		if err := db.TouchSyllabiBatch(ctx, touchedSyllabi); err != nil {
+			log.WithError(err).Warn("Failed to touch remaining unchanged syllabi")
+		}
+	}
+
 	// Rebuild BM25 index from database (includes all syllabi with full content)
 	if bm25Index != nil {
 		if err := bm25Index.Initialize(ctx, db); err != nil {
@@ -779,6 +789,7 @@ processLoop:
 	stats.Syllabi.Add(int64(updatedCount))
 
 	log.WithField("new", updatedCount).
+		WithField("touched", touchedCount).
 		WithField("skipped", skippedCount).
 		WithField("errors", errorCount).
 		WithField("total_scanned", processedCount).

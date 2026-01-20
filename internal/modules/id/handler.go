@@ -14,6 +14,7 @@ import (
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	"github.com/garyellow/ntpu-linebot-go/internal/config"
+	"github.com/garyellow/ntpu-linebot-go/internal/delta"
 	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
@@ -37,6 +38,7 @@ type Handler struct {
 	metrics        *metrics.Metrics
 	logger         *logger.Logger
 	stickerManager *sticker.Manager
+	deltaRecorder  delta.Recorder
 
 	// matchers contains all pattern-handler pairs sorted by priority.
 	// Shared by CanHandle and HandleMessage for consistent routing.
@@ -130,6 +132,7 @@ func NewHandler(
 	metrics *metrics.Metrics,
 	logger *logger.Logger,
 	stickerManager *sticker.Manager,
+	deltaRecorder delta.Recorder,
 ) *Handler {
 	h := &Handler{
 		db:             db,
@@ -137,6 +140,7 @@ func NewHandler(
 		metrics:        metrics,
 		logger:         logger,
 		stickerManager: stickerManager,
+		deltaRecorder:  deltaRecorder,
 	}
 
 	// Initialize Pattern-Action Table
@@ -1109,6 +1113,12 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 		return []messaging_api.MessageInterface{msg}
 	}
 
+	if h.deltaRecorder != nil {
+		if err := h.deltaRecorder.RecordStudents(ctx, []*storage.Student{student}); err != nil {
+			log.WithError(err).WarnContext(ctx, "Failed to record student delta log")
+		}
+	}
+
 	// Save to cache
 	if err := h.db.SaveStudent(ctx, student); err != nil {
 		log.WithError(err).WarnContext(ctx, "Failed to save student to cache")
@@ -1580,6 +1590,11 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 		}
 
 		if len(scrapedStudents) > 0 {
+			if h.deltaRecorder != nil {
+				if err := h.deltaRecorder.RecordStudents(ctx, scrapedStudents); err != nil {
+					log.WithError(err).WarnContext(ctx, "Failed to record student delta log")
+				}
+			}
 			h.metrics.RecordScraperRequest(ModuleName, "success", time.Since(startTime).Seconds())
 			// Save to cache and convert to value slice
 			for _, s := range scrapedStudents {

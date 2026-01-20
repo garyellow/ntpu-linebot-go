@@ -174,25 +174,53 @@
 
 - Go 1.25+（Go 直接執行）
 - Docker + Docker Compose（容器部署）
-- LLM API Key（可選，啟用 AI 功能）：
+- LLM API Key（可選，需 `NTPU_LLM_ENABLED=true` 才啟用 AI 功能）：
   - [Gemini](https://aistudio.google.com/apikey)
   - [Groq](https://console.groq.com/keys)
   - [Cerebras](https://cloud.cerebras.ai/)
+- 所有環境變數統一使用 `NTPU_` 前綴；選用功能需明確設定 `NTPU_*_ENABLED=true`
 
 ### 日誌整合（Better Stack，可選）
 
-若要集中多點部署的日誌，請在 `.env` 設定 `BETTERSTACK_SOURCE_TOKEN`，並可選擇設定 `BETTERSTACK_ENDPOINT`。
-留空字串即不啟用 Better Stack。完整說明請見 [.env.example](.env.example)。
+若要集中多點部署的日誌，請在 `.env` 設定 `NTPU_BETTERSTACK_ENABLED=true` 與 `NTPU_BETTERSTACK_TOKEN`，並可選擇設定 `NTPU_BETTERSTACK_ENDPOINT`。
+未啟用時保持 `NTPU_BETTERSTACK_ENABLED=false`。完整說明請見 [.env.example](.env.example)。
 
 ### 錯誤追蹤（Sentry SDK，可選）
 
 本專案使用 Sentry SDK 進行錯誤追蹤。
-請在 `.env` 設定 `SENTRY_DSN`：
+請在 `.env` 設定 `NTPU_SENTRY_ENABLED=true` 與 `NTPU_SENTRY_DSN`：
 
 - DSN 格式：`https://$APPLICATION_TOKEN@$INGESTING_HOST/1`
-- 可選設定：`SENTRY_ENVIRONMENT`、`SENTRY_RELEASE`、`SENTRY_SAMPLE_RATE`、`SENTRY_TRACES_SAMPLE_RATE`
+- 可選設定：`NTPU_SENTRY_ENVIRONMENT`、`NTPU_SENTRY_RELEASE`、`NTPU_SENTRY_SAMPLE_RATE`、`NTPU_SENTRY_TRACES_SAMPLE_RATE`
 
 設定後服務啟動會自動上報錯誤與 panic。完整範例請見 [.env.example](.env.example)。
+
+### R2 快照同步（可選，建議多節點）
+
+R2 快照用於 **多節點部署** 的資料同步與快速啟動：
+
+- 啟動時自動下載最新 SQLite 快照
+- 啟動時會先嘗試載入快照；**若成功載入快照則略過首次資料刷新**（無快照由 leader 執行）
+- 啟動也會進行 leader lock 判斷，非 leader 會等待快照更新
+- cache miss 抓取結果會以 append-only delta log 保存在 R2，leader 合併後再上傳快照
+- 週期性資料刷新/清理由單一 leader 執行，完成後上傳快照（依 `NTPU_REFRESH_INTERVAL` / `NTPU_CLEANUP_INTERVAL`）
+- 清理任務會刪除 contacts/courses/historical_courses/programs/course_programs/syllabi 的過期資料並 VACUUM
+- SQLite 使用 WAL 模式時，`VACUUM` 後會執行 WAL checkpoint（TRUNCATE）與 optimize，確保磁碟空間回收
+- 其他節點透過輪詢偵測快照更新並熱切換
+- 快照以 zstd 壓縮（.zst），下載後採用暫存檔原子替換
+- Hot-swap 使用連線切換 + 短暫關閉延遲，避免中途查詢失敗
+- 每個 R2 請求有固定 timeout，避免啟動或輪詢被卡住
+- **不建議** 多容器共用同一個 SQLite 檔案（請用 R2 快照同步）
+
+啟用方式：在 `.env` 設定 `NTPU_R2_ENABLED=true`，並提供 `NTPU_R2_ACCOUNT_ID`、`NTPU_R2_ACCESS_KEY_ID`、`NTPU_R2_SECRET_ACCESS_KEY`、`NTPU_R2_BUCKET_NAME`。其餘參數可使用預設值。完整範例請見 [.env.example](.env.example)。
+
+可調參數（選用）：
+
+- `NTPU_R2_POLL_INTERVAL`：輪詢快照更新的間隔
+- `NTPU_R2_LOCK_TTL`：分散式鎖 TTL（leader election）
+- `NTPU_R2_DELTA_PREFIX`：cache miss delta log 前綴
+- `NTPU_REFRESH_INTERVAL`：資料刷新任務間隔
+- `NTPU_CLEANUP_INTERVAL`：資料清理任務間隔
 
 ### 取得 LINE Bot 憑證
 
@@ -220,8 +248,8 @@ task dev
 ```bash
 # Distroless（推薦）
 docker run -d -p 10000:10000 \
-  -e LINE_CHANNEL_ACCESS_TOKEN=xxx \
-  -e LINE_CHANNEL_SECRET=xxx \
+  -e NTPU_LINE_CHANNEL_ACCESS_TOKEN=xxx \
+  -e NTPU_LINE_CHANNEL_SECRET=xxx \
   -v ./data:/data \
   garyellow/ntpu-linebot-go:latest
 
@@ -251,7 +279,7 @@ docker compose up -d
 ### Prometheus Metrics
 
 `/metrics` 提供 Prometheus 指標，可由外部 Prometheus 直接抓取。
-如需保護端點，設定 `METRICS_USERNAME` 與 `METRICS_PASSWORD`。
+如需保護端點，設定 `NTPU_METRICS_AUTH_ENABLED=true`、`NTPU_METRICS_USERNAME` 與 `NTPU_METRICS_PASSWORD`。
 詳細指標與範例請見 [docs/API.md](docs/API.md)。
 
 ### 開發指令

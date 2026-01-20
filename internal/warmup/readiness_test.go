@@ -22,8 +22,8 @@ func TestReadinessStateInitial(t *testing.T) {
 	if status.Ready {
 		t.Error("Expected status.Ready to be false initially")
 	}
-	if status.Reason != "warmup in progress" {
-		t.Errorf("Expected reason 'warmup in progress', got %q", status.Reason)
+	if status.Reason != "data refresh in progress" {
+		t.Errorf("Expected reason 'data refresh in progress', got %q", status.Reason)
 	}
 }
 
@@ -77,8 +77,8 @@ func TestReadinessStateTimeout(t *testing.T) {
 	if !status.Ready {
 		t.Error("Expected status.Ready to be true after timeout")
 	}
-	if status.Reason != "timeout reached (warmup may still be running)" {
-		t.Errorf("Expected timeout reason, got %q", status.Reason)
+	if status.Reason != "timeout reached (refresh may still be running)" {
+		t.Errorf("Expected reason 'timeout reached (refresh may still be running)', got %q", status.Reason)
 	}
 }
 

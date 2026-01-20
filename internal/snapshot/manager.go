@@ -1,0 +1,416 @@
+// Package snapshot provides SQLite snapshot management with R2 storage.
+// It handles snapshot upload/download, background polling for updates,
+// and coordination with the distributed lock for leader election.
+package snapshot
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+
+	"github.com/garyellow/ntpu-linebot-go/internal/r2client"
+	"github.com/garyellow/ntpu-linebot-go/internal/storage"
+)
+
+// Config holds snapshot manager configuration.
+type Config struct {
+	SnapshotKey  string        // R2 object key for snapshot (e.g., "snapshots/cache.db.zst")
+	LockKey      string        // R2 object key for distributed lock
+	LockTTL      time.Duration // TTL for the distributed lock
+	PollInterval time.Duration // How often to check for new snapshots
+	TempDir      string        // Directory for temporary files
+	// RequestTimeout is the timeout for a single R2 request.
+	// Set to 0 to disable per-request timeouts.
+	RequestTimeout time.Duration
+}
+
+// Manager handles SQLite snapshot synchronization with R2.
+type Manager struct {
+	client      *r2client.Client
+	config      Config
+	currentETag string
+	mu          sync.RWMutex
+	pollCancel  context.CancelFunc
+	pollDone    chan struct{}
+	leaderMu    sync.Mutex
+	leaderLock  *r2client.DistributedLock
+	renewCancel context.CancelFunc
+	renewDone   chan struct{}
+}
+
+// New creates a new snapshot manager.
+func New(client *r2client.Client, cfg Config) *Manager {
+	if cfg.TempDir == "" {
+		cfg.TempDir = os.TempDir()
+	}
+	return &Manager{
+		client:   client,
+		config:   cfg,
+		pollDone: make(chan struct{}),
+	}
+}
+
+// DownloadSnapshot downloads and decompresses the latest snapshot from R2.
+// Returns the path to the decompressed database and its ETag.
+// Returns ErrNotFound if no snapshot exists.
+func (m *Manager) DownloadSnapshot(ctx context.Context, destDir string) (string, string, error) {
+	if destDir == "" {
+		destDir = m.config.TempDir
+	}
+	if err := os.MkdirAll(destDir, 0o750); err != nil {
+		return "", "", fmt.Errorf("create snapshot dir: %w", err)
+	}
+
+	// Download compressed snapshot
+	downloadCtx, cancel := m.withTimeout(ctx)
+	body, etag, err := m.client.Download(downloadCtx, m.config.SnapshotKey)
+	cancel()
+	if err != nil {
+		if errors.Is(err, r2client.ErrNotFound) {
+			return "", "", ErrNotFound
+		}
+		return "", "", fmt.Errorf("download snapshot: %w", err)
+	}
+	defer func() {
+		_ = body.Close()
+	}()
+
+	// Create temp file for compressed data
+	compressedFile, err := os.CreateTemp(destDir, "snapshot_*.db.zst")
+	if err != nil {
+		return "", "", fmt.Errorf("create temp file: %w", err)
+	}
+	compressedPath := compressedFile.Name()
+	defer func() {
+		_ = os.Remove(compressedPath)
+	}()
+
+	// Stream download to temp file
+	if _, err := io.Copy(compressedFile, body); err != nil {
+		_ = compressedFile.Close()
+		_ = os.Remove(compressedPath)
+		return "", "", fmt.Errorf("write compressed data: %w", err)
+	}
+	if err := compressedFile.Close(); err != nil {
+		return "", "", fmt.Errorf("close compressed file: %w", err)
+	}
+
+	// Decompress to a temporary destination first
+	dbTempFile, err := os.CreateTemp(destDir, "cache_*.db")
+	if err != nil {
+		return "", "", fmt.Errorf("create temp db: %w", err)
+	}
+	dbTempPath := dbTempFile.Name()
+	_ = dbTempFile.Close()
+	defer func() {
+		_ = os.Remove(dbTempPath)
+	}()
+
+	compressedReader, err := os.Open(compressedPath)
+	if err != nil {
+		return "", "", fmt.Errorf("open compressed file: %w", err)
+	}
+	defer func() {
+		_ = compressedReader.Close()
+	}()
+
+	if err := r2client.DecompressStream(compressedReader, dbTempPath); err != nil {
+		return "", "", fmt.Errorf("decompress snapshot: %w", err)
+	}
+
+	// Atomically replace the target database
+	dbPath := filepath.Join(destDir, "cache.db")
+	if err := replaceFile(dbTempPath, dbPath); err != nil {
+		return "", "", fmt.Errorf("replace snapshot: %w", err)
+	}
+
+	m.mu.Lock()
+	m.currentETag = etag
+	m.mu.Unlock()
+
+	return dbPath, etag, nil
+}
+
+// UploadSnapshot compresses and uploads the database as a new snapshot to R2.
+// Returns the ETag of the uploaded snapshot.
+func (m *Manager) UploadSnapshot(ctx context.Context, db *storage.DB) (string, error) {
+	if err := os.MkdirAll(m.config.TempDir, 0o750); err != nil {
+		return "", fmt.Errorf("create snapshot temp dir: %w", err)
+	}
+
+	// Create a consistent snapshot file first
+	snapshotPath := filepath.Join(m.config.TempDir, fmt.Sprintf("snapshot_%d.db", time.Now().UnixNano()))
+	if err := db.CreateSnapshot(ctx, snapshotPath); err != nil {
+		return "", fmt.Errorf("create snapshot: %w", err)
+	}
+	defer func() {
+		_ = os.Remove(snapshotPath)
+	}()
+
+	// Create temp file for compressed data
+	compressedPath := snapshotPath + ".zst"
+
+	// Compress the snapshot
+	if err := r2client.CompressFile(snapshotPath, compressedPath); err != nil {
+		return "", fmt.Errorf("compress database: %w", err)
+	}
+	defer func() {
+		_ = os.Remove(compressedPath)
+	}()
+
+	// Upload compressed file
+	compressedFile, err := os.Open(compressedPath)
+	if err != nil {
+		return "", fmt.Errorf("open compressed file: %w", err)
+	}
+	defer func() {
+		_ = compressedFile.Close()
+	}()
+
+	uploadCtx, cancel := m.withTimeout(ctx)
+	etag, err := m.client.Upload(uploadCtx, m.config.SnapshotKey, compressedFile, "application/zstd")
+	cancel()
+	if err != nil {
+		return "", fmt.Errorf("upload snapshot: %w", err)
+	}
+
+	m.mu.Lock()
+	m.currentETag = etag
+	m.mu.Unlock()
+
+	return etag, nil
+}
+
+// AcquireLeaderLock attempts to acquire the distributed leader lock.
+// Returns true if this instance became the leader.
+func (m *Manager) AcquireLeaderLock(ctx context.Context) (bool, error) {
+	lock := r2client.NewDistributedLock(m.client, m.config.LockKey, m.config.LockTTL)
+	lockCtx, cancel := m.withTimeout(ctx)
+	acquired, err := lock.Acquire(lockCtx)
+	cancel()
+	if err != nil || !acquired {
+		return acquired, err
+	}
+
+	m.leaderMu.Lock()
+	if m.renewCancel != nil {
+		m.renewCancel()
+		if m.renewDone != nil {
+			<-m.renewDone
+		}
+	}
+	m.leaderLock = lock
+	renewCtx, renewCancel := context.WithCancel(ctx)
+	m.renewCancel = renewCancel
+	m.renewDone = make(chan struct{})
+	go m.renewLoop(renewCtx, lock, m.renewDone)
+	m.leaderMu.Unlock()
+
+	return true, nil
+}
+
+// ReleaseLeaderLock releases the distributed leader lock.
+func (m *Manager) ReleaseLeaderLock(ctx context.Context) error {
+	m.leaderMu.Lock()
+	lock := m.leaderLock
+	cancel := m.renewCancel
+	done := m.renewDone
+	m.leaderLock = nil
+	m.renewCancel = nil
+	m.renewDone = nil
+	m.leaderMu.Unlock()
+
+	if cancel != nil {
+		cancel()
+		if done != nil {
+			<-done
+		}
+	}
+
+	if lock == nil {
+		return nil
+	}
+	releaseCtx, cancel := m.withTimeout(ctx)
+	defer cancel()
+	return lock.Release(releaseCtx)
+}
+
+// StartPolling starts background polling for new snapshots.
+// When a new snapshot is detected (via ETag change), it downloads and
+// hot-swaps the database in the provided HotSwapDB.
+// onHotSwap is called after a successful hot-swap with the new ETag.
+func (m *Manager) StartPolling(ctx context.Context, hotSwapDB *storage.HotSwapDB, destDir string, onHotSwap func(string)) {
+	pollCtx, cancel := context.WithCancel(ctx)
+	m.pollCancel = cancel
+
+	go func() {
+		defer close(m.pollDone)
+
+		ticker := time.NewTicker(m.config.PollInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-pollCtx.Done():
+				slog.Info("Snapshot polling stopped")
+				return
+			case <-ticker.C:
+				m.pollOnce(pollCtx, hotSwapDB, destDir, onHotSwap)
+			}
+		}
+	}()
+
+	slog.Info("Snapshot polling started",
+		"interval", m.config.PollInterval,
+		"snapshot_key", m.config.SnapshotKey)
+}
+
+// pollOnce checks for a new snapshot and performs hot-swap if found.
+func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, destDir string, onHotSwap func(string)) {
+	// Check current ETag
+	m.mu.RLock()
+	currentETag := m.currentETag
+	m.mu.RUnlock()
+
+	// Get remote ETag
+	headCtx, cancel := m.withTimeout(ctx)
+	remoteETag, err := m.client.HeadObject(headCtx, m.config.SnapshotKey)
+	cancel()
+	if err != nil {
+		if !errors.Is(err, r2client.ErrNotFound) {
+			slog.Warn("Snapshot poll: head object failed", "error", err)
+		}
+		return
+	}
+
+	// No change
+	if remoteETag == currentETag {
+		return
+	}
+
+	slog.Info("New snapshot detected, initiating hot-swap",
+		"old_etag", currentETag,
+		"new_etag", remoteETag)
+
+	// Download new snapshot to a unique path to avoid conflicts
+	newDBPath := filepath.Join(destDir, fmt.Sprintf("cache_%d.db", time.Now().UnixNano()))
+
+	// Download and decompress with ETag consistency
+	downloadCtx, cancel := m.withTimeout(ctx)
+	body, downloadedETag, err := m.client.DownloadIfMatch(downloadCtx, m.config.SnapshotKey, remoteETag)
+	cancel()
+	if err != nil {
+		if errors.Is(err, r2client.ErrPreconditionFailed) {
+			slog.Warn("Snapshot poll: ETag changed during download, retrying later",
+				"expected_etag", remoteETag)
+			return
+		}
+		slog.Error("Snapshot poll: download failed", "error", err)
+		return
+	}
+	defer func() {
+		_ = body.Close()
+	}()
+
+	// Stream decompress directly
+	if err := r2client.DecompressStream(body, newDBPath); err != nil {
+		slog.Error("Snapshot poll: decompress failed", "error", err)
+		_ = os.Remove(newDBPath)
+		return
+	}
+
+	// Hot-swap the database
+	if err := hotSwapDB.Swap(ctx, newDBPath); err != nil {
+		slog.Error("Snapshot poll: hot-swap failed", "error", err)
+		_ = os.Remove(newDBPath)
+		_ = os.Remove(newDBPath + "-wal")
+		_ = os.Remove(newDBPath + "-shm")
+		return
+	}
+
+	m.mu.Lock()
+	if downloadedETag != "" {
+		m.currentETag = downloadedETag
+	} else {
+		m.currentETag = remoteETag
+	}
+	m.mu.Unlock()
+
+	if onHotSwap != nil {
+		onHotSwap(remoteETag)
+	}
+
+	slog.Info("Hot-swap completed successfully", "new_etag", remoteETag)
+}
+
+// StopPolling stops the background polling goroutine.
+func (m *Manager) StopPolling() {
+	if m.pollCancel != nil {
+		m.pollCancel()
+		<-m.pollDone
+	}
+}
+
+func (m *Manager) renewLoop(ctx context.Context, lock *r2client.DistributedLock, done chan struct{}) {
+	defer close(done)
+
+	interval := m.config.LockTTL / 3
+	if interval < 10*time.Second {
+		interval = 10 * time.Second
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			renewCtx, cancel := m.withTimeout(ctx)
+			renewed, err := lock.Renew(renewCtx)
+			cancel()
+			if err != nil {
+				slog.Warn("Leader lock renew failed", "error", err)
+				return
+			}
+			if !renewed {
+				slog.Warn("Leader lock lost during renew")
+				return
+			}
+		}
+	}
+}
+
+// CurrentETag returns the ETag of the currently loaded snapshot.
+func (m *Manager) CurrentETag() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.currentETag
+}
+
+// ErrNotFound indicates no snapshot exists in R2.
+var ErrNotFound = errors.New("snapshot: not found")
+
+func (m *Manager) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	if m.config.RequestTimeout <= 0 {
+		return context.WithCancel(ctx)
+	}
+	return context.WithTimeout(ctx, m.config.RequestTimeout)
+}
+
+func replaceFile(src, dst string) error {
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	}
+	if err := os.Remove(dst); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return os.Rename(src, dst)
+}

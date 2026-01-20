@@ -527,7 +527,7 @@ func (h *Handler) formatProgramCoursesAsTextList(programName string, requiredCou
 	}
 
 	// Split into multiple messages if needed
-	content := sb.String()
+	content := strings.TrimSuffix(sb.String(), "\n")
 	if utf8.RuneCountInString(content) <= lineutil.TextListSafeBuffer {
 		listMsg := lineutil.NewTextMessageWithConsistentSender(content, sender)
 		messages = append(messages, listMsg)

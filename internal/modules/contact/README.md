@@ -85,11 +85,11 @@ type Contact struct {
 }
 ```
 
-### 快取策略
+### 資料時效策略
 
-> 完整的快取策略說明請參考 [架構說明文件](/.github/copilot-instructions.md#data-layer-cache-first-strategy)
+> 完整的資料時效策略說明請參考 [架構說明文件](/.github/copilot-instructions.md#data-layer-cache-first-strategy)
 
-- **TTL**：7 天（每日 3:00 AM 自動更新）
+- **TTL**：7 天（依 `NTPU_REFRESH_INTERVAL` 自動更新）
 - **來源**：NTPU 通訊錄系統
 
 ## Flex Message 設計
@@ -224,7 +224,7 @@ emergencyKeywords = []string{
 
 ### 資料來源
 - **通訊錄系統**：可能不完整或過時
-- **更新頻率**：每日一次（3:00 AM）
+- **更新頻率**：依 `NTPU_REFRESH_INTERVAL`
 - **資料品質**：取決於學校維護狀況
 
 ### 搜尋限制

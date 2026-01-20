@@ -40,7 +40,7 @@ func setupTestHandler(t *testing.T) *Handler {
 	log := logger.New("info")
 	stickerManager := sticker.NewManager(db, scraperClient, log)
 
-	return NewHandler(db, scraperClient, m, log, stickerManager)
+	return NewHandler(db, scraperClient, m, log, stickerManager, nil)
 }
 
 func TestCanHandle(t *testing.T) {

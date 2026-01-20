@@ -33,7 +33,7 @@ type Handler interface {
 
 ### NLU DispatchIntent（可選功能）
 
-各模組額外實作 `DispatchIntent` 方法支援 NLU 意圖分發（需設定 `GEMINI_API_KEY` 或 `GROQ_API_KEY` 或 `CEREBRAS_API_KEY`）：
+各模組額外實作 `DispatchIntent` 方法支援 NLU 意圖分發（需設定 `NTPU_LLM_ENABLED=true`，且提供 `NTPU_GEMINI_API_KEY` 或 `NTPU_GROQ_API_KEY` 或 `NTPU_CEREBRAS_API_KEY`）：
 
 ```go
 // DispatchIntent 處理 NLU 解析後的意圖
@@ -44,7 +44,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 
 **為何不在 `Handler` 介面中定義？**
 
-NLU 是**可選功能**（需要 `GEMINI_API_KEY` 或 `GROQ_API_KEY` 或 `CEREBRAS_API_KEY`），不是所有部署環境都啟用。遵循 Go 的介面設計原則：
+NLU 是**可選功能**（需要 `NTPU_LLM_ENABLED=true` 且提供任一 LLM API Key），不是所有部署環境都啟用。遵循 Go 的介面設計原則：
 
 1. **介面最小化**：`Handler` 介面只包含必要方法（`CanHandle`, `HandleMessage`, `HandlePostback`）
 2. **可選性檢測**：Webhook 使用類型斷言 `.(interface{ DispatchIntent(...) })` 動態檢測支援

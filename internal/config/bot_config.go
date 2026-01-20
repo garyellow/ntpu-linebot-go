@@ -6,7 +6,7 @@ import "fmt"
 // LINE API constraints (https://developers.line.biz/en/docs/messaging-api/)
 const (
 	// LINEMaxTextMessageLength is the maximum length for LINE text messages (characters, not bytes)
-	LINEMaxTextMessageLength = 20000
+	LINEMaxTextMessageLength = 5000
 	// LINEMaxPostbackDataLength is the maximum length for postback data (bytes)
 	LINEMaxPostbackDataLength = 300
 	// LINEMaxMessagesPerReply is the maximum messages per reply (LINE API limit)

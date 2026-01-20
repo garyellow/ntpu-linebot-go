@@ -43,7 +43,7 @@ func setupTestHandler(t *testing.T) *Handler {
 	log := logger.New("info")
 	stickerMgr := sticker.NewManager(db, scraperClient, log)
 
-	return NewHandler(db, scraperClient, m, log, stickerMgr, nil, nil, nil, nil)
+	return NewHandler(db, scraperClient, m, log, stickerMgr, nil, nil, nil, nil, nil)
 }
 
 // setupTestHandlerWithSemesters creates a handler with a pre-configured semester cache.
@@ -82,7 +82,7 @@ func setupTestHandlerWithSemesters(t *testing.T, semesters []struct{ year, term 
 	log := logger.New("info")
 	stickerMgr := sticker.NewManager(db, scraperClient, log)
 
-	return NewHandler(db, scraperClient, m, log, stickerMgr, nil, nil, nil, semesterCache)
+	return NewHandler(db, scraperClient, m, log, stickerMgr, nil, nil, nil, nil, semesterCache)
 }
 
 func TestCanHandle(t *testing.T) {

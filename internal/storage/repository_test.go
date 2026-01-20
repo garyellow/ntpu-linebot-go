@@ -380,7 +380,7 @@ func TestStudentDataNeverExpires(t *testing.T) {
 	// Insert "old" student with cached_at 30 days ago (should still be accessible since students never expire)
 	query := `INSERT INTO students (id, name, department, year, cached_at) VALUES (?, ?, ?, ?, ?)`
 	oldTime := time.Now().Add(-30 * 24 * time.Hour).Unix()
-	_, err := db.writer.ExecContext(ctx, query, "41247002", "舊生", "電機系", 112, oldTime)
+	_, err := db.Writer().ExecContext(ctx, query, "41247002", "舊生", "電機系", 112, oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
@@ -429,7 +429,7 @@ func TestDeleteExpiredContacts(t *testing.T) {
 	}
 	query := `INSERT INTO contacts (uid, type, name, organization, cached_at) VALUES (?, ?, ?, ?, ?)`
 	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.writer.ExecContext(ctx, query, old.UID, old.Type, old.Name, old.Organization, oldTime)
+	_, err := db.Writer().ExecContext(ctx, query, old.UID, old.Type, old.Name, old.Organization, oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
@@ -484,7 +484,7 @@ func TestDeleteExpiredCourses(t *testing.T) {
 	// Insert old course (manually set cached_at to 8 days ago)
 	query := `INSERT INTO courses (uid, year, term, no, title, teachers, teacher_urls, times, locations, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.writer.ExecContext(ctx, query, "1121A0002", 112, 1, "A0002", "舊課程", `["李老師"]`, `[]`, `["二3-4"]`, `[]`, oldTime)
+	_, err := db.Writer().ExecContext(ctx, query, "1121A0002", 112, 1, "A0002", "舊課程", `["李老師"]`, `[]`, `["二3-4"]`, `[]`, oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
@@ -534,7 +534,7 @@ func TestStickerDataNeverExpires(t *testing.T) {
 	// Insert old sticker (manually set cached_at to 30 days ago)
 	query := `INSERT INTO stickers (url, source, cached_at) VALUES (?, ?, ?)`
 	oldTime := time.Now().Add(-30 * 24 * time.Hour).Unix()
-	_, err := db.writer.ExecContext(ctx, query, "https://example.com/old.png", "spy_family", oldTime)
+	_, err := db.Writer().ExecContext(ctx, query, "https://example.com/old.png", "spy_family", oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
@@ -588,7 +588,7 @@ func TestGetCoursesByRecentSemesters(t *testing.T) {
 	// Insert expired course (manually set cached_at to 8 days ago)
 	query := `INSERT INTO courses (uid, year, term, no, title, teachers, teacher_urls, times, locations, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.writer.ExecContext(ctx, query, "1121U9999", 112, 1, "U9999", "舊課程", `["舊教授"]`, `[]`, `[]`, `[]`, oldTime)
+	_, err := db.Writer().ExecContext(ctx, query, "1121U9999", 112, 1, "U9999", "舊課程", `["舊教授"]`, `[]`, `[]`, `[]`, oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
@@ -998,7 +998,7 @@ func TestDeleteExpiredHistoricalCourses(t *testing.T) {
 	// Insert expired course (manually set cached_at to 8 days ago)
 	query := `INSERT INTO historical_courses (uid, year, term, no, title, teachers, teacher_urls, times, locations, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.writer.ExecContext(ctx, query, "1001U0002", 100, 1, "U0002", "舊課程", `["舊教授"]`, `[]`, `[]`, `[]`, oldTime)
+	_, err := db.Writer().ExecContext(ctx, query, "1001U0002", 100, 1, "U0002", "舊課程", `["舊教授"]`, `[]`, `[]`, `[]`, oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
@@ -1198,7 +1198,7 @@ func TestHistoricalCoursesTTLFiltering(t *testing.T) {
 	// Insert expired course (manually set cached_at to 8 days ago)
 	query := `INSERT INTO historical_courses (uid, year, term, no, title, teachers, teacher_urls, times, locations, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.writer.ExecContext(ctx, query, "1001U0002", 100, 1, "U0002", "舊課程", `["舊教授"]`, `[]`, `[]`, `[]`, oldTime)
+	_, err := db.Writer().ExecContext(ctx, query, "1001U0002", 100, 1, "U0002", "舊課程", `["舊教授"]`, `[]`, `[]`, `[]`, oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}
@@ -1565,7 +1565,7 @@ func TestDeleteExpiredSyllabi(t *testing.T) {
 	// Manually insert expired syllabus (8 days ago)
 	query := `INSERT INTO syllabi (uid, year, term, title, teachers, objectives, outline, schedule, content_hash, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	oldTime := time.Now().Add(-8 * 24 * time.Hour).Unix()
-	_, err := db.writer.ExecContext(ctx, query, "1131U0002", 113, 1, "舊課程", `["舊教師"]`, "舊目標", "", "", "oldhash", oldTime)
+	_, err := db.Writer().ExecContext(ctx, query, "1131U0002", 113, 1, "舊課程", `["舊教師"]`, "舊目標", "", "", "oldhash", oldTime)
 	if err != nil {
 		t.Fatalf("Manual insert failed: %v", err)
 	}

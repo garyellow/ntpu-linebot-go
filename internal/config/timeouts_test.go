@@ -27,6 +27,26 @@ func TestWebhookTimeouts(t *testing.T) {
 	}
 }
 
+// TestSentryTimeouts verifies sentry-related timeout constants
+func TestSentryTimeouts(t *testing.T) {
+	tests := []struct {
+		name     string
+		got      time.Duration
+		expected time.Duration
+	}{
+		{"SentryHTTPTimeout", SentryHTTPTimeout, 5 * time.Second},
+		{"SentryFlushTimeout", SentryFlushTimeout, 5 * time.Second},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.got != tt.expected {
+				t.Errorf("%s = %v, want %v", tt.name, tt.got, tt.expected)
+			}
+		})
+	}
+}
+
 // TestScraperTimeouts verifies scraper-related timeout constants
 func TestScraperTimeouts(t *testing.T) {
 	tests := []struct {
@@ -57,6 +77,56 @@ func TestDatabaseTimeouts(t *testing.T) {
 	}{
 		{"DatabaseBusyTimeout", DatabaseBusyTimeout, 30 * time.Second},
 		{"DatabaseConnMaxLifetime", DatabaseConnMaxLifetime, time.Hour},
+		{"HotSwapCloseGracePeriod", HotSwapCloseGracePeriod, 5 * time.Second},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.got != tt.expected {
+				t.Errorf("%s = %v, want %v", tt.name, tt.got, tt.expected)
+			}
+		})
+	}
+}
+
+// TestR2Timeouts verifies R2-related timeout constants
+func TestR2Timeouts(t *testing.T) {
+	if R2RequestTimeout != 60*time.Second {
+		t.Errorf("R2RequestTimeout = %v, want %v", R2RequestTimeout, 60*time.Second)
+	}
+}
+
+// TestBackgroundJobIntervals verifies background job intervals
+func TestBackgroundJobIntervals(t *testing.T) {
+	tests := []struct {
+		name     string
+		got      time.Duration
+		expected time.Duration
+	}{
+		{"DataRefreshIntervalDefault", DataRefreshIntervalDefault, 24 * time.Hour},
+		{"DataCleanupIntervalDefault", DataCleanupIntervalDefault, 24 * time.Hour},
+		{"MetricsUpdateInterval", MetricsUpdateInterval, 5 * time.Minute},
+		{"RateLimiterCleanupInterval", RateLimiterCleanupInterval, 5 * time.Minute},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.got != tt.expected {
+				t.Errorf("%s = %v, want %v", tt.name, tt.got, tt.expected)
+			}
+		})
+	}
+}
+
+// TestWarmupTimeouts verifies warmup timeout constants
+func TestWarmupTimeouts(t *testing.T) {
+	tests := []struct {
+		name     string
+		got      time.Duration
+		expected time.Duration
+	}{
+		{"WarmupStickerFetch", WarmupStickerFetch, 5 * time.Second},
+		{"WarmupProactive", WarmupProactive, 2 * time.Hour},
 	}
 
 	for _, tt := range tests {
@@ -89,61 +159,10 @@ func TestSmartSearchTimeouts(t *testing.T) {
 	}
 }
 
-// TestBackgroundJobIntervals verifies background job intervals
-func TestBackgroundJobIntervals(t *testing.T) {
-	tests := []struct {
-		name     string
-		got      time.Duration
-		expected time.Duration
-	}{
-		{"CacheCleanupInterval", CacheCleanupInterval, 24 * time.Hour},
-		{"MetricsUpdateInterval", MetricsUpdateInterval, 5 * time.Minute},
-		{"RateLimiterCleanupInterval", RateLimiterCleanupInterval, 5 * time.Minute},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.got != tt.expected {
-				t.Errorf("%s = %v, want %v", tt.name, tt.got, tt.expected)
-			}
-		})
-	}
-}
-
-// TestBackgroundJobScheduleHours verifies background job schedule hours (Taiwan time)
-func TestBackgroundJobScheduleHours(t *testing.T) {
-	tests := []struct {
-		name     string
-		got      int
-		expected int
-	}{
-		{"WarmupHour", WarmupHour, 3},             // 3:00 AM - warmup cache
-		{"CacheCleanupHour", CacheCleanupHour, 4}, // 4:00 AM - cleanup after warmup
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.got != tt.expected {
-				t.Errorf("%s = %d, want %d", tt.name, tt.got, tt.expected)
-			}
-		})
-	}
-}
-
-// TestScheduleOrderIsLogical verifies jobs run in logical order
-func TestScheduleOrderIsLogical(t *testing.T) {
-	// Warmup should happen before cache cleanup
-	if WarmupHour >= CacheCleanupHour {
-		t.Errorf("WarmupHour (%d) should be < CacheCleanupHour (%d) to avoid deleting fresh data",
-			WarmupHour, CacheCleanupHour)
-	}
-
-	// All should be in early morning (0-6 AM)
-	if WarmupHour < 0 || WarmupHour > 6 {
-		t.Errorf("WarmupHour (%d) should be in early morning (0-6 AM)", WarmupHour)
-	}
-	if CacheCleanupHour < 0 || CacheCleanupHour > 6 {
-		t.Errorf("CacheCleanupHour (%d) should be in early morning (0-6 AM)", CacheCleanupHour)
+// TestGracefulShutdownTimeout verifies graceful shutdown timeout constant
+func TestGracefulShutdownTimeout(t *testing.T) {
+	if GracefulShutdown != 70*time.Second {
+		t.Errorf("GracefulShutdown = %v, want %v", GracefulShutdown, 70*time.Second)
 	}
 }
 

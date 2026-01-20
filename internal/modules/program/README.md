@@ -71,10 +71,10 @@ type Handler struct {
 
 ### 資料來源（雙來源融合）
 
-學程資料採 **課程列表 + 課程大綱** 的雙來源融合，於 warmup 時同步：
+學程資料採 **課程列表 + 課程大綱** 的雙來源融合，於刷新任務時同步：
 
 ```
-Course Warmup (Daily 3:00 AM)
+Course Refresh (interval-based)
     ↓
 ScrapeCourses() - 課程列表頁 (queryByKeyword)
     ↓
@@ -82,7 +82,7 @@ parseMajorAndTypeFields() - 擷取「應修系級」+「必選修別」(原始�
     ↓
 RawProgramReqs (UID → []{name,type})
 
-Syllabus Warmup (Daily 3:00 AM, after course warmup)
+Syllabus Refresh (interval-based, after course refresh)
     ↓
 ScrapeCourseDetail() - 課程大綱頁面 (queryguide)
     ↓
@@ -179,7 +179,7 @@ Course Detail (返回)
 ```
 
 ### 共享組件
-- **SemesterCache**：course 模組提供，warmup 更新，program 使用
+- **SemesterCache**：course 模組提供，refresh 更新，program 使用
 - **Flex Message Builders**：共用 lineutil 工具
 
 ### Postback 路由
@@ -218,13 +218,13 @@ Build Course Carousel (colored by type)
 
 ### 資料同步
 ```
-Warmup (Daily 3:00 AM)
+Refresh (interval-based)
     ↓
 Probe Semesters (scraper)
     ↓
 Refresh Courses (course module)
     ↓
-Syllabus Warmup (most recent 2 semesters)
+Syllabus Refresh (most recent 2 semesters)
     ↓
 ScrapeCourseDetail() → Extract Syllabus + Programs
     ↓
@@ -260,14 +260,14 @@ semesterCache.Update() (shared)
 
 ### 資料來源限制
 - **雙來源融合**：學程名稱來自課程大綱頁，必/選修來自課程列表頁
-- **Warmup 依賴**：需先完成 course warmup 才能帶入必/選修，再由 syllabus warmup 做匹配
-- **啟用條件**：syllabus warmup 需設定 LLM API Key 才會啟用
+- **Refresh 依賴**：需先完成 course refresh 才能帶入必/選修，再由 syllabus refresh 做匹配
+- **啟用條件**：syllabus refresh 需設定 LLM API Key 才會啟用
 - **解析規則**：只提取以「學程」結尾的項目（排除系所）
 
 ### 資料品質
 - **完整性**：課程大綱頁面提供完整且準確的學程名稱
 - **正確性**：必/選修以課程列表頁為準（避免大綱缺欄位）
-- **時效性**：每日 3:00 AM 同步更新（最近 2 學期）
+- **時效性**：依 `NTPU_REFRESH_INTERVAL` 同步更新（最近 2 學期）
 - **覆蓋範圍**：只包含有開課的學程
 
 ## 相關文件

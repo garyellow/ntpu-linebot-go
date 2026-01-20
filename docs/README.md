@@ -32,6 +32,7 @@ NTPU LineBot Go 專案文件導覽。
 
 - [deployments/](../deployments/README.md) - Docker Compose 部署
 - [workflows/](../.github/workflows/README.md) - GitHub Actions CI/CD
+- [architecture.md](architecture.md#3-r2-%E5%BF%AB%E7%85%A7%E5%90%8C%E6%AD%A5%EF%BC%88%E5%8F%AF%E9%81%B8%EF%BC%89) - R2 快照同步（可選）
 
 ## 📖 快速導航
 

@@ -18,20 +18,52 @@ import (
 
 // Config holds all application configuration
 type Config struct {
-	// LINE Bot Configuration (Required)
+	// ========================================================================
+	// Core Configuration (Required)
+	// ========================================================================
+
+	// LINE Bot Configuration
 	LineChannelToken  string
 	LineChannelSecret string
 
-	// LLM API Keys (Optional - at least one required for NLU features)
-	GeminiAPIKey   string
-	GroqAPIKey     string
-	CerebrasAPIKey string
+	// Server Configuration
+	Port            string
+	LogLevel        string
+	ShutdownTimeout time.Duration
 
-	// LLM Provider Configuration
-	LLMProviders []string // Ordered list of LLM providers for fallback (default: "gemini,groq,cerebras")
+	// Data Configuration
+	DataDir  string        // Data directory for SQLite database
+	CacheTTL time.Duration // TTL: absolute expiration for cache entries (default: 7 days)
 
-	// LLM Model Configuration (optional, defaults apply if empty)
-	// Each slice contains models in fallback order: first is primary, rest are fallbacks
+	// ========================================================================
+	// Bot Business Logic Configuration
+	// ========================================================================
+
+	// Bot Configuration (embedded - includes Webhook and Rate Limit settings)
+	Bot BotConfig
+
+	// Scraper Configuration
+	ScraperTimeout    time.Duration
+	ScraperMaxRetries int
+	ScraperBaseURLs   map[string][]string
+
+	// Startup Configuration
+	WaitForWarmup       bool          // If true, wait for warmup completion before accepting traffic (default: false)
+	WarmupGracePeriod   time.Duration // Grace period to wait for warmup when WaitForWarmup=true (default: 10m)
+	DataRefreshInterval time.Duration // Interval for data refresh tasks
+	DataCleanupInterval time.Duration // Interval for data cleanup tasks
+
+	// ========================================================================
+	// Optional Features
+	// ========================================================================
+
+	// 1. LLM Features (NLU, Query Expansion)
+	// Flag: NTPU_LLM_ENABLED
+	LLMEnabled             bool
+	GeminiAPIKey           string
+	GroqAPIKey             string
+	CerebrasAPIKey         string
+	LLMProviders           []string // Ordered list of LLM providers for fallback
 	GeminiIntentModels     []string
 	GeminiExpanderModels   []string
 	GroqIntentModels       []string
@@ -39,41 +71,39 @@ type Config struct {
 	CerebrasIntentModels   []string
 	CerebrasExpanderModels []string
 
-	// Server Configuration
-	Port            string
-	LogLevel        string
-	ShutdownTimeout time.Duration
+	// 2. R2 Snapshot Sync (Distributed Warmup)
+	// Flag: NTPU_R2_ENABLED
+	R2Enabled      bool
+	R2AccountID    string        // Cloudflare Account ID
+	R2AccessKeyID  string        // R2 Access Key ID
+	R2SecretKey    string        // R2 Secret Access Key
+	R2BucketName   string        // R2 Bucket name
+	R2SnapshotKey  string        // Object key for snapshot (default: snapshots/cache.db.zst)
+	R2LockKey      string        // Object key for distributed lock (default: locks/crawler.json)
+	R2LockTTL      time.Duration // TTL for distributed lock (default: 30m)
+	R2PollInterval time.Duration // Polling interval for new snapshots (default: 5m)
+	R2DeltaPrefix  string        // Prefix for delta logs (default: deltas)
 
-	// Better Stack Logging (Optional)
-	BetterStackToken    string
-	BetterStackEndpoint string
-
-	// Sentry Error Tracking (Optional)
+	// 3. Sentry Error Tracking
+	// Flag: NTPU_SENTRY_ENABLED
+	SentryEnabled          bool
 	SentryDSN              string  // Sentry DSN (https://TOKEN@HOST/1)
 	SentryEnvironment      string  // Environment name (e.g., production, staging)
 	SentryRelease          string  // Release version (optional)
 	SentrySampleRate       float64 // Error sampling rate (0.0-1.0, default: 1.0)
 	SentryTracesSampleRate float64 // Traces sampling rate (0.0-1.0, default: 0.0 = disabled)
 
-	// Data Configuration
-	DataDir  string        // Data directory for SQLite database
-	CacheTTL time.Duration // TTL: absolute expiration for cache entries (default: 7 days)
+	// 4. Better Stack Logging
+	// Flag: NTPU_BETTERSTACK_ENABLED
+	BetterStackEnabled  bool
+	BetterStackToken    string
+	BetterStackEndpoint string
 
-	// Scraper Configuration
-	ScraperTimeout    time.Duration
-	ScraperMaxRetries int
-	ScraperBaseURLs   map[string][]string
-
-	// Bot Configuration (embedded - includes Webhook and Rate Limit settings)
-	Bot BotConfig
-
-	// Startup Configuration
-	WaitForWarmup     bool          // If true, wait for warmup completion before accepting traffic (default: false)
-	WarmupGracePeriod time.Duration // Grace period to wait for warmup when WaitForWarmup=true (default: 10m)
-
-	// Metrics Authentication
-	MetricsUsername string // Username for /metrics endpoint Basic Auth (default: "prometheus")
-	MetricsPassword string // Password for /metrics endpoint Basic Auth (empty = no auth)
+	// 5. Metrics Authentication
+	// Flag: NTPU_METRICS_AUTH_ENABLED
+	MetricsAuthEnabled bool
+	MetricsUsername    string // Username for /metrics endpoint Basic Auth (default: "prometheus")
+	MetricsPassword    string // Password for /metrics Basic Auth
 }
 
 // BotConfig holds bot-specific configuration (Webhook, Rate Limits, LINE API Constraints)
@@ -97,7 +127,7 @@ type BotConfig struct {
 	MaxMessagesPerReply int // LINE API limit: 5
 	MaxEventsPerWebhook int // Default: 100
 	MinReplyTokenLength int // Default: 10
-	MaxMessageLength    int // LINE API limit: 20000
+	MaxMessageLength    int // LINE API limit: 5000
 	MaxPostbackDataSize int // LINE API limit: 300
 
 	// Business Limits (hard-coded, not configurable)
@@ -116,74 +146,31 @@ func Load() (*Config, error) {
 
 	cfg := &Config{
 		// LINE Bot Configuration (Required)
-		LineChannelToken:  getEnv("LINE_CHANNEL_ACCESS_TOKEN", ""),
-		LineChannelSecret: getEnv("LINE_CHANNEL_SECRET", ""),
-
-		// LLM API Keys
-		GeminiAPIKey:   getEnv("GEMINI_API_KEY", ""),
-		GroqAPIKey:     getEnv("GROQ_API_KEY", ""),
-		CerebrasAPIKey: getEnv("CEREBRAS_API_KEY", ""),
-
-		// LLM Provider Configuration
-		LLMProviders: getProvidersEnv("LLM_PROVIDERS", []string{"gemini", "groq", "cerebras"}),
-
-		// LLM Model Configuration (empty = use defaults from genai package)
-		GeminiIntentModels:     getModelsEnv("GEMINI_INTENT_MODELS"),
-		GeminiExpanderModels:   getModelsEnv("GEMINI_EXPANDER_MODELS"),
-		GroqIntentModels:       getModelsEnv("GROQ_INTENT_MODELS"),
-		GroqExpanderModels:     getModelsEnv("GROQ_EXPANDER_MODELS"),
-		CerebrasIntentModels:   getModelsEnv("CEREBRAS_INTENT_MODELS"),
-		CerebrasExpanderModels: getModelsEnv("CEREBRAS_EXPANDER_MODELS"),
+		LineChannelToken:  getEnv(EnvLineChannelAccessToken, ""),
+		LineChannelSecret: getEnv(EnvLineChannelSecret, ""),
 
 		// Server Configuration
-		Port:            getEnv("PORT", "10000"),
-		LogLevel:        getEnv("LOG_LEVEL", "info"),
-		ShutdownTimeout: getDurationEnv("SHUTDOWN_TIMEOUT", 30*time.Second),
-
-		// Better Stack Logging (Optional)
-		BetterStackToken:    getEnv("BETTERSTACK_SOURCE_TOKEN", ""),
-		BetterStackEndpoint: getEnv("BETTERSTACK_ENDPOINT", ""),
-
-		// Sentry Error Tracking (Optional)
-		SentryDSN:              getEnv("SENTRY_DSN", ""),
-		SentryEnvironment:      getEnv("SENTRY_ENVIRONMENT", ""),
-		SentryRelease:          getEnv("SENTRY_RELEASE", ""),
-		SentrySampleRate:       getFloatEnv("SENTRY_SAMPLE_RATE", 1.0),
-		SentryTracesSampleRate: getFloatEnv("SENTRY_TRACES_SAMPLE_RATE", 0.0),
+		Port:            getEnv(EnvPort, "10000"),
+		LogLevel:        getEnv(EnvLogLevel, "info"),
+		ShutdownTimeout: getDurationEnv(EnvShutdownTimeout, 30*time.Second),
 
 		// Data Configuration
-		DataDir:  getEnv("DATA_DIR", getDefaultDataDir()),
-		CacheTTL: getDurationEnv("CACHE_TTL", 168*time.Hour), // 7 days
-
-		// Scraper Configuration
-		ScraperTimeout:    getDurationEnv("SCRAPER_TIMEOUT", ScraperRequest),
-		ScraperMaxRetries: getIntEnv("SCRAPER_MAX_RETRIES", 10),
-		ScraperBaseURLs: map[string][]string{
-			"lms": {
-				"http://120.126.197.52",
-				"https://120.126.197.52",
-				"https://lms.ntpu.edu.tw",
-			},
-			"sea": {
-				"http://120.126.197.7",
-				"https://120.126.197.7",
-				"https://sea.cc.ntpu.edu.tw",
-			},
-		},
+		DataDir:  getEnv(EnvDataDir, getDefaultDataDir()),
+		CacheTTL: getDurationEnv(EnvCacheTTL, 168*time.Hour), // 7 days
 
 		// Bot Configuration (Webhook + Rate Limits + LINE API Constraints)
 		Bot: BotConfig{
 			// Webhook
-			WebhookTimeout: getDurationEnv("WEBHOOK_TIMEOUT", WebhookProcessing),
+			WebhookTimeout: getDurationEnv(EnvWebhookTimeout, WebhookProcessing),
 			// Rate Limits - Per-User
-			UserRateBurst:  getFloatEnv("USER_RATE_BURST", 15.0),
-			UserRateRefill: getFloatEnv("USER_RATE_REFILL", 0.1),
+			UserRateBurst:  getFloatEnv(EnvUserRateBurst, 15.0),
+			UserRateRefill: getFloatEnv(EnvUserRateRefill, 0.1),
 			// Rate Limits - Per-User LLM
-			LLMRateBurst:  getFloatEnv("LLM_RATE_BURST", 60.0),
-			LLMRateRefill: getFloatEnv("LLM_RATE_REFILL", 30.0),
-			LLMRateDaily:  getIntEnv("LLM_RATE_DAILY", 180),
+			LLMRateBurst:  getFloatEnv(EnvLLMRateBurst, 60.0),
+			LLMRateRefill: getFloatEnv(EnvLLMRateRefill, 30.0),
+			LLMRateDaily:  getIntEnv(EnvLLMRateDaily, 180),
 			// Rate Limits - Global
-			GlobalRateRPS: getFloatEnv("GLOBAL_RATE_RPS", 100.0),
+			GlobalRateRPS: getFloatEnv(EnvGlobalRateRPS, 100.0),
 			// LINE API Constraints (hard-coded)
 			MaxMessagesPerReply: LINEMaxMessagesPerReply,
 			MaxEventsPerWebhook: 100,
@@ -198,13 +185,70 @@ func Load() (*Config, error) {
 			ValidYearEnd:         112,
 		},
 
-		// Startup Configuration
-		WaitForWarmup:     getBoolEnv("WAIT_FOR_WARMUP", false),
-		WarmupGracePeriod: getDurationEnv("WARMUP_GRACE_PERIOD", 10*time.Minute),
+		// Scraper Configuration
+		ScraperTimeout:    getDurationEnv(EnvScraperTimeout, ScraperRequest),
+		ScraperMaxRetries: getIntEnv(EnvScraperMaxRetries, 10),
+		ScraperBaseURLs: map[string][]string{
+			"lms": {
+				"http://120.126.197.52",
+				"https://120.126.197.52",
+				"https://lms.ntpu.edu.tw",
+			},
+			"sea": {
+				"http://120.126.197.7",
+				"https://120.126.197.7",
+				"https://sea.cc.ntpu.edu.tw",
+			},
+		},
 
-		// Metrics Authentication
-		MetricsUsername: getEnv("METRICS_USERNAME", "prometheus"),
-		MetricsPassword: getEnv("METRICS_PASSWORD", ""),
+		// Startup Configuration
+		WaitForWarmup:       getBoolEnv(EnvWarmupWait, false),
+		WarmupGracePeriod:   getDurationEnv(EnvWarmupGracePeriod, 10*time.Minute),
+		DataRefreshInterval: getDurationEnv(EnvRefreshInterval, DataRefreshIntervalDefault),
+		DataCleanupInterval: getDurationEnv(EnvCleanupInterval, DataCleanupIntervalDefault),
+
+		// 1. LLM Features
+		LLMEnabled:             getBoolEnv(EnvLLMEnabled, false),
+		GeminiAPIKey:           getEnv(EnvGeminiAPIKey, ""),
+		GroqAPIKey:             getEnv(EnvGroqAPIKey, ""),
+		CerebrasAPIKey:         getEnv(EnvCerebrasAPIKey, ""),
+		LLMProviders:           getProvidersEnv(EnvLLMProviders, []string{"gemini", "groq", "cerebras"}),
+		GeminiIntentModels:     getModelsEnv(EnvGeminiIntentModels),
+		GeminiExpanderModels:   getModelsEnv(EnvGeminiExpanderModels),
+		GroqIntentModels:       getModelsEnv(EnvGroqIntentModels),
+		GroqExpanderModels:     getModelsEnv(EnvGroqExpanderModels),
+		CerebrasIntentModels:   getModelsEnv(EnvCerebrasIntentModels),
+		CerebrasExpanderModels: getModelsEnv(EnvCerebrasExpanderModels),
+
+		// 2. R2 Snapshot Storage
+		R2Enabled:      getBoolEnv(EnvR2Enabled, false),
+		R2AccountID:    getEnv(EnvR2AccountID, ""),
+		R2AccessKeyID:  getEnv(EnvR2AccessKeyID, ""),
+		R2SecretKey:    getEnv(EnvR2SecretAccessKey, ""),
+		R2BucketName:   getEnv(EnvR2BucketName, ""),
+		R2SnapshotKey:  getEnv(EnvR2SnapshotKey, "snapshots/cache.db.zst"),
+		R2LockKey:      getEnv(EnvR2LockKey, "locks/crawler.json"),
+		R2LockTTL:      getDurationEnv(EnvR2LockTTL, 30*time.Minute),
+		R2PollInterval: getDurationEnv(EnvR2PollInterval, 5*time.Minute),
+		R2DeltaPrefix:  getEnv(EnvR2DeltaPrefix, "deltas"),
+
+		// 3. Sentry Error Tracking
+		SentryEnabled:          getBoolEnv(EnvSentryEnabled, false),
+		SentryDSN:              getEnv(EnvSentryDSN, ""),
+		SentryEnvironment:      getEnv(EnvSentryEnvironment, ""),
+		SentryRelease:          getEnv(EnvSentryRelease, ""),
+		SentrySampleRate:       getFloatEnv(EnvSentrySampleRate, 1.0),
+		SentryTracesSampleRate: getFloatEnv(EnvSentryTracesSampleRate, 0.0),
+
+		// 4. Better Stack Logging
+		BetterStackEnabled:  getBoolEnv(EnvBetterStackEnabled, false),
+		BetterStackToken:    getEnv(EnvBetterStackToken, ""),
+		BetterStackEndpoint: getEnv(EnvBetterStackEndpoint, ""),
+
+		// 5. Metrics Authentication
+		MetricsAuthEnabled: getBoolEnv(EnvMetricsAuthEnabled, false),
+		MetricsUsername:    getEnv(EnvMetricsUsername, "prometheus"),
+		MetricsPassword:    getEnv(EnvMetricsPassword, ""),
 	}
 
 	// Validate configuration
@@ -220,37 +264,121 @@ func (c *Config) Validate() error {
 	var errs []error
 
 	if c.LineChannelToken == "" {
-		errs = append(errs, errors.New("LINE_CHANNEL_ACCESS_TOKEN is required"))
+		errs = append(errs, errors.New("NTPU_LINE_CHANNEL_ACCESS_TOKEN is required"))
 	}
 	if c.LineChannelSecret == "" {
-		errs = append(errs, errors.New("LINE_CHANNEL_SECRET is required"))
+		errs = append(errs, errors.New("NTPU_LINE_CHANNEL_SECRET is required"))
 	}
 	if c.Port == "" {
-		errs = append(errs, errors.New("PORT is required"))
+		errs = append(errs, errors.New("NTPU_PORT is required"))
 	}
 	if err := c.Bot.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("bot config: %w", err))
 	}
 	if c.DataDir == "" {
-		errs = append(errs, errors.New("DATA_DIR is required"))
+		errs = append(errs, errors.New("NTPU_DATA_DIR is required"))
 	}
 	if c.CacheTTL <= 0 {
-		errs = append(errs, fmt.Errorf("CACHE_TTL must be positive, got %v", c.CacheTTL))
+		errs = append(errs, fmt.Errorf("NTPU_CACHE_TTL must be positive, got %v", c.CacheTTL))
 	}
 	if c.ScraperTimeout <= 0 {
-		errs = append(errs, fmt.Errorf("SCRAPER_TIMEOUT must be positive, got %v", c.ScraperTimeout))
+		errs = append(errs, fmt.Errorf("NTPU_SCRAPER_TIMEOUT must be positive, got %v", c.ScraperTimeout))
 	}
-	if c.SentrySampleRate < 0 || c.SentrySampleRate > 1 {
-		errs = append(errs, fmt.Errorf("SENTRY_SAMPLE_RATE must be between 0 and 1, got %v", c.SentrySampleRate))
+	if c.DataRefreshInterval <= 0 {
+		errs = append(errs, fmt.Errorf("NTPU_REFRESH_INTERVAL must be positive, got %v", c.DataRefreshInterval))
 	}
-	if c.SentryTracesSampleRate < 0 || c.SentryTracesSampleRate > 1 {
-		errs = append(errs, fmt.Errorf("SENTRY_TRACES_SAMPLE_RATE must be between 0 and 1, got %v", c.SentryTracesSampleRate))
+	if c.DataCleanupInterval <= 0 {
+		errs = append(errs, fmt.Errorf("NTPU_CLEANUP_INTERVAL must be positive, got %v", c.DataCleanupInterval))
 	}
+
+	// 1. LLM Validation (only if enabled)
+	if c.IsLLMEnabled() {
+		if c.GeminiAPIKey == "" && c.GroqAPIKey == "" && c.CerebrasAPIKey == "" {
+			errs = append(errs, errors.New("NTPU_LLM_ENABLED=true requires at least one API key (NTPU_GEMINI_API_KEY, NTPU_GROQ_API_KEY, NTPU_CEREBRAS_API_KEY)"))
+		}
+		validProviders := map[string]struct{}{"gemini": {}, "groq": {}, "cerebras": {}}
+		var hasSupported bool
+		for _, p := range c.LLMProviders {
+			if _, ok := validProviders[p]; ok {
+				hasSupported = true
+				continue
+			}
+			if p != "" {
+				errs = append(errs, fmt.Errorf("unsupported NTPU_LLM_PROVIDERS entry: %q", p))
+			}
+		}
+		if !hasSupported {
+			errs = append(errs, errors.New("NTPU_LLM_PROVIDERS must include at least one of: gemini, groq, cerebras"))
+		}
+	}
+
+	// 2. R2 Validation (only if enabled)
+	if c.IsR2Enabled() {
+		if c.R2AccountID == "" {
+			errs = append(errs, errors.New("NTPU_R2_ACCOUNT_ID is required when NTPU_R2_ENABLED=true"))
+		}
+		if c.R2AccessKeyID == "" {
+			errs = append(errs, errors.New("NTPU_R2_ACCESS_KEY_ID is required when NTPU_R2_ENABLED=true"))
+		}
+		if c.R2SecretKey == "" {
+			errs = append(errs, errors.New("NTPU_R2_SECRET_ACCESS_KEY is required when NTPU_R2_ENABLED=true"))
+		}
+		if c.R2BucketName == "" {
+			errs = append(errs, errors.New("NTPU_R2_BUCKET_NAME is required when NTPU_R2_ENABLED=true"))
+		}
+		if c.R2SnapshotKey == "" {
+			errs = append(errs, errors.New("NTPU_R2_SNAPSHOT_KEY must not be empty when NTPU_R2_ENABLED=true"))
+		}
+		if c.R2LockKey == "" {
+			errs = append(errs, errors.New("NTPU_R2_LOCK_KEY must not be empty when NTPU_R2_ENABLED=true"))
+		}
+		if c.R2LockTTL <= 0 {
+			errs = append(errs, fmt.Errorf("NTPU_R2_LOCK_TTL must be positive, got %v", c.R2LockTTL))
+		}
+		if c.R2PollInterval <= 0 {
+			errs = append(errs, fmt.Errorf("NTPU_R2_POLL_INTERVAL must be positive, got %v", c.R2PollInterval))
+		}
+		if c.R2DeltaPrefix == "" {
+			errs = append(errs, errors.New("NTPU_R2_DELTA_PREFIX must not be empty when NTPU_R2_ENABLED=true"))
+		}
+	}
+
+	// 3. Sentry Validation (only if enabled)
+	if c.IsSentryEnabled() {
+		if c.SentryDSN == "" {
+			errs = append(errs, errors.New("NTPU_SENTRY_DSN is required when NTPU_SENTRY_ENABLED=true"))
+		}
+		if c.SentrySampleRate < 0 || c.SentrySampleRate > 1 {
+			errs = append(errs, fmt.Errorf("NTPU_SENTRY_SAMPLE_RATE must be between 0 and 1, got %v", c.SentrySampleRate))
+		}
+		if c.SentryTracesSampleRate < 0 || c.SentryTracesSampleRate > 1 {
+			errs = append(errs, fmt.Errorf("NTPU_SENTRY_TRACES_SAMPLE_RATE must be between 0 and 1, got %v", c.SentryTracesSampleRate))
+		}
+	}
+
+	// 4. Better Stack Validation (only if enabled)
+	if c.IsBetterStackEnabled() {
+		if c.BetterStackToken == "" {
+			errs = append(errs, errors.New("NTPU_BETTERSTACK_TOKEN is required when NTPU_BETTERSTACK_ENABLED=true"))
+		}
+	}
+
+	// 5. Metrics Validation (only if enabled)
+	if c.IsMetricsAuthEnabled() {
+		if c.MetricsPassword == "" {
+			errs = append(errs, errors.New("NTPU_METRICS_PASSWORD is required when NTPU_METRICS_AUTH_ENABLED=true"))
+		}
+		if strings.TrimSpace(c.MetricsUsername) == "" {
+			errs = append(errs, errors.New("NTPU_METRICS_USERNAME is required when NTPU_METRICS_AUTH_ENABLED=true"))
+		}
+	}
+
+	// Scraper internal validation
 	if c.ScraperMaxRetries < 0 {
-		errs = append(errs, fmt.Errorf("SCRAPER_MAX_RETRIES cannot be negative, got %d", c.ScraperMaxRetries))
+		errs = append(errs, fmt.Errorf("NTPU_SCRAPER_MAX_RETRIES cannot be negative, got %d", c.ScraperMaxRetries))
 	}
 	if c.WaitForWarmup && c.WarmupGracePeriod <= 0 {
-		errs = append(errs, fmt.Errorf("WARMUP_GRACE_PERIOD must be positive when WAIT_FOR_WARMUP is enabled, got %v", c.WarmupGracePeriod))
+		errs = append(errs, fmt.Errorf("NTPU_WARMUP_GRACE_PERIOD must be positive when NTPU_WARMUP_WAIT is enabled, got %v", c.WarmupGracePeriod))
 	}
 
 	if len(errs) > 0 {
@@ -258,6 +386,39 @@ func (c *Config) Validate() error {
 	}
 	return nil
 }
+
+// ----------------------------------------------------------------------------
+// Feature Enablement Checks (Unified Pattern)
+// ----------------------------------------------------------------------------
+
+// IsLLMEnabled returns true if LLM features are enabled.
+func (c *Config) IsLLMEnabled() bool {
+	return c.LLMEnabled
+}
+
+// IsR2Enabled returns true if R2 snapshot storage is enabled.
+func (c *Config) IsR2Enabled() bool {
+	return c.R2Enabled
+}
+
+// IsSentryEnabled returns true if Sentry error tracking is enabled.
+func (c *Config) IsSentryEnabled() bool {
+	return c.SentryEnabled
+}
+
+// IsBetterStackEnabled returns true if Better Stack logging is enabled.
+func (c *Config) IsBetterStackEnabled() bool {
+	return c.BetterStackEnabled
+}
+
+// IsMetricsAuthEnabled returns true if Basic Auth is enabled for metrics endpoint.
+func (c *Config) IsMetricsAuthEnabled() bool {
+	return c.MetricsAuthEnabled
+}
+
+// ----------------------------------------------------------------------------
+// Helper Methods
+// ----------------------------------------------------------------------------
 
 // getEnv retrieves environment variable with fallback to default value
 func getEnv(key, defaultValue string) string {
@@ -350,7 +511,7 @@ func getProvidersEnv(key string, defaultValue []string) []string {
 	result := make([]string, 0, len(providers))
 	for _, p := range providers {
 		if trimmed := strings.TrimSpace(p); trimmed != "" {
-			result = append(result, trimmed)
+			result = append(result, strings.ToLower(trimmed))
 		}
 	}
 	if len(result) == 0 {
@@ -372,12 +533,10 @@ func (c *Config) SQLitePath() string {
 	return filepath.Join(c.DataDir, "cache.db")
 }
 
-// HasLLMProvider returns true if at least one LLM provider is configured.
-func (c *Config) HasLLMProvider() bool {
-	return c.GeminiAPIKey != "" || c.GroqAPIKey != "" || c.CerebrasAPIKey != ""
-}
-
-// HasSentry returns true if Sentry error tracking is configured.
-func (c *Config) HasSentry() bool {
-	return c.SentryDSN != ""
+// R2Endpoint returns the R2 S3-compatible endpoint URL.
+func (c *Config) R2Endpoint() string {
+	if c.R2AccountID == "" {
+		return ""
+	}
+	return "https://" + c.R2AccountID + ".r2.cloudflarestorage.com"
 }

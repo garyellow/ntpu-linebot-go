@@ -202,21 +202,27 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 
 ### 環境變數
 
+#### Enable Flag
+
+| 變數名稱 | 預設值 | 說明 |
+|---------|--------|------|
+| `NTPU_LLM_ENABLED` | false | 是否啟用 LLM 功能（需搭配 API Key） |
+
 #### LLM Provider Keys
 
 | 變數名稱 | 必填 | 說明 |
 |---------|------|------|
-| `GEMINI_API_KEY` | 任一 | Google AI Studio API Key |
-| `GROQ_API_KEY` | 任一 | Groq API Key |
-| `CEREBRAS_API_KEY` | 任一 | Cerebras API Key |
+| `NTPU_GEMINI_API_KEY` | 任一 | Google AI Studio API Key |
+| `NTPU_GROQ_API_KEY` | 任一 | Groq API Key |
+| `NTPU_CEREBRAS_API_KEY` | 任一 | Cerebras API Key |
 
-> **注意**: 至少需要設定其中一個 API Key 才能啟用 LLM 功能
+> **注意**: 需先設定 `NTPU_LLM_ENABLED=true`，且至少提供一個 API Key 才能啟用 LLM 功能
 
 #### Provider Selection
 
 | 變數名稱 | 預設值 | 說明 |
 |---------|--------|------|
-| `LLM_PROVIDERS` | gemini,groq,cerebras | 提供者鏈（依序故障轉移）|
+| `NTPU_LLM_PROVIDERS` | gemini,groq,cerebras | 提供者鏈（依序故障轉移）|
 
 > **注意**: 只有配置了 API Key 的提供者才會被使用
 
@@ -226,23 +232,23 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 
 | 變數名稱 | 預設值 | 說明 |
 |---------|--------|------|
-| `GEMINI_INTENT_MODELS` | gemini-2.5-flash,gemini-2.5-flash-lite | Gemini 意圖解析模型鏈 |
-| `GEMINI_EXPANDER_MODELS` | gemini-2.5-flash,gemini-2.5-flash-lite | Gemini 查詢擴展模型鏈 |
-| `GROQ_INTENT_MODELS` | llama-4-maverick...,llama-3.3-70b-versatile | Groq 意圖解析模型鏈 |
-| `GROQ_EXPANDER_MODELS` | llama-4-scout...,llama-3.1-8b-instant | Groq 查詢擴展模型鏈 |
-| `CEREBRAS_INTENT_MODELS` | llama-3.3-70b,llama-3.1-8b | Cerebras 意圖解析模型鏈 |
-| `CEREBRAS_EXPANDER_MODELS` | llama-3.3-70b,llama-3.1-8b | Cerebras 查詢擴展模型鏈 |
+| `NTPU_GEMINI_INTENT_MODELS` | gemini-2.5-flash,gemini-2.5-flash-lite | Gemini 意圖解析模型鏈 |
+| `NTPU_GEMINI_EXPANDER_MODELS` | gemini-2.5-flash,gemini-2.5-flash-lite | Gemini 查詢擴展模型鏈 |
+| `NTPU_GROQ_INTENT_MODELS` | llama-4-maverick...,llama-3.3-70b-versatile | Groq 意圖解析模型鏈 |
+| `NTPU_GROQ_EXPANDER_MODELS` | llama-4-scout...,llama-3.1-8b-instant | Groq 查詢擴展模型鏈 |
+| `NTPU_CEREBRAS_INTENT_MODELS` | llama-3.3-70b,llama-3.1-8b | Cerebras 意圖解析模型鏈 |
+| `NTPU_CEREBRAS_EXPANDER_MODELS` | llama-3.3-70b,llama-3.1-8b | Cerebras 查詢擴展模型鏈 |
 
 > **💡 提示**：可添加更多 fallback 模型，例如：
-> `GEMINI_INTENT_MODELS=gemini-2.5-flash,gemini-2.5-flash-lite,gemini-2.0-flash`
+> `NTPU_GEMINI_INTENT_MODELS=gemini-2.5-flash,gemini-2.5-flash-lite,gemini-2.0-flash`
 
 #### Rate Limiting
 
 | 變數名稱 | 預設值 | 說明 |
 |---------|--------|------|
-| `LLM_RATE_BURST` | 60 | LLM 請求 burst 上限 |
-| `LLM_RATE_REFILL` | 30 | 每小時恢復 token 數 |
-| `LLM_RATE_DAILY` | 180 | 每日 LLM 請求上限 (0=無限制) |
+| `NTPU_LLM_RATE_BURST` | 60 | LLM 請求 burst 上限 |
+| `NTPU_LLM_RATE_REFILL` | 30 | 每小時恢復 token 數 |
+| `NTPU_LLM_RATE_DAILY` | 180 | 每日 LLM 請求上限 (0=無限制) |
 
 ### 獲取 API Key
 

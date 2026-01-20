@@ -1,4 +1,31 @@
-# NTPU LineBot Go - AI Agent Instructions
+# NTPU LineBot Go — Copilot Instructions
+
+## Big picture
+- LINE webhook is async: handler returns 200 fast, then processes events in a goroutine with preserved tracing. See internal/webhook/handler.go and internal/ctxutil/context.go.
+- Dispatch flow: registry first-match on CanHandle, then HandleMessage / HandlePostback. Handlers are registered in app.Initialize order. See internal/bot/registry.go and internal/app/app.go.
+- Reply token is single-use; batch replies (max 5 messages) and keep a consistent sender per reply.
+
+## Data & caching
+- SQLite cache-first (WAL) with TTL for contacts/courses/programs/syllabi; students/stickers never expire. See internal/storage/.
+- Refresh/cleanup jobs run on intervals; syllabus scraping happens ONLY in warmup/refresh (never in user queries). See internal/warmup/warmup.go and internal/syllabus/.
+- Smart course search uses BM25 index rebuilt on startup from cached syllabi. See internal/rag/bm25.go.
+
+## Module conventions
+- Pure constructor DI; handlers depend on *storage.DB directly; optional deps are passed as nil when unused.
+- Postbacks use module prefix "module:data". When parsing, extract the matched payload, not the full string.
+- LINE message building uses internal/lineutil/* presets: QuickReply* and NewTextMessageWithConsistentSender. Use TruncateRunes only for LINE API limits; otherwise prefer wrap:true in Flex content.
+
+## Config & env
+- Config is validated at load time (internal/config/*). Required: NTPU_LINE_CHANNEL_SECRET and NTPU_LINE_CHANNEL_ACCESS_TOKEN.
+- LLM features are optional (NTPU_LLM_ENABLED + provider API key) and power NLU + query expansion.
+- Default data dir is OS-dependent (Windows ./data, Linux/Mac /data).
+
+## Dev workflows (Taskfile.yml)
+- task dev (debug server), task test (short), task test:full (includes network), task test:coverage (80% threshold), task lint, task fmt, task build, task compose:up.
+- Tests use table-driven patterns; DB tests use in-memory SQLite via setupTestDB(); network tests must guard with testing.Short().
+
+## Key entry points
+- cmd/server/main.go (app entry), internal/app/app.go (DI + server), internal/bot/processor.go (routing).# NTPU LineBot Go - AI Agent Instructions
 
 LINE chatbot "NTPU 小工具" for NTPU (National Taipei University) providing student ID lookup, contact directory, course queries, and academic program information. Built with Go, emphasizing anti-scraping measures, persistent caching, and observability.
 
@@ -117,7 +144,7 @@ LINE Webhook → Gin Handler
 - **Course ordering**: Required (必修) first, elective (選修) after, then by semester (newest first)
 - **NLU intents**: `list` (no params), `search` (query), `courses` (programName)
 - **Course detail integration**: "相關學程" button shows programs containing the course
-- **Data source**: Dual-source fusion during warmup
+- **Data source**: Dual-source fusion during refresh task
   - List page (queryByKeyword): provides required/elective types
   - Detail page (queryguide): provides complete program names
   - Fuzzy matching merges types into full names
@@ -134,7 +161,7 @@ LINE Webhook → Gin Handler
 - **Cache Strategy by Data Type**:
   - **Students**: Never expires, not refreshed (static data)
   - **Stickers**: Never expires, loaded once on startup
-  - **Contacts/Courses/Programs**: 7-day TTL, refreshed daily at 3:00 AM Taiwan time
+  - **Contacts/Courses/Programs**: 7-day TTL, refreshed on `NTPU_REFRESH_INTERVAL`
   - **Syllabi**: 7-day TTL, auto-enabled when LLM API key is configured
 - TTL enforced at SQL level for contacts/courses/programs: `WHERE cached_at > ?`
 - **Syllabi table**: Stores syllabus content + SHA256 hash for incremental updates
@@ -148,13 +175,13 @@ LINE Webhook → Gin Handler
 
 **Background Jobs** (Taiwan time/Asia/Taipei):
 - **Sticker**: Startup only
-- **Daily Refresh** (3:00 AM): contact, course+programs (always), syllabus (only most recent 2 semesters, auto-enabled if LLM API key)
-- **Cache Cleanup** (4:00 AM): Delete expired contacts/courses/programs/syllabi (7-day TTL) + VACUUM
+- **Refresh Task** (interval-based): contact, course+programs (always), syllabus (only most recent 2 semesters, auto-enabled if LLM API key)
+- **Cleanup Task** (interval-based): Delete expired contacts/courses/programs/syllabi (7-day TTL) + VACUUM
 - **Metrics/Rate Limiter Cleanup**: Every 5 minutes
 
 **Data availability**:
 - Student:
-  - **Cache range**: 101-112 學年度 (warmup auto-loads, complete data)
+  - **Cache range**: 101-112 學年度 (refresh task auto-loads, complete data)
   - **Query range**: 94-112 學年度 (real-time scraping, complete data)
   - **Year 113**: Allowed with warning, extremely sparse data (only students with manual LMS 2.0 accounts)
     - **Academic year query** (`handleYearQuery`): Shows warning before proceeding
@@ -165,12 +192,12 @@ LINE Webhook → Gin Handler
     - **Student ID query**: Early rejection before database query
   - **Status**: Static data, year 114+ has no data due to LMS 2.0 deprecation
 - Course:
-  - **Cache range**: 4 most recent semesters (7-day TTL, warmup auto-loads)
+  - **Cache range**: 4 most recent semesters (7-day TTL, refresh task auto-loads)
   - **Query range**: 90-current year (Course system launched 90, real-time scraping supported)
   - **Validation**: Uses `config.CourseSystemLaunchYear` as minimum, not limited by cache content
 - Contact: 7-day TTL
 - Sticker: Startup only, never expires
-- Syllabus: ONLY scraped during warmup for the most recent 2 semesters with cached data, 7-day TTL, auto-enabled when LLM API key configured
+- Syllabus: ONLY scraped during refresh task for the most recent 2 semesters with cached data, 7-day TTL, auto-enabled when LLM API key configured
 
 ## Rate Limiting
 
@@ -326,8 +353,8 @@ lineutil.TruncateRunes(value, 20)                                               
 ## Configuration
 
 **Load-time validation**: All env vars loaded at startup (`internal/config/`) with validation before server starts
-**Required**: `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN`
-**Optional**: `GEMINI_API_KEY` or `GROQ_API_KEY` or `CEREBRAS_API_KEY` (enables NLU + Query Expansion with multi-provider fallback)
+**Required**: `NTPU_LINE_CHANNEL_SECRET`, `NTPU_LINE_CHANNEL_ACCESS_TOKEN`
+**Optional**: `NTPU_LLM_ENABLED=true` + (`NTPU_GEMINI_API_KEY` or `NTPU_GROQ_API_KEY` or `NTPU_CEREBRAS_API_KEY`) enables NLU + Query Expansion with multi-provider fallback
 **Platform paths**: `runtime.GOOS` determines default paths (Windows: `./data`, Linux/Mac: `/data`)
 
 ## Task Commands
@@ -351,16 +378,17 @@ task compose:up       # Start Docker Compose deployment (bot only)
 - In-memory SQLite (`:memory:`) via `setupTestDB()` helper
 
 **Environment variables** (`.env`):
-- **Required**: `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`
-- **LLM** (Optional): `GEMINI_API_KEY`, `GROQ_API_KEY`, `CEREBRAS_API_KEY`, `LLM_PROVIDERS`, `*_INTENT_MODELS`, `*_EXPANDER_MODELS`
-- **Server**: `PORT`, `LOG_LEVEL`, `SHUTDOWN_TIMEOUT`
-- **Data**: `DATA_DIR` (default: `./data` on Windows, `/data` on Linux/Mac), `CACHE_TTL`
-- **Scraper**: `SCRAPER_TIMEOUT`, `SCRAPER_MAX_RETRIES`
-- **Rate Limits**: `USER_RATE_BURST`, `USER_RATE_REFILL`, `LLM_RATE_BURST`, `LLM_RATE_REFILL`, `LLM_RATE_DAILY`, `GLOBAL_RATE_RPS`
-- **Startup**: `WAIT_FOR_WARMUP` (default: `false`), `WARMUP_GRACE_PERIOD` (default: `10m`)
-- **Metrics**: `METRICS_USERNAME`, `METRICS_PASSWORD`
+- **Required**: `NTPU_LINE_CHANNEL_ACCESS_TOKEN`, `NTPU_LINE_CHANNEL_SECRET`
+- **LLM** (Optional): `NTPU_LLM_ENABLED`, `NTPU_GEMINI_API_KEY`, `NTPU_GROQ_API_KEY`, `NTPU_CEREBRAS_API_KEY`, `NTPU_LLM_PROVIDERS`, `NTPU_*_INTENT_MODELS`, `NTPU_*_EXPANDER_MODELS`
+- **Server**: `NTPU_PORT`, `NTPU_LOG_LEVEL`, `NTPU_SHUTDOWN_TIMEOUT`
+- **Data**: `NTPU_DATA_DIR` (default: `./data` on Windows, `/data` on Linux/Mac), `NTPU_CACHE_TTL`
+- **Scraper**: `NTPU_SCRAPER_TIMEOUT`, `NTPU_SCRAPER_MAX_RETRIES`
+- **Rate Limits**: `NTPU_USER_RATE_BURST`, `NTPU_USER_RATE_REFILL`, `NTPU_LLM_RATE_BURST`, `NTPU_LLM_RATE_REFILL`, `NTPU_LLM_RATE_DAILY`, `NTPU_GLOBAL_RATE_RPS`
+- **Startup**: `NTPU_WARMUP_WAIT` (default: `false`), `NTPU_WARMUP_GRACE_PERIOD` (default: `10m`)
+- **Intervals**: `NTPU_REFRESH_INTERVAL`, `NTPU_CLEANUP_INTERVAL`
+- **Metrics**: `NTPU_METRICS_AUTH_ENABLED`, `NTPU_METRICS_USERNAME`, `NTPU_METRICS_PASSWORD`
 
-See `.env.example` for full documentation. Production: set `WAIT_FOR_WARMUP=true` to ensure data is ready before accepting traffic.
+See `.env.example` for full documentation. Production: set `NTPU_WARMUP_WAIT=true` to ensure data is ready before accepting traffic.
 
 ## Error Handling
 
@@ -451,10 +479,10 @@ Fallback → getHelpMessage() + Warning Log
 
 ## Syllabus Module
 
-**CRITICAL: Syllabus and program data scraping is ONLY performed during warmup - never in real-time user queries**
+**CRITICAL: Syllabus and program data scraping is ONLY performed during refresh tasks - never in real-time user queries**
 
-**Warmup Behavior** (`internal/warmup/warmup.go:warmupSyllabusModule()`):
-1. Course warmup scrapes list pages and collects raw program requirements (name + type)
+**Refresh Behavior** (`internal/warmup/warmup.go:warmupSyllabusModule()`):
+1. Course refresh scrapes list pages and collects raw program requirements (name + type)
 2. Identify most recent 2 semesters with cached course data via `GetDistinctRecentSemesters(ctx, 2)`
 3. Load courses from those 2 semesters only via `GetCoursesByYearTerm(ctx, year, term)`
 4. Scrape course detail page via `syllabus.ScrapeCourseDetail(ctx, course)` - returns syllabus content + matched programs
@@ -471,18 +499,18 @@ Fallback → getHelpMessage() + Warning Log
 **User Query Behavior**:
 - Smart search (`找課`) uses BM25 index built from cached syllabi (read-only)
 - Course detail queries show cached syllabus if available (read-only)
-- Program queries use course-program relationships populated during warmup (read-only)
+- Program queries use course-program relationships populated during refresh (read-only)
 - NO scraping occurs during user queries - all data is pre-cached
 
 **Cache Strategy**:
 - TTL: 7 days (enforced at SQL level: `WHERE cached_at > ?`)
 - Scope: Only most recent 2 semesters with data
-- Trigger: Daily refresh at 3:00 AM (auto-enabled when LLM API key configured)
-- Cleanup: Expired entries deleted at 4:00 AM
+- Trigger: Interval-based refresh (auto-enabled when LLM API key configured)
+- Cleanup: Expired entries deleted on `NTPU_CLEANUP_INTERVAL`
 
 **Data Flow**:
 ```
-Warmup (3:00 AM)
+Refresh Task (interval-based)
   → ScrapeCourses (list page, 4 semesters) → RawProgramReqs
   → ScrapeCourseDetail (2 semesters) → Full Program Names
   → Match (types + names) → Save Programs + Syllabus → Rebuild BM25
@@ -495,7 +523,7 @@ User Query (`找課`/`學程`) → BM25/SQL Search (read-only) → Return cached
 - **Entry point**: `cmd/server/main.go` - Application entry point (minimalist)
 - **Application**: `internal/app/app.go` - Application lifecycle with DI, HTTP server, routes, middleware, background jobs
 - **Webhook handler**: `internal/webhook/handler.go:Handle()` (async processing)
-- **Warmup module**: `internal/warmup/warmup.go` (background cache warming, syllabus scraping)
+- **Warmup module**: `internal/warmup/warmup.go` (background data refresh, syllabus scraping)
 - **Bot module interface**: `internal/bot/handler.go`
 - **Context utilities**: `internal/ctxutil/context.go` (type-safe context values, PreserveTracing)
 - **DB schema**: `internal/storage/schema.go`
@@ -504,5 +532,5 @@ User Query (`找課`/`學程`) → BM25/SQL Search (read-only) → Return cached
 - **Smart search**: `internal/rag/bm25.go` (BM25 index with Chinese tokenization, read-only during queries)
 - **Query expander**: `internal/genai/gemini_expander.go` / `internal/genai/openai_expander.go` (LLM-based query expansion for Gemini/Groq/Cerebras)
 - **NLU intent parser**: `internal/genai/gemini_intent.go` / `internal/genai/openai_intent.go` (Function Calling with Close method for Gemini/Groq/Cerebras)
-- **Syllabus scraper**: `internal/syllabus/scraper.go` (extracts syllabus, parses full program names, and fuses with list-page types; ONLY called by warmup module)
+- **Syllabus scraper**: `internal/syllabus/scraper.go` (extracts syllabus, parses full program names, and fuses with list-page types; ONLY called by refresh task)
 - **Timeout constants**: `internal/config/timeouts.go` (all timeout/interval constants)

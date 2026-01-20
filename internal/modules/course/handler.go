@@ -15,6 +15,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	"github.com/garyellow/ntpu-linebot-go/internal/config"
 	"github.com/garyellow/ntpu-linebot-go/internal/ctxutil"
+	"github.com/garyellow/ntpu-linebot-go/internal/delta"
 	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
 	"github.com/garyellow/ntpu-linebot-go/internal/genai"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
@@ -42,6 +43,7 @@ type Handler struct {
 	metrics        *metrics.Metrics
 	logger         *logger.Logger
 	stickerManager *sticker.Manager
+	deltaRecorder  delta.Recorder
 	bm25Index      *rag.BM25Index
 	queryExpander  genai.QueryExpander // Interface for multi-provider support
 	llmRateLimiter *ratelimit.KeyedLimiter
@@ -135,6 +137,7 @@ func NewHandler(
 	metrics *metrics.Metrics,
 	logger *logger.Logger,
 	stickerManager *sticker.Manager,
+	deltaRecorder delta.Recorder,
 	bm25Index *rag.BM25Index,
 	queryExpander genai.QueryExpander, // Interface for multi-provider support
 	llmRateLimiter *ratelimit.KeyedLimiter,
@@ -151,6 +154,7 @@ func NewHandler(
 		metrics:        metrics,
 		logger:         logger,
 		stickerManager: stickerManager,
+		deltaRecorder:  deltaRecorder,
 		bm25Index:      bm25Index,
 		queryExpander:  queryExpander,
 		llmRateLimiter: llmRateLimiter,
@@ -668,6 +672,11 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 	}
 
 	// Save to cache
+	if h.deltaRecorder != nil {
+		if err := h.deltaRecorder.RecordCourses(ctx, []*storage.Course{course}); err != nil {
+			log.WithError(err).WarnContext(ctx, "Failed to record course delta log")
+		}
+	}
 	if err := h.db.SaveCourse(ctx, course); err != nil {
 		log.WithError(err).WarnContext(ctx, "Failed to save course to cache")
 	}
@@ -735,6 +744,11 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 
 		if course != nil {
 			// Save to cache
+			if h.deltaRecorder != nil {
+				if err := h.deltaRecorder.RecordCourses(ctx, []*storage.Course{course}); err != nil {
+					log.WithError(err).WarnContext(ctx, "Failed to record course delta log")
+				}
+			}
 			if err := h.db.SaveCourse(ctx, course); err != nil {
 				log.WithError(err).WarnContext(ctx, "Failed to save course to cache")
 			}
@@ -1000,6 +1014,11 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 				DebugContext(ctx, "Failed to scrape courses for year/term")
 			continue
 		}
+		if h.deltaRecorder != nil && len(scrapedCourses) > 0 {
+			if err := h.deltaRecorder.RecordCourses(ctx, scrapedCourses); err != nil {
+				log.WithError(err).WarnContext(ctx, "Failed to record course delta log")
+			}
+		}
 
 		// Save courses to cache and collect results
 		for _, course := range scrapedCourses {
@@ -1029,6 +1048,11 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 				log.WithError(err).WithField("year", year).WithField("term", term).
 					DebugContext(ctx, "Failed to scrape all courses for year/term")
 				continue
+			}
+			if h.deltaRecorder != nil && len(scrapedCourses) > 0 {
+				if err := h.deltaRecorder.RecordCourses(ctx, scrapedCourses); err != nil {
+					log.WithError(err).WarnContext(ctx, "Failed to record course delta log")
+				}
 			}
 
 			// Filter by searchTerm (title or teacher) using fuzzy matching
@@ -1307,6 +1331,18 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	log.WithField("count", len(scrapedCourses)).
 		WithField("year", year).
 		DebugContext(ctx, "Historical courses scraped")
+
+	if h.deltaRecorder != nil && len(scrapedCourses) > 0 {
+		var recordErr error
+		if isRecent {
+			recordErr = h.deltaRecorder.RecordCourses(ctx, scrapedCourses)
+		} else {
+			recordErr = h.deltaRecorder.RecordHistoricalCourses(ctx, scrapedCourses)
+		}
+		if recordErr != nil {
+			log.WithError(recordErr).WarnContext(ctx, "Failed to record historical course delta log")
+		}
+	}
 
 	// Save courses to correct table based on recency (Hot vs Cold)
 	for _, course := range scrapedCourses {

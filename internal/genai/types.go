@@ -9,7 +9,7 @@
 // Fallback Strategy (3-layer):
 // 1. Model Retry: Same model retried with exponential backoff
 // 2. Model Chain: Next model in same provider's model list
-// 3. Provider Chain: Next provider in LLM_PROVIDERS list
+// 3. Provider Chain: Next provider in NTPU_LLM_PROVIDERS list
 package genai
 
 import (

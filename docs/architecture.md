@@ -91,11 +91,11 @@ NTPU LineBot 是一個為國立臺北大學設計的 LINE 聊天機器人，提�
 │      (internal/scraper/)           │ │   (internal/rag/)        │
 ├────────────────────────────────────┤ ├──────────────────────────┤
 │  Rate Limiter & Retry              │ │  BM25Index               │
-│  • Rate limit: 2s per request      │ │  • Pure Go(Memory Index) │
+│  • No fixed delay between requests │ │  • Pure Go(Memory Index) │
 │  • Timeout: 60s per request        │ │  • Chinese Tokenize      │
 │  • Exponential backoff on failure  │ │  • Keyword Matching      │
 │  • Jitter: ±25% randomization      │ │  • Query Expansion       │
-│  • Max retries: 5 (configurable)   │ │    (Gemini/Groq/Cerebras)│
+│  • Max retries: 10 (configurable)  │ │    (Gemini/Groq/Cerebras)│
 ├────────────────────────────────────┘ └──────────────────────────┤
 │  ┌────────────────────────────────────────────────────────────┐ │
 │  │  URL Cache & Failover                                      │ │
@@ -115,7 +115,7 @@ NTPU LineBot 是一個為國立臺北大學設計的 LINE 聊天機器人，提�
 │                       Target Websites                           │
 │  • LMS (Digital Learning): https://lms.ntpu.edu.tw              │
 │  • SEA (Campus Directory): https://sea.cc.ntpu.edu.tw           │
-│  Mirrors: 120.126.197.7, 140.126.197.8, ...                     │
+│  Mirrors: 120.126.197.52 (LMS), 120.126.197.7 (SEA)             │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -161,7 +161,7 @@ Personal Chat              Group Chat
             Yes        No → Help message
               │
     IntentParser.Parse()
-    (Gemini Function Calling)
+    (Gemini/Groq/Cerebras Function Calling)
               │
     ┌─────────┴─────────┐
     │                   │
@@ -197,6 +197,36 @@ User Query → Bot Module → Repository Layer
                         Return to User
 ```
 
+#### 3. R2 快照同步（可選）
+
+> 目的：多節點部署時，避免重複刷新任務，並確保資料庫一致。
+
+```
+Startup (all nodes)
+    └─ Download latest snapshot from R2 → Open DB
+
+Cache Miss (any node)
+    └─ Scrape → Append delta log (R2)
+
+Refresh/Cleanup Task (leader only)
+    └─ Acquire R2 lock → Refresh/Cleanup → Merge delta logs → Upload snapshot
+
+Follower Nodes
+    └─ Poll snapshot ETag → Download → Hot-swap DB
+```
+
+- **Leader election**：使用 R2 物件條件寫入（ETag）實作分散式鎖。
+- **啟動鎖判斷**：若啟動成功載入快照，直接服務且等待輪詢更新；無快照時才進入 leader 競爭與首次刷新。
+- **首次刷新**：若啟動成功載入快照則略過；無快照時由 leader 執行。
+- **Hot-swap**：新快照下載後，透過 HotSwapDB 安全切換。
+- **Delta Log**：cache miss 的抓取結果以 append-only 形式寫入 R2，leader 合併後再上傳快照。
+- **啟用條件**：`NTPU_R2_ENABLED=true` 並提供 R2 憑證與 bucket。
+- **快照格式**：SQLite 快照以 zstd 壓縮（.zst），下載後先落地暫存檔，再原子替換。
+- **連線關閉延遲**：Hot-swap 後會延遲關閉舊連線，降低中斷風險。
+- **請求超時**：每個 R2 操作有固定 timeout，避免輪詢或啟動長時間卡住。
+- **注意事項**：多容器請避免共享同一個 SQLite 檔案，請使用 R2 快照同步。
+- **WAL 維護**：VACUUM 後需執行 wal_checkpoint(TRUNCATE)，並建議搭配 optimize，確保 WAL 空間回收。
+
 ## Logging 政策（生產環境）
 
 - **Info**：使用者操作與結果（訊息/按鈕進入、意圖分派、查詢開始與結果摘要）。
@@ -218,7 +248,7 @@ User Query → Bot Module → Repository Layer
 ## 錯誤追蹤（Sentry SDK）
 
 - 使用 Sentry Go SDK 進行錯誤追蹤。
-- 啟用方式：設定 `SENTRY_DSN`（格式：`https://$APPLICATION_TOKEN@$INGESTING_HOST/1`）。
+- 啟用方式：設定 `NTPU_SENTRY_ENABLED=true` 與 `NTPU_SENTRY_DSN`（格式：`https://$APPLICATION_TOKEN@$INGESTING_HOST/1`）。
 - 事件保護：預設移除請求標頭/Cookie/Body，並忽略 `context canceled`、`context deadline exceeded` 類型錯誤。
 - 中介層：Gin Middleware 先於 `gin.Recovery()`，可捕捉 panic 與 HTTP 錯誤上下文。
 
@@ -261,7 +291,7 @@ User Query → Bot Module → Repository Layer
      - 資料來源：雙來源融合
          * 課程列表頁 (queryByKeyword) 提供「必/選修」
          * 課程大綱頁 (queryguide) 提供完整學程名稱
-         * warmup 時模糊比對整合後寫入 course_programs
+         * 刷新任務時模糊比對整合後寫入 course_programs
    - 學期範圍：最近 2 個有資料的學期（與智慧搜尋一致）
 
 ## 設計模式
@@ -382,21 +412,21 @@ registry.Register(programHandler) // 學程查詢
 **學期範圍設計**:
 | 資料類型 | 學期範圍 | 來源 |
 |---------|---------|------|
-| courses | 4 學期 | Warmup（資料驅動偵測） |
+| courses | 4 學期 | Refresh（資料驅動偵測） |
 | course_programs | 4 學期 | 隨 courses 同步 |
-| syllabi / BM25 | 2 學期 | Warmup |
+| syllabi / BM25 | 2 學期 | Refresh |
 | 學程課程顯示 | 2 學期 | 查詢時過濾 |
 | historical_courses | 任意 | 按需快取（7 天 TTL） |
 
 **背景任務排程** (臺灣時間):
 - **Sticker**: 啟動時一次
-- **每日刷新** (3:00 AM): contact, course (每日), syllabus (若設定 LLM API Key)
-- **Cache Cleanup** (4:00 AM): 刪除過期資料 (7 天 TTL) + VACUUM
+- **資料刷新任務** (interval-based): contact, course, syllabus（若設定 LLM API Key）
+- **資料清理任務** (interval-based): 刪除過期資料（contacts/courses/historical_courses/programs/course_programs/syllabi）+ VACUUM
 
 ### 2. 智慧搜尋架構（可選）
 
 **BM25 + Query Expansion + Per-Semester Indexing**:
-1. **Warmup**: 課程列表 → 抓取大綱 → 存入 SQLite + 建立 Per-Semester BM25 索引
+1. **Refresh**: 課程列表 → 抓取大綱 → 存入 SQLite + 建立 Per-Semester BM25 索引
 2. **查詢**: 輸入 → Query Expansion (LLM) → Per-Semester Search → Confidence Scoring
 
 **Per-Semester Indexing 優勢**:
@@ -415,7 +445,7 @@ registry.Register(programHandler) // 學程查詢
 - 分數分佈遵循 Normal-Exponential 混合模型（學術標準）
 
 **啟用條件**:
-- 設定 `GEMINI_API_KEY` 或 `GROQ_API_KEY` 或 `CEREBRAS_API_KEY`（自動啟用 syllabus 模組）
+- 設定 `NTPU_LLM_ENABLED=true`，並提供 `NTPU_GEMINI_API_KEY` 或 `NTPU_GROQ_API_KEY` 或 `NTPU_CEREBRAS_API_KEY`（啟用 syllabus 模組）
 - Query Expansion 需要 LLM API Key
 - 即使沒有 API Key，基本 BM25 搜尋仍可使用（但需手動載入大綱資料）
 
@@ -471,11 +501,11 @@ go func() {
 
 **並行執行模組**:
 ```go
-// Warmup 模組使用 WaitGroup 並行執行 (Go 1.25+)
+// Refresh 模組使用 WaitGroup 並行執行 (Go 1.25+)
 var wg sync.WaitGroup
 for _, module := range modules {
     wg.Go(func() {
-        warmupModule(ctx, module)
+        refreshModule(ctx, module)
     })
 }
 wg.Wait()
@@ -638,8 +668,8 @@ go run ./cmd/server
 ```bash
 # Distroless（推薦）
 docker run -d -p 10000:10000 \
-  -e LINE_CHANNEL_ACCESS_TOKEN=xxx \
-  -e LINE_CHANNEL_SECRET=xxx \
+    -e NTPU_LINE_CHANNEL_ACCESS_TOKEN=xxx \
+    -e NTPU_LINE_CHANNEL_SECRET=xxx \
   -v ./data:/data \
   garyellow/ntpu-linebot-go:latest
 
@@ -663,10 +693,11 @@ docker compose up -d
 
 | 環境變數 | 預設值 | 說明 |
 |----------|--------|------|
-| `METRICS_USERNAME` | prometheus | 帳號 |
-| `METRICS_PASSWORD` | (空) | 密碼（空=停用驗證）|
+| `NTPU_METRICS_AUTH_ENABLED` | false | 是否啟用 Basic Auth |
+| `NTPU_METRICS_USERNAME` | prometheus | 帳號 |
+| `NTPU_METRICS_PASSWORD` | (空) | 密碼 |
 
-內部 Docker 網路不需要驗證（保持 `METRICS_PASSWORD` 為空）。
+內部 Docker 網路不需要驗證（保持 `NTPU_METRICS_AUTH_ENABLED=false`）。
 
 ### Kubernetes（未來擴展）
 

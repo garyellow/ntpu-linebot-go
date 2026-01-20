@@ -25,7 +25,7 @@ func (db *DB) SaveStudent(ctx context.Context, student *Student) error {
 			cached_at = excluded.cached_at
 	`
 	start := time.Now()
-	_, err := db.writer.ExecContext(ctx, query, student.ID, student.Name, student.Department, student.Year, time.Now().Unix())
+	_, err := db.Writer().ExecContext(ctx, query, student.ID, student.Name, student.Department, student.Year, time.Now().Unix())
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to save student",
 			"student_id", student.ID,
@@ -101,7 +101,7 @@ func (db *DB) GetStudentByID(ctx context.Context, id string) (*Student, error) {
 	query := `SELECT id, name, department, year, cached_at FROM students WHERE id = ?`
 
 	var student Student
-	err := db.reader.QueryRowContext(ctx, query, id).Scan(
+	err := db.Reader().QueryRowContext(ctx, query, id).Scan(
 		&student.ID,
 		&student.Name,
 		&student.Department,
@@ -159,7 +159,7 @@ func (db *DB) SearchStudentsByName(ctx context.Context, name string) (*StudentSe
 	// Add ordering and limit
 	query += ` ORDER BY year DESC, id DESC LIMIT 401` // Fetch 401 to check if we hit limit (though UI limits to 400)
 
-	rows, err := db.reader.QueryContext(ctx, query, args...)
+	rows, err := db.Reader().QueryContext(ctx, query, args...)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to search students",
 			"search_term", name,
@@ -215,7 +215,7 @@ func (db *DB) GetCoursesByYearTermPaginated(ctx context.Context, year, term, lim
               ORDER BY uid ASC
               LIMIT ? OFFSET ?`
 
-	rows, err := db.reader.QueryContext(ctx, query, year, term, ttlTimestamp, limit, offset)
+	rows, err := db.Reader().QueryContext(ctx, query, year, term, ttlTimestamp, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get courses paginated: %w", err)
 	}
@@ -229,7 +229,7 @@ func (db *DB) GetCoursesByYearTermPaginated(ctx context.Context, year, term, lim
 func (db *DB) GetStudentsByDepartment(ctx context.Context, dept string, year int) ([]Student, error) {
 	query := `SELECT id, name, department, year, cached_at FROM students WHERE year = ? AND department = ?`
 
-	rows, err := db.reader.QueryContext(ctx, query, year, dept)
+	rows, err := db.Reader().QueryContext(ctx, query, year, dept)
 	if err != nil {
 		return nil, fmt.Errorf("query students: %w", err)
 	}
@@ -253,7 +253,7 @@ func (db *DB) CountStudents(ctx context.Context) (int, error) {
 	query := `SELECT COUNT(*) FROM students`
 
 	var count int
-	err := db.reader.QueryRowContext(ctx, query).Scan(&count)
+	err := db.Reader().QueryRowContext(ctx, query).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count students: %w", err)
 	}
@@ -281,7 +281,7 @@ func (db *DB) SaveContact(ctx context.Context, contact *Contact) error {
 			superior = excluded.superior,
 			cached_at = excluded.cached_at
 	`
-	_, err := db.writer.ExecContext(ctx, query,
+	_, err := db.Writer().ExecContext(ctx, query,
 		contact.UID,
 		contact.Type,
 		contact.Name,
@@ -360,7 +360,7 @@ func (db *DB) GetContactByUID(ctx context.Context, uid string) (*Contact, error)
 	var contact Contact
 	var nameEn, title, org, extension, phone, email, website, location, superior sql.NullString
 
-	err := db.reader.QueryRowContext(ctx, query, uid).Scan(
+	err := db.Reader().QueryRowContext(ctx, query, uid).Scan(
 		&contact.UID,
 		&contact.Type,
 		&contact.Name,
@@ -424,7 +424,7 @@ func (db *DB) SearchContactsByName(ctx context.Context, name string) ([]Contact,
 		ORDER BY type, name LIMIT 500`
 
 	likePattern := "%" + sanitized + "%"
-	rows, err := db.reader.QueryContext(ctx, query, likePattern, likePattern, ttlTimestamp)
+	rows, err := db.Reader().QueryContext(ctx, query, likePattern, likePattern, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search contacts by name: %w", err)
 	}
@@ -462,7 +462,7 @@ func (db *DB) GetContactsByOrganization(ctx context.Context, org string) ([]Cont
 	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT uid, type, name, name_en, title, organization, superior, extension, phone, email, cached_at FROM contacts WHERE organization = ? AND cached_at > ?`
 
-	rows, err := db.reader.QueryContext(ctx, query, org, ttlTimestamp)
+	rows, err := db.Reader().QueryContext(ctx, query, org, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get contacts by organization: %w", err)
 	}
@@ -529,7 +529,7 @@ func (db *DB) SearchContactsFuzzy(ctx context.Context, term string) ([]Contact, 
 
 	query += ` ORDER BY type, name LIMIT 500`
 
-	rows, err := db.reader.QueryContext(ctx, query, args...)
+	rows, err := db.Reader().QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fuzzy search contacts: %w", err)
 	}
@@ -570,7 +570,7 @@ func (db *DB) DeleteExpiredContacts(ctx context.Context, ttl time.Duration) (int
 	query := `DELETE FROM contacts WHERE cached_at < ?`
 	expiryTime := time.Now().Add(-ttl).Unix()
 
-	result, err := db.writer.ExecContext(ctx, query, expiryTime)
+	result, err := db.Writer().ExecContext(ctx, query, expiryTime)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete expired contacts: %w", err)
 	}
@@ -588,7 +588,7 @@ func (db *DB) CountContacts(ctx context.Context) (int, error) {
 	query := `SELECT COUNT(*) FROM contacts WHERE cached_at > ?`
 
 	var count int
-	err := db.reader.QueryRowContext(ctx, query, ttlTimestamp).Scan(&count)
+	err := db.Reader().QueryRowContext(ctx, query, ttlTimestamp).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count contacts: %w", err)
 	}
@@ -635,7 +635,7 @@ func (db *DB) SaveCourse(ctx context.Context, course *Course) error {
 			note = excluded.note,
 			cached_at = excluded.cached_at
 	`
-	_, err = db.writer.ExecContext(ctx, query,
+	_, err = db.Writer().ExecContext(ctx, query,
 		course.UID,
 		course.Year,
 		course.Term,
@@ -732,7 +732,7 @@ func (db *DB) GetCourseByUID(ctx context.Context, uid string) (*Course, error) {
 	var teachersJSON, teacherURLsJSON, timesJSON, locationsJSON string
 	var detailURL, note sql.NullString
 
-	err := db.reader.QueryRowContext(ctx, query, uid).Scan(
+	err := db.Reader().QueryRowContext(ctx, query, uid).Scan(
 		&course.UID,
 		&course.Year,
 		&course.Term,
@@ -795,7 +795,7 @@ func (db *DB) SearchCoursesByTitle(ctx context.Context, title string) ([]Course,
 	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at FROM courses WHERE title LIKE ? ESCAPE '\' AND cached_at > ? ORDER BY year DESC, term DESC LIMIT 500`
 
-	rows, err := db.reader.QueryContext(ctx, query, "%"+sanitized+"%", ttlTimestamp)
+	rows, err := db.Reader().QueryContext(ctx, query, "%"+sanitized+"%", ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search courses by title: %w", err)
 	}
@@ -819,7 +819,7 @@ func (db *DB) SearchCoursesByTeacher(ctx context.Context, teacher string) ([]Cou
 	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at FROM courses WHERE teachers LIKE ? ESCAPE '\' AND cached_at > ? ORDER BY year DESC, term DESC LIMIT 500`
 
-	rows, err := db.reader.QueryContext(ctx, query, "%"+sanitized+"%", ttlTimestamp)
+	rows, err := db.Reader().QueryContext(ctx, query, "%"+sanitized+"%", ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search courses by teacher: %w", err)
 	}
@@ -865,7 +865,7 @@ func (db *DB) SearchCoursesByTeacherFuzzy(ctx context.Context, teacherName strin
 
 	query += ` ORDER BY year DESC, term DESC LIMIT 500`
 
-	rows, err := db.reader.QueryContext(ctx, query, args...)
+	rows, err := db.Reader().QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fuzzy search courses by teacher: %w", err)
 	}
@@ -881,7 +881,7 @@ func (db *DB) GetCoursesByYearTerm(ctx context.Context, year, term int) ([]Cours
 	ttlTimestamp := db.getTTLTimestamp()
 	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at FROM courses WHERE year = ? AND term = ? AND cached_at > ?`
 
-	rows, err := db.reader.QueryContext(ctx, query, year, term, ttlTimestamp)
+	rows, err := db.Reader().QueryContext(ctx, query, year, term, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get courses by year and term: %w", err)
 	}
@@ -902,7 +902,7 @@ func (db *DB) GetDistinctRecentSemesters(ctx context.Context, limit int) ([]stru
 		ORDER BY year DESC, term DESC
 		LIMIT ?`
 
-	rows, err := db.reader.QueryContext(ctx, query, ttlTimestamp, limit)
+	rows, err := db.Reader().QueryContext(ctx, query, ttlTimestamp, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get distinct recent semesters: %w", err)
 	}
@@ -936,7 +936,7 @@ func (db *DB) GetCoursesByRecentSemesters(ctx context.Context) ([]Course, error)
 	query := `SELECT uid, year, term, no, title, teachers, teacher_urls, times, locations, detail_url, note, cached_at
 		FROM courses WHERE cached_at > ? ORDER BY year DESC, term DESC`
 
-	rows, err := db.reader.QueryContext(ctx, query, ttlTimestamp)
+	rows, err := db.Reader().QueryContext(ctx, query, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get courses by recent semesters: %w", err)
 	}
@@ -951,7 +951,7 @@ func (db *DB) DeleteExpiredCourses(ctx context.Context, ttl time.Duration) (int6
 	query := `DELETE FROM courses WHERE cached_at < ?`
 	expiryTime := time.Now().Add(-ttl).Unix()
 
-	result, err := db.writer.ExecContext(ctx, query, expiryTime)
+	result, err := db.Writer().ExecContext(ctx, query, expiryTime)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete expired courses: %w", err)
 	}
@@ -969,7 +969,7 @@ func (db *DB) CountCourses(ctx context.Context) (int, error) {
 	query := `SELECT COUNT(*) FROM courses WHERE cached_at > ?`
 
 	var count int
-	err := db.reader.QueryRowContext(ctx, query, ttlTimestamp).Scan(&count)
+	err := db.Reader().QueryRowContext(ctx, query, ttlTimestamp).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count courses: %w", err)
 	}
@@ -983,7 +983,7 @@ func (db *DB) CountCoursesBySemester(ctx context.Context, year, term int) (int, 
 	query := `SELECT COUNT(*) FROM courses WHERE year = ? AND term = ? AND cached_at > ?`
 
 	var count int
-	err := db.reader.QueryRowContext(ctx, query, year, term, ttlTimestamp).Scan(&count)
+	err := db.Reader().QueryRowContext(ctx, query, year, term, ttlTimestamp).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count courses by semester: %w", err)
 	}
@@ -1060,7 +1060,7 @@ func (db *DB) SaveSticker(ctx context.Context, sticker *Sticker) error {
 			source = excluded.source,
 			cached_at = excluded.cached_at
 	`
-	_, err := db.writer.ExecContext(ctx, query,
+	_, err := db.Writer().ExecContext(ctx, query,
 		sticker.URL,
 		sticker.Source,
 		time.Now().Unix(),
@@ -1076,7 +1076,7 @@ func (db *DB) SaveSticker(ctx context.Context, sticker *Sticker) error {
 func (db *DB) GetAllStickers(ctx context.Context) ([]Sticker, error) {
 	query := `SELECT url, source, cached_at FROM stickers`
 
-	rows, err := db.reader.QueryContext(ctx, query)
+	rows, err := db.Reader().QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get all stickers: %w", err)
 	}
@@ -1101,7 +1101,7 @@ func (db *DB) CountStickers(ctx context.Context) (int, error) {
 	query := `SELECT COUNT(*) FROM stickers`
 
 	var count int
-	err := db.reader.QueryRowContext(ctx, query).Scan(&count)
+	err := db.Reader().QueryRowContext(ctx, query).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count stickers: %w", err)
 	}
@@ -1112,7 +1112,7 @@ func (db *DB) CountStickers(ctx context.Context) (int, error) {
 func (db *DB) GetStickerStats(ctx context.Context) (map[string]int, error) {
 	query := `SELECT source, COUNT(*) as count FROM stickers GROUP BY source`
 
-	rows, err := db.reader.QueryContext(ctx, query)
+	rows, err := db.Reader().QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sticker stats: %w", err)
 	}
@@ -1172,7 +1172,7 @@ func (db *DB) SaveHistoricalCourse(ctx context.Context, course *Course) error {
 			note = excluded.note,
 			cached_at = excluded.cached_at
 	`
-	_, err = db.writer.ExecContext(ctx, query,
+	_, err = db.Writer().ExecContext(ctx, query,
 		course.UID,
 		course.Year,
 		course.Term,
@@ -1276,7 +1276,7 @@ func (db *DB) SearchHistoricalCoursesByYearAndTitle(ctx context.Context, year in
 		FROM historical_courses WHERE year = ? AND title LIKE ? ESCAPE '\' AND cached_at > ?
 		ORDER BY term DESC LIMIT 500`
 
-	rows, err := db.reader.QueryContext(ctx, query, year, "%"+sanitized+"%", ttlTimestamp)
+	rows, err := db.Reader().QueryContext(ctx, query, year, "%"+sanitized+"%", ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search historical courses: %w", err)
 	}
@@ -1295,7 +1295,7 @@ func (db *DB) SearchHistoricalCoursesByYear(ctx context.Context, year int) ([]Co
 		FROM historical_courses WHERE year = ? AND cached_at > ?
 		ORDER BY term DESC, title LIMIT 500`
 
-	rows, err := db.reader.QueryContext(ctx, query, year, ttlTimestamp)
+	rows, err := db.Reader().QueryContext(ctx, query, year, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get historical courses by year: %w", err)
 	}
@@ -1310,7 +1310,7 @@ func (db *DB) DeleteExpiredHistoricalCourses(ctx context.Context, ttl time.Durat
 	query := `DELETE FROM historical_courses WHERE cached_at < ?`
 	expiryTime := time.Now().Add(-ttl).Unix()
 
-	result, err := db.writer.ExecContext(ctx, query, expiryTime)
+	result, err := db.Writer().ExecContext(ctx, query, expiryTime)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete expired historical courses: %w", err)
 	}
@@ -1326,7 +1326,7 @@ func (db *DB) DeleteExpiredHistoricalCourses(ctx context.Context, ttl time.Durat
 // This is used by warmup to clean up cold storage when data is promoted to hot storage.
 func (db *DB) DeleteHistoricalCoursesByYearTerm(ctx context.Context, year, term int) error {
 	query := `DELETE FROM historical_courses WHERE year = ? AND term = ?`
-	_, err := db.writer.ExecContext(ctx, query, year, term)
+	_, err := db.Writer().ExecContext(ctx, query, year, term)
 	if err != nil {
 		return fmt.Errorf("failed to delete historical courses for year %d term %d: %w", year, term, err)
 	}
@@ -1339,7 +1339,7 @@ func (db *DB) CountHistoricalCourses(ctx context.Context) (int, error) {
 	query := `SELECT COUNT(*) FROM historical_courses WHERE cached_at > ?`
 
 	var count int
-	err := db.reader.QueryRowContext(ctx, query, ttlTimestamp).Scan(&count)
+	err := db.Reader().QueryRowContext(ctx, query, ttlTimestamp).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count historical courses: %w", err)
 	}
@@ -1370,7 +1370,7 @@ func (db *DB) SaveSyllabus(ctx context.Context, syllabus *Syllabus) error {
 		return fmt.Errorf("failed to marshal teachers: %w", err)
 	}
 
-	_, err = db.writer.ExecContext(ctx, query,
+	_, err = db.Writer().ExecContext(ctx, query,
 		syllabus.UID,
 		syllabus.Year,
 		syllabus.Term,
@@ -1425,13 +1425,32 @@ func (db *DB) SaveSyllabusBatch(ctx context.Context, syllabi []*Syllabus) error 
 	})
 }
 
+// TouchSyllabiBatch updates cached_at for the given syllabus UIDs.
+// This prevents valid but unchanged syllabi from being removed by TTL cleanup.
+func (db *DB) TouchSyllabiBatch(ctx context.Context, uids []string) error {
+	if len(uids) == 0 {
+		return nil
+	}
+
+	query := `UPDATE syllabi SET cached_at = ? WHERE uid = ?`
+	cachedAt := time.Now().Unix()
+	return db.ExecBatchContext(ctx, query, func(stmt *sql.Stmt) error {
+		for _, uid := range uids {
+			if _, err := stmt.ExecContext(ctx, cachedAt, uid); err != nil {
+				return fmt.Errorf("failed to touch syllabus %s: %w", uid, err)
+			}
+		}
+		return nil
+	})
+}
+
 // GetSyllabusContentHash retrieves the content hash for a syllabus
 // Used for incremental update detection - returns empty string if not found
 func (db *DB) GetSyllabusContentHash(ctx context.Context, uid string) (string, error) {
 	query := `SELECT content_hash FROM syllabi WHERE uid = ?`
 
 	var hash string
-	err := db.reader.QueryRowContext(ctx, query, uid).Scan(&hash)
+	err := db.Reader().QueryRowContext(ctx, query, uid).Scan(&hash)
 	if err == sql.ErrNoRows {
 		return "", nil
 	}
@@ -1448,7 +1467,7 @@ func (db *DB) GetSyllabusByUID(ctx context.Context, uid string) (*Syllabus, erro
 	var teachersJSON string
 	var objectives, outline, schedule sql.NullString
 	syllabus := &Syllabus{}
-	err := db.reader.QueryRowContext(ctx, query, uid).Scan(
+	err := db.Reader().QueryRowContext(ctx, query, uid).Scan(
 		&syllabus.UID,
 		&syllabus.Year,
 		&syllabus.Term,
@@ -1467,6 +1486,12 @@ func (db *DB) GetSyllabusByUID(ctx context.Context, uid string) (*Syllabus, erro
 		return nil, fmt.Errorf("failed to get syllabus: %w", err)
 	}
 
+	// Check TTL using configured cache duration
+	ttl := int64(db.cacheTTL.Seconds())
+	if syllabus.CachedAt+ttl <= time.Now().Unix() {
+		return nil, domerrors.ErrNotFound
+	}
+
 	if err := json.Unmarshal([]byte(teachersJSON), &syllabus.Teachers); err != nil {
 		syllabus.Teachers = []string{}
 	}
@@ -1480,9 +1505,11 @@ func (db *DB) GetSyllabusByUID(ctx context.Context, uid string) (*Syllabus, erro
 // GetAllSyllabi retrieves all syllabi from the database
 // Used for loading into BM25 index on startup
 func (db *DB) GetAllSyllabi(ctx context.Context) ([]*Syllabus, error) {
-	query := `SELECT uid, year, term, title, teachers, objectives, outline, schedule, content_hash, cached_at FROM syllabi`
+	ttlTimestamp := db.getTTLTimestamp()
+	query := `SELECT uid, year, term, title, teachers, objectives, outline, schedule, content_hash, cached_at
+		FROM syllabi WHERE cached_at > ?`
 
-	rows, err := db.reader.QueryContext(ctx, query)
+	rows, err := db.Reader().QueryContext(ctx, query, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query syllabi: %w", err)
 	}
@@ -1524,9 +1551,10 @@ func (db *DB) GetAllSyllabi(ctx context.Context) ([]*Syllabus, error) {
 // GetDistinctSemesters retrieves all distinct semesters (year, term pairs) from the syllabi table.
 // Used for chunked loading of the BM25 index to reduce memory usage.
 func (db *DB) GetDistinctSemesters(ctx context.Context) ([]struct{ Year, Term int }, error) {
-	query := `SELECT DISTINCT year, term FROM syllabi ORDER BY year DESC, term DESC`
+	ttlTimestamp := db.getTTLTimestamp()
+	query := `SELECT DISTINCT year, term FROM syllabi WHERE cached_at > ? ORDER BY year DESC, term DESC`
 
-	rows, err := db.reader.QueryContext(ctx, query)
+	rows, err := db.Reader().QueryContext(ctx, query, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get distinct semesters from syllabi: %w", err)
 	}
@@ -1550,9 +1578,11 @@ func (db *DB) GetDistinctSemesters(ctx context.Context) ([]struct{ Year, Term in
 
 // GetSyllabiByYearTerm retrieves all syllabi for a specific year and term
 func (db *DB) GetSyllabiByYearTerm(ctx context.Context, year, term int) ([]*Syllabus, error) {
-	query := `SELECT uid, year, term, title, teachers, objectives, outline, schedule, content_hash, cached_at FROM syllabi WHERE year = ? AND term = ?`
+	ttlTimestamp := db.getTTLTimestamp()
+	query := `SELECT uid, year, term, title, teachers, objectives, outline, schedule, content_hash, cached_at
+		FROM syllabi WHERE year = ? AND term = ? AND cached_at > ?`
 
-	rows, err := db.reader.QueryContext(ctx, query, year, term)
+	rows, err := db.Reader().QueryContext(ctx, query, year, term, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query syllabi: %w", err)
 	}
@@ -1597,7 +1627,7 @@ func (db *DB) CountSyllabi(ctx context.Context) (int, error) {
 	query := `SELECT COUNT(*) FROM syllabi WHERE cached_at > ?`
 
 	var count int
-	err := db.reader.QueryRowContext(ctx, query, ttlTimestamp).Scan(&count)
+	err := db.Reader().QueryRowContext(ctx, query, ttlTimestamp).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count syllabi: %w", err)
 	}
@@ -1609,7 +1639,7 @@ func (db *DB) DeleteExpiredSyllabi(ctx context.Context, ttl time.Duration) (int6
 	query := `DELETE FROM syllabi WHERE cached_at < ?`
 	expiryTime := time.Now().Add(-ttl).Unix()
 
-	result, err := db.writer.ExecContext(ctx, query, expiryTime)
+	result, err := db.Writer().ExecContext(ctx, query, expiryTime)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete expired syllabi: %w", err)
 	}
