@@ -1077,7 +1077,6 @@ func (a *Application) maintenanceLoop(ctx context.Context) {
 					}
 				} else {
 					localState.LastRefresh = completedAt.Unix()
-					localState.UpdatedAt = completedAt.Unix()
 				}
 			}
 		}
@@ -1096,7 +1095,6 @@ func (a *Application) maintenanceLoop(ctx context.Context) {
 					}
 				} else {
 					localState.LastCleanup = completedAt.Unix()
-					localState.UpdatedAt = completedAt.Unix()
 				}
 			}
 		}
@@ -1114,13 +1112,7 @@ func maintenanceCheckInterval(refreshInterval, cleanupInterval time.Duration) ti
 	if base <= 0 {
 		return 0
 	}
-	interval := base / 10
-	if interval < time.Minute {
-		interval = time.Minute
-	}
-	if interval > 15*time.Minute {
-		interval = 15 * time.Minute
-	}
+	interval := min(max(base/10, time.Minute), 15*time.Minute)
 	return interval
 }
 

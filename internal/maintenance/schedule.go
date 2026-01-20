@@ -7,18 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/r2client"
-)
-
-// Kind represents a maintenance job type.
-type Kind string
-
-// Supported maintenance kinds.
-const (
-	KindRefresh Kind = "refresh"
-	KindCleanup Kind = "cleanup"
 )
 
 // State stores the last successful run timestamps.
@@ -28,15 +20,21 @@ type State struct {
 	UpdatedAt   int64 `json:"updated_at"`
 }
 
+type r2ScheduleClient interface {
+	Download(ctx context.Context, key string) (io.ReadCloser, string, error)
+	PutObjectIfNotExists(ctx context.Context, key string, body io.Reader, contentType string) (bool, string, error)
+	PutObjectIfMatch(ctx context.Context, key string, body io.Reader, etag string, contentType string) (bool, string, error)
+}
+
 // R2ScheduleStore persists maintenance state in R2.
 type R2ScheduleStore struct {
-	client         *r2client.Client
+	client         r2ScheduleClient
 	key            string
 	requestTimeout time.Duration
 }
 
 // NewR2ScheduleStore creates a new schedule store.
-func NewR2ScheduleStore(client *r2client.Client, key string, requestTimeout time.Duration) (*R2ScheduleStore, error) {
+func NewR2ScheduleStore(client r2ScheduleClient, key string, requestTimeout time.Duration) (*R2ScheduleStore, error) {
 	if client == nil {
 		return nil, errors.New("maintenance: r2 client is required")
 	}
