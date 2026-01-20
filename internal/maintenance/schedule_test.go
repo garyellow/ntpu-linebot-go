@@ -170,7 +170,10 @@ func TestR2ScheduleStoreUpdateWithRetry(t *testing.T) {
 
 	client := &fakeR2Client{exists: true, etag: "etag-1", matchFailCount: 1}
 	initial := State{LastRefresh: 10, LastCleanup: 20, UpdatedAt: 30}
-	data, _ := json.Marshal(initial)
+	data, err := json.Marshal(initial)
+	if err != nil {
+		t.Fatalf("json.Marshal failed: %v", err)
+	}
 	client.body = data
 
 	store, err := NewR2ScheduleStore(client, "schedule.json", time.Second)
