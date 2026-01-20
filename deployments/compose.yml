@@ -81,8 +81,8 @@ services:
       - NTPU_R2_BUCKET_NAME=${NTPU_R2_BUCKET_NAME:-}
       - NTPU_R2_SNAPSHOT_KEY=${NTPU_R2_SNAPSHOT_KEY:-snapshots/cache.db.zst}
       - NTPU_R2_LOCK_KEY=${NTPU_R2_LOCK_KEY:-locks/crawler.json}
-      - NTPU_R2_LOCK_TTL=${NTPU_R2_LOCK_TTL:-30m}
-      - NTPU_R2_POLL_INTERVAL=${NTPU_R2_POLL_INTERVAL:-5m}
+      - NTPU_R2_LOCK_TTL=${NTPU_R2_LOCK_TTL:-1h}
+      - NTPU_R2_POLL_INTERVAL=${NTPU_R2_POLL_INTERVAL:-15m}
       - NTPU_R2_DELTA_PREFIX=${NTPU_R2_DELTA_PREFIX:-deltas}
     deploy:
       resources:
