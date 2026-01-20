@@ -475,7 +475,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	// Try multiple search variants to increase hit rate
 	h.metrics.RecordCacheMiss(ModuleName)
 	log.WithField("search_term", searchTerm).
-		InfoContext(ctx, "Contact search cache miss; scraping")
+		InfoContext(ctx, "Contact search cache miss, scraping")
 
 	// Build search variants (e.g., "資工系" -> also try "資訊工程")
 	searchVariants := h.buildSearchVariants(searchTerm)
@@ -595,7 +595,7 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 	// Step 2: Cache miss - try scraping
 	h.metrics.RecordCacheMiss(ModuleName)
 	log.WithField("organization", orgName).
-		InfoContext(ctx, "Organization members cache miss; scraping")
+		InfoContext(ctx, "Organization members cache miss, scraping")
 
 	scrapedContacts, err := ntpu.ScrapeContacts(ctx, h.scraper, orgName)
 	if err != nil {

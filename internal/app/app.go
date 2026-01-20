@@ -107,19 +107,19 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 
 	// Warn on ignored credentials when feature flags are disabled
 	if !cfg.IsLLMEnabled() && (cfg.GeminiAPIKey != "" || cfg.GroqAPIKey != "" || cfg.CerebrasAPIKey != "") {
-		log.Warn("LLM credentials provided but NTPU_LLM_ENABLED=false; LLM features are disabled")
+		log.Warn("LLM credentials provided but NTPU_LLM_ENABLED=false, LLM features are disabled")
 	}
 	if !cfg.IsSentryEnabled() && cfg.SentryDSN != "" {
-		log.Warn("Sentry DSN provided but NTPU_SENTRY_ENABLED=false; Sentry is disabled")
+		log.Warn("Sentry DSN provided but NTPU_SENTRY_ENABLED=false, Sentry is disabled")
 	}
 	if !cfg.IsBetterStackEnabled() && cfg.BetterStackToken != "" {
-		log.Warn("Better Stack token provided but NTPU_BETTERSTACK_ENABLED=false; Better Stack is disabled")
+		log.Warn("Better Stack token provided but NTPU_BETTERSTACK_ENABLED=false, Better Stack is disabled")
 	}
 	if !cfg.IsR2Enabled() && (cfg.R2AccountID != "" || cfg.R2AccessKeyID != "" || cfg.R2SecretKey != "" || cfg.R2BucketName != "") {
-		log.Warn("R2 credentials provided but NTPU_R2_ENABLED=false; R2 snapshot sync is disabled")
+		log.Warn("R2 credentials provided but NTPU_R2_ENABLED=false, R2 snapshot sync is disabled")
 	}
 	if !cfg.IsMetricsAuthEnabled() && cfg.MetricsPassword != "" {
-		log.Warn("Metrics password provided but NTPU_METRICS_AUTH_ENABLED=false; metrics auth is disabled")
+		log.Warn("Metrics password provided but NTPU_METRICS_AUTH_ENABLED=false, metrics auth is disabled")
 	}
 
 	// 1. Better Stack Logging
@@ -539,7 +539,7 @@ func (a *Application) readinessCheck(c *gin.Context) {
 	}
 
 	if err := a.db.Ping(ctx); err != nil {
-		a.logger.WithError(err).Warn("Readiness check failed: database unavailable")
+		a.logger.WithError(err).Warn("Readiness check failed, database unavailable")
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"status": "not ready",
 			"reason": "database unavailable",
@@ -738,7 +738,7 @@ func (a *Application) dataCleanupLoop(ctx context.Context) {
 
 	interval := a.cfg.DataCleanupInterval
 	if interval <= 0 {
-		a.logger.Warn("Data cleanup interval disabled or invalid; cleanup loop will not run")
+		a.logger.Warn("Data cleanup interval disabled or invalid, cleanup loop will not run")
 		return
 	}
 
@@ -909,7 +909,7 @@ func (a *Application) dataRefreshLoop(ctx context.Context) {
 
 	interval := a.cfg.DataRefreshInterval
 	if interval <= 0 {
-		a.logger.Warn("Data refresh interval disabled or invalid; refresh loop will not run")
+		a.logger.Warn("Data refresh interval disabled or invalid, refresh loop will not run")
 		return
 	}
 
@@ -936,7 +936,7 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) {
 	defer cancel()
 
 	if includeID && a.snapshotMgr != nil && a.snapshotReady {
-		a.logger.Info("Snapshot already loaded; skipping initial refresh")
+		a.logger.Info("Snapshot already loaded, skipping initial refresh")
 		a.readinessState.MarkReady()
 		return
 	}

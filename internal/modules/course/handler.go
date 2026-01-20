@@ -635,7 +635,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 	// Cache miss - scrape from website
 	h.metrics.RecordCacheMiss(ModuleName)
 	log.WithField("uid", uid).
-		InfoContext(ctx, "Course cache miss; scraping course")
+		InfoContext(ctx, "Course cache miss, scraping course")
 
 	course, err = ntpu.ScrapeCourseByUID(ctx, h.scraper, uid)
 	if err != nil {
@@ -727,7 +727,7 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 	// Cache miss - try scraping from each semester
 	h.metrics.RecordCacheMiss(ModuleName)
 	log.WithField("course_no", courseNo).
-		InfoContext(ctx, "Course cache miss; scraping by course number")
+		InfoContext(ctx, "Course cache miss, scraping by course number")
 
 	for i := range searchYears {
 		year := searchYears[i]
@@ -996,7 +996,7 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 	// Step 3: Cache miss - Try scraping
 	log.WithField("search_term", searchTerm).
 		WithField("semester_type", semesterType).
-		InfoContext(ctx, "Course search cache miss; scraping")
+		InfoContext(ctx, "Course search cache miss, scraping")
 	h.metrics.RecordCacheMiss(ModuleName)
 
 	// Search courses from multiple semesters
@@ -1189,7 +1189,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	// If it's a recent year, redirect to the hot path logic
 	if isRecent {
 		log.WithField("year", year).
-			DebugContext(ctx, "Requested year is recent; using hot cache")
+			DebugContext(ctx, "Requested year is recent, using hot cache")
 		// Reuse the logic from handleRegularPattern but filtered by year
 		var courses []storage.Course
 		for _, term := range []int{1, 2} {
@@ -1281,7 +1281,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	h.metrics.RecordCacheMiss(ModuleName)
 	log.WithField("year", year).
 		WithField("keyword", keyword).
-		InfoContext(ctx, "Historical course cache miss; scraping")
+		InfoContext(ctx, "Historical course cache miss, scraping")
 
 	// Use term=0 to query both semesters at once (more efficient)
 	// Strategy: Dual scrape (Parallel-ish) to catch both Course Title and Teacher Name matches

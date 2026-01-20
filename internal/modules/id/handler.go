@@ -1080,7 +1080,7 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	// Cache miss - scrape from website
 	h.metrics.RecordCacheMiss(ModuleName)
 	log.WithField("student_id", studentID).
-		InfoContext(ctx, "Student cache miss; scraping")
+		InfoContext(ctx, "Student cache miss, scraping")
 
 	student, err = ntpu.ScrapeStudentByID(ctx, h.scraper, studentID)
 	if err != nil {
@@ -1567,7 +1567,7 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 	if len(students) == 0 {
 		log.WithField("year", year).
 			WithField("dept_code", deptCode).
-			InfoContext(ctx, "Department selection cache miss; scraping")
+			InfoContext(ctx, "Department selection cache miss, scraping")
 		h.metrics.RecordCacheMiss(ModuleName)
 		startTime := time.Now()
 

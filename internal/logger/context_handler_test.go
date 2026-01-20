@@ -222,7 +222,7 @@ func TestContextHandler_Integration(t *testing.T) {
 	}
 
 	// Verify message
-	if !strings.Contains(output, `"message":"Processing request"`) {
+	if !strings.Contains(output, `"message":"processing request"`) {
 		t.Errorf("Expected message not found in output: %s", output)
 	}
 }
