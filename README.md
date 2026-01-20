@@ -185,6 +185,11 @@
 若要集中多點部署的日誌，請在 `.env` 設定 `NTPU_BETTERSTACK_ENABLED=true` 與 `NTPU_BETTERSTACK_TOKEN`，並可選擇設定 `NTPU_BETTERSTACK_ENDPOINT`。
 未啟用時保持 `NTPU_BETTERSTACK_ENABLED=false`。完整說明請見 [.env.example](.env.example)。
 
+多點部署識別（可選）：
+
+- `NTPU_SERVER_NAME`：穩定節點名稱，用於 log 與 Sentry 分辨來源
+- `NTPU_INSTANCE_ID`：實例識別（容器/Pod），用於 log/metrics 分辨短生命週期實例
+
 ### 錯誤追蹤（Sentry SDK，可選）
 
 本專案使用 Sentry SDK 進行錯誤追蹤。

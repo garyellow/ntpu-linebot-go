@@ -30,6 +30,8 @@ type Config struct {
 	Port            string
 	LogLevel        string
 	ShutdownTimeout time.Duration
+	ServerName      string
+	InstanceID      string
 
 	// Data Configuration
 	DataDir  string        // Data directory for SQLite database
@@ -153,6 +155,8 @@ func Load() (*Config, error) {
 		Port:            getEnv(EnvPort, "10000"),
 		LogLevel:        getEnv(EnvLogLevel, "info"),
 		ShutdownTimeout: getDurationEnv(EnvShutdownTimeout, 30*time.Second),
+		ServerName:      getEnv(EnvServerName, ""),
+		InstanceID:      getEnv(EnvInstanceID, ""),
 
 		// Data Configuration
 		DataDir:  getEnv(EnvDataDir, getDefaultDataDir()),
