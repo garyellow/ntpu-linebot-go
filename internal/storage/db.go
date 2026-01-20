@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/config"
@@ -19,6 +21,7 @@ import (
 // Writer uses a single connection to avoid SQLITE_BUSY errors.
 // Reader uses multiple connections for parallel queries.
 type DB struct {
+	mu       sync.RWMutex
 	writer   *sql.DB
 	reader   *sql.DB
 	path     string
@@ -130,6 +133,9 @@ func configureConnection(ctx context.Context, conn *sql.DB, readOnly bool) error
 // Close closes both reader and writer database connections.
 // Returns all errors joined together.
 func (db *DB) Close() error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	var errs []error
 	if db.reader != nil {
 		if err := db.reader.Close(); err != nil {
@@ -147,41 +153,59 @@ func (db *DB) Close() error {
 // Writer returns the writer connection for write operations.
 // Use this for INSERT, UPDATE, DELETE operations.
 func (db *DB) Writer() *sql.DB {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
 	return db.writer
 }
 
 // Reader returns the reader connection pool for read operations.
 // Use this for SELECT queries.
 func (db *DB) Reader() *sql.DB {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
 	return db.reader
 }
 
 // Path returns the database file path
 func (db *DB) Path() string {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
 	return db.path
 }
 
 // ExecContext executes a write query with context on the writer connection
 func (db *DB) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	return db.writer.ExecContext(ctx, query, args...)
+	db.mu.RLock()
+	writer := db.writer
+	db.mu.RUnlock()
+	return writer.ExecContext(ctx, query, args...)
 }
 
 // GetCacheTTL returns the configured cache TTL
 func (db *DB) GetCacheTTL() time.Duration {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
 	return db.cacheTTL
 }
 
 // getTTLTimestamp returns the Unix timestamp for TTL cutoff (entries older than this are expired)
 // This is a helper method to avoid repeating the same calculation across repository methods
 func (db *DB) getTTLTimestamp() int64 {
-	return time.Now().Unix() - int64(db.cacheTTL.Seconds())
+	db.mu.RLock()
+	cacheTTL := db.cacheTTL
+	db.mu.RUnlock()
+	return time.Now().Unix() - int64(cacheTTL.Seconds())
 }
 
 // Ping verifies the database connections are alive by pinging both writer and reader connections.
 func (db *DB) Ping(ctx context.Context) error {
+	db.mu.RLock()
+	writer := db.writer
+	reader := db.reader
+	db.mu.RUnlock()
 	return errors.Join(
-		db.writer.PingContext(ctx),
-		db.reader.PingContext(ctx),
+		writer.PingContext(ctx),
+		reader.PingContext(ctx),
 	)
 }
 
@@ -200,7 +224,11 @@ func (db *DB) Ping(ctx context.Context) error {
 //	    return nil
 //	})
 func (db *DB) ExecBatchContext(ctx context.Context, query string, execFn func(stmt *sql.Stmt) error) error {
-	tx, err := db.writer.BeginTx(ctx, nil)
+	db.mu.RLock()
+	writer := db.writer
+	db.mu.RUnlock()
+
+	tx, err := writer.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -228,4 +256,44 @@ func (db *DB) ExecBatchContext(ctx context.Context, query string, execFn func(st
 	committed = true
 
 	return nil
+}
+
+// SwapConnections replaces the underlying reader/writer connections and path.
+// Returns the old connections and path for cleanup by the caller.
+func (db *DB) SwapConnections(newDB *DB) (oldWriter, oldReader *sql.DB, oldPath string) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	oldWriter = db.writer
+	oldReader = db.reader
+	oldPath = db.path
+
+	db.writer = newDB.writer
+	db.reader = newDB.reader
+	db.path = newDB.path
+	db.cacheTTL = newDB.cacheTTL
+
+	newDB.writer = nil
+	newDB.reader = nil
+
+	return oldWriter, oldReader, oldPath
+}
+
+// CreateSnapshot creates a consistent snapshot of the database at destPath.
+// It uses VACUUM INTO to produce a compact, consistent copy.
+func (db *DB) CreateSnapshot(ctx context.Context, destPath string) error {
+	if destPath == "" {
+		return errors.New("snapshot path is required")
+	}
+	_ = os.Remove(destPath)
+
+	query := fmt.Sprintf("VACUUM INTO '%s'", escapeSQLiteString(destPath))
+	if _, err := db.ExecContext(ctx, query); err != nil {
+		return fmt.Errorf("create snapshot: %w", err)
+	}
+	return nil
+}
+
+func escapeSQLiteString(value string) string {
+	return strings.ReplaceAll(value, "'", "''")
 }

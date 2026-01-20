@@ -74,6 +74,17 @@ type Config struct {
 	// Metrics Authentication
 	MetricsUsername string // Username for /metrics endpoint Basic Auth (default: "prometheus")
 	MetricsPassword string // Password for /metrics endpoint Basic Auth (empty = no auth)
+
+	// R2 Snapshot Storage (Optional - enables multi-instance sync)
+	R2Enabled      bool          // Enable R2 snapshot synchronization (default: false)
+	R2AccountID    string        // Cloudflare Account ID
+	R2AccessKeyID  string        // R2 Access Key ID
+	R2SecretKey    string        // R2 Secret Access Key
+	R2BucketName   string        // R2 Bucket name
+	R2SnapshotKey  string        // Object key for snapshot (default: snapshots/cache.db.zst)
+	R2LockKey      string        // Object key for distributed lock (default: locks/crawler.json)
+	R2LockTTL      time.Duration // TTL for distributed lock (default: 30m)
+	R2PollInterval time.Duration // Polling interval for new snapshots (default: 5m)
 }
 
 // BotConfig holds bot-specific configuration (Webhook, Rate Limits, LINE API Constraints)
@@ -205,6 +216,17 @@ func Load() (*Config, error) {
 		// Metrics Authentication
 		MetricsUsername: getEnv("METRICS_USERNAME", "prometheus"),
 		MetricsPassword: getEnv("METRICS_PASSWORD", ""),
+
+		// R2 Snapshot Storage (Optional)
+		R2Enabled:      getBoolEnv("R2_ENABLED", false),
+		R2AccountID:    getEnv("R2_ACCOUNT_ID", ""),
+		R2AccessKeyID:  getEnv("R2_ACCESS_KEY_ID", ""),
+		R2SecretKey:    getEnv("R2_SECRET_ACCESS_KEY", ""),
+		R2BucketName:   getEnv("R2_BUCKET_NAME", ""),
+		R2SnapshotKey:  getEnv("R2_SNAPSHOT_KEY", "snapshots/cache.db.zst"),
+		R2LockKey:      getEnv("R2_LOCK_KEY", "locks/crawler.json"),
+		R2LockTTL:      getDurationEnv("R2_LOCK_TTL", 30*time.Minute),
+		R2PollInterval: getDurationEnv("R2_POLL_INTERVAL", 5*time.Minute),
 	}
 
 	// Validate configuration
@@ -251,6 +273,26 @@ func (c *Config) Validate() error {
 	}
 	if c.WaitForWarmup && c.WarmupGracePeriod <= 0 {
 		errs = append(errs, fmt.Errorf("WARMUP_GRACE_PERIOD must be positive when WAIT_FOR_WARMUP is enabled, got %v", c.WarmupGracePeriod))
+	}
+	if c.R2Enabled {
+		if c.R2AccountID == "" {
+			errs = append(errs, errors.New("R2_ACCOUNT_ID is required when R2_ENABLED is true"))
+		}
+		if c.R2AccessKeyID == "" {
+			errs = append(errs, errors.New("R2_ACCESS_KEY_ID is required when R2_ENABLED is true"))
+		}
+		if c.R2SecretKey == "" {
+			errs = append(errs, errors.New("R2_SECRET_ACCESS_KEY is required when R2_ENABLED is true"))
+		}
+		if c.R2BucketName == "" {
+			errs = append(errs, errors.New("R2_BUCKET_NAME is required when R2_ENABLED is true"))
+		}
+		if c.R2LockTTL <= 0 {
+			errs = append(errs, fmt.Errorf("R2_LOCK_TTL must be positive, got %v", c.R2LockTTL))
+		}
+		if c.R2PollInterval <= 0 {
+			errs = append(errs, fmt.Errorf("R2_POLL_INTERVAL must be positive, got %v", c.R2PollInterval))
+		}
 	}
 
 	if len(errs) > 0 {
@@ -380,4 +422,12 @@ func (c *Config) HasLLMProvider() bool {
 // HasSentry returns true if Sentry error tracking is configured.
 func (c *Config) HasSentry() bool {
 	return c.SentryDSN != ""
+}
+
+// R2Endpoint returns the R2 S3-compatible endpoint URL.
+func (c *Config) R2Endpoint() string {
+	if c.R2AccountID == "" {
+		return ""
+	}
+	return "https://" + c.R2AccountID + ".r2.cloudflarestorage.com"
 }

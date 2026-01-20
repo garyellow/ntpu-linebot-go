@@ -35,7 +35,7 @@ func (db *DB) SaveCoursePrograms(ctx context.Context, courseUID string, programs
 		return nil
 	}
 
-	tx, err := db.writer.BeginTx(ctx, nil)
+	tx, err := db.Writer().BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
@@ -79,7 +79,7 @@ func (db *DB) SyncPrograms(ctx context.Context, programs []struct{ Name, Categor
 		return nil
 	}
 
-	tx, err := db.writer.BeginTx(ctx, nil)
+	tx, err := db.Writer().BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
@@ -159,7 +159,7 @@ func (db *DB) GetAllPrograms(ctx context.Context, years, terms []int) ([]Program
 			GROUP BY p.name, p.category
 			ORDER BY p.name`
 	}
-	rows, err := db.reader.QueryContext(ctx, query, args...)
+	rows, err := db.Reader().QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query programs: %w", err)
 	}
@@ -230,7 +230,7 @@ func (db *DB) GetProgramByName(ctx context.Context, name string, years, terms []
 	}
 
 	var prog Program
-	err := db.reader.QueryRowContext(ctx, query, args...).Scan(&prog.Name, &prog.Category, &prog.URL, &prog.RequiredCount, &prog.ElectiveCount, &prog.TotalCount, &prog.CachedAt)
+	err := db.Reader().QueryRowContext(ctx, query, args...).Scan(&prog.Name, &prog.Category, &prog.URL, &prog.RequiredCount, &prog.ElectiveCount, &prog.TotalCount, &prog.CachedAt)
 	if err == sql.ErrNoRows {
 		return nil, sql.ErrNoRows
 	}
@@ -299,7 +299,7 @@ func (db *DB) SearchPrograms(ctx context.Context, searchTerm string, years, term
 		args = []any{"%" + sanitized + "%"}
 	}
 
-	rows, err := db.reader.QueryContext(ctx, query, args...)
+	rows, err := db.Reader().QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("search programs: %w", err)
 	}
@@ -364,7 +364,7 @@ func (db *DB) GetProgramCourses(ctx context.Context, programName string, years, 
 		args = []any{programName}
 	}
 
-	rows, err := db.reader.QueryContext(ctx, query, args...)
+	rows, err := db.Reader().QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query program courses: %w", err)
 	}
@@ -419,7 +419,7 @@ func (db *DB) GetCoursePrograms(ctx context.Context, courseUID string) ([]Progra
 			program_name
 	`
 
-	rows, err := db.reader.QueryContext(ctx, query, courseUID)
+	rows, err := db.Reader().QueryContext(ctx, query, courseUID)
 	if err != nil {
 		return nil, fmt.Errorf("query course programs: %w", err)
 	}
@@ -447,7 +447,7 @@ func (db *DB) DeleteExpiredCoursePrograms(ctx context.Context, ttl time.Duration
 	query := `DELETE FROM course_programs WHERE cached_at < ?`
 	expiryTime := time.Now().Add(-ttl).Unix()
 
-	result, err := db.writer.ExecContext(ctx, query, expiryTime)
+	result, err := db.Writer().ExecContext(ctx, query, expiryTime)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete expired course programs: %w", err)
 	}
@@ -465,7 +465,7 @@ func (db *DB) DeleteExpiredPrograms(ctx context.Context, ttl time.Duration) (int
 	query := `DELETE FROM programs WHERE cached_at < ?`
 	expiryTime := time.Now().Add(-ttl).Unix()
 
-	result, err := db.writer.ExecContext(ctx, query, expiryTime)
+	result, err := db.Writer().ExecContext(ctx, query, expiryTime)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete expired programs: %w", err)
 	}
@@ -480,7 +480,7 @@ func (db *DB) DeleteExpiredPrograms(ctx context.Context, ttl time.Duration) (int
 // CountPrograms returns the total number of programs in the database.
 func (db *DB) CountPrograms(ctx context.Context) (int, error) {
 	var count int
-	err := db.reader.QueryRowContext(ctx, "SELECT COUNT(*) FROM programs").Scan(&count)
+	err := db.Reader().QueryRowContext(ctx, "SELECT COUNT(*) FROM programs").Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("count programs: %w", err)
 	}

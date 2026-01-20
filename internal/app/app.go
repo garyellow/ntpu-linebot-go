@@ -3,6 +3,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -24,10 +25,12 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/modules/id"
 	"github.com/garyellow/ntpu-linebot-go/internal/modules/program"
 	"github.com/garyellow/ntpu-linebot-go/internal/modules/usage"
+	"github.com/garyellow/ntpu-linebot-go/internal/r2client"
 	"github.com/garyellow/ntpu-linebot-go/internal/rag"
 	"github.com/garyellow/ntpu-linebot-go/internal/ratelimit"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	internalSentry "github.com/garyellow/ntpu-linebot-go/internal/sentry"
+	"github.com/garyellow/ntpu-linebot-go/internal/snapshot"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 	"github.com/garyellow/ntpu-linebot-go/internal/warmup"
@@ -44,6 +47,8 @@ type Application struct {
 	cfg            *config.Config
 	logger         *logger.Logger
 	db             *storage.DB
+	hotSwapDB      *storage.HotSwapDB // Used when R2 is enabled
+	snapshotMgr    *snapshot.Manager  // R2 snapshot manager (nil if R2 disabled)
 	metrics        *metrics.Metrics
 	registry       *prometheus.Registry
 	scraperClient  *scraper.Client
@@ -108,11 +113,75 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		}
 	}
 
-	db, err := storage.New(ctx, cfg.SQLitePath(), cfg.CacheTTL)
-	if err != nil {
-		return nil, fmt.Errorf("database: %w", err)
+	// Initialize database - with optional R2 snapshot support
+	var db *storage.DB
+	var hotSwapDB *storage.HotSwapDB
+	var snapshotMgr *snapshot.Manager
+	useLocalDB := true // Flag to track if we should use local DB
+
+	if cfg.R2Enabled {
+		// R2 mode: try to download snapshot for fast startup
+		log.Info("R2 snapshot sync enabled, attempting to download latest snapshot...")
+
+		r2Client, r2Err := r2client.New(ctx, r2client.Config{
+			Endpoint:    cfg.R2Endpoint(),
+			AccessKeyID: cfg.R2AccessKeyID,
+			SecretKey:   cfg.R2SecretKey,
+			BucketName:  cfg.R2BucketName,
+		})
+		if r2Err != nil {
+			log.WithError(r2Err).Warn("R2 client initialization failed, falling back to local database")
+		} else {
+			snapshotMgr = snapshot.New(r2Client, snapshot.Config{
+				SnapshotKey:  cfg.R2SnapshotKey,
+				LockKey:      cfg.R2LockKey,
+				LockTTL:      cfg.R2LockTTL,
+				PollInterval: cfg.R2PollInterval,
+				TempDir:      cfg.DataDir,
+			})
+
+			// Default to local database path; may be replaced by snapshot download
+			dbPath := cfg.SQLitePath()
+
+			// Try to download latest snapshot
+			snapshotPath, etag, dlErr := snapshotMgr.DownloadSnapshot(ctx, cfg.DataDir)
+			if dlErr != nil {
+				if errors.Is(dlErr, snapshot.ErrNotFound) {
+					log.Info("No R2 snapshot found, starting with local database")
+				} else {
+					log.WithError(dlErr).Warn("R2 snapshot download failed, starting with local database")
+				}
+			} else {
+				log.WithField("etag", etag).Info("Downloaded snapshot from R2")
+				dbPath = snapshotPath
+			}
+
+			// Create HotSwapDB for runtime updates (even if snapshot download failed)
+			var hsErr error
+			hotSwapDB, hsErr = storage.NewHotSwapDB(ctx, dbPath, cfg.CacheTTL)
+			if hsErr != nil {
+				log.WithError(hsErr).Warn("HotSwapDB creation failed, falling back to regular DB")
+				snapshotMgr = nil
+			} else {
+				db = hotSwapDB.DB()
+				useLocalDB = false
+				log.WithField("path", dbPath).WithField("cache_ttl", cfg.CacheTTL).Info("Database connected (R2 snapshot mode)")
+
+				// Start background polling for new snapshots
+				snapshotMgr.StartPolling(ctx, hotSwapDB, cfg.DataDir)
+			}
+		}
 	}
-	log.WithField("path", cfg.SQLitePath()).WithField("cache_ttl", cfg.CacheTTL).Info("Database connected")
+
+	// Fallback to local database if R2 is disabled or failed
+	if useLocalDB {
+		var dbErr error
+		db, dbErr = storage.New(ctx, cfg.SQLitePath(), cfg.CacheTTL)
+		if dbErr != nil {
+			return nil, fmt.Errorf("database: %w", dbErr)
+		}
+		log.WithField("path", cfg.SQLitePath()).WithField("cache_ttl", cfg.CacheTTL).Info("Database connected")
+	}
 
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(
@@ -138,12 +207,16 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	if cfg.HasLLMProvider() {
 		llmCfg := buildLLMConfig(cfg)
 
-		if intentParser, err = genai.CreateIntentParser(ctx, llmCfg); err != nil {
-			log.WithError(err).Warn("Intent parser initialization failed")
+		var ipErr, qeErr error
+		intentParser, ipErr = genai.CreateIntentParser(ctx, llmCfg)
+		if ipErr != nil {
+			log.WithError(ipErr).Warn("Intent parser initialization failed")
 		}
-		if queryExpander, err = genai.CreateQueryExpander(ctx, llmCfg); err != nil {
-			log.WithError(err).Warn("Query expander initialization failed")
+		queryExpander, qeErr = genai.CreateQueryExpander(ctx, llmCfg)
+		if qeErr != nil {
+			log.WithError(qeErr).Warn("Query expander initialization failed")
 		}
+
 		if intentParser != nil || queryExpander != nil {
 			// Get configured providers from LLM config
 			providers := llmCfg.ConfiguredProviders()
@@ -233,6 +306,8 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		cfg:            cfg,
 		logger:         log,
 		db:             db,
+		hotSwapDB:      hotSwapDB,
+		snapshotMgr:    snapshotMgr,
 		metrics:        m,
 		registry:       registry,
 		scraperClient:  scraperClient,
@@ -506,8 +581,21 @@ func (a *Application) shutdown() error {
 		}
 	}
 
-	if err := a.db.Close(); err != nil {
-		a.logger.WithError(err).WithField("component", "database").Error("Component close error")
+	// Stop R2 snapshot polling if enabled
+	if a.snapshotMgr != nil {
+		a.snapshotMgr.StopPolling()
+		a.logger.Info("Stopped R2 snapshot polling")
+	}
+
+	// Close database (use HotSwapDB if R2 is enabled)
+	if a.hotSwapDB != nil {
+		if err := a.hotSwapDB.Close(); err != nil {
+			a.logger.WithError(err).WithField("component", "hotswap_database").Error("Component close error")
+		}
+	} else if a.db != nil {
+		if err := a.db.Close(); err != nil {
+			a.logger.WithError(err).WithField("component", "database").Error("Component close error")
+		}
 	}
 
 	if a.llmLimiter != nil {
@@ -692,6 +780,32 @@ func (a *Application) performProactiveWarmup(ctx context.Context, warmID bool) {
 	warmupCtx, cancel := context.WithTimeout(ctx, config.WarmupProactive)
 	defer cancel()
 
+	// R2 distributed lock: only one instance should run warmup at a time
+	isLeader := true
+	if a.snapshotMgr != nil && !warmID {
+		// Skip leader election for initial warmup (warmID=true) - all instances need data
+		// For daily warmup, use leader election
+		var lockErr error
+		isLeader, lockErr = a.snapshotMgr.AcquireLeaderLock(warmupCtx)
+		if lockErr != nil {
+			a.logger.WithError(lockErr).Warn("Failed to acquire leader lock, proceeding as follower")
+			isLeader = false
+		}
+
+		if !isLeader {
+			a.logger.Info("Another instance is leader for warmup, waiting for new snapshot via polling")
+			// Follower: no warmup needed, snapshot polling will handle updates
+			return
+		}
+
+		a.logger.Info("Acquired leader lock, this instance will run warmup")
+		defer func() {
+			if err := a.snapshotMgr.ReleaseLeaderLock(warmupCtx); err != nil {
+				a.logger.WithError(err).Warn("Failed to release leader lock")
+			}
+		}()
+	}
+
 	opts := warmup.Options{
 		Reset:         false,
 		HasLLMKey:     a.cfg.HasLLMProvider(),
@@ -726,6 +840,18 @@ func (a *Application) performProactiveWarmup(ctx context.Context, warmID bool) {
 
 	if a.bm25Index != nil && a.bm25Index.IsEnabled() {
 		a.logger.WithField("doc_count", a.bm25Index.Count()).Info("BM25 smart search enabled")
+	}
+
+	// R2: Leader uploads new snapshot after successful warmup
+	if a.snapshotMgr != nil && isLeader {
+		a.logger.Info("Uploading new snapshot to R2...")
+
+		etag, uploadErr := a.snapshotMgr.UploadSnapshot(warmupCtx, a.db)
+		if uploadErr != nil {
+			a.logger.WithError(uploadErr).Error("Failed to upload snapshot to R2")
+		} else {
+			a.logger.WithField("etag", etag).Info("Snapshot uploaded to R2 successfully")
+		}
 	}
 }
 
