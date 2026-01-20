@@ -195,6 +195,16 @@
 
 設定後服務啟動會自動上報錯誤與 panic。完整範例請見 [.env.example](.env.example)。
 
+### R2 快照同步（可選，建議多節點）
+
+R2 快照用於 **多節點部署** 的資料同步與快速啟動：
+
+- 啟動時自動下載最新 SQLite 快照
+- 每日 warmup 由單一 leader 執行，完成後上傳快照
+- 其他節點透過輪詢偵測快照更新並熱切換
+
+啟用方式：在 `.env` 設定 `NTPU_R2_ENABLED=true`，並提供 `NTPU_R2_ACCOUNT_ID`、`NTPU_R2_ACCESS_KEY_ID`、`NTPU_R2_SECRET_ACCESS_KEY`、`NTPU_R2_BUCKET_NAME`。其餘參數可使用預設值。完整範例請見 [.env.example](.env.example)。
+
 ### 取得 LINE Bot 憑證
 
 1. 前往 [LINE Developers Console](https://developers.line.biz/console/)

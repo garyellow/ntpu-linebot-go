@@ -5,6 +5,7 @@
 package r2client
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -263,7 +264,7 @@ func (l *DistributedLock) Acquire(ctx context.Context) (bool, error) {
 	}
 
 	// Try to create the lock (fails if it already exists)
-	created, etag, err := l.client.PutObjectIfNotExists(ctx, l.key, strings.NewReader(string(data)), "application/json")
+	created, etag, err := l.client.PutObjectIfNotExists(ctx, l.key, bytes.NewReader(data), "application/json")
 	if err != nil {
 		return false, fmt.Errorf("acquire lock: %w", err)
 	}
@@ -316,7 +317,7 @@ func (l *DistributedLock) Renew(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("renew lock: marshal: %w", err)
 	}
 
-	updated, newEtag, err := l.client.PutObjectIfMatch(ctx, l.key, strings.NewReader(string(data)), l.etag, "application/json")
+	updated, newEtag, err := l.client.PutObjectIfMatch(ctx, l.key, bytes.NewReader(data), l.etag, "application/json")
 	if err != nil {
 		return false, fmt.Errorf("renew lock: %w", err)
 	}
@@ -366,7 +367,7 @@ func (l *DistributedLock) steal(ctx context.Context, _ *LockInfo, oldEtag string
 		return false, "", fmt.Errorf("marshal: %w", err)
 	}
 
-	return l.client.PutObjectIfMatch(ctx, l.key, strings.NewReader(string(data)), oldEtag, "application/json")
+	return l.client.PutObjectIfMatch(ctx, l.key, bytes.NewReader(data), oldEtag, "application/json")
 }
 
 // Release releases the lock.

@@ -91,11 +91,11 @@ NTPU LineBot 是一個為國立臺北大學設計的 LINE 聊天機器人，提�
 │      (internal/scraper/)           │ │   (internal/rag/)        │
 ├────────────────────────────────────┤ ├──────────────────────────┤
 │  Rate Limiter & Retry              │ │  BM25Index               │
-│  • Rate limit: 2s per request      │ │  • Pure Go(Memory Index) │
+│  • No fixed delay between requests │ │  • Pure Go(Memory Index) │
 │  • Timeout: 60s per request        │ │  • Chinese Tokenize      │
 │  • Exponential backoff on failure  │ │  • Keyword Matching      │
 │  • Jitter: ±25% randomization      │ │  • Query Expansion       │
-│  • Max retries: 5 (configurable)   │ │    (Gemini/Groq/Cerebras)│
+│  • Max retries: 10 (configurable)  │ │    (Gemini/Groq/Cerebras)│
 ├────────────────────────────────────┘ └──────────────────────────┤
 │  ┌────────────────────────────────────────────────────────────┐ │
 │  │  URL Cache & Failover                                      │ │
@@ -115,7 +115,7 @@ NTPU LineBot 是一個為國立臺北大學設計的 LINE 聊天機器人，提�
 │                       Target Websites                           │
 │  • LMS (Digital Learning): https://lms.ntpu.edu.tw              │
 │  • SEA (Campus Directory): https://sea.cc.ntpu.edu.tw           │
-│  Mirrors: 120.126.197.7, 140.126.197.8, ...                     │
+│  Mirrors: 120.126.197.52 (LMS), 120.126.197.7 (SEA)             │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -161,7 +161,7 @@ Personal Chat              Group Chat
             Yes        No → Help message
               │
     IntentParser.Parse()
-    (Gemini Function Calling)
+    (Gemini/Groq/Cerebras Function Calling)
               │
     ┌─────────┴─────────┐
     │                   │
@@ -196,6 +196,25 @@ User Query → Bot Module → Repository Layer
                               ↓
                         Return to User
 ```
+
+#### 3. R2 快照同步（可選）
+
+> 目的：多節點部署時，避免重複 warmup，並確保資料庫一致。
+
+```
+Startup (all nodes)
+    └─ Download latest snapshot from R2 → Open DB
+
+Daily Warmup (leader only)
+    └─ Acquire R2 lock → Warmup → Upload snapshot
+
+Follower Nodes
+    └─ Poll snapshot ETag → Download → Hot-swap DB
+```
+
+- **Leader election**：使用 R2 物件條件寫入（ETag）實作分散式鎖。
+- **Hot-swap**：新快照下載後，透過 HotSwapDB 安全切換。
+- **啟用條件**：`NTPU_R2_ENABLED=true` 並提供 R2 憑證與 bucket。
 
 ## Logging 政策（生產環境）
 

@@ -314,6 +314,12 @@ func (c *Config) Validate() error {
 		if c.R2BucketName == "" {
 			errs = append(errs, errors.New("NTPU_R2_BUCKET_NAME is required when NTPU_R2_ENABLED=true"))
 		}
+		if c.R2SnapshotKey == "" {
+			errs = append(errs, errors.New("NTPU_R2_SNAPSHOT_KEY must not be empty when NTPU_R2_ENABLED=true"))
+		}
+		if c.R2LockKey == "" {
+			errs = append(errs, errors.New("NTPU_R2_LOCK_KEY must not be empty when NTPU_R2_ENABLED=true"))
+		}
 		if c.R2LockTTL <= 0 {
 			errs = append(errs, fmt.Errorf("NTPU_R2_LOCK_TTL must be positive, got %v", c.R2LockTTL))
 		}

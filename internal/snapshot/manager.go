@@ -326,12 +326,5 @@ func (m *Manager) CurrentETag() string {
 	return m.currentETag
 }
 
-// SetCurrentETag sets the current ETag (used when loading from local DB).
-func (m *Manager) SetCurrentETag(etag string) {
-	m.mu.Lock()
-	m.currentETag = etag
-	m.mu.Unlock()
-}
-
 // ErrNotFound indicates no snapshot exists in R2.
 var ErrNotFound = errors.New("snapshot: not found")
