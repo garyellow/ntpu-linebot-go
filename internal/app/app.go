@@ -469,8 +469,8 @@ func (a *Application) readinessCheck(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), config.ReadinessCheckTimeout)
 	defer cancel()
 
-	// Check refresh state first (for initial startup) - only if waiting for refresh is enabled
-	if a.cfg.WaitForWarmup && !a.readinessState.IsReady() {
+	// Check refresh state first (for initial startup)
+	if !a.readinessState.IsReady() {
 		status := a.readinessState.Status()
 		a.logger.WithField("elapsed_seconds", status.ElapsedSeconds).
 			WithField("timeout_seconds", status.TimeoutSeconds).
@@ -1042,8 +1042,8 @@ func (a *Application) recordCacheSizeMetrics(ctx context.Context) {
 	}
 }
 
-// readinessMiddleware rejects webhook requests with 503 until initial refresh completes.
-// LINE Platform will automatically retry, ensuring eventual delivery.
+// readinessMiddleware rejects webhook requests with 503 when warmup wait is enabled
+// and initial refresh is not ready. LINE Platform will automatically retry.
 func (a *Application) readinessMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if a.cfg.WaitForWarmup && !a.readinessState.IsReady() {

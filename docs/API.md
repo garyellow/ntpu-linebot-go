@@ -103,16 +103,17 @@ GET /readyz
 
 **何時失敗**:
 - 資料庫無法連線
-- 初次啟動資料刷新尚未完成（且仍在 Grace Period 內）（僅當 `NTPU_WARMUP_WAIT=true`）
+- 初次啟動資料刷新尚未完成（且仍在 Grace Period 內）
 - 依賴服務暫時不可用
 
 > **環境變數 `NTPU_WARMUP_WAIT`**:
-> - `true`：等待刷新完成或 grace period 後才接受流量
-> - `false`（預設）：資料庫連線後立即 Ready
+> - `true`：/webhook 會在 warmup 未完成時回 503（LINE 會自動重試）
+> - `false`（預設）：/webhook 立即接受流量
 >
-> **環境變數 `NTPU_WARMUP_GRACE_PERIOD`**（僅當 `NTPU_WARMUP_WAIT=true` 時生效）:
+> **環境變數 `NTPU_WARMUP_GRACE_PERIOD`**:
 > - 預設 `10m`（10 分鐘）
-> - 超過此時間後，無論刷新是否完成都開放流量
+> - 超過此時間後，/readyz 會回 Ready，即使 warmup 仍在進行
+> - 若 `NTPU_WARMUP_WAIT=true`，/webhook 也會在此時間後停止回 503
 
 ---
 
@@ -195,10 +196,12 @@ X-Line-Signature: {signature}
 **Response** (503 Service Unavailable - 資料來源不可用或 Refresh 中):
 ```json
 {
-  "error": "service warming up",
+  "error": "service refreshing",
   "retry_after": 60
 }
 ```
+
+> **注意**: 只有在 `NTPU_WARMUP_WAIT=true` 且 warmup 尚未 ready 時，/webhook 才會回 503。
 
 **支援的事件類型**:
 - `message` - 文字訊息、貼圖

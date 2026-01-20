@@ -48,8 +48,8 @@ type Config struct {
 	ScraperBaseURLs   map[string][]string
 
 	// Startup Configuration
-	WaitForWarmup       bool          // If true, wait for warmup completion before accepting traffic (default: false)
-	WarmupGracePeriod   time.Duration // Grace period to wait for warmup when WaitForWarmup=true (default: 10m)
+	WaitForWarmup       bool          // If true, reject /webhook until warmup is ready (default: false)
+	WarmupGracePeriod   time.Duration // Readiness grace period for initial warmup (default: 10m)
 	DataRefreshInterval time.Duration // Interval for data refresh tasks
 	DataCleanupInterval time.Duration // Interval for data cleanup tasks
 
@@ -377,8 +377,8 @@ func (c *Config) Validate() error {
 	if c.ScraperMaxRetries < 0 {
 		errs = append(errs, fmt.Errorf("NTPU_SCRAPER_MAX_RETRIES cannot be negative, got %d", c.ScraperMaxRetries))
 	}
-	if c.WaitForWarmup && c.WarmupGracePeriod <= 0 {
-		errs = append(errs, fmt.Errorf("NTPU_WARMUP_GRACE_PERIOD must be positive when NTPU_WARMUP_WAIT is enabled, got %v", c.WarmupGracePeriod))
+	if c.WarmupGracePeriod <= 0 {
+		errs = append(errs, fmt.Errorf("NTPU_WARMUP_GRACE_PERIOD must be positive, got %v", c.WarmupGracePeriod))
 	}
 
 	if len(errs) > 0 {
