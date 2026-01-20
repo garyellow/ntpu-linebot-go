@@ -81,29 +81,10 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	})
 
 	readinessState := warmup.NewReadinessState(cfg.WarmupGracePeriod)
-	serverName := cfg.ServerName
-	instanceID := cfg.InstanceID
+	host, _ := os.Hostname()
+	serverName, instanceID := resolveServerIdentity(cfg, host, time.Now)
 	log = log.WithField("service", "ntpu-linebot-go")
-	if host, err := os.Hostname(); err == nil && host != "" {
-		if serverName == "" {
-			serverName = host
-		}
-	}
-	if serverName == "" && instanceID != "" {
-		serverName = instanceID
-	}
-	if instanceID == "" {
-		instanceID = serverName
-	}
-	if instanceID == "" {
-		instanceID = fmt.Sprintf("instance-%d", time.Now().UnixNano())
-		if serverName == "" {
-			serverName = instanceID
-		}
-	}
-	if serverName != "" {
-		log = log.WithField("server_name", serverName)
-	}
+	log = log.WithField("server_name", serverName)
 	log = log.WithField("instance_id", instanceID)
 
 	// Set as default logger to enable context value extraction (userID, chatID, requestID)
@@ -418,6 +399,27 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 
 	log.Info("Initialization complete")
 	return app, nil
+}
+
+func resolveServerIdentity(cfg *config.Config, hostname string, now func() time.Time) (string, string) {
+	serverName := cfg.ServerName
+	instanceID := cfg.InstanceID
+	if hostname != "" && serverName == "" {
+		serverName = hostname
+	}
+	if serverName == "" && instanceID != "" {
+		serverName = instanceID
+	}
+	if instanceID == "" {
+		instanceID = serverName
+	}
+	if instanceID == "" {
+		instanceID = fmt.Sprintf("instance-%d", now().UnixNano())
+		if serverName == "" {
+			serverName = instanceID
+		}
+	}
+	return serverName, instanceID
 }
 
 func resolveLogVersion(cfg *config.Config) string {

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -225,6 +226,68 @@ func TestReadinessCheckCacheStats(t *testing.T) {
 	// Check that contacts count is present (should be 1)
 	if contacts, ok := cache["contacts"].(float64); !ok || contacts != 1 {
 		t.Errorf("Expected contacts=1, got %v", cache["contacts"])
+	}
+}
+
+func TestResolveServerIdentity(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	nowFunc := func() time.Time { return now }
+	generatedID := "instance-" + strconv.FormatInt(now.UnixNano(), 10)
+
+	tests := []struct {
+		name       string
+		cfg        *config.Config
+		hostname   string
+		wantServer string
+		wantInst   string
+	}{
+		{
+			name:       "config server and instance",
+			cfg:        &config.Config{ServerName: "srv-1", InstanceID: "pod-1"},
+			hostname:   "node-1",
+			wantServer: "srv-1",
+			wantInst:   "pod-1",
+		},
+		{
+			name:       "hostname fallback",
+			cfg:        &config.Config{},
+			hostname:   "node-1",
+			wantServer: "node-1",
+			wantInst:   "node-1",
+		},
+		{
+			name:       "instance fallback",
+			cfg:        &config.Config{InstanceID: "pod-1"},
+			hostname:   "",
+			wantServer: "pod-1",
+			wantInst:   "pod-1",
+		},
+		{
+			name:       "generated fallback",
+			cfg:        &config.Config{},
+			hostname:   "",
+			wantServer: generatedID,
+			wantInst:   generatedID,
+		},
+		{
+			name:       "server only",
+			cfg:        &config.Config{ServerName: "srv-1"},
+			hostname:   "node-1",
+			wantServer: "srv-1",
+			wantInst:   "srv-1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			serverName, instanceID := resolveServerIdentity(tt.cfg, tt.hostname, nowFunc)
+			if serverName != tt.wantServer {
+				t.Fatalf("serverName = %q, want %q", serverName, tt.wantServer)
+			}
+			if instanceID != tt.wantInst {
+				t.Fatalf("instanceID = %q, want %q", instanceID, tt.wantInst)
+			}
+		})
 	}
 }
 
