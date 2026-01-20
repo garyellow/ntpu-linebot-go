@@ -65,7 +65,8 @@ func TestContextHandler_Handle(t *testing.T) {
 			// Setup buffer to capture log output
 			var buf bytes.Buffer
 			baseHandler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{
-				Level: slog.LevelDebug,
+				Level:       slog.LevelDebug,
+				ReplaceAttr: replaceAttrFunc(),
 			})
 			handler := NewContextHandler(baseHandler)
 
@@ -105,7 +106,8 @@ func TestContextHandler_Handle(t *testing.T) {
 
 func TestContextHandler_Enabled(t *testing.T) {
 	baseHandler := slog.NewJSONHandler(bytes.NewBuffer(nil), &slog.HandlerOptions{
-		Level: slog.LevelInfo,
+		Level:       slog.LevelInfo,
+		ReplaceAttr: replaceAttrFunc(),
 	})
 	handler := NewContextHandler(baseHandler)
 
@@ -134,7 +136,7 @@ func TestContextHandler_Enabled(t *testing.T) {
 
 func TestContextHandler_WithAttrs(t *testing.T) {
 	var buf bytes.Buffer
-	baseHandler := slog.NewJSONHandler(&buf, nil)
+	baseHandler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{ReplaceAttr: replaceAttrFunc()})
 	handler := NewContextHandler(baseHandler)
 
 	// Add attributes using WithAttrs
@@ -160,7 +162,7 @@ func TestContextHandler_WithAttrs(t *testing.T) {
 
 func TestContextHandler_WithGroup(t *testing.T) {
 	var buf bytes.Buffer
-	baseHandler := slog.NewJSONHandler(&buf, nil)
+	baseHandler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{ReplaceAttr: replaceAttrFunc()})
 	handler := NewContextHandler(baseHandler)
 
 	// Create group
@@ -184,7 +186,8 @@ func TestContextHandler_Integration(t *testing.T) {
 	// Test that ContextHandler works with both context values and explicit attributes
 	var buf bytes.Buffer
 	baseHandler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
+		Level:       slog.LevelInfo,
+		ReplaceAttr: replaceAttrFunc(),
 	})
 	handler := NewContextHandler(baseHandler)
 	logger := slog.New(handler)
@@ -219,7 +222,7 @@ func TestContextHandler_Integration(t *testing.T) {
 	}
 
 	// Verify message
-	if !strings.Contains(output, `"msg":"processing request"`) {
+	if !strings.Contains(output, `"message":"processing request"`) {
 		t.Errorf("Expected message not found in output: %s", output)
 	}
 }
