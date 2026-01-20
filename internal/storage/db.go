@@ -43,8 +43,9 @@ func New(ctx context.Context, dbPath string, cacheTTL time.Duration) (*DB, error
 
 	var writerDSN, readerDSN string
 	if isMemory {
-		writerDSN = "file::memory:?cache=shared&_txlock=immediate"
-		readerDSN = "file::memory:?cache=shared&mode=ro"
+		baseDSN := "file:ntpu_cache?mode=memory&cache=shared"
+		writerDSN = baseDSN + "&_txlock=immediate"
+		readerDSN = baseDSN
 	} else {
 		writerDSN = dbPath + "?_txlock=immediate"
 		readerDSN = dbPath + "?mode=ro"
@@ -105,8 +106,10 @@ func New(ctx context.Context, dbPath string, cacheTTL time.Duration) (*DB, error
 }
 
 func configureConnection(ctx context.Context, conn *sql.DB, readOnly bool) error {
-	if _, err := conn.ExecContext(ctx, "PRAGMA journal_mode=WAL"); err != nil {
-		return fmt.Errorf("enable WAL: %w", err)
+	if !readOnly {
+		if _, err := conn.ExecContext(ctx, "PRAGMA journal_mode=WAL"); err != nil {
+			return fmt.Errorf("enable WAL: %w", err)
+		}
 	}
 
 	busyTimeoutMs := int(config.DatabaseBusyTimeout.Milliseconds())
@@ -119,11 +122,20 @@ func configureConnection(ctx context.Context, conn *sql.DB, readOnly bool) error
 		return fmt.Errorf("failed to enable foreign keys: %w", err)
 	}
 
+	// Store temporary tables in memory for faster queries
+	if _, err := conn.ExecContext(ctx, "PRAGMA temp_store=MEMORY"); err != nil {
+		return fmt.Errorf("failed to set temp store: %w", err)
+	}
+
 	// Set synchronous mode to NORMAL for better write performance
 	// (WAL mode makes this safe - data is still durable)
 	if !readOnly {
 		if _, err := conn.ExecContext(ctx, "PRAGMA synchronous=NORMAL"); err != nil {
 			return fmt.Errorf("failed to set synchronous mode: %w", err)
+		}
+	} else {
+		if _, err := conn.ExecContext(ctx, "PRAGMA query_only=ON"); err != nil {
+			return fmt.Errorf("failed to set query-only mode: %w", err)
 		}
 	}
 
@@ -290,6 +302,14 @@ func (db *DB) CreateSnapshot(ctx context.Context, destPath string) error {
 	query := fmt.Sprintf("VACUUM INTO '%s'", escapeSQLiteString(destPath))
 	if _, err := db.ExecContext(ctx, query); err != nil {
 		return fmt.Errorf("create snapshot: %w", err)
+	}
+
+	if _, err := db.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+		return fmt.Errorf("create snapshot: wal checkpoint: %w", err)
+	}
+
+	if _, err := db.ExecContext(ctx, "PRAGMA optimize"); err != nil {
+		return fmt.Errorf("create snapshot: optimize: %w", err)
 	}
 	return nil
 }

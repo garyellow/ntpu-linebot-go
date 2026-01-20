@@ -278,7 +278,7 @@ func NewDistributedLock(client *Client, key string, ttl time.Duration) *Distribu
 func (l *DistributedLock) Acquire(ctx context.Context) (bool, error) {
 	lockInfo := LockInfo{
 		Owner:     l.ownerID,
-		ExpiresAt: time.Now().Add(l.ttl),
+		ExpiresAt: time.Now().UTC().Add(l.ttl),
 	}
 
 	data, err := json.Marshal(lockInfo)
@@ -332,7 +332,7 @@ func (l *DistributedLock) Renew(ctx context.Context) (bool, error) {
 
 	info := LockInfo{
 		Owner:     l.ownerID,
-		ExpiresAt: time.Now().Add(l.ttl),
+		ExpiresAt: time.Now().UTC().Add(l.ttl),
 	}
 
 	data, err := json.Marshal(info)
@@ -375,14 +375,14 @@ func (l *DistributedLock) checkExpired(ctx context.Context) (bool, *LockInfo, st
 		return true, nil, etag, nil
 	}
 
-	return time.Now().After(info.ExpiresAt), &info, etag, nil
+	return time.Now().UTC().After(info.ExpiresAt), &info, etag, nil
 }
 
 // steal attempts to steal an expired lock using conditional writes.
 func (l *DistributedLock) steal(ctx context.Context, _ *LockInfo, oldEtag string) (bool, string, error) {
 	newInfo := LockInfo{
 		Owner:     l.ownerID,
-		ExpiresAt: time.Now().Add(l.ttl),
+		ExpiresAt: time.Now().UTC().Add(l.ttl),
 	}
 
 	data, err := json.Marshal(newInfo)

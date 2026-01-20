@@ -49,6 +49,7 @@ type Application struct {
 	db             *storage.DB
 	hotSwapDB      *storage.HotSwapDB // Used when R2 is enabled
 	snapshotMgr    *snapshot.Manager  // R2 snapshot manager (nil if R2 disabled)
+	snapshotReady  bool               // True if a snapshot was successfully downloaded at startup
 	metrics        *metrics.Metrics
 	registry       *prometheus.Registry
 	scraperClient  *scraper.Client
@@ -146,6 +147,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	var snapshotMgr *snapshot.Manager
 	useLocalDB := true // Flag to track if we should use local DB
 
+	snapshotReady := false
 	if cfg.IsR2Enabled() {
 		// R2 mode: try to download snapshot for fast startup
 		log.Info("R2 snapshot sync enabled, attempting to download latest snapshot...")
@@ -160,11 +162,12 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 			log.WithError(r2Err).Warn("R2 client initialization failed, falling back to local database")
 		} else {
 			snapshotMgr = snapshot.New(r2Client, snapshot.Config{
-				SnapshotKey:  cfg.R2SnapshotKey,
-				LockKey:      cfg.R2LockKey,
-				LockTTL:      cfg.R2LockTTL,
-				PollInterval: cfg.R2PollInterval,
-				TempDir:      cfg.DataDir,
+				SnapshotKey:    cfg.R2SnapshotKey,
+				LockKey:        cfg.R2LockKey,
+				LockTTL:        cfg.R2LockTTL,
+				PollInterval:   cfg.R2PollInterval,
+				TempDir:        cfg.DataDir,
+				RequestTimeout: config.R2RequestTimeout,
 			})
 
 			// Default to local database path; may be replaced by snapshot download
@@ -181,6 +184,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 			} else {
 				log.WithField("etag", etag).Info("Downloaded snapshot from R2")
 				dbPath = snapshotPath
+				snapshotReady = true
 			}
 
 			// Create HotSwapDB for runtime updates (even if snapshot download failed)
@@ -336,6 +340,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		db:             db,
 		hotSwapDB:      hotSwapDB,
 		snapshotMgr:    snapshotMgr,
+		snapshotReady:  snapshotReady,
 		metrics:        m,
 		registry:       registry,
 		scraperClient:  scraperClient,
@@ -808,6 +813,12 @@ func (a *Application) performProactiveWarmup(ctx context.Context, warmID bool) {
 
 	warmupCtx, cancel := context.WithTimeout(ctx, config.WarmupProactive)
 	defer cancel()
+
+	if warmID && a.snapshotMgr != nil && a.snapshotReady {
+		a.logger.Info("Snapshot already loaded; skipping initial warmup")
+		a.readinessState.MarkReady()
+		return
+	}
 
 	// R2 distributed lock: only one instance should run warmup at a time
 	isLeader := true

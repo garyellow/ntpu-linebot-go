@@ -25,6 +25,9 @@ type Config struct {
 	LockTTL      time.Duration // TTL for the distributed lock
 	PollInterval time.Duration // How often to check for new snapshots
 	TempDir      string        // Directory for temporary files
+	// RequestTimeout is the timeout for a single R2 request.
+	// Set to 0 to disable per-request timeouts.
+	RequestTimeout time.Duration
 }
 
 // Manager handles SQLite snapshot synchronization with R2.
@@ -65,7 +68,9 @@ func (m *Manager) DownloadSnapshot(ctx context.Context, destDir string) (string,
 	}
 
 	// Download compressed snapshot
-	body, etag, err := m.client.Download(ctx, m.config.SnapshotKey)
+	downloadCtx, cancel := m.withTimeout(ctx)
+	body, etag, err := m.client.Download(downloadCtx, m.config.SnapshotKey)
+	cancel()
 	if err != nil {
 		if errors.Is(err, r2client.ErrNotFound) {
 			return "", "", ErrNotFound
@@ -152,7 +157,9 @@ func (m *Manager) UploadSnapshot(ctx context.Context, db *storage.DB) (string, e
 	}
 	defer compressedFile.Close()
 
-	etag, err := m.client.Upload(ctx, m.config.SnapshotKey, compressedFile, "application/zstd")
+	uploadCtx, cancel := m.withTimeout(ctx)
+	etag, err := m.client.Upload(uploadCtx, m.config.SnapshotKey, compressedFile, "application/zstd")
+	cancel()
 	if err != nil {
 		return "", fmt.Errorf("upload snapshot: %w", err)
 	}
@@ -168,7 +175,9 @@ func (m *Manager) UploadSnapshot(ctx context.Context, db *storage.DB) (string, e
 // Returns true if this instance became the leader.
 func (m *Manager) AcquireLeaderLock(ctx context.Context) (bool, error) {
 	lock := r2client.NewDistributedLock(m.client, m.config.LockKey, m.config.LockTTL)
-	acquired, err := lock.Acquire(ctx)
+	lockCtx, cancel := m.withTimeout(ctx)
+	acquired, err := lock.Acquire(lockCtx)
+	cancel()
 	if err != nil || !acquired {
 		return acquired, err
 	}
@@ -181,10 +190,10 @@ func (m *Manager) AcquireLeaderLock(ctx context.Context) (bool, error) {
 		}
 	}
 	m.leaderLock = lock
-	ctx, cancel := context.WithCancel(ctx)
-	m.renewCancel = cancel
+	renewCtx, renewCancel := context.WithCancel(ctx)
+	m.renewCancel = renewCancel
 	m.renewDone = make(chan struct{})
-	go m.renewLoop(ctx, lock, m.renewDone)
+	go m.renewLoop(renewCtx, lock, m.renewDone)
 	m.leaderMu.Unlock()
 
 	return true, nil
@@ -211,7 +220,9 @@ func (m *Manager) ReleaseLeaderLock(ctx context.Context) error {
 	if lock == nil {
 		return nil
 	}
-	return lock.Release(ctx)
+	releaseCtx, cancel := m.withTimeout(ctx)
+	defer cancel()
+	return lock.Release(releaseCtx)
 }
 
 // StartPolling starts background polling for new snapshots.
@@ -251,7 +262,9 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 	m.mu.RUnlock()
 
 	// Get remote ETag
-	remoteETag, err := m.client.HeadObject(ctx, m.config.SnapshotKey)
+	headCtx, cancel := m.withTimeout(ctx)
+	remoteETag, err := m.client.HeadObject(headCtx, m.config.SnapshotKey)
+	cancel()
 	if err != nil {
 		if !errors.Is(err, r2client.ErrNotFound) {
 			slog.Warn("Snapshot poll: head object failed", "error", err)
@@ -272,7 +285,9 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 	newDbPath := filepath.Join(destDir, fmt.Sprintf("cache_%d.db", time.Now().UnixNano()))
 
 	// Download and decompress
-	body, _, err := m.client.Download(ctx, m.config.SnapshotKey)
+	downloadCtx, cancel := m.withTimeout(ctx)
+	body, _, err := m.client.Download(downloadCtx, m.config.SnapshotKey)
+	cancel()
 	if err != nil {
 		slog.Error("Snapshot poll: download failed", "error", err)
 		return
@@ -326,7 +341,9 @@ func (m *Manager) renewLoop(ctx context.Context, lock *r2client.DistributedLock,
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			renewed, err := lock.Renew(ctx)
+			renewCtx, cancel := m.withTimeout(ctx)
+			renewed, err := lock.Renew(renewCtx)
+			cancel()
 			if err != nil {
 				slog.Warn("Leader lock renew failed", "error", err)
 				return
@@ -348,6 +365,13 @@ func (m *Manager) CurrentETag() string {
 
 // ErrNotFound indicates no snapshot exists in R2.
 var ErrNotFound = errors.New("snapshot: not found")
+
+func (m *Manager) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	if m.config.RequestTimeout <= 0 {
+		return context.WithCancel(ctx)
+	}
+	return context.WithTimeout(ctx, m.config.RequestTimeout)
+}
 
 func replaceFile(src, dst string) error {
 	if err := os.Rename(src, dst); err == nil {

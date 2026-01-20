@@ -213,10 +213,12 @@ Follower Nodes
 ```
 
 - **Leader election**：使用 R2 物件條件寫入（ETag）實作分散式鎖。
+- **首次 warmup**：若啟動成功載入快照則略過；無快照才會執行。
 - **Hot-swap**：新快照下載後，透過 HotSwapDB 安全切換。
 - **啟用條件**：`NTPU_R2_ENABLED=true` 並提供 R2 憑證與 bucket。
 - **快照格式**：SQLite 快照以 zstd 壓縮（.zst），下載後先落地暫存檔，再原子替換。
 - **連線關閉延遲**：Hot-swap 後會延遲關閉舊連線，降低中斷風險。
+- **請求超時**：每個 R2 操作有固定 timeout，避免輪詢或啟動長時間卡住。
 - **注意事項**：多容器請避免共享同一個 SQLite 檔案，請使用 R2 快照同步。
 
 ## Logging 政策（生產環境）

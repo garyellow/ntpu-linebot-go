@@ -56,6 +56,12 @@ const (
 	HotSwapCloseGracePeriod = 2 * time.Second
 )
 
+// R2 timeouts
+const (
+	// R2RequestTimeout is the timeout for a single R2 request.
+	R2RequestTimeout = 60 * time.Second
+)
+
 // Background job intervals
 const (
 	// CacheCleanupInterval is how often cache cleanup runs.
