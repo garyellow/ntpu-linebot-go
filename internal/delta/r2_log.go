@@ -1,3 +1,4 @@
+// Package delta provides R2-backed delta log recording and merging.
 package delta
 
 import (
@@ -38,6 +39,7 @@ type Entry struct {
 	Payload   json.RawMessage `json:"payload"`
 }
 
+// EntryType* defines delta entry types.
 const (
 	EntryTypeStudents          = "students"
 	EntryTypeContacts          = "contacts"
@@ -152,7 +154,9 @@ func (l *R2Log) mergeObject(ctx context.Context, db *storage.DB, key string) err
 	if err != nil {
 		return fmt.Errorf("download %s: %w", key, err)
 	}
-	defer body.Close()
+	defer func() {
+		_ = body.Close()
+	}()
 
 	var entry Entry
 	decoder := json.NewDecoder(body)

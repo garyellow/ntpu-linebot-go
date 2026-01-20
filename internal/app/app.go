@@ -3,10 +3,11 @@ package app
 
 import (
 	"context"
+	cryptorand "crypto/rand"
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand"
+	"math/big"
 	"net/http"
 	"os"
 	"os/signal"
@@ -689,9 +690,8 @@ func (a *Application) dataCleanupLoop(ctx context.Context) {
 		return
 	}
 
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for {
-		waitDuration := jitterDuration(interval, rng)
+		waitDuration := jitterDuration(interval)
 		a.logger.WithField("next_run_in", waitDuration.String()).
 			Info("Scheduled next data cleanup")
 
@@ -711,7 +711,7 @@ func (a *Application) runDataCleanup(ctx context.Context) {
 	a.logger.Info("Starting data cleanup...")
 
 	isLeader := true
-	lockAcquired := false
+	var lockAcquired bool
 	if a.snapshotMgr != nil {
 		var lockErr error
 		lockAcquired, lockErr = a.snapshotMgr.AcquireLeaderLock(ctx)
@@ -861,9 +861,8 @@ func (a *Application) dataRefreshLoop(ctx context.Context) {
 		return
 	}
 
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for {
-		waitDuration := jitterDuration(interval, rng)
+		waitDuration := jitterDuration(interval)
 		a.logger.WithField("next_run_in", waitDuration.String()).
 			Info("Scheduled next data refresh")
 
@@ -892,7 +891,7 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) {
 
 	// R2 distributed lock: only one instance should run refresh at a time
 	isLeader := true
-	lockAcquired := false
+	var lockAcquired bool
 	if a.snapshotMgr != nil {
 		var lockErr error
 		lockAcquired, lockErr = a.snapshotMgr.AcquireLeaderLock(warmupCtx)
@@ -979,7 +978,7 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) {
 	}
 }
 
-func jitterDuration(base time.Duration, rng *rand.Rand) time.Duration {
+func jitterDuration(base time.Duration) time.Duration {
 	if base <= 0 {
 		return base
 	}
@@ -987,7 +986,12 @@ func jitterDuration(base time.Duration, rng *rand.Rand) time.Duration {
 	if jitter <= 0 {
 		return base
 	}
-	delta := time.Duration(rng.Int63n(int64(jitter*2+1))) - jitter
+	maxN := big.NewInt(int64(jitter*2 + 1))
+	n, err := cryptorand.Int(cryptorand.Reader, maxN)
+	if err != nil {
+		return base
+	}
+	delta := time.Duration(n.Int64()) - jitter
 	next := base + delta
 	if next < time.Second {
 		return time.Second

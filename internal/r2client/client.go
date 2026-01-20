@@ -428,7 +428,9 @@ func (l *DistributedLock) checkExpired(ctx context.Context) (bool, *LockInfo, st
 		}
 		return false, nil, "", err
 	}
-	defer body.Close()
+	defer func() {
+		_ = body.Close()
+	}()
 
 	data, err := io.ReadAll(body)
 	if err != nil {
@@ -471,8 +473,11 @@ func (l *DistributedLock) Release(ctx context.Context) error {
 		return fmt.Errorf("release lock: verify: %w", err)
 	}
 
+	defer func() {
+		_ = body.Close()
+	}()
+
 	data, err := io.ReadAll(body)
-	body.Close()
 	if err != nil {
 		return fmt.Errorf("release lock: read: %w", err)
 	}
@@ -502,13 +507,17 @@ func CompressFile(srcPath, dstPath string) error {
 	if err != nil {
 		return fmt.Errorf("compress: open source: %w", err)
 	}
-	defer src.Close()
+	defer func() {
+		_ = src.Close()
+	}()
 
 	dst, err := os.Create(dstPath)
 	if err != nil {
 		return fmt.Errorf("compress: create dest: %w", err)
 	}
-	defer dst.Close()
+	defer func() {
+		_ = dst.Close()
+	}()
 
 	encoder, err := zstd.NewWriter(dst, zstd.WithEncoderLevel(zstd.SpeedBetterCompression))
 	if err != nil {
@@ -540,7 +549,9 @@ func DecompressStream(r io.Reader, dstPath string) error {
 	if err != nil {
 		return fmt.Errorf("decompress: create dest: %w", err)
 	}
-	defer dst.Close()
+	defer func() {
+		_ = dst.Close()
+	}()
 
 	if _, err := io.Copy(dst, decoder); err != nil {
 		return fmt.Errorf("decompress: copy: %w", err)

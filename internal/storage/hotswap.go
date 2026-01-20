@@ -52,9 +52,9 @@ func (h *HotSwapDB) DB() *DB {
 //  3. Swap the database pointer
 //  4. Release write lock
 //  5. Close old database asynchronously (with grace period for in-flight queries)
-func (h *HotSwapDB) Swap(ctx context.Context, newDbPath string) error {
+func (h *HotSwapDB) Swap(ctx context.Context, newDBPath string) error {
 	// Open and validate new database before acquiring lock
-	newDB, err := New(ctx, newDbPath, h.cacheTTL)
+	newDB, err := New(ctx, newDBPath, h.cacheTTL)
 	if err != nil {
 		return fmt.Errorf("hotswap: open new db: %w", err)
 	}

@@ -63,7 +63,7 @@ func (m *Manager) DownloadSnapshot(ctx context.Context, destDir string) (string,
 	if destDir == "" {
 		destDir = m.config.TempDir
 	}
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
+	if err := os.MkdirAll(destDir, 0o750); err != nil {
 		return "", "", fmt.Errorf("create snapshot dir: %w", err)
 	}
 
@@ -77,7 +77,9 @@ func (m *Manager) DownloadSnapshot(ctx context.Context, destDir string) (string,
 		}
 		return "", "", fmt.Errorf("download snapshot: %w", err)
 	}
-	defer body.Close()
+	defer func() {
+		_ = body.Close()
+	}()
 
 	// Create temp file for compressed data
 	compressedFile, err := os.CreateTemp(destDir, "snapshot_*.db.zst")
@@ -85,15 +87,19 @@ func (m *Manager) DownloadSnapshot(ctx context.Context, destDir string) (string,
 		return "", "", fmt.Errorf("create temp file: %w", err)
 	}
 	compressedPath := compressedFile.Name()
-	defer os.Remove(compressedPath)
+	defer func() {
+		_ = os.Remove(compressedPath)
+	}()
 
 	// Stream download to temp file
 	if _, err := io.Copy(compressedFile, body); err != nil {
-		compressedFile.Close()
-		os.Remove(compressedPath)
+		_ = compressedFile.Close()
+		_ = os.Remove(compressedPath)
 		return "", "", fmt.Errorf("write compressed data: %w", err)
 	}
-	compressedFile.Close()
+	if err := compressedFile.Close(); err != nil {
+		return "", "", fmt.Errorf("close compressed file: %w", err)
+	}
 
 	// Decompress to a temporary destination first
 	dbTempFile, err := os.CreateTemp(destDir, "cache_*.db")
@@ -102,13 +108,17 @@ func (m *Manager) DownloadSnapshot(ctx context.Context, destDir string) (string,
 	}
 	dbTempPath := dbTempFile.Name()
 	_ = dbTempFile.Close()
-	defer os.Remove(dbTempPath)
+	defer func() {
+		_ = os.Remove(dbTempPath)
+	}()
 
 	compressedReader, err := os.Open(compressedPath)
 	if err != nil {
 		return "", "", fmt.Errorf("open compressed file: %w", err)
 	}
-	defer compressedReader.Close()
+	defer func() {
+		_ = compressedReader.Close()
+	}()
 
 	if err := r2client.DecompressStream(compressedReader, dbTempPath); err != nil {
 		return "", "", fmt.Errorf("decompress snapshot: %w", err)
@@ -130,7 +140,7 @@ func (m *Manager) DownloadSnapshot(ctx context.Context, destDir string) (string,
 // UploadSnapshot compresses and uploads the database as a new snapshot to R2.
 // Returns the ETag of the uploaded snapshot.
 func (m *Manager) UploadSnapshot(ctx context.Context, db *storage.DB) (string, error) {
-	if err := os.MkdirAll(m.config.TempDir, 0o755); err != nil {
+	if err := os.MkdirAll(m.config.TempDir, 0o750); err != nil {
 		return "", fmt.Errorf("create snapshot temp dir: %w", err)
 	}
 
@@ -139,7 +149,9 @@ func (m *Manager) UploadSnapshot(ctx context.Context, db *storage.DB) (string, e
 	if err := db.CreateSnapshot(ctx, snapshotPath); err != nil {
 		return "", fmt.Errorf("create snapshot: %w", err)
 	}
-	defer os.Remove(snapshotPath)
+	defer func() {
+		_ = os.Remove(snapshotPath)
+	}()
 
 	// Create temp file for compressed data
 	compressedPath := snapshotPath + ".zst"
@@ -148,14 +160,18 @@ func (m *Manager) UploadSnapshot(ctx context.Context, db *storage.DB) (string, e
 	if err := r2client.CompressFile(snapshotPath, compressedPath); err != nil {
 		return "", fmt.Errorf("compress database: %w", err)
 	}
-	defer os.Remove(compressedPath)
+	defer func() {
+		_ = os.Remove(compressedPath)
+	}()
 
 	// Upload compressed file
 	compressedFile, err := os.Open(compressedPath)
 	if err != nil {
 		return "", fmt.Errorf("open compressed file: %w", err)
 	}
-	defer compressedFile.Close()
+	defer func() {
+		_ = compressedFile.Close()
+	}()
 
 	uploadCtx, cancel := m.withTimeout(ctx)
 	etag, err := m.client.Upload(uploadCtx, m.config.SnapshotKey, compressedFile, "application/zstd")
@@ -283,7 +299,7 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 		"new_etag", remoteETag)
 
 	// Download new snapshot to a unique path to avoid conflicts
-	newDbPath := filepath.Join(destDir, fmt.Sprintf("cache_%d.db", time.Now().UnixNano()))
+	newDBPath := filepath.Join(destDir, fmt.Sprintf("cache_%d.db", time.Now().UnixNano()))
 
 	// Download and decompress with ETag consistency
 	downloadCtx, cancel := m.withTimeout(ctx)
@@ -298,21 +314,23 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 		slog.Error("Snapshot poll: download failed", "error", err)
 		return
 	}
-	defer body.Close()
+	defer func() {
+		_ = body.Close()
+	}()
 
 	// Stream decompress directly
-	if err := r2client.DecompressStream(body, newDbPath); err != nil {
+	if err := r2client.DecompressStream(body, newDBPath); err != nil {
 		slog.Error("Snapshot poll: decompress failed", "error", err)
-		os.Remove(newDbPath)
+		_ = os.Remove(newDBPath)
 		return
 	}
 
 	// Hot-swap the database
-	if err := hotSwapDB.Swap(ctx, newDbPath); err != nil {
+	if err := hotSwapDB.Swap(ctx, newDBPath); err != nil {
 		slog.Error("Snapshot poll: hot-swap failed", "error", err)
-		os.Remove(newDbPath)
-		os.Remove(newDbPath + "-wal")
-		os.Remove(newDbPath + "-shm")
+		_ = os.Remove(newDBPath)
+		_ = os.Remove(newDBPath + "-wal")
+		_ = os.Remove(newDBPath + "-shm")
 		return
 	}
 

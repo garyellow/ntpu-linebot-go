@@ -1,6 +1,7 @@
 // Package config defines environment variable keys for configuration.
 package config
 
+//nolint:gosec,revive // Environment variable keys are not credentials and do not need per-const comments.
 const (
 	// Core (Required)
 	EnvLineChannelAccessToken = "NTPU_LINE_CHANNEL_ACCESS_TOKEN"
