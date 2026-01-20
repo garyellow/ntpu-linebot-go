@@ -49,6 +49,11 @@ docker compose up -d
 - `NTPU_IMAGE_TAG` - 映像版本（預設：latest）
 - `NTPU_HOST_PORT` - Host 對外埠號（預設：10000）
 
+### 可選項目（多點部署識別）
+
+- `NTPU_SERVER_NAME` - 覆蓋 server 名稱，用於 log 與 Sentry 分辨節點（預設：hostname）
+- `NTPU_INSTANCE_ID` - 覆蓋 instance id，用於 log/metrics 分辨容器或 Pod（預設：server name）
+
 詳細環境變數說明請參考 [.env.example](.env.example)。
 
 ## 服務端點

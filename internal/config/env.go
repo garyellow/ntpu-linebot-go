@@ -11,6 +11,8 @@ const (
 	EnvPort            = "NTPU_PORT"
 	EnvLogLevel        = "NTPU_LOG_LEVEL"
 	EnvShutdownTimeout = "NTPU_SHUTDOWN_TIMEOUT"
+	EnvServerName      = "NTPU_SERVER_NAME"
+	EnvInstanceID      = "NTPU_INSTANCE_ID"
 
 	// Data
 	EnvDataDir  = "NTPU_DATA_DIR"

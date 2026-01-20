@@ -81,15 +81,30 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	})
 
 	readinessState := warmup.NewReadinessState(cfg.WarmupGracePeriod)
-	instanceID := ""
+	serverName := cfg.ServerName
+	instanceID := cfg.InstanceID
 	log = log.WithField("service", "ntpu-linebot-go")
 	if host, err := os.Hostname(); err == nil && host != "" {
-		log = log.WithField("instance_id", host)
-		instanceID = host
+		if serverName == "" {
+			serverName = host
+		}
+	}
+	if serverName == "" && instanceID != "" {
+		serverName = instanceID
+	}
+	if instanceID == "" {
+		instanceID = serverName
 	}
 	if instanceID == "" {
 		instanceID = fmt.Sprintf("instance-%d", time.Now().UnixNano())
+		if serverName == "" {
+			serverName = instanceID
+		}
 	}
+	if serverName != "" {
+		log = log.WithField("server_name", serverName)
+	}
+	log = log.WithField("instance_id", instanceID)
 
 	// Set as default logger to enable context value extraction (userID, chatID, requestID)
 	// via ContextHandler in package-level slog.*Context() calls.
@@ -130,10 +145,6 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	// 2. Sentry Error Tracking
 	if cfg.IsSentryEnabled() {
 		release := cfg.SentryRelease
-		serverName := ""
-		if host, err := os.Hostname(); err == nil && host != "" {
-			serverName = host
-		}
 		env := resolveSentryEnvironment(cfg.SentryEnvironment, cfg.LogLevel)
 		if err := internalSentry.Initialize(internalSentry.Config{
 			DSN:              cfg.SentryDSN,
