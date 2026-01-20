@@ -85,6 +85,7 @@ type Config struct {
 	R2LockTTL      time.Duration // TTL for distributed lock (default: 30m)
 	R2PollInterval time.Duration // Polling interval for new snapshots (default: 5m)
 	R2DeltaPrefix  string        // Prefix for delta logs (default: deltas)
+	R2ScheduleKey  string        // Object key for maintenance schedule state (default: schedules/maintenance.json)
 
 	// 3. Sentry Error Tracking
 	// Flag: NTPU_SENTRY_ENABLED
@@ -235,6 +236,7 @@ func Load() (*Config, error) {
 		R2LockTTL:      getDurationEnv(EnvR2LockTTL, 30*time.Minute),
 		R2PollInterval: getDurationEnv(EnvR2PollInterval, 5*time.Minute),
 		R2DeltaPrefix:  getEnv(EnvR2DeltaPrefix, "deltas"),
+		R2ScheduleKey:  getEnv(EnvR2ScheduleKey, "schedules/maintenance.json"),
 
 		// 3. Sentry Error Tracking
 		SentryEnabled:          getBoolEnv(EnvSentryEnabled, false),
@@ -344,6 +346,9 @@ func (c *Config) Validate() error {
 		}
 		if c.R2DeltaPrefix == "" {
 			errs = append(errs, errors.New("NTPU_R2_DELTA_PREFIX must not be empty when NTPU_R2_ENABLED=true"))
+		}
+		if c.R2ScheduleKey == "" {
+			errs = append(errs, errors.New("NTPU_R2_SCHEDULE_KEY must not be empty when NTPU_R2_ENABLED=true"))
 		}
 	}
 

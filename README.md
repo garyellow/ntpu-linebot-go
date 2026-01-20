@@ -208,7 +208,8 @@ R2 快照用於 **多節點部署** 的資料同步與快速啟動：
 - 啟動時會先嘗試載入快照；**若成功載入快照則略過首次資料刷新**（無快照由 leader 執行）
 - 啟動也會進行 leader lock 判斷，非 leader 會等待快照更新
 - cache miss 抓取結果會以 append-only delta log 保存在 R2，leader 合併後再上傳快照
-- 週期性資料刷新/清理由單一 leader 執行，完成後上傳快照（依 `NTPU_REFRESH_INTERVAL` / `NTPU_CLEANUP_INTERVAL`）
+- 週期性資料刷新/清理由單一 leader 執行，**以「最長允許未刷新/未清理時間」為門檻**（依 `NTPU_REFRESH_INTERVAL` / `NTPU_CLEANUP_INTERVAL`）
+- 上次刷新/清理時間會儲存在 R2，所有節點共用
 - 清理任務會刪除 contacts/courses/historical_courses/programs/course_programs/syllabi 的過期資料並 VACUUM
 - SQLite 使用 WAL 模式時，`VACUUM` 後會執行 WAL checkpoint（TRUNCATE）與 optimize，確保磁碟空間回收
 - 其他節點透過輪詢偵測快照更新並熱切換
@@ -224,6 +225,7 @@ R2 快照用於 **多節點部署** 的資料同步與快速啟動：
 - `NTPU_R2_POLL_INTERVAL`：輪詢快照更新的間隔
 - `NTPU_R2_LOCK_TTL`：分散式鎖 TTL（leader election）
 - `NTPU_R2_DELTA_PREFIX`：cache miss delta log 前綴
+- `NTPU_R2_SCHEDULE_KEY`：共享的刷新/清理排程狀態物件 key
 - `NTPU_REFRESH_INTERVAL`：資料刷新任務間隔
 - `NTPU_CLEANUP_INTERVAL`：資料清理任務間隔
 

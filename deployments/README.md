@@ -43,6 +43,7 @@ docker compose up -d
 - `NTPU_R2_LOCK_TTL` - 鎖 TTL
 - `NTPU_R2_POLL_INTERVAL` - 輪詢快照更新間隔
 - `NTPU_R2_DELTA_PREFIX` - cache miss delta log 前綴
+- `NTPU_R2_SCHEDULE_KEY` - 刷新/清理排程狀態 key（預設：schedules/maintenance.json）
 
 ### Docker Compose 設定
 
