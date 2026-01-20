@@ -70,13 +70,14 @@ func (m *Manager) DownloadSnapshot(ctx context.Context, destDir string) (string,
 	// Download compressed snapshot
 	downloadCtx, cancel := m.withTimeout(ctx)
 	body, etag, err := m.client.Download(downloadCtx, m.config.SnapshotKey)
-	cancel()
 	if err != nil {
+		cancel()
 		if errors.Is(err, r2client.ErrNotFound) {
 			return "", "", ErrNotFound
 		}
 		return "", "", fmt.Errorf("download snapshot: %w", err)
 	}
+	defer cancel()
 	defer func() {
 		_ = body.Close()
 	}()
@@ -304,8 +305,8 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 	// Download and decompress with ETag consistency
 	downloadCtx, cancel := m.withTimeout(ctx)
 	body, downloadedETag, err := m.client.DownloadIfMatch(downloadCtx, m.config.SnapshotKey, remoteETag)
-	cancel()
 	if err != nil {
+		cancel()
 		if errors.Is(err, r2client.ErrPreconditionFailed) {
 			slog.Warn("Snapshot poll ETag changed during download, retrying later",
 				"expected_etag", remoteETag)
@@ -314,6 +315,7 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 		slog.Error("Snapshot poll download failed", "error", err)
 		return
 	}
+	defer cancel()
 	defer func() {
 		_ = body.Close()
 	}()
