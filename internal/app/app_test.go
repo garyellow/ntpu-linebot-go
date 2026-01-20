@@ -438,7 +438,7 @@ func TestWebhookRejectsDuringRefresh(t *testing.T) {
 	}
 }
 
-func TestReadinessCheck_WarmupWaitDisabled(t *testing.T) {
+func TestReadinessCheck_WarmupWaitDisabledStillBlocks(t *testing.T) {
 	t.Parallel()
 	// Setup app with WaitForWarmup = false
 	app := setupTestApp(t)
@@ -449,8 +449,7 @@ func TestReadinessCheck_WarmupWaitDisabled(t *testing.T) {
 	router := gin.New()
 	router.GET("/readyz", app.readinessCheck)
 
-	// Even though readinessState is NOT ready (default),
-	// WaitForWarmup=false should cause it to bypass the check and return 200 (assuming DB is up)
+	// readinessState is NOT ready (default). /readyz should still return 503.
 	if app.readinessState.IsReady() {
 		t.Fatal("Expected readinessState to be initially false")
 	}
@@ -459,7 +458,28 @@ func TestReadinessCheck_WarmupWaitDisabled(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("Expected status 503 (readiness always gated), got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestWebhookAllowsWhenWarmupWaitDisabled(t *testing.T) {
+	t.Parallel()
+	app := setupTestApp(t)
+	app.cfg.WaitForWarmup = false
+	defer func() { _ = app.db.Close() }()
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.POST("/webhook", app.readinessMiddleware(), func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
 	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200 (gating disabled), got %d body=%s", w.Code, w.Body.String())
+		t.Errorf("Expected status 200 when warmup wait disabled, got %d", w.Code)
 	}
 }

@@ -119,7 +119,6 @@ const (
 	// ReadinessWarmupTimeout is the default grace period for initial warmup.
 	// This is the default value for the NTPU_WARMUP_GRACE_PERIOD environment variable.
 	// After this duration, readiness will return OK even if warmup is still running.
-	// Only applies when NTPU_WARMUP_WAIT=true.
 	// Set to 10 minutes based on typical warmup duration (contact + course: ~2-5 min).
 	ReadinessWarmupTimeout = 10 * time.Minute
 )

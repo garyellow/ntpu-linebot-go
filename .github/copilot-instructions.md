@@ -384,11 +384,11 @@ task compose:up       # Start Docker Compose deployment (bot only)
 - **Data**: `NTPU_DATA_DIR` (default: `./data` on Windows, `/data` on Linux/Mac), `NTPU_CACHE_TTL`
 - **Scraper**: `NTPU_SCRAPER_TIMEOUT`, `NTPU_SCRAPER_MAX_RETRIES`
 - **Rate Limits**: `NTPU_USER_RATE_BURST`, `NTPU_USER_RATE_REFILL`, `NTPU_LLM_RATE_BURST`, `NTPU_LLM_RATE_REFILL`, `NTPU_LLM_RATE_DAILY`, `NTPU_GLOBAL_RATE_RPS`
-- **Startup**: `NTPU_WARMUP_WAIT` (default: `false`), `NTPU_WARMUP_GRACE_PERIOD` (default: `10m`)
+- **Startup**: `NTPU_WARMUP_WAIT` (default: `false`, gates /webhook only), `NTPU_WARMUP_GRACE_PERIOD` (default: `10m`, readiness grace period)
 - **Intervals**: `NTPU_REFRESH_INTERVAL`, `NTPU_CLEANUP_INTERVAL`
 - **Metrics**: `NTPU_METRICS_AUTH_ENABLED`, `NTPU_METRICS_USERNAME`, `NTPU_METRICS_PASSWORD`
 
-See `.env.example` for full documentation. Production: set `NTPU_WARMUP_WAIT=true` to ensure data is ready before accepting traffic.
+See `.env.example` for full documentation. Production: set `NTPU_WARMUP_WAIT=true` if you want /webhook to wait for warmup readiness.
 
 ## Error Handling
 
