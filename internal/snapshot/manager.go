@@ -228,7 +228,8 @@ func (m *Manager) ReleaseLeaderLock(ctx context.Context) error {
 // StartPolling starts background polling for new snapshots.
 // When a new snapshot is detected (via ETag change), it downloads and
 // hot-swaps the database in the provided HotSwapDB.
-func (m *Manager) StartPolling(ctx context.Context, hotSwapDB *storage.HotSwapDB, destDir string) {
+// onHotSwap is called after a successful hot-swap with the new ETag.
+func (m *Manager) StartPolling(ctx context.Context, hotSwapDB *storage.HotSwapDB, destDir string, onHotSwap func(string)) {
 	pollCtx, cancel := context.WithCancel(ctx)
 	m.pollCancel = cancel
 
@@ -244,7 +245,7 @@ func (m *Manager) StartPolling(ctx context.Context, hotSwapDB *storage.HotSwapDB
 				slog.Info("Snapshot polling stopped")
 				return
 			case <-ticker.C:
-				m.pollOnce(pollCtx, hotSwapDB, destDir)
+				m.pollOnce(pollCtx, hotSwapDB, destDir, onHotSwap)
 			}
 		}
 	}()
@@ -255,7 +256,7 @@ func (m *Manager) StartPolling(ctx context.Context, hotSwapDB *storage.HotSwapDB
 }
 
 // pollOnce checks for a new snapshot and performs hot-swap if found.
-func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, destDir string) {
+func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, destDir string, onHotSwap func(string)) {
 	// Check current ETag
 	m.mu.RLock()
 	currentETag := m.currentETag
@@ -284,11 +285,16 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 	// Download new snapshot to a unique path to avoid conflicts
 	newDbPath := filepath.Join(destDir, fmt.Sprintf("cache_%d.db", time.Now().UnixNano()))
 
-	// Download and decompress
+	// Download and decompress with ETag consistency
 	downloadCtx, cancel := m.withTimeout(ctx)
-	body, _, err := m.client.Download(downloadCtx, m.config.SnapshotKey)
+	body, downloadedETag, err := m.client.DownloadIfMatch(downloadCtx, m.config.SnapshotKey, remoteETag)
 	cancel()
 	if err != nil {
+		if errors.Is(err, r2client.ErrPreconditionFailed) {
+			slog.Warn("Snapshot poll: ETag changed during download, retrying later",
+				"expected_etag", remoteETag)
+			return
+		}
 		slog.Error("Snapshot poll: download failed", "error", err)
 		return
 	}
@@ -311,8 +317,16 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 	}
 
 	m.mu.Lock()
-	m.currentETag = remoteETag
+	if downloadedETag != "" {
+		m.currentETag = downloadedETag
+	} else {
+		m.currentETag = remoteETag
+	}
 	m.mu.Unlock()
+
+	if onHotSwap != nil {
+		onHotSwap(remoteETag)
+	}
 
 	slog.Info("Hot-swap completed successfully", "new_etag", remoteETag)
 }

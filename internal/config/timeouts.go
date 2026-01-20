@@ -53,7 +53,7 @@ const (
 
 	// HotSwapCloseGracePeriod is the delay before closing old SQLite connections
 	// after a hot-swap, giving in-flight queries time to finish.
-	HotSwapCloseGracePeriod = 2 * time.Second
+	HotSwapCloseGracePeriod = 5 * time.Second
 )
 
 // R2 timeouts
@@ -64,16 +64,11 @@ const (
 
 // Background job intervals
 const (
-	// CacheCleanupInterval is how often cache cleanup runs.
-	CacheCleanupInterval = 24 * time.Hour
+	// DataRefreshIntervalDefault is the default interval for data refresh tasks.
+	DataRefreshIntervalDefault = 24 * time.Hour
 
-	// CacheCleanupHour is the hour (0-23) when cache cleanup runs daily (Taiwan time).
-	// Set to 4:00 AM, after warmup completes to avoid deleting fresh data.
-	CacheCleanupHour = 4
-
-	// WarmupHour is the hour (0-23) when daily warmup runs (Taiwan time).
-	// Set to 3:00 AM for fresh cache before business hours.
-	WarmupHour = 3
+	// DataCleanupIntervalDefault is the default interval for data cleanup tasks.
+	DataCleanupIntervalDefault = 24 * time.Hour
 
 	// MetricsUpdateInterval is how often cache size metrics are updated.
 	MetricsUpdateInterval = 5 * time.Minute

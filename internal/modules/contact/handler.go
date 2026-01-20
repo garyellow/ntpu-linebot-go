@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
+	"github.com/garyellow/ntpu-linebot-go/internal/delta"
 	domerrors "github.com/garyellow/ntpu-linebot-go/internal/errors"
 	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
@@ -32,6 +33,7 @@ type Handler struct {
 	logger           *logger.Logger
 	stickerManager   *sticker.Manager
 	maxContactsLimit int // Maximum contacts per search (from config)
+	deltaRecorder    delta.Recorder
 
 	// matchers contains all pattern-handler pairs sorted by priority.
 	// Shared by CanHandle and HandleMessage for consistent routing.
@@ -119,6 +121,7 @@ func NewHandler(
 	logger *logger.Logger,
 	stickerManager *sticker.Manager,
 	maxContactsLimit int,
+	deltaRecorder delta.Recorder,
 ) *Handler {
 	h := &Handler{
 		db:               db,
@@ -127,6 +130,7 @@ func NewHandler(
 		logger:           logger,
 		stickerManager:   stickerManager,
 		maxContactsLimit: maxContactsLimit,
+		deltaRecorder:    deltaRecorder,
 	}
 	h.initializeMatchers()
 	return h
@@ -513,6 +517,12 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 		contactsPtr = result
 	}
 
+	if h.deltaRecorder != nil && len(contactsPtr) > 0 {
+		if err := h.deltaRecorder.RecordContacts(ctx, contactsPtr); err != nil {
+			log.WithError(err).WarnContext(ctx, "Failed to record contact delta log")
+		}
+	}
+
 	// Convert []*storage.Contact to []storage.Contact
 	contacts = make([]storage.Contact, len(contactsPtr))
 	for i, c := range contactsPtr {
@@ -602,6 +612,12 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 			lineutil.QuickReplyEmergencyAction(),
 		))
 		return []messaging_api.MessageInterface{msg}
+	}
+
+	if h.deltaRecorder != nil && len(scrapedContacts) > 0 {
+		if err := h.deltaRecorder.RecordContacts(ctx, scrapedContacts); err != nil {
+			log.WithError(err).WarnContext(ctx, "Failed to record contact delta log")
+		}
 	}
 
 	// Save to cache and filter individuals

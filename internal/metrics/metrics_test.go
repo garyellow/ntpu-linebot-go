@@ -279,9 +279,9 @@ func TestRecordJob(t *testing.T) {
 		module   string
 		duration float64
 	}{
-		{"warmup", "id", 60.0},
-		{"warmup", "course", 120.0},
-		{"warmup", "total", 300.0},
+		{"refresh", "id", 60.0},
+		{"refresh", "course", 120.0},
+		{"refresh", "total", 300.0},
 		{"cleanup", "all", 10.0},
 		{"sticker_refresh", "all", 30.0},
 	}

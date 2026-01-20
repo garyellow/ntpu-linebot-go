@@ -30,6 +30,20 @@ docker compose up -d
 - `NTPU_GROQ_API_KEY` - Groq API
 - `NTPU_CEREBRAS_API_KEY` - Cerebras API
 
+### 可選項目（R2 快照同步）
+
+多節點部署建議啟用 `NTPU_R2_ENABLED=true`，啟動時會自動下載最新 SQLite 快照並進行同步：
+
+- `NTPU_R2_ACCOUNT_ID` - Cloudflare Account ID
+- `NTPU_R2_ACCESS_KEY_ID` - R2 Access Key ID
+- `NTPU_R2_SECRET_ACCESS_KEY` - R2 Secret Access Key
+- `NTPU_R2_BUCKET_NAME` - R2 Bucket
+- `NTPU_R2_SNAPSHOT_KEY` - 快照物件 key（預設：snapshots/cache.db.zst）
+- `NTPU_R2_LOCK_KEY` - 分散式鎖 key（預設：locks/crawler.json）
+- `NTPU_R2_LOCK_TTL` - 鎖 TTL
+- `NTPU_R2_POLL_INTERVAL` - 輪詢快照更新間隔
+- `NTPU_R2_DELTA_PREFIX` - cache miss delta log 前綴
+
 ### Docker Compose 設定
 
 - `NTPU_IMAGE_TAG` - 映像版本（預設：latest）

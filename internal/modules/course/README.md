@@ -92,12 +92,12 @@ type Handler struct {
 ```
 
 #### SemesterCache
-- **資料驅動設計**：由 warmup 探測實際資料源更新
+- **資料驅動設計**：由 refresh 探測實際資料源更新
 - **方法**：
   - `GetRecentSemesters()` - 取得最近 2 個學期
   - `GetExtendedSemesters()` - 取得第 3-4 個學期
   - `GetAllSemesters()` - 取得全部快取的學期
-  - `Update(semesters)` - 更新快取（warmup 呼叫）
+  - `Update(semesters)` - 更新快取（refresh 呼叫）
 - **使用情境**：
   - 精確搜尋：`GetRecentSemesters()` → 1-2
   - 擴展搜尋：`GetExtendedSemesters()` → 3-4
@@ -167,15 +167,15 @@ Pattern Matching (priority order)
 Carousel (max 40)       Carousel + Score        Single Bubble
 ```
 
-### Cache 策略
+### 資料時效策略
 
-> 完整的快取策略說明請參考 [架構說明文件](/.github/copilot-instructions.md#data-layer-cache-first-strategy)
+> 完整的資料時效策略請參考 [架構說明文件](/.github/copilot-instructions.md#data-layer-cache-first-strategy)
 
-- **TTL**：7 天（每日 3:00 AM 自動更新）
+- **TTL**：7 天（依 `NTPU_REFRESH_INTERVAL` 自動更新）
 - **範圍**：最近 4 個學期的課程資料
 
 ### Syllabus 整合
-- **更新時機**：Warmup only（非即時查詢，僅最近 2 個學期）
+- **更新時機**：Refresh only（非即時查詢，僅最近 2 個學期）
 - **範圍**：最近 2 個有資料的學期
 - **用途**：智慧搜尋的語意索引
 

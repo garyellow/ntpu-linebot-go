@@ -67,10 +67,10 @@ func (s *ReadinessState) Status() ReadinessStatus {
 	}
 
 	if !isReady {
-		status.Reason = "warmup in progress"
+		status.Reason = "data refresh in progress"
 	} else if !s.ready.Load() {
 		// Ready due to timeout, not warmup completion
-		status.Reason = "timeout reached (warmup may still be running)"
+		status.Reason = "timeout reached (refresh may still be running)"
 	}
 
 	return status

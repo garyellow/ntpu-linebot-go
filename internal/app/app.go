@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,8 +17,8 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
 	"github.com/garyellow/ntpu-linebot-go/internal/config"
 	"github.com/garyellow/ntpu-linebot-go/internal/ctxutil"
+	"github.com/garyellow/ntpu-linebot-go/internal/delta"
 	"github.com/garyellow/ntpu-linebot-go/internal/genai"
-	"github.com/garyellow/ntpu-linebot-go/internal/lineutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 	"github.com/garyellow/ntpu-linebot-go/internal/modules/contact"
@@ -50,6 +51,7 @@ type Application struct {
 	hotSwapDB      *storage.HotSwapDB // Used when R2 is enabled
 	snapshotMgr    *snapshot.Manager  // R2 snapshot manager (nil if R2 disabled)
 	snapshotReady  bool               // True if a snapshot was successfully downloaded at startup
+	deltaLog       *delta.R2Log       // R2 delta log (nil if R2 disabled)
 	metrics        *metrics.Metrics
 	registry       *prometheus.Registry
 	scraperClient  *scraper.Client
@@ -61,8 +63,8 @@ type Application struct {
 	queryExpander  genai.QueryExpander // Interface type for multi-provider support
 	llmLimiter     *ratelimit.KeyedLimiter
 	userLimiter    *ratelimit.KeyedLimiter
-	semesterCache  *course.SemesterCache  // Shared cache for semester data (updated by warmup)
-	readinessState *warmup.ReadinessState // Tracks initial warmup completion for readiness
+	semesterCache  *course.SemesterCache  // Shared cache for semester data (updated by refresh task)
+	readinessState *warmup.ReadinessState // Tracks initial refresh completion for readiness
 	wg             sync.WaitGroup         // Track background goroutines for graceful shutdown
 }
 
@@ -73,9 +75,15 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		BetterStackEndpoint: cfg.BetterStackEndpoint,
 	})
 
+	readinessState := warmup.NewReadinessState(cfg.WarmupGracePeriod)
+	instanceID := ""
 	log = log.WithField("service", "ntpu-linebot-go")
 	if host, err := os.Hostname(); err == nil && host != "" {
 		log = log.WithField("instance_id", host)
+		instanceID = host
+	}
+	if instanceID == "" {
+		instanceID = fmt.Sprintf("instance-%d", time.Now().UnixNano())
 	}
 
 	// Set as default logger to enable context value extraction (userID, chatID, requestID)
@@ -145,6 +153,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	var db *storage.DB
 	var hotSwapDB *storage.HotSwapDB
 	var snapshotMgr *snapshot.Manager
+	var deltaLog *delta.R2Log
 	useLocalDB := true // Flag to track if we should use local DB
 
 	snapshotReady := false
@@ -198,8 +207,17 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 				useLocalDB = false
 				log.WithField("path", dbPath).WithField("cache_ttl", cfg.CacheTTL).Info("Database connected (R2 snapshot mode)")
 
+				var deltaErr error
+				deltaLog, deltaErr = delta.NewR2Log(r2Client, cfg.R2DeltaPrefix, instanceID)
+				if deltaErr != nil {
+					log.WithError(deltaErr).Warn("Delta log initialization failed; miss results will not be preserved")
+				}
+
 				// Start background polling for new snapshots
-				snapshotMgr.StartPolling(ctx, hotSwapDB, cfg.DataDir)
+				snapshotMgr.StartPolling(ctx, hotSwapDB, cfg.DataDir, func(etag string) {
+					readinessState.MarkReady()
+					log.WithField("etag", etag).Info("Snapshot hot-swap applied; service marked ready")
+				})
 			}
 		}
 	}
@@ -278,12 +296,12 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		MetricType:    ratelimit.MetricTypeUser,
 	})
 
-	idHandler := id.NewHandler(db, scraperClient, m, log, stickerMgr)
+	idHandler := id.NewHandler(db, scraperClient, m, log, stickerMgr, deltaLog)
 
 	// Create shared semester cache for course and program handlers
 	semesterCache := course.NewSemesterCache()
-	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerMgr, bm25Index, queryExpander, llmLimiter, semesterCache)
-	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerMgr, cfg.Bot.MaxContactsPerSearch)
+	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerMgr, deltaLog, bm25Index, queryExpander, llmLimiter, semesterCache)
+	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerMgr, cfg.Bot.MaxContactsPerSearch, deltaLog)
 	programHandler := program.NewHandler(db, m, log, stickerMgr, semesterCache)
 	usageHandler := usage.NewHandler(userLimiter, llmLimiter, log, stickerMgr)
 
@@ -341,6 +359,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		hotSwapDB:      hotSwapDB,
 		snapshotMgr:    snapshotMgr,
 		snapshotReady:  snapshotReady,
+		deltaLog:       deltaLog,
 		metrics:        m,
 		registry:       registry,
 		scraperClient:  scraperClient,
@@ -352,7 +371,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		llmLimiter:     llmLimiter,
 		userLimiter:    userLimiter,
 		semesterCache:  semesterCache,
-		readinessState: warmup.NewReadinessState(cfg.WarmupGracePeriod),
+		readinessState: readinessState,
 	}
 
 	router.GET("/", app.redirectToGitHub)
@@ -449,12 +468,12 @@ func (a *Application) readinessCheck(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), config.ReadinessCheckTimeout)
 	defer cancel()
 
-	// Check warmup state first (for initial startup) - only if waiting for warmup is enabled
+	// Check refresh state first (for initial startup) - only if waiting for refresh is enabled
 	if a.cfg.WaitForWarmup && !a.readinessState.IsReady() {
 		status := a.readinessState.Status()
 		a.logger.WithField("elapsed_seconds", status.ElapsedSeconds).
 			WithField("timeout_seconds", status.TimeoutSeconds).
-			Debug("Readiness check: warmup in progress")
+			Debug("Readiness check: refresh in progress")
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"status": "not ready",
 			"reason": status.Reason,
@@ -517,10 +536,10 @@ func (a *Application) getCacheStats(ctx context.Context) map[string]int {
 // Graceful shutdown sequence (critical for data integrity):
 //  1. Receive shutdown signal (SIGINT/SIGTERM)
 //  2. Cancel context → signal background jobs to stop
-//  3. Wait for background jobs to complete (warmup, cleanup, etc.)
+//  3. Wait for background jobs to complete (refresh, cleanup, etc.)
 //  4. Close resources in order (HTTP server, webhook handler, API clients, database, rate limiters)
 //
-// This order prevents "sql: database is closed" errors during warmup/cleanup operations.
+// This order prevents "sql: database is closed" errors during refresh/cleanup operations.
 // Previous bug: Resources were closed before background jobs finished, causing transaction failures.
 func (a *Application) Run() error {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -551,13 +570,13 @@ func (a *Application) Run() error {
 // startBackgroundJobs starts all background goroutines tracked by WaitGroup.
 func (a *Application) startBackgroundJobs(ctx context.Context) {
 	a.wg.Go(func() {
-		a.cacheCleanup(ctx)
+		a.dataCleanupLoop(ctx)
 	})
 	a.wg.Go(func() {
 		a.refreshStickers(ctx)
 	})
 	a.wg.Go(func() {
-		a.proactiveWarmup(ctx)
+		a.dataRefreshLoop(ctx)
 	})
 	a.wg.Go(func() {
 		a.updateCacheSizeMetrics(ctx)
@@ -654,44 +673,63 @@ func (a *Application) shutdown() error {
 	return nil
 }
 
-// cacheCleanup runs daily at 4:00 AM Taiwan time, exits on context cancellation.
-func (a *Application) cacheCleanup(ctx context.Context) {
-	a.logger.Debug("Cache cleanup job started")
-	defer a.logger.Debug("Cache cleanup job stopped")
+// dataCleanupLoop runs cleanup on a configurable interval, exits on context cancellation.
+func (a *Application) dataCleanupLoop(ctx context.Context) {
+	a.logger.Debug("Data cleanup job started")
+	defer a.logger.Debug("Data cleanup job stopped")
 
-	// Run initial cleanup on startup with independent context
-	initialCtx, initialCancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	//nolint:contextcheck // Intentionally using independent context
-	a.runCacheCleanup(initialCtx)
+	// Run initial cleanup on startup with cancellable context
+	initialCtx, initialCancel := context.WithTimeout(ctx, 10*time.Minute)
+	a.runDataCleanup(initialCtx)
 	initialCancel()
 
-	// Schedule daily cleanup at fixed time (4:00 AM Taiwan time)
-	taipeiTZ := lineutil.GetTaipeiLocation()
-	for {
-		now := time.Now().In(taipeiTZ)
-		next := time.Date(now.Year(), now.Month(), now.Day(), config.CacheCleanupHour, 0, 0, 0, taipeiTZ)
-		if now.After(next) {
-			next = next.Add(24 * time.Hour)
-		}
+	interval := a.cfg.DataCleanupInterval
+	if interval <= 0 {
+		a.logger.Warn("Data cleanup interval disabled or invalid; cleanup loop will not run")
+		return
+	}
 
-		waitDuration := time.Until(next)
-		a.logger.WithField("next_run", next.Format(time.RFC3339)).
-			Info("Scheduled next cache cleanup (Taiwan time)")
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for {
+		waitDuration := jitterDuration(interval, rng)
+		a.logger.WithField("next_run_in", waitDuration.String()).
+			Info("Scheduled next data cleanup")
 
 		select {
 		case <-ctx.Done():
-			a.logger.Debug("Cache cleanup received shutdown signal")
+			a.logger.Debug("Data cleanup received shutdown signal")
 			return
 		case <-time.After(waitDuration):
-			a.runCacheCleanup(ctx)
+			a.runDataCleanup(ctx)
 		}
 	}
 }
 
-// runCacheCleanup performs the actual cache cleanup operation.
-func (a *Application) runCacheCleanup(ctx context.Context) {
+// runDataCleanup performs the actual cleanup operation.
+func (a *Application) runDataCleanup(ctx context.Context) {
 	startTime := time.Now()
-	a.logger.Info("Starting cache cleanup...")
+	a.logger.Info("Starting data cleanup...")
+
+	isLeader := true
+	lockAcquired := false
+	if a.snapshotMgr != nil {
+		var lockErr error
+		lockAcquired, lockErr = a.snapshotMgr.AcquireLeaderLock(ctx)
+		if lockErr != nil {
+			a.logger.WithError(lockErr).Warn("Failed to acquire leader lock for cleanup, proceeding without lock")
+			isLeader = true
+		} else if !lockAcquired {
+			a.logger.Info("Another instance is leader for cleanup, skipping")
+			return
+		}
+		if lockAcquired {
+			defer func() {
+				if err := a.snapshotMgr.ReleaseLeaderLock(ctx); err != nil {
+					a.logger.WithError(err).Warn("Failed to release leader lock")
+				}
+			}()
+		}
+	}
 
 	var totalDeleted int64
 
@@ -703,6 +741,12 @@ func (a *Application) runCacheCleanup(ctx context.Context) {
 
 	if deleted, err := a.db.DeleteExpiredCourses(ctx, a.cfg.CacheTTL); err != nil {
 		a.logger.WithError(err).Error("Failed to cleanup expired courses")
+	} else {
+		totalDeleted += deleted
+	}
+
+	if deleted, err := a.db.DeleteExpiredHistoricalCourses(ctx, a.cfg.CacheTTL); err != nil {
+		a.logger.WithError(err).Error("Failed to cleanup expired historical courses")
 	} else {
 		totalDeleted += deleted
 	}
@@ -725,17 +769,45 @@ func (a *Application) runCacheCleanup(ctx context.Context) {
 		totalDeleted += deleted
 	}
 
-	if _, err := a.db.Writer().Exec("VACUUM"); err != nil {
+	if _, err := a.db.Writer().ExecContext(ctx, "VACUUM"); err != nil {
 		a.logger.WithError(err).Warn("Failed to VACUUM database")
+	}
+	if _, err := a.db.Writer().ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+		a.logger.WithError(err).Warn("Failed to checkpoint WAL after VACUUM")
+	}
+	if _, err := a.db.Writer().ExecContext(ctx, "PRAGMA optimize"); err != nil {
+		a.logger.WithError(err).Warn("Failed to optimize database")
 	}
 
 	duration := time.Since(startTime)
 	a.logger.WithField("deleted", totalDeleted).
 		WithField("duration_ms", duration.Milliseconds()).
-		Info("Cache cleanup completed")
+		Info("Data cleanup completed")
 
 	if a.metrics != nil {
-		a.metrics.RecordJob("cache_cleanup", "all", duration.Seconds())
+		a.metrics.RecordJob("data_cleanup", "all", duration.Seconds())
+	}
+
+	if a.snapshotMgr != nil && isLeader {
+		if a.deltaLog != nil {
+			stats, err := a.deltaLog.MergeIntoDB(ctx, a.db)
+			if err != nil {
+				a.logger.WithError(err).Warn("Failed to merge delta logs before cleanup snapshot upload")
+			} else {
+				a.logger.WithField("processed", stats.ObjectsProcessed).
+					WithField("merged", stats.ObjectsMerged).
+					WithField("skipped", stats.ObjectsSkipped).
+					Info("Delta logs merged before cleanup snapshot upload")
+			}
+		}
+
+		a.logger.Info("Uploading cleanup snapshot to R2...")
+		etag, uploadErr := a.snapshotMgr.UploadSnapshot(ctx, a.db)
+		if uploadErr != nil {
+			a.logger.WithError(uploadErr).Error("Failed to upload cleanup snapshot to R2")
+		} else {
+			a.logger.WithField("etag", etag).Info("Cleanup snapshot uploaded to R2 successfully")
+		}
 	}
 }
 
@@ -744,9 +816,8 @@ func (a *Application) refreshStickers(ctx context.Context) {
 	a.logger.Debug("Sticker refresh job started")
 	defer a.logger.Debug("Sticker refresh job stopped")
 
-	initialCtx, initialCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	initialCtx, initialCancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer initialCancel()
-	//nolint:contextcheck // Intentionally using independent context
 	a.performStickerRefresh(initialCtx)
 
 	<-ctx.Done()
@@ -775,81 +846,82 @@ func (a *Application) performStickerRefresh(ctx context.Context) {
 	}
 }
 
-// proactiveWarmup runs initial warmup on startup, then daily at 3:00 AM Taiwan time.
-func (a *Application) proactiveWarmup(ctx context.Context) {
-	a.logger.Debug("Proactive warmup job started")
-	defer a.logger.Debug("Proactive warmup job stopped")
+// dataRefreshLoop runs initial refresh on startup, then on a configurable interval.
+func (a *Application) dataRefreshLoop(ctx context.Context) {
+	a.logger.Debug("Data refresh job started")
+	defer a.logger.Debug("Data refresh job stopped")
 
-	initialCtx, initialCancel := context.WithTimeout(context.Background(), config.WarmupProactive)
-	//nolint:contextcheck // Intentionally using independent context
-	a.performProactiveWarmup(initialCtx, true)
+	initialCtx, initialCancel := context.WithTimeout(ctx, config.WarmupProactive)
+	a.runDataRefresh(initialCtx, true)
 	initialCancel()
 
-	taipeiTZ := lineutil.GetTaipeiLocation()
-	for {
-		now := time.Now().In(taipeiTZ)
-		next := time.Date(now.Year(), now.Month(), now.Day(), config.WarmupHour, 0, 0, 0, taipeiTZ)
-		if now.After(next) {
-			next = next.Add(24 * time.Hour)
-		}
+	interval := a.cfg.DataRefreshInterval
+	if interval <= 0 {
+		a.logger.Warn("Data refresh interval disabled or invalid; refresh loop will not run")
+		return
+	}
 
-		waitDuration := time.Until(next)
-		a.logger.WithField("next_run", next.Format(time.RFC3339)).
-			Info("Scheduled next proactive warmup (Taiwan time)")
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for {
+		waitDuration := jitterDuration(interval, rng)
+		a.logger.WithField("next_run_in", waitDuration.String()).
+			Info("Scheduled next data refresh")
 
 		select {
 		case <-ctx.Done():
-			a.logger.Debug("Proactive warmup received shutdown signal")
+			a.logger.Debug("Data refresh received shutdown signal")
 			return
 		case <-time.After(waitDuration):
-			a.performProactiveWarmup(ctx, false)
+			a.runDataRefresh(ctx, false)
 		}
 	}
 }
 
-func (a *Application) performProactiveWarmup(ctx context.Context, warmID bool) {
-	a.logger.Info("Starting proactive warmup...")
+func (a *Application) runDataRefresh(ctx context.Context, includeID bool) {
+	a.logger.Info("Starting data refresh...")
 	startTime := time.Now()
 
 	warmupCtx, cancel := context.WithTimeout(ctx, config.WarmupProactive)
 	defer cancel()
 
-	if warmID && a.snapshotMgr != nil && a.snapshotReady {
-		a.logger.Info("Snapshot already loaded; skipping initial warmup")
+	if includeID && a.snapshotMgr != nil && a.snapshotReady {
+		a.logger.Info("Snapshot already loaded; skipping initial refresh")
 		a.readinessState.MarkReady()
 		return
 	}
 
-	// R2 distributed lock: only one instance should run warmup at a time
+	// R2 distributed lock: only one instance should run refresh at a time
 	isLeader := true
-	if a.snapshotMgr != nil && !warmID {
-		// Skip leader election for initial warmup (warmID=true) - all instances need data
-		// For daily warmup, use leader election
+	lockAcquired := false
+	if a.snapshotMgr != nil {
 		var lockErr error
-		isLeader, lockErr = a.snapshotMgr.AcquireLeaderLock(warmupCtx)
+		lockAcquired, lockErr = a.snapshotMgr.AcquireLeaderLock(warmupCtx)
 		if lockErr != nil {
-			a.logger.WithError(lockErr).Warn("Failed to acquire leader lock, proceeding as follower")
-			isLeader = false
-		}
-
-		if !isLeader {
-			a.logger.Info("Another instance is leader for warmup, waiting for new snapshot via polling")
-			// Follower: no warmup needed, snapshot polling will handle updates
+			a.logger.WithError(lockErr).Warn("Failed to acquire leader lock, proceeding without lock")
+			isLeader = true
+		} else if !lockAcquired {
+			if includeID {
+				a.logger.Info("Another instance is leader for initial refresh, waiting for new snapshot via polling")
+			} else {
+				a.logger.Info("Another instance is leader for refresh, waiting for new snapshot via polling")
+			}
 			return
 		}
 
-		a.logger.Info("Acquired leader lock, this instance will run warmup")
-		defer func() {
-			if err := a.snapshotMgr.ReleaseLeaderLock(warmupCtx); err != nil {
-				a.logger.WithError(err).Warn("Failed to release leader lock")
-			}
-		}()
+		a.logger.Info("Acquired leader lock, this instance will run refresh")
+		if lockAcquired {
+			defer func() {
+				if err := a.snapshotMgr.ReleaseLeaderLock(warmupCtx); err != nil {
+					a.logger.WithError(err).Warn("Failed to release leader lock")
+				}
+			}()
+		}
 	}
 
 	opts := warmup.Options{
 		Reset:         false,
 		HasLLMKey:     a.cfg.IsLLMEnabled(), // Use unified check
-		WarmID:        warmID,
+		WarmID:        includeID,
 		Metrics:       a.metrics,
 		BM25Index:     a.bm25Index,
 		SemesterCache: a.semesterCache,
@@ -857,14 +929,14 @@ func (a *Application) performProactiveWarmup(ctx context.Context, warmID bool) {
 
 	stats, err := warmup.Run(warmupCtx, a.db, a.scraperClient, a.logger, opts)
 
-	if warmID {
-		a.readinessState.MarkReady()
-		a.logger.Info("Service marked as ready after initial warmup")
+	if err != nil {
+		a.logger.WithError(err).Error("Data refresh failed")
+		return
 	}
 
-	if err != nil {
-		a.logger.WithError(err).Error("Proactive warmup failed")
-		return
+	if includeID {
+		a.readinessState.MarkReady()
+		a.logger.Info("Service marked as ready after initial refresh")
 	}
 
 	logEntry := a.logger.WithField("contacts", stats.Contacts.Load()).
@@ -872,18 +944,30 @@ func (a *Application) performProactiveWarmup(ctx context.Context, warmID bool) {
 		WithField("syllabi", stats.Syllabi.Load()).
 		WithField("duration_ms", time.Since(startTime).Milliseconds())
 
-	if warmID {
-		logEntry.Info("Proactive warmup completed (startup: includes ID data)")
+	if includeID {
+		logEntry.Info("Data refresh completed (startup: includes ID data)")
 	} else {
-		logEntry.Info("Proactive warmup completed (daily refresh)")
+		logEntry.Info("Data refresh completed")
 	}
 
 	if a.bm25Index != nil && a.bm25Index.IsEnabled() {
 		a.logger.WithField("doc_count", a.bm25Index.Count()).Info("BM25 smart search enabled")
 	}
 
-	// R2: Leader uploads new snapshot after successful warmup
+	// R2: Leader merges delta logs then uploads new snapshot after successful refresh
 	if a.snapshotMgr != nil && isLeader {
+		if a.deltaLog != nil {
+			stats, err := a.deltaLog.MergeIntoDB(warmupCtx, a.db)
+			if err != nil {
+				a.logger.WithError(err).Warn("Failed to merge delta logs before snapshot upload")
+			} else {
+				a.logger.WithField("processed", stats.ObjectsProcessed).
+					WithField("merged", stats.ObjectsMerged).
+					WithField("skipped", stats.ObjectsSkipped).
+					Info("Delta logs merged before snapshot upload")
+			}
+		}
+
 		a.logger.Info("Uploading new snapshot to R2...")
 
 		etag, uploadErr := a.snapshotMgr.UploadSnapshot(warmupCtx, a.db)
@@ -893,6 +977,22 @@ func (a *Application) performProactiveWarmup(ctx context.Context, warmID bool) {
 			a.logger.WithField("etag", etag).Info("Snapshot uploaded to R2 successfully")
 		}
 	}
+}
+
+func jitterDuration(base time.Duration, rng *rand.Rand) time.Duration {
+	if base <= 0 {
+		return base
+	}
+	jitter := base / 10
+	if jitter <= 0 {
+		return base
+	}
+	delta := time.Duration(rng.Int63n(int64(jitter*2+1))) - jitter
+	next := base + delta
+	if next < time.Second {
+		return time.Second
+	}
+	return next
 }
 
 // updateCacheSizeMetrics periodically records cache size to Prometheus.
@@ -938,17 +1038,17 @@ func (a *Application) recordCacheSizeMetrics(ctx context.Context) {
 	}
 }
 
-// readinessMiddleware rejects webhook requests with 503 until initial warmup completes.
+// readinessMiddleware rejects webhook requests with 503 until initial refresh completes.
 // LINE Platform will automatically retry, ensuring eventual delivery.
 func (a *Application) readinessMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if a.cfg.WaitForWarmup && !a.readinessState.IsReady() {
 			status := a.readinessState.Status()
 			a.logger.WithField("elapsed_seconds", status.ElapsedSeconds).
-				Debug("Webhook rejected: warmup in progress")
+				Debug("Webhook rejected: refresh in progress")
 			c.Header("Retry-After", "60")
 			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"error":       "service warming up",
+				"error":       "service refreshing",
 				"retry_after": 60,
 			})
 			c.Abort()

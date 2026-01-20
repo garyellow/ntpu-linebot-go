@@ -53,9 +53,9 @@ func setupTestHandler(t *testing.T) *Handler {
 
 	stickerManager := sticker.NewManager(db, scraperClient, log)
 
-	idHandler := id.NewHandler(db, scraperClient, m, log, stickerManager)
-	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerManager, 100)
-	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerManager, nil, nil, nil, nil)
+	idHandler := id.NewHandler(db, scraperClient, m, log, stickerManager, nil)
+	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerManager, 100, nil)
+	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerManager, nil, nil, nil, nil, nil)
 
 	botRegistry := bot.NewRegistry()
 	botRegistry.Register(contactHandler)
@@ -73,7 +73,7 @@ func setupTestHandler(t *testing.T) *Handler {
 		MaxMessagesPerReply: 5,
 		MaxEventsPerWebhook: 100,
 		MinReplyTokenLength: 10,
-		MaxMessageLength:    20000,
+		MaxMessageLength:    config.LINEMaxTextMessageLength,
 		MaxPostbackDataSize: 300,
 		MaxCoursesPerSearch: 40,
 
@@ -255,7 +255,7 @@ func TestMessageValidation(t *testing.T) {
 		},
 		{
 			name:          "Too long message",
-			textLength:    20001,
+			textLength:    config.LINEMaxTextMessageLength + 1,
 			expectError:   true,
 			errorContains: "過長",
 		},
@@ -267,7 +267,7 @@ func TestMessageValidation(t *testing.T) {
 			// This is a conceptual test - actual validation happens in handleMessageEvent
 			// We're just verifying the logic exists
 			text := string(make([]byte, tt.textLength))
-			if len(text) > 20000 && !tt.expectError {
+			if len(text) > config.LINEMaxTextMessageLength && !tt.expectError {
 				t.Error("Expected validation to catch oversized message")
 			}
 		})

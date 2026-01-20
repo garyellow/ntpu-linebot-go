@@ -1,19 +1,25 @@
 package config
-
-import (
-	"testing"
-	"time"
-)
-
-// TestWebhookTimeouts verifies webhook-related timeout constants
-func TestWebhookTimeouts(t *testing.T) {
-	tests := []struct {
-		name     string
-		got      time.Duration
-		expected time.Duration
-	}{
-		{"WebhookProcessing", WebhookProcessing, 60 * time.Second},
-		{"WebhookHTTPRead", WebhookHTTPRead, 10 * time.Second},
+	{
+		{"DataRefreshIntervalDefault", DataRefreshIntervalDefault, 24 * time.Hour},
+		{"DataCleanupIntervalDefault", DataCleanupIntervalDefault, 24 * time.Hour},
+		{"MetricsUpdateInterval", MetricsUpdateInterval, 5 * time.Minute},
+		{"RateLimiterCleanupInterval", RateLimiterCleanupInterval, 5 * time.Minute},
+	{
+		{"DataRefreshIntervalDefault", DataRefreshIntervalDefault, 24 * time.Hour},
+		{"DataCleanupIntervalDefault", DataCleanupIntervalDefault, 24 * time.Hour},
+		{"MetricsUpdateInterval", MetricsUpdateInterval, 5 * time.Minute},
+		{"RateLimiterCleanupInterval", RateLimiterCleanupInterval, 5 * time.Minute},
+	{
+		{"DataRefreshIntervalDefault", DataRefreshIntervalDefault, 24 * time.Hour},
+		{"DataCleanupIntervalDefault", DataCleanupIntervalDefault, 24 * time.Hour},
+		{"MetricsUpdateInterval", MetricsUpdateInterval, 5 * time.Minute},
+		{"RateLimiterCleanupInterval", RateLimiterCleanupInterval, 5 * time.Minute},
+	{
+		{"DataRefreshIntervalDefault", DataRefreshIntervalDefault, 24 * time.Hour},
+		{"DataCleanupIntervalDefault", DataCleanupIntervalDefault, 24 * time.Hour},
+		{"MetricsUpdateInterval", MetricsUpdateInterval, 5 * time.Minute},
+		{"RateLimiterCleanupInterval", RateLimiterCleanupInterval, 5 * time.Minute},
+	}
 		{"WebhookHTTPWrite", WebhookHTTPWrite, 65 * time.Second},
 		{"WebhookHTTPIdle", WebhookHTTPIdle, 120 * time.Second},
 	}
@@ -96,7 +102,8 @@ func TestBackgroundJobIntervals(t *testing.T) {
 		got      time.Duration
 		expected time.Duration
 	}{
-		{"CacheCleanupInterval", CacheCleanupInterval, 24 * time.Hour},
+		{"DataRefreshIntervalDefault", DataRefreshIntervalDefault, 24 * time.Hour},
+		{"DataCleanupIntervalDefault", DataCleanupIntervalDefault, 24 * time.Hour},
 		{"MetricsUpdateInterval", MetricsUpdateInterval, 5 * time.Minute},
 		{"RateLimiterCleanupInterval", RateLimiterCleanupInterval, 5 * time.Minute},
 	}
@@ -107,43 +114,6 @@ func TestBackgroundJobIntervals(t *testing.T) {
 				t.Errorf("%s = %v, want %v", tt.name, tt.got, tt.expected)
 			}
 		})
-	}
-}
-
-// TestBackgroundJobScheduleHours verifies background job schedule hours (Taiwan time)
-func TestBackgroundJobScheduleHours(t *testing.T) {
-	tests := []struct {
-		name     string
-		got      int
-		expected int
-	}{
-		{"WarmupHour", WarmupHour, 3},             // 3:00 AM - warmup cache
-		{"CacheCleanupHour", CacheCleanupHour, 4}, // 4:00 AM - cleanup after warmup
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.got != tt.expected {
-				t.Errorf("%s = %d, want %d", tt.name, tt.got, tt.expected)
-			}
-		})
-	}
-}
-
-// TestScheduleOrderIsLogical verifies jobs run in logical order
-func TestScheduleOrderIsLogical(t *testing.T) {
-	// Warmup should happen before cache cleanup
-	if WarmupHour >= CacheCleanupHour {
-		t.Errorf("WarmupHour (%d) should be < CacheCleanupHour (%d) to avoid deleting fresh data",
-			WarmupHour, CacheCleanupHour)
-	}
-
-	// All should be in early morning (0-6 AM)
-	if WarmupHour < 0 || WarmupHour > 6 {
-		t.Errorf("WarmupHour (%d) should be in early morning (0-6 AM)", WarmupHour)
-	}
-	if CacheCleanupHour < 0 || CacheCleanupHour > 6 {
-		t.Errorf("CacheCleanupHour (%d) should be in early morning (0-6 AM)", CacheCleanupHour)
 	}
 }
 

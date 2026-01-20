@@ -33,6 +33,8 @@ const (
 	// Startup
 	EnvWarmupWait        = "NTPU_WARMUP_WAIT"
 	EnvWarmupGracePeriod = "NTPU_WARMUP_GRACE_PERIOD"
+	EnvRefreshInterval   = "NTPU_REFRESH_INTERVAL"
+	EnvCleanupInterval   = "NTPU_CLEANUP_INTERVAL"
 
 	// LLM Feature
 	EnvLLMEnabled             = "NTPU_LLM_ENABLED"
@@ -57,6 +59,7 @@ const (
 	EnvR2LockKey         = "NTPU_R2_LOCK_KEY"
 	EnvR2LockTTL         = "NTPU_R2_LOCK_TTL"
 	EnvR2PollInterval    = "NTPU_R2_POLL_INTERVAL"
+	EnvR2DeltaPrefix     = "NTPU_R2_DELTA_PREFIX"
 
 	// Sentry Feature
 	EnvSentryEnabled          = "NTPU_SENTRY_ENABLED"

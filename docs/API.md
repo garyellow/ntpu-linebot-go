@@ -78,11 +78,11 @@ GET /readyz
 }
 ```
 
-**Response** (503 Service Unavailable - Warmup in Progress):
+**Response** (503 Service Unavailable - Data Refresh in Progress):
 ```json
 {
   "status": "not ready",
-  "reason": "warmup in progress",
+  "reason": "data refresh in progress",
   "progress": {
     "elapsed_seconds": 125,
     "timeout_seconds": 600
@@ -103,16 +103,16 @@ GET /readyz
 
 **何時失敗**:
 - 資料庫無法連線
-- 初次啟動 Warmup 尚未完成（且仍在 Grace Period 內）（僅當 `NTPU_WARMUP_WAIT=true`）
+- 初次啟動資料刷新尚未完成（且仍在 Grace Period 內）（僅當 `NTPU_WARMUP_WAIT=true`）
 - 依賴服務暫時不可用
 
 > **環境變數 `NTPU_WARMUP_WAIT`**:
-> - `true`：等待 warmup 完成或 grace period 後才接受流量
+> - `true`：等待刷新完成或 grace period 後才接受流量
 > - `false`（預設）：資料庫連線後立即 Ready
 >
 > **環境變數 `NTPU_WARMUP_GRACE_PERIOD`**（僅當 `NTPU_WARMUP_WAIT=true` 時生效）:
 > - 預設 `10m`（10 分鐘）
-> - 超過此時間後，無論 warmup 是否完成都開放流量
+> - 超過此時間後，無論刷新是否完成都開放流量
 
 ---
 
@@ -192,7 +192,7 @@ X-Line-Signature: {signature}
 }
 ```
 
-**Response** (503 Service Unavailable - 資料來源不可用或 Warmup 中):
+**Response** (503 Service Unavailable - 資料來源不可用或 Refresh 中):
 ```json
 {
   "error": "service warming up",

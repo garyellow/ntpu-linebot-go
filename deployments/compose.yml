@@ -39,6 +39,8 @@ services:
       # Startup
       - NTPU_WARMUP_GRACE_PERIOD=${NTPU_WARMUP_GRACE_PERIOD:-10m}
       - NTPU_WARMUP_WAIT=${NTPU_WARMUP_WAIT:-false}
+      - NTPU_REFRESH_INTERVAL=${NTPU_REFRESH_INTERVAL:-24h}
+      - NTPU_CLEANUP_INTERVAL=${NTPU_CLEANUP_INTERVAL:-24h}
 
       # LLM
       - NTPU_LLM_ENABLED=${NTPU_LLM_ENABLED:-false}
@@ -81,6 +83,7 @@ services:
       - NTPU_R2_LOCK_KEY=${NTPU_R2_LOCK_KEY:-locks/crawler.json}
       - NTPU_R2_LOCK_TTL=${NTPU_R2_LOCK_TTL:-30m}
       - NTPU_R2_POLL_INTERVAL=${NTPU_R2_POLL_INTERVAL:-5m}
+      - NTPU_R2_DELTA_PREFIX=${NTPU_R2_DELTA_PREFIX:-deltas}
     deploy:
       resources:
         limits:

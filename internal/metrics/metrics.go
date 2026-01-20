@@ -101,7 +101,7 @@ type Metrics struct {
 
 	// ============================================
 	// Background Jobs (Duration only)
-	// Warmup, Cleanup operations
+	// Refresh, Cleanup operations
 	// ============================================
 	JobDuration *prometheus.HistogramVec
 }
@@ -330,7 +330,7 @@ func New(registry *prometheus.Registry) *Metrics {
 				// Jobs can run for minutes (warmup) to seconds (cleanup)
 				Buckets: []float64{1, 10, 30, 60, 120, 300, 600, 1800},
 			},
-			// job: warmup, cache_cleanup, sticker_refresh
+			// job: refresh, data_cleanup, sticker_refresh
 			// module: id, contact, course, syllabus, total, all
 			[]string{"job", "module"},
 		),

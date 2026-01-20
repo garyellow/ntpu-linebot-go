@@ -117,6 +117,8 @@ func (db *DB) SyncPrograms(ctx context.Context, programs []struct{ Name, Categor
 func (db *DB) GetAllPrograms(ctx context.Context, years, terms []int) ([]Program, error) {
 	var query string
 	var args []any
+	// NOTE: Program metadata is filtered by its own TTL only; course statistics
+	// are computed from current cached courses via joins with TTL on courses.
 
 	if semesterCond, semesterArgs, ok := buildSemesterConditions(years, terms); ok {
 		// We use semesterCond 3 times in the query (required_count, elective_count, total_count)
@@ -329,11 +331,13 @@ func (db *DB) GetProgramCourses(ctx context.Context, programName string, years, 
 	// Build query with optional semester filter
 	var query string
 	var args []any
+	ttlTimestamp := db.getTTLTimestamp()
 
 	if semesterCond, semesterArgs, ok := buildSemesterConditions(years, terms); ok {
 		// Program name first, then semester args
 		args = append(args, programName)
 		args = append(args, semesterArgs...)
+		args = append(args, ttlTimestamp, ttlTimestamp)
 
 		query = `
 			SELECT
@@ -342,7 +346,7 @@ func (db *DB) GetProgramCourses(ctx context.Context, programName string, years, 
 				cp.course_type
 			FROM course_programs cp
 			JOIN courses c ON cp.course_uid = c.uid
-			WHERE cp.program_name = ? AND (` + semesterCond + `)
+			WHERE cp.program_name = ? AND (` + semesterCond + `) AND c.cached_at > ? AND cp.cached_at > ?
 			ORDER BY
 				CASE WHEN cp.course_type = '必' THEN 0 ELSE 1 END,
 				c.year DESC,
@@ -356,12 +360,12 @@ func (db *DB) GetProgramCourses(ctx context.Context, programName string, years, 
 				cp.course_type
 			FROM course_programs cp
 			JOIN courses c ON cp.course_uid = c.uid
-			WHERE cp.program_name = ?
+			WHERE cp.program_name = ? AND c.cached_at > ? AND cp.cached_at > ?
 			ORDER BY
 				CASE WHEN cp.course_type = '必' THEN 0 ELSE 1 END,
 				c.year DESC,
 				c.term DESC`
-		args = []any{programName}
+		args = []any{programName, ttlTimestamp, ttlTimestamp}
 	}
 
 	rows, err := db.Reader().QueryContext(ctx, query, args...)
@@ -413,13 +417,14 @@ func (db *DB) GetCoursePrograms(ctx context.Context, courseUID string) ([]Progra
 	query := `
 		SELECT program_name, course_type
 		FROM course_programs
-		WHERE course_uid = ?
+		WHERE course_uid = ? AND cached_at > ?
 		ORDER BY
 			CASE WHEN course_type = '必' THEN 0 ELSE 1 END,
 			program_name
 	`
+	ttlTimestamp := db.getTTLTimestamp()
 
-	rows, err := db.Reader().QueryContext(ctx, query, courseUID)
+	rows, err := db.Reader().QueryContext(ctx, query, courseUID, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("query course programs: %w", err)
 	}

@@ -103,7 +103,7 @@ func TestReadinessCheckDatabaseFailure(t *testing.T) {
 	app := setupTestApp(t)
 	defer func() { _ = app.db.Close() }()
 
-	// Mark ready to bypass warmup check so we hit the database check
+	// Mark ready to bypass refresh check so we hit the database check
 	app.readinessState.MarkReady()
 
 	// Close database to simulate failure
@@ -142,7 +142,7 @@ func TestReadinessCheckContextTimeout(t *testing.T) {
 	app := setupTestApp(t)
 	defer func() { _ = app.db.Close() }()
 
-	// Mark ready to bypass warmup check
+	// Mark ready to bypass refresh check
 	app.readinessState.MarkReady()
 
 	gin.SetMode(gin.TestMode)
@@ -182,7 +182,7 @@ func TestReadinessCheckCacheStats(t *testing.T) {
 	defer func() { _ = app.db.Close() }()
 	ctx := context.Background()
 
-	// Mark ready to bypass warmup check
+	// Mark ready to bypass refresh check
 	app.readinessState.MarkReady()
 
 	// Insert test data
@@ -305,7 +305,7 @@ func TestGetFeatures(t *testing.T) {
 	}
 }
 
-func TestReadinessCheckDuringWarmup(t *testing.T) {
+func TestReadinessCheckDuringRefresh(t *testing.T) {
 	t.Parallel()
 	app := setupTestApp(t)
 	defer func() { _ = app.db.Close() }()
@@ -314,13 +314,13 @@ func TestReadinessCheckDuringWarmup(t *testing.T) {
 	router := gin.New()
 	router.GET("/readyz", app.readinessCheck)
 
-	// App just started, warmup not complete
+	// App just started, refresh not complete
 	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusServiceUnavailable {
-		t.Errorf("Expected status 503 during warmup, got %d", w.Code)
+		t.Errorf("Expected status 503 during refresh, got %d", w.Code)
 	}
 
 	var response map[string]any
@@ -337,12 +337,12 @@ func TestReadinessCheckDuringWarmup(t *testing.T) {
 	}
 }
 
-func TestReadinessCheckAfterWarmupComplete(t *testing.T) {
+func TestReadinessCheckAfterRefreshComplete(t *testing.T) {
 	t.Parallel()
 	app := setupTestApp(t)
 	defer func() { _ = app.db.Close() }()
 
-	// Mark warmup as complete
+	// Mark refresh as complete
 	app.readinessState.MarkReady()
 
 	gin.SetMode(gin.TestMode)
@@ -354,7 +354,7 @@ func TestReadinessCheckAfterWarmupComplete(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200 after warmup complete, got %d", w.Code)
+		t.Errorf("Expected status 200 after refresh complete, got %d", w.Code)
 	}
 
 	var response map[string]any
@@ -392,7 +392,7 @@ func TestReadinessCheckAfterTimeout(t *testing.T) {
 	}
 }
 
-func TestWebhookRejectsDuringWarmup(t *testing.T) {
+func TestWebhookRejectsDuringRefresh(t *testing.T) {
 	t.Parallel()
 	app := setupTestApp(t)
 	defer func() { _ = app.db.Close() }()
@@ -404,13 +404,13 @@ func TestWebhookRejectsDuringWarmup(t *testing.T) {
 		c.Status(http.StatusOK)
 	})
 
-	// App just started, warmup not complete
+	// App just started, refresh not complete
 	req := httptest.NewRequest(http.MethodPost, "/webhook", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusServiceUnavailable {
-		t.Errorf("Expected status 503 during warmup, got %d", w.Code)
+		t.Errorf("Expected status 503 during refresh, got %d", w.Code)
 	}
 
 	var response map[string]any
@@ -418,8 +418,8 @@ func TestWebhookRejectsDuringWarmup(t *testing.T) {
 		t.Fatalf("Failed to parse JSON response: %v", err)
 	}
 
-	if errStr, ok := response["error"].(string); !ok || errStr != "service warming up" {
-		t.Errorf("Expected error='service warming up', got %v", response["error"])
+	if errStr, ok := response["error"].(string); !ok || errStr != "service refreshing" {
+		t.Errorf("Expected error='service refreshing', got %v", response["error"])
 	}
 
 	// Verify headers
@@ -434,7 +434,7 @@ func TestWebhookRejectsDuringWarmup(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200 after warmup complete, got %d", w.Code)
+		t.Errorf("Expected status 200 after refresh complete, got %d", w.Code)
 	}
 }
 

@@ -114,6 +114,35 @@ func (c *Client) Download(ctx context.Context, key string) (io.ReadCloser, strin
 	return result.Body, etag, nil
 }
 
+// DownloadIfMatch downloads an object only if its ETag matches the provided value.
+// Returns ErrPreconditionFailed if the ETag does not match.
+func (c *Client) DownloadIfMatch(ctx context.Context, key, etag string) (io.ReadCloser, string, error) {
+	input := &s3.GetObjectInput{
+		Bucket: aws.String(c.bucket),
+		Key:    aws.String(key),
+	}
+	if etag != "" {
+		input.IfMatch = aws.String("\"" + etag + "\"")
+	}
+
+	result, err := c.s3.GetObject(ctx, input)
+	if err != nil {
+		if isPreconditionFailed(err) {
+			return nil, "", ErrPreconditionFailed
+		}
+		if isNotFound(err) {
+			return nil, "", ErrNotFound
+		}
+		return nil, "", fmt.Errorf("r2client: download if-match %q: %w", key, err)
+	}
+
+	resultETag := ""
+	if result.ETag != nil {
+		resultETag = strings.Trim(*result.ETag, "\"")
+	}
+	return result.Body, resultETag, nil
+}
+
 // HeadObject retrieves metadata for an object without downloading the body.
 // Returns the ETag. Returns ErrNotFound if the object does not exist.
 func (c *Client) HeadObject(ctx context.Context, key string) (string, error) {
@@ -133,6 +162,40 @@ func (c *Client) HeadObject(ctx context.Context, key string) (string, error) {
 		etag = strings.Trim(*result.ETag, "\"")
 	}
 	return etag, nil
+}
+
+// ListObjects returns object keys under the given prefix.
+// It paginates until all keys are fetched.
+func (c *Client) ListObjects(ctx context.Context, prefix string) ([]string, error) {
+	var keys []string
+	var token *string
+
+	for {
+		input := &s3.ListObjectsV2Input{
+			Bucket: aws.String(c.bucket),
+			Prefix: aws.String(prefix),
+		}
+		if token != nil {
+			input.ContinuationToken = token
+		}
+
+		result, err := c.s3.ListObjectsV2(ctx, input)
+		if err != nil {
+			return nil, fmt.Errorf("r2client: list objects %q: %w", prefix, err)
+		}
+		for _, obj := range result.Contents {
+			if obj.Key != nil {
+				keys = append(keys, *obj.Key)
+			}
+		}
+		if result.IsTruncated != nil && *result.IsTruncated {
+			token = result.NextContinuationToken
+			continue
+		}
+		break
+	}
+
+	return keys, nil
 }
 
 // PutObjectIfNotExists attempts to create an object only if it doesn't exist.
@@ -245,6 +308,9 @@ func isNotFound(err error) bool {
 
 // ErrNotFound is returned when an object does not exist.
 var ErrNotFound = errors.New("r2client: object not found")
+
+// ErrPreconditionFailed is returned when conditional requests fail (e.g., If-Match mismatch).
+var ErrPreconditionFailed = errors.New("r2client: precondition failed")
 
 // LockInfo contains information about a distributed lock.
 type LockInfo struct {

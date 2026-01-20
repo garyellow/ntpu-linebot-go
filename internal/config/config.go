@@ -48,8 +48,10 @@ type Config struct {
 	ScraperBaseURLs   map[string][]string
 
 	// Startup Configuration
-	WaitForWarmup     bool          // If true, wait for warmup completion before accepting traffic (default: false)
-	WarmupGracePeriod time.Duration // Grace period to wait for warmup when WaitForWarmup=true (default: 10m)
+	WaitForWarmup       bool          // If true, wait for warmup completion before accepting traffic (default: false)
+	WarmupGracePeriod   time.Duration // Grace period to wait for warmup when WaitForWarmup=true (default: 10m)
+	DataRefreshInterval time.Duration // Interval for data refresh tasks
+	DataCleanupInterval time.Duration // Interval for data cleanup tasks
 
 	// ========================================================================
 	// Optional Features
@@ -80,6 +82,7 @@ type Config struct {
 	R2LockKey      string        // Object key for distributed lock (default: locks/crawler.json)
 	R2LockTTL      time.Duration // TTL for distributed lock (default: 30m)
 	R2PollInterval time.Duration // Polling interval for new snapshots (default: 5m)
+	R2DeltaPrefix  string        // Prefix for delta logs (default: deltas)
 
 	// 3. Sentry Error Tracking
 	// Flag: NTPU_SENTRY_ENABLED
@@ -124,7 +127,7 @@ type BotConfig struct {
 	MaxMessagesPerReply int // LINE API limit: 5
 	MaxEventsPerWebhook int // Default: 100
 	MinReplyTokenLength int // Default: 10
-	MaxMessageLength    int // LINE API limit: 20000
+	MaxMessageLength    int // LINE API limit: 5000
 	MaxPostbackDataSize int // LINE API limit: 300
 
 	// Business Limits (hard-coded, not configurable)
@@ -199,8 +202,10 @@ func Load() (*Config, error) {
 		},
 
 		// Startup Configuration
-		WaitForWarmup:     getBoolEnv(EnvWarmupWait, false),
-		WarmupGracePeriod: getDurationEnv(EnvWarmupGracePeriod, 10*time.Minute),
+		WaitForWarmup:       getBoolEnv(EnvWarmupWait, false),
+		WarmupGracePeriod:   getDurationEnv(EnvWarmupGracePeriod, 10*time.Minute),
+		DataRefreshInterval: getDurationEnv(EnvRefreshInterval, DataRefreshIntervalDefault),
+		DataCleanupInterval: getDurationEnv(EnvCleanupInterval, DataCleanupIntervalDefault),
 
 		// 1. LLM Features
 		LLMEnabled:             getBoolEnv(EnvLLMEnabled, false),
@@ -225,6 +230,7 @@ func Load() (*Config, error) {
 		R2LockKey:      getEnv(EnvR2LockKey, "locks/crawler.json"),
 		R2LockTTL:      getDurationEnv(EnvR2LockTTL, 30*time.Minute),
 		R2PollInterval: getDurationEnv(EnvR2PollInterval, 5*time.Minute),
+		R2DeltaPrefix:  getEnv(EnvR2DeltaPrefix, "deltas"),
 
 		// 3. Sentry Error Tracking
 		SentryEnabled:          getBoolEnv(EnvSentryEnabled, false),
@@ -278,6 +284,12 @@ func (c *Config) Validate() error {
 	if c.ScraperTimeout <= 0 {
 		errs = append(errs, fmt.Errorf("NTPU_SCRAPER_TIMEOUT must be positive, got %v", c.ScraperTimeout))
 	}
+	if c.DataRefreshInterval <= 0 {
+		errs = append(errs, fmt.Errorf("NTPU_REFRESH_INTERVAL must be positive, got %v", c.DataRefreshInterval))
+	}
+	if c.DataCleanupInterval <= 0 {
+		errs = append(errs, fmt.Errorf("NTPU_CLEANUP_INTERVAL must be positive, got %v", c.DataCleanupInterval))
+	}
 
 	// 1. LLM Validation (only if enabled)
 	if c.IsLLMEnabled() {
@@ -325,6 +337,9 @@ func (c *Config) Validate() error {
 		}
 		if c.R2PollInterval <= 0 {
 			errs = append(errs, fmt.Errorf("NTPU_R2_POLL_INTERVAL must be positive, got %v", c.R2PollInterval))
+		}
+		if c.R2DeltaPrefix == "" {
+			errs = append(errs, errors.New("NTPU_R2_DELTA_PREFIX must not be empty when NTPU_R2_ENABLED=true"))
 		}
 	}
 

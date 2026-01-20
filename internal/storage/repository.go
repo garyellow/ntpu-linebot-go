@@ -1425,6 +1425,25 @@ func (db *DB) SaveSyllabusBatch(ctx context.Context, syllabi []*Syllabus) error 
 	})
 }
 
+// TouchSyllabiBatch updates cached_at for the given syllabus UIDs.
+// This prevents valid but unchanged syllabi from being removed by TTL cleanup.
+func (db *DB) TouchSyllabiBatch(ctx context.Context, uids []string) error {
+	if len(uids) == 0 {
+		return nil
+	}
+
+	query := `UPDATE syllabi SET cached_at = ? WHERE uid = ?`
+	cachedAt := time.Now().Unix()
+	return db.ExecBatchContext(ctx, query, func(stmt *sql.Stmt) error {
+		for _, uid := range uids {
+			if _, err := stmt.ExecContext(ctx, cachedAt, uid); err != nil {
+				return fmt.Errorf("failed to touch syllabus %s: %w", uid, err)
+			}
+		}
+		return nil
+	})
+}
+
 // GetSyllabusContentHash retrieves the content hash for a syllabus
 // Used for incremental update detection - returns empty string if not found
 func (db *DB) GetSyllabusContentHash(ctx context.Context, uid string) (string, error) {
@@ -1467,6 +1486,12 @@ func (db *DB) GetSyllabusByUID(ctx context.Context, uid string) (*Syllabus, erro
 		return nil, fmt.Errorf("failed to get syllabus: %w", err)
 	}
 
+	// Check TTL using configured cache duration
+	ttl := int64(db.cacheTTL.Seconds())
+	if syllabus.CachedAt+ttl <= time.Now().Unix() {
+		return nil, domerrors.ErrNotFound
+	}
+
 	if err := json.Unmarshal([]byte(teachersJSON), &syllabus.Teachers); err != nil {
 		syllabus.Teachers = []string{}
 	}
@@ -1480,9 +1505,11 @@ func (db *DB) GetSyllabusByUID(ctx context.Context, uid string) (*Syllabus, erro
 // GetAllSyllabi retrieves all syllabi from the database
 // Used for loading into BM25 index on startup
 func (db *DB) GetAllSyllabi(ctx context.Context) ([]*Syllabus, error) {
-	query := `SELECT uid, year, term, title, teachers, objectives, outline, schedule, content_hash, cached_at FROM syllabi`
+	ttlTimestamp := db.getTTLTimestamp()
+	query := `SELECT uid, year, term, title, teachers, objectives, outline, schedule, content_hash, cached_at
+		FROM syllabi WHERE cached_at > ?`
 
-	rows, err := db.Reader().QueryContext(ctx, query)
+	rows, err := db.Reader().QueryContext(ctx, query, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query syllabi: %w", err)
 	}
@@ -1524,9 +1551,10 @@ func (db *DB) GetAllSyllabi(ctx context.Context) ([]*Syllabus, error) {
 // GetDistinctSemesters retrieves all distinct semesters (year, term pairs) from the syllabi table.
 // Used for chunked loading of the BM25 index to reduce memory usage.
 func (db *DB) GetDistinctSemesters(ctx context.Context) ([]struct{ Year, Term int }, error) {
-	query := `SELECT DISTINCT year, term FROM syllabi ORDER BY year DESC, term DESC`
+	ttlTimestamp := db.getTTLTimestamp()
+	query := `SELECT DISTINCT year, term FROM syllabi WHERE cached_at > ? ORDER BY year DESC, term DESC`
 
-	rows, err := db.Reader().QueryContext(ctx, query)
+	rows, err := db.Reader().QueryContext(ctx, query, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get distinct semesters from syllabi: %w", err)
 	}
@@ -1550,9 +1578,11 @@ func (db *DB) GetDistinctSemesters(ctx context.Context) ([]struct{ Year, Term in
 
 // GetSyllabiByYearTerm retrieves all syllabi for a specific year and term
 func (db *DB) GetSyllabiByYearTerm(ctx context.Context, year, term int) ([]*Syllabus, error) {
-	query := `SELECT uid, year, term, title, teachers, objectives, outline, schedule, content_hash, cached_at FROM syllabi WHERE year = ? AND term = ?`
+	ttlTimestamp := db.getTTLTimestamp()
+	query := `SELECT uid, year, term, title, teachers, objectives, outline, schedule, content_hash, cached_at
+		FROM syllabi WHERE year = ? AND term = ? AND cached_at > ?`
 
-	rows, err := db.Reader().QueryContext(ctx, query, year, term)
+	rows, err := db.Reader().QueryContext(ctx, query, year, term, ttlTimestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query syllabi: %w", err)
 	}
