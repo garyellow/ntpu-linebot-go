@@ -258,7 +258,9 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 	for _, st := range studentTypes {
 		totalTasks += (fromYear - 100) * len(st.depts)
 	}
-	log.WithField("tasks", totalTasks).Info("Starting ID module warmup (undergrad + master's + PhD)")
+	log.WithField("tasks", totalTasks).
+		WithField("student_types", []string{"undergrad", "masters", "phd"}).
+		Info("Starting ID module warmup")
 
 	var completed int
 	var errorCount int

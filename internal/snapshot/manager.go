@@ -284,7 +284,7 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 	cancel()
 	if err != nil {
 		if !errors.Is(err, r2client.ErrNotFound) {
-			slog.Warn("Snapshot poll: head object failed", "error", err)
+			slog.Warn("Snapshot poll head object failed", "error", err)
 		}
 		return
 	}
@@ -307,11 +307,11 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 	cancel()
 	if err != nil {
 		if errors.Is(err, r2client.ErrPreconditionFailed) {
-			slog.Warn("Snapshot poll: ETag changed during download, retrying later",
+			slog.Warn("Snapshot poll ETag changed during download, retrying later",
 				"expected_etag", remoteETag)
 			return
 		}
-		slog.Error("Snapshot poll: download failed", "error", err)
+		slog.Error("Snapshot poll download failed", "error", err)
 		return
 	}
 	defer func() {
@@ -320,14 +320,14 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 
 	// Stream decompress directly
 	if err := r2client.DecompressStream(body, newDBPath); err != nil {
-		slog.Error("Snapshot poll: decompress failed", "error", err)
+		slog.Error("Snapshot poll decompress failed", "error", err)
 		_ = os.Remove(newDBPath)
 		return
 	}
 
 	// Hot-swap the database
 	if err := hotSwapDB.Swap(ctx, newDBPath); err != nil {
-		slog.Error("Snapshot poll: hot-swap failed", "error", err)
+		slog.Error("Snapshot poll hot-swap failed", "error", err)
 		_ = os.Remove(newDBPath)
 		_ = os.Remove(newDBPath + "-wal")
 		_ = os.Remove(newDBPath + "-shm")

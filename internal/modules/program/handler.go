@@ -567,7 +567,7 @@ func (h *Handler) handleCourseProgramsList(ctx context.Context, courseUID string
 	if err != nil {
 		log.WithError(err).
 			WithField("course_uid", courseUID).
-			WarnContext(ctx, "Failed to load course info; using UID fallback")
+			WarnContext(ctx, "Failed to load course info, using UID fallback")
 	} else if course != nil {
 		courseName = course.Title
 	}

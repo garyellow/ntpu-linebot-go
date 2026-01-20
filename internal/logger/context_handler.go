@@ -40,6 +40,8 @@ func (h *ContextHandler) Enabled(ctx context.Context, level slog.Level) bool {
 // - user_id: LINE user ID for user-specific operations and rate limiting
 // - chat_id: LINE chat ID (user, group, or room conversation)
 // - request_id: Request ID for log correlation and tracing
+// - event_id: LINE webhook event ID
+// - message_id: LINE message ID
 //
 // Note: The context parameter is provided solely to access context values.
 // Canceling the context does not affect record processing (per slog.Handler contract).
@@ -57,6 +59,16 @@ func (h *ContextHandler) Handle(ctx context.Context, r slog.Record) error {
 	// Extract requestID from context
 	if requestID, ok := ctxutil.GetRequestID(ctx); ok && requestID != "" {
 		r.AddAttrs(slog.String("request_id", requestID))
+	}
+
+	// Extract LINE webhook event ID from context
+	if eventID := ctxutil.GetEventID(ctx); eventID != "" {
+		r.AddAttrs(slog.String("event_id", eventID))
+	}
+
+	// Extract LINE message ID from context
+	if messageID := ctxutil.GetMessageID(ctx); messageID != "" {
+		r.AddAttrs(slog.String("message_id", messageID))
 	}
 
 	// Delegate to wrapped handler

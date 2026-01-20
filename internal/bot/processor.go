@@ -509,7 +509,7 @@ func (p *Processor) checkLLMRateLimit(ctx context.Context, source webhook.Source
 
 // handleStickerMessage processes sticker messages
 func (p *Processor) handleStickerMessage(ctx context.Context, _ webhook.MessageEvent) []messaging_api.MessageInterface {
-	p.logger.InfoContext(ctx, "Sticker message received; replying with random sticker")
+	p.logger.InfoContext(ctx, "Sticker message received, replying with random sticker")
 
 	stickerURL := p.stickerManager.GetRandomSticker()
 	sender := lineutil.GetSender("貼圖小幫手", p.stickerManager)

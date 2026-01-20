@@ -58,8 +58,8 @@ func TestMultiHandler_Handle(t *testing.T) {
 	t.Parallel()
 
 	var buf1, buf2 bytes.Buffer
-	handler1 := slog.NewJSONHandler(&buf1, &slog.HandlerOptions{Level: slog.LevelInfo})
-	handler2 := slog.NewJSONHandler(&buf2, &slog.HandlerOptions{Level: slog.LevelInfo})
+	handler1 := slog.NewJSONHandler(&buf1, &slog.HandlerOptions{Level: slog.LevelInfo, ReplaceAttr: replaceAttrFunc()})
+	handler2 := slog.NewJSONHandler(&buf2, &slog.HandlerOptions{Level: slog.LevelInfo, ReplaceAttr: replaceAttrFunc()})
 
 	mh := NewMultiHandler(handler1, handler2)
 	logger := slog.New(mh)
@@ -75,11 +75,11 @@ func TestMultiHandler_Handle(t *testing.T) {
 		t.Fatalf("Failed to parse JSON from handler2: %v", err)
 	}
 
-	if entry1["msg"] != "test message" {
-		t.Errorf("Handler1 msg = %v, want 'test message'", entry1["msg"])
+	if entry1["message"] != "test message" {
+		t.Errorf("Handler1 message = %v, want 'test message'", entry1["message"])
 	}
-	if entry2["msg"] != "test message" {
-		t.Errorf("Handler2 msg = %v, want 'test message'", entry2["msg"])
+	if entry2["message"] != "test message" {
+		t.Errorf("Handler2 message = %v, want 'test message'", entry2["message"])
 	}
 	if entry1["key"] != "value" {
 		t.Errorf("Handler1 key = %v, want 'value'", entry1["key"])

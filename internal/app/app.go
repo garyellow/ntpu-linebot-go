@@ -11,11 +11,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
+	"github.com/garyellow/ntpu-linebot-go/internal/buildinfo"
 	"github.com/garyellow/ntpu-linebot-go/internal/config"
 	"github.com/garyellow/ntpu-linebot-go/internal/ctxutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/delta"
@@ -71,9 +73,11 @@ type Application struct {
 
 // Initialize creates and initializes a new application with all dependencies.
 func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
+	version := resolveLogVersion(cfg)
 	log := logger.NewWithOptions(cfg.LogLevel, os.Stdout, logger.Options{
 		BetterStackToken:    cfg.BetterStackToken,
 		BetterStackEndpoint: cfg.BetterStackEndpoint,
+		Version:             version,
 	})
 
 	readinessState := warmup.NewReadinessState(cfg.WarmupGracePeriod)
@@ -91,7 +95,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	// via ContextHandler in package-level slog.*Context() calls.
 	slog.SetDefault(log.Logger)
 
-	log.Info("Initializing application...")
+	log.Info("Initializing application")
 
 	// Log status of Optional Features
 	log.WithField("sentry", cfg.IsSentryEnabled()).
@@ -103,19 +107,19 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 
 	// Warn on ignored credentials when feature flags are disabled
 	if !cfg.IsLLMEnabled() && (cfg.GeminiAPIKey != "" || cfg.GroqAPIKey != "" || cfg.CerebrasAPIKey != "") {
-		log.Warn("LLM credentials provided but NTPU_LLM_ENABLED=false; LLM features are disabled")
+		log.Warn("LLM credentials provided but NTPU_LLM_ENABLED=false, LLM features are disabled")
 	}
 	if !cfg.IsSentryEnabled() && cfg.SentryDSN != "" {
-		log.Warn("Sentry DSN provided but NTPU_SENTRY_ENABLED=false; Sentry is disabled")
+		log.Warn("Sentry DSN provided but NTPU_SENTRY_ENABLED=false, Sentry is disabled")
 	}
 	if !cfg.IsBetterStackEnabled() && cfg.BetterStackToken != "" {
-		log.Warn("Better Stack token provided but NTPU_BETTERSTACK_ENABLED=false; Better Stack is disabled")
+		log.Warn("Better Stack token provided but NTPU_BETTERSTACK_ENABLED=false, Better Stack is disabled")
 	}
 	if !cfg.IsR2Enabled() && (cfg.R2AccountID != "" || cfg.R2AccessKeyID != "" || cfg.R2SecretKey != "" || cfg.R2BucketName != "") {
-		log.Warn("R2 credentials provided but NTPU_R2_ENABLED=false; R2 snapshot sync is disabled")
+		log.Warn("R2 credentials provided but NTPU_R2_ENABLED=false, R2 snapshot sync is disabled")
 	}
 	if !cfg.IsMetricsAuthEnabled() && cfg.MetricsPassword != "" {
-		log.Warn("Metrics password provided but NTPU_METRICS_AUTH_ENABLED=false; metrics auth is disabled")
+		log.Warn("Metrics password provided but NTPU_METRICS_AUTH_ENABLED=false, metrics auth is disabled")
 	}
 
 	// 1. Better Stack Logging
@@ -160,7 +164,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	snapshotReady := false
 	if cfg.IsR2Enabled() {
 		// R2 mode: try to download snapshot for fast startup
-		log.Info("R2 snapshot sync enabled, attempting to download latest snapshot...")
+		log.Info("R2 snapshot sync enabled, downloading latest snapshot")
 
 		r2Client, r2Err := r2client.New(ctx, r2client.Config{
 			Endpoint:    cfg.R2Endpoint(),
@@ -206,18 +210,21 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 			} else {
 				db = hotSwapDB.DB()
 				useLocalDB = false
-				log.WithField("path", dbPath).WithField("cache_ttl", cfg.CacheTTL).Info("Database connected (R2 snapshot mode)")
+				log.WithField("path", dbPath).
+					WithField("cache_ttl", cfg.CacheTTL).
+					WithField("db_mode", "r2_snapshot").
+					Info("Database connected")
 
 				var deltaErr error
 				deltaLog, deltaErr = delta.NewR2Log(r2Client, cfg.R2DeltaPrefix, instanceID)
 				if deltaErr != nil {
-					log.WithError(deltaErr).Warn("Delta log initialization failed; miss results will not be preserved")
+					log.WithError(deltaErr).Warn("Delta log initialization failed, missed results will not be preserved")
 				}
 
 				// Start background polling for new snapshots
 				snapshotMgr.StartPolling(ctx, hotSwapDB, cfg.DataDir, func(etag string) {
 					readinessState.MarkReady()
-					log.WithField("etag", etag).Info("Snapshot hot-swap applied; service marked ready")
+					log.WithField("etag", etag).Info("Snapshot hot-swap applied and service marked ready")
 				})
 			}
 		}
@@ -230,7 +237,10 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		if dbErr != nil {
 			return nil, fmt.Errorf("database: %w", dbErr)
 		}
-		log.WithField("path", cfg.SQLitePath()).WithField("cache_ttl", cfg.CacheTTL).Info("Database connected")
+		log.WithField("path", cfg.SQLitePath()).
+			WithField("cache_ttl", cfg.CacheTTL).
+			WithField("db_mode", "local").
+			Info("Database connected")
 	}
 
 	registry := prometheus.NewRegistry()
@@ -399,6 +409,48 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	return app, nil
 }
 
+func resolveLogVersion(cfg *config.Config) string {
+	if buildinfo.Version != "" {
+		return buildinfo.Version
+	}
+	if buildinfo.Commit != "" {
+		return buildinfo.Commit
+	}
+
+	if cfg.SentryRelease != "" {
+		return cfg.SentryRelease
+	}
+
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return ""
+	}
+
+	revision := ""
+	modified := false
+	for _, setting := range info.Settings {
+		switch setting.Key {
+		case "vcs.revision":
+			revision = setting.Value
+		case "vcs.modified":
+			modified = setting.Value == "true"
+		}
+	}
+
+	if revision != "" {
+		if modified {
+			revision += "-dirty"
+		}
+		return revision
+	}
+
+	if info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+
+	return ""
+}
+
 // buildLLMConfig creates an LLMConfig from the application config.
 func buildLLMConfig(cfg *config.Config) genai.LLMConfig {
 	llmCfg := genai.DefaultLLMConfig()
@@ -487,7 +539,7 @@ func (a *Application) readinessCheck(c *gin.Context) {
 	}
 
 	if err := a.db.Ping(ctx); err != nil {
-		a.logger.WithError(err).Warn("Readiness check failed: database unavailable")
+		a.logger.WithError(err).Warn("Readiness check failed, database unavailable")
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"status": "not ready",
 			"reason": "database unavailable",
@@ -558,7 +610,7 @@ func (a *Application) Run() error {
 	cancel()
 
 	// Step 2: Wait for all background goroutines to finish
-	a.logger.Info("Waiting for background jobs to finish...")
+	a.logger.Info("Waiting for background jobs to finish")
 	start := time.Now()
 	a.wg.Wait()
 	a.logger.WithField("duration_ms", time.Since(start).Milliseconds()).
@@ -611,17 +663,17 @@ func (a *Application) shutdown() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), a.cfg.ShutdownTimeout)
 	defer cancel()
 
-	a.logger.Info("Stopping HTTP server...")
+	a.logger.Info("Stopping HTTP server")
 	if err := a.server.Shutdown(shutdownCtx); err != nil {
 		a.logger.WithError(err).Error("HTTP server shutdown error")
 	}
 
-	a.logger.Info("Waiting for webhook events to complete...")
+	a.logger.Info("Waiting for webhook events to complete")
 	if err := a.webhookHandler.Shutdown(shutdownCtx); err != nil {
 		a.logger.WithError(err).Warn("Webhook handler shutdown timeout")
 	}
 
-	a.logger.Info("Closing resources...")
+	a.logger.Info("Closing resources")
 
 	if a.queryExpander != nil {
 		if err := a.queryExpander.Close(); err != nil {
@@ -686,7 +738,7 @@ func (a *Application) dataCleanupLoop(ctx context.Context) {
 
 	interval := a.cfg.DataCleanupInterval
 	if interval <= 0 {
-		a.logger.Warn("Data cleanup interval disabled or invalid; cleanup loop will not run")
+		a.logger.Warn("Data cleanup interval disabled or invalid, cleanup loop will not run")
 		return
 	}
 
@@ -708,7 +760,7 @@ func (a *Application) dataCleanupLoop(ctx context.Context) {
 // runDataCleanup performs the actual cleanup operation.
 func (a *Application) runDataCleanup(ctx context.Context) {
 	startTime := time.Now()
-	a.logger.Info("Starting data cleanup...")
+	a.logger.Info("Starting data cleanup")
 
 	isLeader := true
 	var lockAcquired bool
@@ -801,7 +853,7 @@ func (a *Application) runDataCleanup(ctx context.Context) {
 			}
 		}
 
-		a.logger.Info("Uploading cleanup snapshot to R2...")
+		a.logger.Info("Uploading cleanup snapshot to R2")
 		etag, uploadErr := a.snapshotMgr.UploadSnapshot(ctx, a.db)
 		if uploadErr != nil {
 			a.logger.WithError(uploadErr).Error("Failed to upload cleanup snapshot to R2")
@@ -825,7 +877,7 @@ func (a *Application) refreshStickers(ctx context.Context) {
 }
 
 func (a *Application) performStickerRefresh(ctx context.Context) {
-	a.logger.Info("Starting sticker refresh...")
+	a.logger.Info("Starting sticker refresh")
 	startTime := time.Now()
 
 	refreshCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
@@ -857,7 +909,7 @@ func (a *Application) dataRefreshLoop(ctx context.Context) {
 
 	interval := a.cfg.DataRefreshInterval
 	if interval <= 0 {
-		a.logger.Warn("Data refresh interval disabled or invalid; refresh loop will not run")
+		a.logger.Warn("Data refresh interval disabled or invalid, refresh loop will not run")
 		return
 	}
 
@@ -877,14 +929,14 @@ func (a *Application) dataRefreshLoop(ctx context.Context) {
 }
 
 func (a *Application) runDataRefresh(ctx context.Context, includeID bool) {
-	a.logger.Info("Starting data refresh...")
+	a.logger.Info("Starting data refresh")
 	startTime := time.Now()
 
 	warmupCtx, cancel := context.WithTimeout(ctx, config.WarmupProactive)
 	defer cancel()
 
 	if includeID && a.snapshotMgr != nil && a.snapshotReady {
-		a.logger.Info("Snapshot already loaded; skipping initial refresh")
+		a.logger.Info("Snapshot already loaded, skipping initial refresh")
 		a.readinessState.MarkReady()
 		return
 	}
@@ -941,13 +993,10 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) {
 	logEntry := a.logger.WithField("contacts", stats.Contacts.Load()).
 		WithField("courses", stats.Courses.Load()).
 		WithField("syllabi", stats.Syllabi.Load()).
-		WithField("duration_ms", time.Since(startTime).Milliseconds())
+		WithField("duration_ms", time.Since(startTime).Milliseconds()).
+		WithField("initial_refresh", includeID)
 
-	if includeID {
-		logEntry.Info("Data refresh completed (startup: includes ID data)")
-	} else {
-		logEntry.Info("Data refresh completed")
-	}
+	logEntry.Info("Data refresh completed")
 
 	if a.bm25Index != nil && a.bm25Index.IsEnabled() {
 		a.logger.WithField("doc_count", a.bm25Index.Count()).Info("BM25 smart search enabled")
@@ -967,7 +1016,7 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) {
 			}
 		}
 
-		a.logger.Info("Uploading new snapshot to R2...")
+		a.logger.Info("Uploading new snapshot to R2")
 
 		etag, uploadErr := a.snapshotMgr.UploadSnapshot(warmupCtx, a.db)
 		if uploadErr != nil {

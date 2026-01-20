@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/garyellow/ntpu-linebot-go/internal/ctxutil"
 	slogbetterstack "github.com/samber/slog-betterstack"
 )
 
@@ -26,6 +25,7 @@ type Logger struct {
 type Options struct {
 	BetterStackToken    string
 	BetterStackEndpoint string
+	Version             string
 }
 
 // New creates a new logger instance with JSON formatting
@@ -73,7 +73,11 @@ func NewWithOptions(level string, w io.Writer, opts Options) *Logger {
 	}
 
 	contextHandler := NewContextHandler(handler)
-	return &Logger{Logger: slog.New(contextHandler), shutdown: asyncShutdown}
+	baseLogger := slog.New(contextHandler)
+	if opts.Version != "" {
+		baseLogger = baseLogger.With("version", opts.Version)
+	}
+	return &Logger{Logger: baseLogger, shutdown: asyncShutdown}
 }
 
 func parseLevel(level string) slog.Level {
@@ -167,22 +171,22 @@ func (l *Logger) Debugf(format string, args ...any) {
 
 // InfoContext logs a message at info level with tracing data from context.
 func (l *Logger) InfoContext(ctx context.Context, msg string, args ...any) {
-	l.withContextFields(ctx).Info(msg, args...)
+	l.Logger.InfoContext(ctx, msg, args...)
 }
 
 // WarnContext logs a message at warn level with tracing data from context.
 func (l *Logger) WarnContext(ctx context.Context, msg string, args ...any) {
-	l.withContextFields(ctx).Warn(msg, args...)
+	l.Logger.WarnContext(ctx, msg, args...)
 }
 
 // ErrorContext logs a message at error level with tracing data from context.
 func (l *Logger) ErrorContext(ctx context.Context, msg string, args ...any) {
-	l.withContextFields(ctx).Error(msg, args...)
+	l.Logger.ErrorContext(ctx, msg, args...)
 }
 
 // DebugContext logs a message at debug level with tracing data from context.
 func (l *Logger) DebugContext(ctx context.Context, msg string, args ...any) {
-	l.withContextFields(ctx).Debug(msg, args...)
+	l.Logger.DebugContext(ctx, msg, args...)
 }
 
 // Shutdown flushes any async logging pipelines (best-effort).
@@ -191,36 +195,4 @@ func (l *Logger) Shutdown(ctx context.Context) error {
 		return nil
 	}
 	return l.shutdown(ctx)
-}
-
-// withContextFields extracts tracing fields from context and returns a logger with those fields.
-func (l *Logger) withContextFields(ctx context.Context) *Logger {
-	logger := l
-
-	// Add userID if present
-	if userID := ctxutil.GetUserID(ctx); userID != "" {
-		logger = logger.WithField("user_id", userID)
-	}
-
-	// Add chatID if present
-	if chatID := ctxutil.GetChatID(ctx); chatID != "" {
-		logger = logger.WithField("chat_id", chatID)
-	}
-
-	// Add requestID if present
-	if requestID, ok := ctxutil.GetRequestID(ctx); ok && requestID != "" {
-		logger = logger.WithRequestID(requestID)
-	}
-
-	// Add LINE webhook event ID if present
-	if eventID := ctxutil.GetEventID(ctx); eventID != "" {
-		logger = logger.WithField("event_id", eventID)
-	}
-
-	// Add LINE message ID if present
-	if messageID := ctxutil.GetMessageID(ctx); messageID != "" {
-		logger = logger.WithField("message_id", messageID)
-	}
-
-	return logger
 }
