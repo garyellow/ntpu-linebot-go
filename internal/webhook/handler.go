@@ -105,7 +105,7 @@ func (h *Handler) Handle(c *gin.Context) {
 	if len(cb.Events) > h.maxEventsPerWebhook {
 		h.logger.WithField("event_count", len(cb.Events)).
 			WithField("limit", h.maxEventsPerWebhook).
-			WarnContext(reqCtx, "Too many events in webhook batch; truncating")
+			WarnContext(reqCtx, "Too many events in webhook batch, truncating")
 		cb.Events = cb.Events[:h.maxEventsPerWebhook] // Limit to prevent DoS
 	}
 
@@ -192,7 +192,7 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 		if len(messages) > h.maxMessagesPerReply {
 			log.WithField("message_count", len(messages)).
 				WithField("limit", h.maxMessagesPerReply).
-				WarnContext(ctx, "Message count exceeds limit; truncating")
+				WarnContext(ctx, "Message count exceeds limit, truncating")
 			messages = messages[:h.maxMessagesPerReply-1]
 			sender := lineutil.GetSender("NTPU 小工具", h.stickerManager)
 			msg := lineutil.NewTextMessageWithConsistentSender(
@@ -217,7 +217,7 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 
 		// Check global rate limit
 		if !h.rateLimiter.Allow() {
-			log.WarnContext(ctx, "Global rate limit exceeded; waiting")
+			log.WarnContext(ctx, "Global rate limit exceeded, waiting")
 			h.metrics.RecordRateLimiterDrop("global")
 			h.rateLimiter.WaitSimple()
 		}

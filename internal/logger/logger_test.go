@@ -135,8 +135,8 @@ func TestLogger_JSONFormat(t *testing.T) {
 		}
 	}
 
-	if logEntry["message"] != "test message" {
-		t.Errorf("message = %v, want %q", logEntry["message"], "test message")
+	if logEntry["message"] != "Test message" {
+		t.Errorf("message = %v, want %q", logEntry["message"], "Test message")
 	}
 	if logEntry["level"] != "info" {
 		t.Errorf("level = %v, want %q", logEntry["level"], "info")

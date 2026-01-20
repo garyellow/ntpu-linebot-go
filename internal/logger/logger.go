@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode"
 
 	slogbetterstack "github.com/samber/slog-betterstack"
 )
@@ -25,6 +26,7 @@ type Logger struct {
 type Options struct {
 	BetterStackToken    string
 	BetterStackEndpoint string
+	Version             string
 }
 
 // New creates a new logger instance with JSON formatting
@@ -72,7 +74,11 @@ func NewWithOptions(level string, w io.Writer, opts Options) *Logger {
 	}
 
 	contextHandler := NewContextHandler(handler)
-	return &Logger{Logger: slog.New(contextHandler), shutdown: asyncShutdown}
+	baseLogger := slog.New(contextHandler)
+	if opts.Version != "" {
+		baseLogger = baseLogger.With("version", opts.Version)
+	}
+	return &Logger{Logger: baseLogger, shutdown: asyncShutdown}
 }
 
 func parseLevel(level string) slog.Level {
@@ -106,9 +112,32 @@ func replaceAttrFunc() func([]string, slog.Attr) slog.Attr {
 		}
 		if a.Key == slog.MessageKey {
 			a.Key = "message"
+			if a.Value.Kind() == slog.KindString {
+				a.Value = slog.StringValue(normalizeMessage(a.Value.String()))
+			}
 		}
 		return a
 	}
+}
+
+func normalizeMessage(message string) string {
+	message = strings.TrimSpace(message)
+	message = strings.TrimSuffix(message, "...")
+	message = strings.TrimSuffix(message, ".")
+	message = strings.TrimSpace(message)
+	message = strings.Join(strings.Fields(message), " ")
+
+	if message == "" {
+		return message
+	}
+
+	runes := []rune(message)
+	if len(runes) > 0 && unicode.IsLower(runes[0]) {
+		runes[0] = unicode.ToUpper(runes[0])
+		return string(runes)
+	}
+
+	return message
 }
 
 // WithModule creates a new entry with module field
