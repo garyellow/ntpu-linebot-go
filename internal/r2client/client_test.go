@@ -2,6 +2,8 @@ package r2client
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -18,20 +20,18 @@ func TestLockInfo_JSON(t *testing.T) {
 		ExpiresAt: time.Date(2025, 1, 20, 10, 30, 0, 0, time.UTC),
 	}
 
-	// Marshal
 	data := `{"owner":"test-owner-123","expires_at":"2025-01-20T10:30:00Z"}`
 	var parsed LockInfo
-	if err := parseJSON(data, &parsed); err != nil {
+	if err := json.Unmarshal([]byte(data), &parsed); err != nil {
 		t.Fatalf("Failed to parse JSON: %v", err)
 	}
 
 	if parsed.Owner != info.Owner {
 		t.Errorf("Owner mismatch: got %q, want %q", parsed.Owner, info.Owner)
 	}
-}
-
-func parseJSON(data string, v interface{}) error {
-	return nil // Placeholder - actual test would use json.Unmarshal
+	if !parsed.ExpiresAt.Equal(info.ExpiresAt) {
+		t.Errorf("ExpiresAt mismatch: got %v, want %v", parsed.ExpiresAt, info.ExpiresAt)
+	}
 }
 
 func TestCompressDecompress(t *testing.T) {
@@ -181,42 +181,6 @@ func TestDistributedLock_NewGeneratesUniqueID(t *testing.T) {
 	}
 }
 
-// MockS3Client is a mock for testing R2 operations without actual R2 connection.
-// This can be expanded for more comprehensive testing.
-type MockS3Client struct {
-	objects map[string]string
-	etags   map[string]string
-}
-
-func (m *MockS3Client) Put(key, content string) string {
-	if m.objects == nil {
-		m.objects = make(map[string]string)
-		m.etags = make(map[string]string)
-	}
-	m.objects[key] = content
-	etag := "etag-" + key
-	m.etags[key] = etag
-	return etag
-}
-
-func (m *MockS3Client) Get(key string) (string, string, bool) {
-	content, ok := m.objects[key]
-	if !ok {
-		return "", "", false
-	}
-	return content, m.etags[key], true
-}
-
-func (m *MockS3Client) Delete(key string) {
-	delete(m.objects, key)
-	delete(m.etags, key)
-}
-
-func (m *MockS3Client) Exists(key string) bool {
-	_, ok := m.objects[key]
-	return ok
-}
-
 // TestConfig validates the Config struct requirements
 func TestConfig_Validation(t *testing.T) {
 	t.Parallel()
@@ -278,13 +242,18 @@ func TestConfig_Validation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			// Validate by checking if New would accept this config
-			// (without actually creating a client, which requires network)
-			hasError := tt.cfg.Endpoint == "" || tt.cfg.AccessKeyID == "" ||
-				tt.cfg.SecretKey == "" || tt.cfg.BucketName == ""
-
-			if hasError != tt.wantErr {
-				t.Errorf("Config validation: got error=%v, want error=%v", hasError, tt.wantErr)
+			client, err := New(context.Background(), tt.cfg)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("Expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+			if client == nil {
+				t.Fatal("Expected client, got nil")
 			}
 		})
 	}

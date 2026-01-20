@@ -2,10 +2,13 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/garyellow/ntpu-linebot-go/internal/config"
 )
 
 // HotSwapDB wraps a DB with thread-safe hot-swap capability.
@@ -65,11 +68,15 @@ func (h *HotSwapDB) Swap(ctx context.Context, newDbPath string) error {
 	// Acquire write lock and swap connections in-place
 	h.mu.Lock()
 	oldWriter, oldReader, oldPath := h.current.SwapConnections(newDB)
+	currentPath := h.current.Path()
 	h.mu.Unlock()
 
 	// Close old database asynchronously with grace period
 	// This allows in-flight queries to complete
 	go func() {
+		if config.HotSwapCloseGracePeriod > 0 {
+			time.Sleep(config.HotSwapCloseGracePeriod)
+		}
 		if oldReader != nil {
 			_ = oldReader.Close()
 		}
@@ -78,7 +85,6 @@ func (h *HotSwapDB) Swap(ctx context.Context, newDbPath string) error {
 		}
 
 		// Clean up old database file if it's different from the new one
-		currentPath := h.current.Path()
 		if oldPath != currentPath && oldPath != ":memory:" {
 			// Remove old .db, .db-wal, and .db-shm files
 			_ = os.Remove(oldPath)
@@ -117,14 +123,14 @@ func (h *HotSwapDB) Ping(ctx context.Context) error {
 }
 
 // Reader returns the reader connection pool for read operations.
-func (h *HotSwapDB) Reader() interface{} {
+func (h *HotSwapDB) Reader() *sql.DB {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.current.Reader()
 }
 
 // Writer returns the writer connection for write operations.
-func (h *HotSwapDB) Writer() interface{} {
+func (h *HotSwapDB) Writer() *sql.DB {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.current.Writer()

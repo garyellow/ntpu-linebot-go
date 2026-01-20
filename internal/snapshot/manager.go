@@ -57,6 +57,13 @@ func New(client *r2client.Client, cfg Config) *Manager {
 // Returns the path to the decompressed database and its ETag.
 // Returns ErrNotFound if no snapshot exists.
 func (m *Manager) DownloadSnapshot(ctx context.Context, destDir string) (string, string, error) {
+	if destDir == "" {
+		destDir = m.config.TempDir
+	}
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return "", "", fmt.Errorf("create snapshot dir: %w", err)
+	}
+
 	// Download compressed snapshot
 	body, etag, err := m.client.Download(ctx, m.config.SnapshotKey)
 	if err != nil {
@@ -68,11 +75,12 @@ func (m *Manager) DownloadSnapshot(ctx context.Context, destDir string) (string,
 	defer body.Close()
 
 	// Create temp file for compressed data
-	compressedPath := filepath.Join(destDir, "snapshot_download.db.zst")
-	compressedFile, err := os.Create(compressedPath)
+	compressedFile, err := os.CreateTemp(destDir, "snapshot_*.db.zst")
 	if err != nil {
 		return "", "", fmt.Errorf("create temp file: %w", err)
 	}
+	compressedPath := compressedFile.Name()
+	defer os.Remove(compressedPath)
 
 	// Stream download to temp file
 	if _, err := io.Copy(compressedFile, body); err != nil {
@@ -82,22 +90,30 @@ func (m *Manager) DownloadSnapshot(ctx context.Context, destDir string) (string,
 	}
 	compressedFile.Close()
 
-	// Decompress to final destination
-	dbPath := filepath.Join(destDir, "cache.db")
+	// Decompress to a temporary destination first
+	dbTempFile, err := os.CreateTemp(destDir, "cache_*.db")
+	if err != nil {
+		return "", "", fmt.Errorf("create temp db: %w", err)
+	}
+	dbTempPath := dbTempFile.Name()
+	_ = dbTempFile.Close()
+	defer os.Remove(dbTempPath)
+
 	compressedReader, err := os.Open(compressedPath)
 	if err != nil {
-		os.Remove(compressedPath)
 		return "", "", fmt.Errorf("open compressed file: %w", err)
 	}
 	defer compressedReader.Close()
 
-	if err := r2client.DecompressStream(compressedReader, dbPath); err != nil {
-		os.Remove(compressedPath)
+	if err := r2client.DecompressStream(compressedReader, dbTempPath); err != nil {
 		return "", "", fmt.Errorf("decompress snapshot: %w", err)
 	}
 
-	// Clean up compressed file
-	os.Remove(compressedPath)
+	// Atomically replace the target database
+	dbPath := filepath.Join(destDir, "cache.db")
+	if err := replaceFile(dbTempPath, dbPath); err != nil {
+		return "", "", fmt.Errorf("replace snapshot: %w", err)
+	}
 
 	m.mu.Lock()
 	m.currentETag = etag
@@ -109,6 +125,10 @@ func (m *Manager) DownloadSnapshot(ctx context.Context, destDir string) (string,
 // UploadSnapshot compresses and uploads the database as a new snapshot to R2.
 // Returns the ETag of the uploaded snapshot.
 func (m *Manager) UploadSnapshot(ctx context.Context, db *storage.DB) (string, error) {
+	if err := os.MkdirAll(m.config.TempDir, 0o755); err != nil {
+		return "", fmt.Errorf("create snapshot temp dir: %w", err)
+	}
+
 	// Create a consistent snapshot file first
 	snapshotPath := filepath.Join(m.config.TempDir, fmt.Sprintf("snapshot_%d.db", time.Now().UnixNano()))
 	if err := db.CreateSnapshot(ctx, snapshotPath); err != nil {
@@ -328,3 +348,13 @@ func (m *Manager) CurrentETag() string {
 
 // ErrNotFound indicates no snapshot exists in R2.
 var ErrNotFound = errors.New("snapshot: not found")
+
+func replaceFile(src, dst string) error {
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	}
+	if err := os.Remove(dst); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return os.Rename(src, dst)
+}

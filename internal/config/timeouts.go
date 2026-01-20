@@ -50,6 +50,10 @@ const (
 
 	// DatabaseConnMaxLifetime is the maximum lifetime of database connections.
 	DatabaseConnMaxLifetime = time.Hour
+
+	// HotSwapCloseGracePeriod is the delay before closing old SQLite connections
+	// after a hot-swap, giving in-flight queries time to finish.
+	HotSwapCloseGracePeriod = 2 * time.Second
 )
 
 // Background job intervals

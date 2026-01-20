@@ -202,8 +202,16 @@ R2 快照用於 **多節點部署** 的資料同步與快速啟動：
 - 啟動時自動下載最新 SQLite 快照
 - 每日 warmup 由單一 leader 執行，完成後上傳快照
 - 其他節點透過輪詢偵測快照更新並熱切換
+- 快照以 zstd 壓縮（.zst），下載後採用暫存檔原子替換
+- Hot-swap 使用連線切換 + 短暫關閉延遲，避免中途查詢失敗
+- **不建議** 多容器共用同一個 SQLite 檔案（請用 R2 快照同步）
 
 啟用方式：在 `.env` 設定 `NTPU_R2_ENABLED=true`，並提供 `NTPU_R2_ACCOUNT_ID`、`NTPU_R2_ACCESS_KEY_ID`、`NTPU_R2_SECRET_ACCESS_KEY`、`NTPU_R2_BUCKET_NAME`。其餘參數可使用預設值。完整範例請見 [.env.example](.env.example)。
+
+可調參數（選用）：
+
+- `NTPU_R2_POLL_INTERVAL`：輪詢快照更新的間隔
+- `NTPU_R2_LOCK_TTL`：分散式鎖 TTL（leader election）
 
 ### 取得 LINE Bot 憑證
 

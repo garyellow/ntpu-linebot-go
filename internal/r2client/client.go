@@ -20,6 +20,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/google/uuid"
 	"github.com/klauspost/compress/zstd"
 )
@@ -99,8 +101,7 @@ func (c *Client) Download(ctx context.Context, key string) (io.ReadCloser, strin
 		Key:    aws.String(key),
 	})
 	if err != nil {
-		var nsk *types.NoSuchKey
-		if errors.As(err, &nsk) {
+		if isNotFound(err) {
 			return nil, "", ErrNotFound
 		}
 		return nil, "", fmt.Errorf("r2client: download %q: %w", key, err)
@@ -121,8 +122,7 @@ func (c *Client) HeadObject(ctx context.Context, key string) (string, error) {
 		Key:    aws.String(key),
 	})
 	if err != nil {
-		var nsk *types.NotFound
-		if errors.As(err, &nsk) {
+		if isNotFound(err) {
 			return "", ErrNotFound
 		}
 		return "", fmt.Errorf("r2client: head %q: %w", key, err)
@@ -209,15 +209,38 @@ func (c *Client) DeleteObject(ctx context.Context, key string) error {
 
 // isPreconditionFailed checks if the error is a 412 Precondition Failed response.
 func isPreconditionFailed(err error) bool {
-	// Check for S3 API error with 412 status code
-	var apiErr interface {
-		HTTPStatusCode() int
-	}
-	if errors.As(err, &apiErr) && apiErr.HTTPStatusCode() == 412 {
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) && apiErr.ErrorCode() == "PreconditionFailed" {
 		return true
 	}
-	// Also check for error message containing "PreconditionFailed"
+	var respErr *smithyhttp.ResponseError
+	if errors.As(err, &respErr) && respErr.HTTPStatusCode() == 412 {
+		return true
+	}
 	return strings.Contains(err.Error(), "PreconditionFailed")
+}
+
+func isNotFound(err error) bool {
+	var nsk *types.NoSuchKey
+	if errors.As(err, &nsk) {
+		return true
+	}
+	var nf *types.NotFound
+	if errors.As(err, &nf) {
+		return true
+	}
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		switch apiErr.ErrorCode() {
+		case "NoSuchKey", "NotFound", "404":
+			return true
+		}
+	}
+	var respErr *smithyhttp.ResponseError
+	if errors.As(err, &respErr) && respErr.HTTPStatusCode() == 404 {
+		return true
+	}
+	return false
 }
 
 // ErrNotFound is returned when an object does not exist.
@@ -425,13 +448,17 @@ func CompressFile(srcPath, dstPath string) error {
 	if err != nil {
 		return fmt.Errorf("compress: create encoder: %w", err)
 	}
-	defer encoder.Close()
 
 	if _, err := io.Copy(encoder, src); err != nil {
+		_ = encoder.Close()
 		return fmt.Errorf("compress: copy: %w", err)
 	}
 
-	return encoder.Close()
+	if err := encoder.Close(); err != nil {
+		return fmt.Errorf("compress: close encoder: %w", err)
+	}
+
+	return nil
 }
 
 // DecompressStream decompresses a zstd-compressed stream to the destination path.
