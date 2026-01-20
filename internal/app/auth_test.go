@@ -15,9 +15,9 @@ func init() {
 }
 
 func TestMetricsAuthMiddleware_NoPasswordBypass(t *testing.T) {
-	// When password is empty, middleware should pass through without auth
+	// When disabled, middleware should pass through without auth
 	router := gin.New()
-	router.GET("/metrics", metricsAuthMiddleware("prometheus", ""), func(c *gin.Context) {
+	router.GET("/metrics", metricsAuthMiddleware(false, "prometheus", ""), func(c *gin.Context) {
 		c.String(http.StatusOK, "metrics")
 	})
 
@@ -32,7 +32,7 @@ func TestMetricsAuthMiddleware_NoPasswordBypass(t *testing.T) {
 
 func TestMetricsAuthMiddleware_ValidCredentials(t *testing.T) {
 	router := gin.New()
-	router.GET("/metrics", metricsAuthMiddleware("prometheus", "secret123"), func(c *gin.Context) {
+	router.GET("/metrics", metricsAuthMiddleware(true, "prometheus", "secret123"), func(c *gin.Context) {
 		c.String(http.StatusOK, "metrics")
 	})
 
@@ -48,7 +48,7 @@ func TestMetricsAuthMiddleware_ValidCredentials(t *testing.T) {
 
 func TestMetricsAuthMiddleware_InvalidCredentials(t *testing.T) {
 	router := gin.New()
-	router.GET("/metrics", metricsAuthMiddleware("prometheus", "secret123"), func(c *gin.Context) {
+	router.GET("/metrics", metricsAuthMiddleware(true, "prometheus", "secret123"), func(c *gin.Context) {
 		c.String(http.StatusOK, "metrics")
 	})
 
@@ -77,7 +77,7 @@ func TestMetricsAuthMiddleware_InvalidCredentials(t *testing.T) {
 
 func TestMetricsAuthMiddleware_NoAuthHeader(t *testing.T) {
 	router := gin.New()
-	router.GET("/metrics", metricsAuthMiddleware("prometheus", "secret123"), func(c *gin.Context) {
+	router.GET("/metrics", metricsAuthMiddleware(true, "prometheus", "secret123"), func(c *gin.Context) {
 		c.String(http.StatusOK, "metrics")
 	})
 
@@ -92,7 +92,7 @@ func TestMetricsAuthMiddleware_NoAuthHeader(t *testing.T) {
 
 func TestMetricsAuthMiddleware_MalformedAuthHeader(t *testing.T) {
 	router := gin.New()
-	router.GET("/metrics", metricsAuthMiddleware("prometheus", "secret123"), func(c *gin.Context) {
+	router.GET("/metrics", metricsAuthMiddleware(true, "prometheus", "secret123"), func(c *gin.Context) {
 		c.String(http.StatusOK, "metrics")
 	})
 

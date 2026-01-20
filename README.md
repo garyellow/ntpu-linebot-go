@@ -174,23 +174,24 @@
 
 - Go 1.25+（Go 直接執行）
 - Docker + Docker Compose（容器部署）
-- LLM API Key（可選，啟用 AI 功能）：
+- LLM API Key（可選，需 `NTPU_LLM_ENABLED=true` 才啟用 AI 功能）：
   - [Gemini](https://aistudio.google.com/apikey)
   - [Groq](https://console.groq.com/keys)
   - [Cerebras](https://cloud.cerebras.ai/)
+- 所有環境變數統一使用 `NTPU_` 前綴；選用功能需明確設定 `NTPU_*_ENABLED=true`
 
 ### 日誌整合（Better Stack，可選）
 
-若要集中多點部署的日誌，請在 `.env` 設定 `BETTERSTACK_SOURCE_TOKEN`，並可選擇設定 `BETTERSTACK_ENDPOINT`。
-留空字串即不啟用 Better Stack。完整說明請見 [.env.example](.env.example)。
+若要集中多點部署的日誌，請在 `.env` 設定 `NTPU_BETTERSTACK_ENABLED=true` 與 `NTPU_BETTERSTACK_TOKEN`，並可選擇設定 `NTPU_BETTERSTACK_ENDPOINT`。
+未啟用時保持 `NTPU_BETTERSTACK_ENABLED=false`。完整說明請見 [.env.example](.env.example)。
 
 ### 錯誤追蹤（Sentry SDK，可選）
 
 本專案使用 Sentry SDK 進行錯誤追蹤。
-請在 `.env` 設定 `SENTRY_DSN`：
+請在 `.env` 設定 `NTPU_SENTRY_ENABLED=true` 與 `NTPU_SENTRY_DSN`：
 
 - DSN 格式：`https://$APPLICATION_TOKEN@$INGESTING_HOST/1`
-- 可選設定：`SENTRY_ENVIRONMENT`、`SENTRY_RELEASE`、`SENTRY_SAMPLE_RATE`、`SENTRY_TRACES_SAMPLE_RATE`
+- 可選設定：`NTPU_SENTRY_ENVIRONMENT`、`NTPU_SENTRY_RELEASE`、`NTPU_SENTRY_SAMPLE_RATE`、`NTPU_SENTRY_TRACES_SAMPLE_RATE`
 
 設定後服務啟動會自動上報錯誤與 panic。完整範例請見 [.env.example](.env.example)。
 
@@ -220,8 +221,8 @@ task dev
 ```bash
 # Distroless（推薦）
 docker run -d -p 10000:10000 \
-  -e LINE_CHANNEL_ACCESS_TOKEN=xxx \
-  -e LINE_CHANNEL_SECRET=xxx \
+  -e NTPU_LINE_CHANNEL_ACCESS_TOKEN=xxx \
+  -e NTPU_LINE_CHANNEL_SECRET=xxx \
   -v ./data:/data \
   garyellow/ntpu-linebot-go:latest
 
@@ -251,7 +252,7 @@ docker compose up -d
 ### Prometheus Metrics
 
 `/metrics` 提供 Prometheus 指標，可由外部 Prometheus 直接抓取。
-如需保護端點，設定 `METRICS_USERNAME` 與 `METRICS_PASSWORD`。
+如需保護端點，設定 `NTPU_METRICS_AUTH_ENABLED=true`、`NTPU_METRICS_USERNAME` 與 `NTPU_METRICS_PASSWORD`。
 詳細指標與範例請見 [docs/API.md](docs/API.md)。
 
 ### 開發指令

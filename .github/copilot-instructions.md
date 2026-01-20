@@ -326,8 +326,8 @@ lineutil.TruncateRunes(value, 20)                                               
 ## Configuration
 
 **Load-time validation**: All env vars loaded at startup (`internal/config/`) with validation before server starts
-**Required**: `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN`
-**Optional**: `GEMINI_API_KEY` or `GROQ_API_KEY` or `CEREBRAS_API_KEY` (enables NLU + Query Expansion with multi-provider fallback)
+**Required**: `NTPU_LINE_CHANNEL_SECRET`, `NTPU_LINE_CHANNEL_ACCESS_TOKEN`
+**Optional**: `NTPU_LLM_ENABLED=true` + (`NTPU_GEMINI_API_KEY` or `NTPU_GROQ_API_KEY` or `NTPU_CEREBRAS_API_KEY`) enables NLU + Query Expansion with multi-provider fallback
 **Platform paths**: `runtime.GOOS` determines default paths (Windows: `./data`, Linux/Mac: `/data`)
 
 ## Task Commands
@@ -351,16 +351,16 @@ task compose:up       # Start Docker Compose deployment (bot only)
 - In-memory SQLite (`:memory:`) via `setupTestDB()` helper
 
 **Environment variables** (`.env`):
-- **Required**: `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`
-- **LLM** (Optional): `GEMINI_API_KEY`, `GROQ_API_KEY`, `CEREBRAS_API_KEY`, `LLM_PROVIDERS`, `*_INTENT_MODELS`, `*_EXPANDER_MODELS`
-- **Server**: `PORT`, `LOG_LEVEL`, `SHUTDOWN_TIMEOUT`
-- **Data**: `DATA_DIR` (default: `./data` on Windows, `/data` on Linux/Mac), `CACHE_TTL`
-- **Scraper**: `SCRAPER_TIMEOUT`, `SCRAPER_MAX_RETRIES`
-- **Rate Limits**: `USER_RATE_BURST`, `USER_RATE_REFILL`, `LLM_RATE_BURST`, `LLM_RATE_REFILL`, `LLM_RATE_DAILY`, `GLOBAL_RATE_RPS`
-- **Startup**: `WAIT_FOR_WARMUP` (default: `false`), `WARMUP_GRACE_PERIOD` (default: `10m`)
-- **Metrics**: `METRICS_USERNAME`, `METRICS_PASSWORD`
+- **Required**: `NTPU_LINE_CHANNEL_ACCESS_TOKEN`, `NTPU_LINE_CHANNEL_SECRET`
+- **LLM** (Optional): `NTPU_LLM_ENABLED`, `NTPU_GEMINI_API_KEY`, `NTPU_GROQ_API_KEY`, `NTPU_CEREBRAS_API_KEY`, `NTPU_LLM_PROVIDERS`, `NTPU_*_INTENT_MODELS`, `NTPU_*_EXPANDER_MODELS`
+- **Server**: `NTPU_PORT`, `NTPU_LOG_LEVEL`, `NTPU_SHUTDOWN_TIMEOUT`
+- **Data**: `NTPU_DATA_DIR` (default: `./data` on Windows, `/data` on Linux/Mac), `NTPU_CACHE_TTL`
+- **Scraper**: `NTPU_SCRAPER_TIMEOUT`, `NTPU_SCRAPER_MAX_RETRIES`
+- **Rate Limits**: `NTPU_USER_RATE_BURST`, `NTPU_USER_RATE_REFILL`, `NTPU_LLM_RATE_BURST`, `NTPU_LLM_RATE_REFILL`, `NTPU_LLM_RATE_DAILY`, `NTPU_GLOBAL_RATE_RPS`
+- **Startup**: `NTPU_WARMUP_WAIT` (default: `false`), `NTPU_WARMUP_GRACE_PERIOD` (default: `10m`)
+- **Metrics**: `NTPU_METRICS_AUTH_ENABLED`, `NTPU_METRICS_USERNAME`, `NTPU_METRICS_PASSWORD`
 
-See `.env.example` for full documentation. Production: set `WAIT_FOR_WARMUP=true` to ensure data is ready before accepting traffic.
+See `.env.example` for full documentation. Production: set `NTPU_WARMUP_WAIT=true` to ensure data is ready before accepting traffic.
 
 ## Error Handling
 

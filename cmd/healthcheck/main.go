@@ -14,7 +14,7 @@ func main() {
 }
 
 func run() int {
-	port := os.Getenv("PORT")
+	port := os.Getenv("NTPU_PORT")
 	if port == "" {
 		port = "10000"
 	}

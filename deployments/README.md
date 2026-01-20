@@ -20,15 +20,20 @@ docker compose up -d
 
 ### 必填項目
 
-- `LINE_CHANNEL_ACCESS_TOKEN` - LINE Channel Access Token
-- `LINE_CHANNEL_SECRET` - LINE Channel Secret
+- `NTPU_LINE_CHANNEL_ACCESS_TOKEN` - LINE Channel Access Token
+- `NTPU_LINE_CHANNEL_SECRET` - LINE Channel Secret
 
 ### 可選項目（啟用 AI 功能）
 
-至少設定一個 LLM Provider API Key：
-- `GEMINI_API_KEY` - Google Gemini API
-- `GROQ_API_KEY` - Groq API
-- `CEREBRAS_API_KEY` - Cerebras API
+需先設定 `NTPU_LLM_ENABLED=true`，並至少設定一個 LLM Provider API Key：
+- `NTPU_GEMINI_API_KEY` - Google Gemini API
+- `NTPU_GROQ_API_KEY` - Groq API
+- `NTPU_CEREBRAS_API_KEY` - Cerebras API
+
+### Docker Compose 設定
+
+- `NTPU_IMAGE_TAG` - 映像版本（預設：latest）
+- `NTPU_HOST_PORT` - Host 對外埠號（預設：10000）
 
 詳細環境變數說明請參考 [.env.example](.env.example)。
 

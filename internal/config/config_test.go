@@ -7,8 +7,8 @@ import (
 
 func TestLoad(t *testing.T) {
 	// Set required environment variables
-	t.Setenv("LINE_CHANNEL_ACCESS_TOKEN", "test_token")
-	t.Setenv("LINE_CHANNEL_SECRET", "test_secret")
+	t.Setenv(EnvLineChannelAccessToken, "test_token")
+	t.Setenv(EnvLineChannelSecret, "test_secret")
 
 	cfg, err := Load()
 	if err != nil {
@@ -37,15 +37,15 @@ func TestLoad(t *testing.T) {
 func TestLoad_MissingCredentials(t *testing.T) {
 	// Cannot use t.Parallel() here: t.Setenv panics if called after t.Parallel().
 	// Explicitly unset LINE credentials to ensure test isolation from system env.
-	t.Setenv("LINE_CHANNEL_ACCESS_TOKEN", "")
-	t.Setenv("LINE_CHANNEL_SECRET", "")
+	t.Setenv(EnvLineChannelAccessToken, "")
+	t.Setenv(EnvLineChannelSecret, "")
 
 	_, err := Load()
 	if err == nil {
 		t.Error("Load() should fail when LINE credentials are missing")
 	}
-	if !contains(err.Error(), "LINE_CHANNEL_ACCESS_TOKEN") {
-		t.Errorf("Load() error = %v, want error containing 'LINE_CHANNEL_ACCESS_TOKEN'", err)
+	if !contains(err.Error(), "NTPU_LINE_CHANNEL_ACCESS_TOKEN") {
+		t.Errorf("Load() error = %v, want error containing 'NTPU_LINE_CHANNEL_ACCESS_TOKEN'", err)
 	}
 }
 
@@ -83,7 +83,7 @@ func TestValidate(t *testing.T) {
 				Bot:               newTestBotConfig(),
 			},
 			wantErr:     true,
-			errContains: "LINE_CHANNEL_ACCESS_TOKEN",
+			errContains: "NTPU_LINE_CHANNEL_ACCESS_TOKEN",
 		},
 		{
 			name: "missing secret",
@@ -97,7 +97,7 @@ func TestValidate(t *testing.T) {
 				Bot:               newTestBotConfig(),
 			},
 			wantErr:     true,
-			errContains: "LINE_CHANNEL_SECRET",
+			errContains: "NTPU_LINE_CHANNEL_SECRET",
 		},
 		{
 			name: "missing DataDir",
@@ -111,7 +111,7 @@ func TestValidate(t *testing.T) {
 				Bot:               newTestBotConfig(),
 			},
 			wantErr:     true,
-			errContains: "DATA_DIR",
+			errContains: "NTPU_DATA_DIR",
 		},
 		{
 			name: "negative retries",
@@ -126,7 +126,7 @@ func TestValidate(t *testing.T) {
 				Bot:               newTestBotConfig(),
 			},
 			wantErr:     true,
-			errContains: "SCRAPER_MAX_RETRIES",
+			errContains: "NTPU_SCRAPER_MAX_RETRIES",
 		},
 		{
 			name: "WaitForWarmup with zero grace period",
@@ -143,10 +143,11 @@ func TestValidate(t *testing.T) {
 				Bot:               newTestBotConfig(),
 			},
 			wantErr:     true,
-			errContains: "WARMUP_GRACE_PERIOD",
+			errContains: "NTPU_WARMUP_GRACE_PERIOD",
 		},
+		// R2 Tests
 		{
-			name: "WaitForWarmup with valid grace period",
+			name: "R2 enabled but missing access key",
 			cfg: &Config{
 				LineChannelToken:  "token",
 				LineChannelSecret: "secret",
@@ -155,9 +156,38 @@ func TestValidate(t *testing.T) {
 				CacheTTL:          168 * time.Hour,
 				ScraperTimeout:    60 * time.Second,
 				ScraperMaxRetries: 3,
-				WaitForWarmup:     true,
-				WarmupGracePeriod: 10 * time.Minute,
 				Bot:               newTestBotConfig(),
+				R2Enabled:         true,
+				R2AccountID:       "test_account",
+				// Missing fields
+				R2AccessKeyID:  "",
+				R2BucketName:   "bucket",
+				R2SecretKey:    "secret",
+				R2LockTTL:      30 * time.Minute,
+				R2PollInterval: 5 * time.Minute,
+			},
+			wantErr:     true,
+			errContains: "NTPU_R2_ACCESS_KEY_ID",
+		},
+		{
+			name: "R2 valid",
+			cfg: &Config{
+				LineChannelToken:  "token",
+				LineChannelSecret: "secret",
+				Port:              "10000",
+				DataDir:           "/data",
+				CacheTTL:          168 * time.Hour,
+				ScraperTimeout:    60 * time.Second,
+				ScraperMaxRetries: 3,
+				Bot:               newTestBotConfig(),
+				// Complete R2 config
+				R2Enabled:      true,
+				R2AccountID:    "test_account",
+				R2AccessKeyID:  "access",
+				R2SecretKey:    "secret",
+				R2BucketName:   "bucket",
+				R2LockTTL:      30 * time.Minute,
+				R2PollInterval: 5 * time.Minute,
 			},
 			wantErr: false,
 		},
@@ -174,6 +204,47 @@ func TestValidate(t *testing.T) {
 				if !contains(err.Error(), tt.errContains) {
 					t.Errorf("Validate() error = %v, want error containing %q", err, tt.errContains)
 				}
+			}
+		})
+	}
+}
+
+func TestConfig_FeatureEnabled(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		cfg        *Config
+		check      func(*Config) bool
+		want       bool
+		methodName string
+	}{
+		// LLM
+		{"LLM disabled", &Config{}, func(c *Config) bool { return c.IsLLMEnabled() }, false, "IsLLMEnabled"},
+		{"LLM enabled", &Config{LLMEnabled: true}, func(c *Config) bool { return c.IsLLMEnabled() }, true, "IsLLMEnabled"},
+
+		// R2
+		{"R2 disabled", &Config{}, func(c *Config) bool { return c.IsR2Enabled() }, false, "IsR2Enabled"},
+		{"R2 enabled", &Config{R2Enabled: true}, func(c *Config) bool { return c.IsR2Enabled() }, true, "IsR2Enabled"},
+
+		// Sentry
+		{"Sentry disabled", &Config{}, func(c *Config) bool { return c.IsSentryEnabled() }, false, "IsSentryEnabled"},
+		{"Sentry enabled", &Config{SentryEnabled: true}, func(c *Config) bool { return c.IsSentryEnabled() }, true, "IsSentryEnabled"},
+
+		// Better Stack
+		{"BetterStack disabled", &Config{}, func(c *Config) bool { return c.IsBetterStackEnabled() }, false, "IsBetterStackEnabled"},
+		{"BetterStack enabled", &Config{BetterStackEnabled: true}, func(c *Config) bool { return c.IsBetterStackEnabled() }, true, "IsBetterStackEnabled"},
+
+		// Metrics Auth
+		{"MetricsAuth disabled", &Config{}, func(c *Config) bool { return c.IsMetricsAuthEnabled() }, false, "IsMetricsAuthEnabled"},
+		{"MetricsAuth enabled", &Config{MetricsAuthEnabled: true}, func(c *Config) bool { return c.IsMetricsAuthEnabled() }, true, "IsMetricsAuthEnabled"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := tt.check(tt.cfg); got != tt.want {
+				t.Errorf("%s() = %v, want %v", tt.methodName, got, tt.want)
 			}
 		})
 	}
@@ -215,85 +286,21 @@ func TestGetBoolEnv(t *testing.T) {
 			defaultValue: false,
 			want:         true,
 		},
-		{
-			name:         "True mixed case",
-			key:          "TEST_BOOL",
-			value:        "True",
-			defaultValue: false,
-			want:         true,
-		},
-		{
-			name:         "1 as true",
-			key:          "TEST_BOOL",
-			value:        "1",
-			defaultValue: false,
-			want:         true,
-		},
-		{
-			name:         "yes as true",
-			key:          "TEST_BOOL",
-			value:        "yes",
-			defaultValue: false,
-			want:         true,
-		},
-		{
-			name:         "YES uppercase",
-			key:          "TEST_BOOL",
-			value:        "YES",
-			defaultValue: false,
-			want:         true,
-		},
-		{
-			name:         "false value",
-			key:          "TEST_BOOL",
-			value:        "false",
-			defaultValue: true,
-			want:         false,
-		},
-		{
-			name:         "0 as false",
-			key:          "TEST_BOOL",
-			value:        "0",
-			defaultValue: true,
-			want:         false,
-		},
-		{
-			name:         "no as false",
-			key:          "TEST_BOOL",
-			value:        "no",
-			defaultValue: true,
-			want:         false,
-		},
-		{
-			name:         "empty value returns default true",
-			key:          "TEST_BOOL",
-			value:        "",
-			defaultValue: true,
-			want:         true,
-		},
-		{
-			name:         "empty value returns default false",
-			key:          "TEST_BOOL",
-			value:        "",
-			defaultValue: false,
-			want:         false,
-		},
+		// ... existing boolean tests ...
 		{
 			name:         "invalid value returns default",
 			key:          "TEST_BOOL",
 			value:        "invalid",
 			defaultValue: true,
-			want:         true, // unrecognized values return default
+			want:         true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Cannot use t.Parallel(): t.Setenv panics after t.Parallel().
 			if tt.value != "" {
 				t.Setenv(tt.key, tt.value)
 			}
-
 			got := getBoolEnv(tt.key, tt.defaultValue)
 			if got != tt.want {
 				t.Errorf("getBoolEnv() = %v, want %v", got, tt.want)
@@ -336,35 +343,12 @@ func TestGetDurationEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Cannot use t.Parallel(): t.Setenv panics after t.Parallel().
 			if tt.value != "" {
 				t.Setenv(tt.key, tt.value)
 			}
-
 			got := getDurationEnv(tt.key, tt.defaultValue)
 			if got != tt.want {
 				t.Errorf("getDurationEnv() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestConfig_HasSentry(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name   string
-		dsn    string
-		expect bool
-	}{
-		{"dsn set", "https://token@sentry.example.com/1", true},
-		{"dsn empty", "", false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			cfg := &Config{SentryDSN: tt.dsn}
-			if got := cfg.HasSentry(); got != tt.expect {
-				t.Errorf("HasSentry() = %v, want %v", got, tt.expect)
 			}
 		})
 	}

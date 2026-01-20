@@ -82,12 +82,39 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	slog.SetDefault(log.Logger)
 
 	log.Info("Initializing application...")
-	if cfg.BetterStackToken != "" {
+
+	// Log status of Optional Features
+	log.WithField("sentry", cfg.IsSentryEnabled()).
+		WithField("betterstack", cfg.IsBetterStackEnabled()).
+		WithField("r2_snapshot", cfg.IsR2Enabled()).
+		WithField("llm_features", cfg.IsLLMEnabled()).
+		WithField("metrics_auth", cfg.IsMetricsAuthEnabled()).
+		Info("Feature status")
+
+	// Warn on ignored credentials when feature flags are disabled
+	if !cfg.IsLLMEnabled() && (cfg.GeminiAPIKey != "" || cfg.GroqAPIKey != "" || cfg.CerebrasAPIKey != "") {
+		log.Warn("LLM credentials provided but NTPU_LLM_ENABLED=false; LLM features are disabled")
+	}
+	if !cfg.IsSentryEnabled() && cfg.SentryDSN != "" {
+		log.Warn("Sentry DSN provided but NTPU_SENTRY_ENABLED=false; Sentry is disabled")
+	}
+	if !cfg.IsBetterStackEnabled() && cfg.BetterStackToken != "" {
+		log.Warn("Better Stack token provided but NTPU_BETTERSTACK_ENABLED=false; Better Stack is disabled")
+	}
+	if !cfg.IsR2Enabled() && (cfg.R2AccountID != "" || cfg.R2AccessKeyID != "" || cfg.R2SecretKey != "" || cfg.R2BucketName != "") {
+		log.Warn("R2 credentials provided but NTPU_R2_ENABLED=false; R2 snapshot sync is disabled")
+	}
+	if !cfg.IsMetricsAuthEnabled() && cfg.MetricsPassword != "" {
+		log.Warn("Metrics password provided but NTPU_METRICS_AUTH_ENABLED=false; metrics auth is disabled")
+	}
+
+	// 1. Better Stack Logging
+	if cfg.IsBetterStackEnabled() {
 		log.WithField("endpoint", cfg.BetterStackEndpoint).Info("Better Stack logging enabled")
 	}
 
-	// Initialize Sentry error tracking
-	if cfg.HasSentry() {
+	// 2. Sentry Error Tracking
+	if cfg.IsSentryEnabled() {
 		release := cfg.SentryRelease
 		serverName := ""
 		if host, err := os.Hostname(); err == nil && host != "" {
@@ -113,13 +140,13 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		}
 	}
 
-	// Initialize database - with optional R2 snapshot support
+	// 3. Database & R2 Initialization
 	var db *storage.DB
 	var hotSwapDB *storage.HotSwapDB
 	var snapshotMgr *snapshot.Manager
 	useLocalDB := true // Flag to track if we should use local DB
 
-	if cfg.R2Enabled {
+	if cfg.IsR2Enabled() {
 		// R2 mode: try to download snapshot for fast startup
 		log.Info("R2 snapshot sync enabled, attempting to download latest snapshot...")
 
@@ -202,9 +229,10 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		log.WithError(err).Warn("BM25 initialization failed")
 	}
 
+	// 4. LLM Initialization
 	var intentParser genai.IntentParser
 	var queryExpander genai.QueryExpander
-	if cfg.HasLLMProvider() {
+	if cfg.IsLLMEnabled() {
 		llmCfg := buildLLMConfig(cfg)
 
 		var ipErr, qeErr error
@@ -329,7 +357,8 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	router.HEAD("/readyz", app.readinessCheck)
 	router.POST("/webhook", app.readinessMiddleware(), webhookHandler.Handle)
 	router.GET("/metrics",
-		metricsAuthMiddleware(cfg.MetricsUsername, cfg.MetricsPassword),
+		// 5. Metrics Authentication
+		metricsAuthMiddleware(cfg.IsMetricsAuthEnabled(), cfg.MetricsUsername, cfg.MetricsPassword),
 		gin.WrapH(promhttp.HandlerFor(registry, promhttp.HandlerOpts{})))
 
 	app.server = &http.Server{
@@ -808,7 +837,7 @@ func (a *Application) performProactiveWarmup(ctx context.Context, warmID bool) {
 
 	opts := warmup.Options{
 		Reset:         false,
-		HasLLMKey:     a.cfg.HasLLMProvider(),
+		HasLLMKey:     a.cfg.IsLLMEnabled(), // Use unified check
 		WarmID:        warmID,
 		Metrics:       a.metrics,
 		BM25Index:     a.bm25Index,

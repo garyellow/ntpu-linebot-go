@@ -218,7 +218,7 @@ User Query → Bot Module → Repository Layer
 ## 錯誤追蹤（Sentry SDK）
 
 - 使用 Sentry Go SDK 進行錯誤追蹤。
-- 啟用方式：設定 `SENTRY_DSN`（格式：`https://$APPLICATION_TOKEN@$INGESTING_HOST/1`）。
+- 啟用方式：設定 `NTPU_SENTRY_ENABLED=true` 與 `NTPU_SENTRY_DSN`（格式：`https://$APPLICATION_TOKEN@$INGESTING_HOST/1`）。
 - 事件保護：預設移除請求標頭/Cookie/Body，並忽略 `context canceled`、`context deadline exceeded` 類型錯誤。
 - 中介層：Gin Middleware 先於 `gin.Recovery()`，可捕捉 panic 與 HTTP 錯誤上下文。
 
@@ -415,7 +415,7 @@ registry.Register(programHandler) // 學程查詢
 - 分數分佈遵循 Normal-Exponential 混合模型（學術標準）
 
 **啟用條件**:
-- 設定 `GEMINI_API_KEY` 或 `GROQ_API_KEY` 或 `CEREBRAS_API_KEY`（自動啟用 syllabus 模組）
+- 設定 `NTPU_LLM_ENABLED=true`，並提供 `NTPU_GEMINI_API_KEY` 或 `NTPU_GROQ_API_KEY` 或 `NTPU_CEREBRAS_API_KEY`（啟用 syllabus 模組）
 - Query Expansion 需要 LLM API Key
 - 即使沒有 API Key，基本 BM25 搜尋仍可使用（但需手動載入大綱資料）
 
@@ -638,8 +638,8 @@ go run ./cmd/server
 ```bash
 # Distroless（推薦）
 docker run -d -p 10000:10000 \
-  -e LINE_CHANNEL_ACCESS_TOKEN=xxx \
-  -e LINE_CHANNEL_SECRET=xxx \
+    -e NTPU_LINE_CHANNEL_ACCESS_TOKEN=xxx \
+    -e NTPU_LINE_CHANNEL_SECRET=xxx \
   -v ./data:/data \
   garyellow/ntpu-linebot-go:latest
 
@@ -663,10 +663,11 @@ docker compose up -d
 
 | 環境變數 | 預設值 | 說明 |
 |----------|--------|------|
-| `METRICS_USERNAME` | prometheus | 帳號 |
-| `METRICS_PASSWORD` | (空) | 密碼（空=停用驗證）|
+| `NTPU_METRICS_AUTH_ENABLED` | false | 是否啟用 Basic Auth |
+| `NTPU_METRICS_USERNAME` | prometheus | 帳號 |
+| `NTPU_METRICS_PASSWORD` | (空) | 密碼 |
 
-內部 Docker 網路不需要驗證（保持 `METRICS_PASSWORD` 為空）。
+內部 Docker 網路不需要驗證（保持 `NTPU_METRICS_AUTH_ENABLED=false`）。
 
 ### Kubernetes（未來擴展）
 
