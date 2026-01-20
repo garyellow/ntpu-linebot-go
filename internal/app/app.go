@@ -3,11 +3,9 @@ package app
 
 import (
 	"context"
-	cryptorand "crypto/rand"
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/big"
 	"net/http"
 	"os"
 	"os/signal"
@@ -23,6 +21,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/delta"
 	"github.com/garyellow/ntpu-linebot-go/internal/genai"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
+	"github.com/garyellow/ntpu-linebot-go/internal/maintenance"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 	"github.com/garyellow/ntpu-linebot-go/internal/modules/contact"
 	"github.com/garyellow/ntpu-linebot-go/internal/modules/course"
@@ -55,6 +54,7 @@ type Application struct {
 	snapshotMgr    *snapshot.Manager  // R2 snapshot manager (nil if R2 disabled)
 	snapshotReady  bool               // True if a snapshot was successfully downloaded at startup
 	deltaLog       *delta.R2Log       // R2 delta log (nil if R2 disabled)
+	scheduleStore  *maintenance.R2ScheduleStore
 	metrics        *metrics.Metrics
 	registry       *prometheus.Registry
 	scraperClient  *scraper.Client
@@ -151,6 +151,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	var hotSwapDB *storage.HotSwapDB
 	var snapshotMgr *snapshot.Manager
 	var deltaLog *delta.R2Log
+	var scheduleStore *maintenance.R2ScheduleStore
 	useLocalDB := true // Flag to track if we should use local DB
 
 	snapshotReady := false
@@ -211,6 +212,12 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 				deltaLog, deltaErr = delta.NewR2Log(r2Client, cfg.R2DeltaPrefix, instanceID)
 				if deltaErr != nil {
 					log.WithError(deltaErr).Warn("Delta log initialization failed, missed results will not be preserved")
+				}
+
+				var scheduleErr error
+				scheduleStore, scheduleErr = maintenance.NewR2ScheduleStore(r2Client, cfg.R2ScheduleKey, config.R2RequestTimeout)
+				if scheduleErr != nil {
+					log.WithError(scheduleErr).Warn("Schedule store initialization failed, maintenance will fall back to local scheduling")
 				}
 
 				// Start background polling for new snapshots
@@ -363,6 +370,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		snapshotMgr:    snapshotMgr,
 		snapshotReady:  snapshotReady,
 		deltaLog:       deltaLog,
+		scheduleStore:  scheduleStore,
 		metrics:        m,
 		registry:       registry,
 		scraperClient:  scraperClient,
@@ -636,16 +644,13 @@ func (a *Application) Run() error {
 // startBackgroundJobs starts all background goroutines tracked by WaitGroup.
 func (a *Application) startBackgroundJobs(ctx context.Context) {
 	a.wg.Go(func() {
-		a.dataCleanupLoop(ctx)
-	})
-	a.wg.Go(func() {
-		a.refreshStickers(ctx)
-	})
-	a.wg.Go(func() {
-		a.dataRefreshLoop(ctx)
+		a.maintenanceLoop(ctx)
 	})
 	a.wg.Go(func() {
 		a.updateCacheSizeMetrics(ctx)
+	})
+	a.wg.Go(func() {
+		a.refreshStickers(ctx)
 	})
 }
 
@@ -739,39 +744,9 @@ func (a *Application) shutdown() error {
 	return nil
 }
 
-// dataCleanupLoop runs cleanup on a configurable interval, exits on context cancellation.
-func (a *Application) dataCleanupLoop(ctx context.Context) {
-	a.logger.Debug("Data cleanup job started")
-	defer a.logger.Debug("Data cleanup job stopped")
-
-	// Run initial cleanup on startup with cancellable context
-	initialCtx, initialCancel := context.WithTimeout(ctx, 10*time.Minute)
-	a.runDataCleanup(initialCtx)
-	initialCancel()
-
-	interval := a.cfg.DataCleanupInterval
-	if interval <= 0 {
-		a.logger.Warn("Data cleanup interval disabled or invalid, cleanup loop will not run")
-		return
-	}
-
-	for {
-		waitDuration := jitterDuration(interval)
-		a.logger.WithField("next_run_in", waitDuration.String()).
-			Info("Scheduled next data cleanup")
-
-		select {
-		case <-ctx.Done():
-			a.logger.Debug("Data cleanup received shutdown signal")
-			return
-		case <-time.After(waitDuration):
-			a.runDataCleanup(ctx)
-		}
-	}
-}
-
 // runDataCleanup performs the actual cleanup operation.
-func (a *Application) runDataCleanup(ctx context.Context) {
+// Returns (true, nil) when cleanup ran successfully.
+func (a *Application) runDataCleanup(ctx context.Context) (bool, error) {
 	startTime := time.Now()
 	a.logger.Info("Starting data cleanup")
 
@@ -781,11 +756,11 @@ func (a *Application) runDataCleanup(ctx context.Context) {
 		var lockErr error
 		lockAcquired, lockErr = a.snapshotMgr.AcquireLeaderLock(ctx)
 		if lockErr != nil {
-			a.logger.WithError(lockErr).Warn("Failed to acquire leader lock for cleanup, proceeding without lock")
-			isLeader = true
+			a.logger.WithError(lockErr).Warn("Failed to acquire leader lock for cleanup, skipping this run")
+			return false, lockErr
 		} else if !lockAcquired {
 			a.logger.Info("Another instance is leader for cleanup, skipping")
-			return
+			return false, nil
 		}
 		if lockAcquired {
 			defer func() {
@@ -797,51 +772,61 @@ func (a *Application) runDataCleanup(ctx context.Context) {
 	}
 
 	var totalDeleted int64
+	var cleanupErr error
 
 	if deleted, err := a.db.DeleteExpiredContacts(ctx, a.cfg.CacheTTL); err != nil {
 		a.logger.WithError(err).Error("Failed to cleanup expired contacts")
+		cleanupErr = errors.Join(cleanupErr, err)
 	} else {
 		totalDeleted += deleted
 	}
 
 	if deleted, err := a.db.DeleteExpiredCourses(ctx, a.cfg.CacheTTL); err != nil {
 		a.logger.WithError(err).Error("Failed to cleanup expired courses")
+		cleanupErr = errors.Join(cleanupErr, err)
 	} else {
 		totalDeleted += deleted
 	}
 
 	if deleted, err := a.db.DeleteExpiredHistoricalCourses(ctx, a.cfg.CacheTTL); err != nil {
 		a.logger.WithError(err).Error("Failed to cleanup expired historical courses")
+		cleanupErr = errors.Join(cleanupErr, err)
 	} else {
 		totalDeleted += deleted
 	}
 
 	if deleted, err := a.db.DeleteExpiredCoursePrograms(ctx, a.cfg.CacheTTL); err != nil {
 		a.logger.WithError(err).Error("Failed to cleanup expired course programs")
+		cleanupErr = errors.Join(cleanupErr, err)
 	} else {
 		totalDeleted += deleted
 	}
 
 	if deleted, err := a.db.DeleteExpiredPrograms(ctx, a.cfg.CacheTTL); err != nil {
 		a.logger.WithError(err).Error("Failed to cleanup expired programs")
+		cleanupErr = errors.Join(cleanupErr, err)
 	} else {
 		totalDeleted += deleted
 	}
 
 	if deleted, err := a.db.DeleteExpiredSyllabi(ctx, a.cfg.CacheTTL); err != nil {
 		a.logger.WithError(err).Error("Failed to cleanup expired syllabi")
+		cleanupErr = errors.Join(cleanupErr, err)
 	} else {
 		totalDeleted += deleted
 	}
 
 	if _, err := a.db.Writer().ExecContext(ctx, "VACUUM"); err != nil {
 		a.logger.WithError(err).Warn("Failed to VACUUM database")
+		cleanupErr = errors.Join(cleanupErr, err)
 	}
 	if _, err := a.db.Writer().ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
 		a.logger.WithError(err).Warn("Failed to checkpoint WAL after VACUUM")
+		cleanupErr = errors.Join(cleanupErr, err)
 	}
 	if _, err := a.db.Writer().ExecContext(ctx, "PRAGMA optimize"); err != nil {
 		a.logger.WithError(err).Warn("Failed to optimize database")
+		cleanupErr = errors.Join(cleanupErr, err)
 	}
 
 	duration := time.Since(startTime)
@@ -858,6 +843,7 @@ func (a *Application) runDataCleanup(ctx context.Context) {
 			stats, err := a.deltaLog.MergeIntoDB(ctx, a.db)
 			if err != nil {
 				a.logger.WithError(err).Warn("Failed to merge delta logs before cleanup snapshot upload")
+				cleanupErr = errors.Join(cleanupErr, err)
 			} else {
 				a.logger.WithField("processed", stats.ObjectsProcessed).
 					WithField("merged", stats.ObjectsMerged).
@@ -870,10 +856,16 @@ func (a *Application) runDataCleanup(ctx context.Context) {
 		etag, uploadErr := a.snapshotMgr.UploadSnapshot(ctx, a.db)
 		if uploadErr != nil {
 			a.logger.WithError(uploadErr).Error("Failed to upload cleanup snapshot to R2")
+			cleanupErr = errors.Join(cleanupErr, uploadErr)
 		} else {
 			a.logger.WithField("etag", etag).Info("Cleanup snapshot uploaded to R2 successfully")
 		}
 	}
+
+	if cleanupErr != nil {
+		return true, cleanupErr
+	}
+	return true, nil
 }
 
 // refreshStickers loads stickers once on startup.
@@ -911,37 +903,7 @@ func (a *Application) performStickerRefresh(ctx context.Context) {
 	}
 }
 
-// dataRefreshLoop runs initial refresh on startup, then on a configurable interval.
-func (a *Application) dataRefreshLoop(ctx context.Context) {
-	a.logger.Debug("Data refresh job started")
-	defer a.logger.Debug("Data refresh job stopped")
-
-	initialCtx, initialCancel := context.WithTimeout(ctx, config.WarmupProactive)
-	a.runDataRefresh(initialCtx, true)
-	initialCancel()
-
-	interval := a.cfg.DataRefreshInterval
-	if interval <= 0 {
-		a.logger.Warn("Data refresh interval disabled or invalid, refresh loop will not run")
-		return
-	}
-
-	for {
-		waitDuration := jitterDuration(interval)
-		a.logger.WithField("next_run_in", waitDuration.String()).
-			Info("Scheduled next data refresh")
-
-		select {
-		case <-ctx.Done():
-			a.logger.Debug("Data refresh received shutdown signal")
-			return
-		case <-time.After(waitDuration):
-			a.runDataRefresh(ctx, false)
-		}
-	}
-}
-
-func (a *Application) runDataRefresh(ctx context.Context, includeID bool) {
+func (a *Application) runDataRefresh(ctx context.Context, includeID bool) (bool, bool, error) {
 	a.logger.Info("Starting data refresh")
 	startTime := time.Now()
 
@@ -951,7 +913,7 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) {
 	if includeID && a.snapshotMgr != nil && a.snapshotReady {
 		a.logger.Info("Snapshot already loaded, skipping initial refresh")
 		a.readinessState.MarkReady()
-		return
+		return false, true, nil
 	}
 
 	// R2 distributed lock: only one instance should run refresh at a time
@@ -961,15 +923,15 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) {
 		var lockErr error
 		lockAcquired, lockErr = a.snapshotMgr.AcquireLeaderLock(warmupCtx)
 		if lockErr != nil {
-			a.logger.WithError(lockErr).Warn("Failed to acquire leader lock, proceeding without lock")
-			isLeader = true
+			a.logger.WithError(lockErr).Warn("Failed to acquire leader lock, skipping this run")
+			return false, false, lockErr
 		} else if !lockAcquired {
 			if includeID {
 				a.logger.Info("Another instance is leader for initial refresh, waiting for new snapshot via polling")
 			} else {
 				a.logger.Info("Another instance is leader for refresh, waiting for new snapshot via polling")
 			}
-			return
+			return false, false, nil
 		}
 
 		a.logger.Info("Acquired leader lock, this instance will run refresh")
@@ -995,7 +957,7 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) {
 
 	if err != nil {
 		a.logger.WithError(err).Error("Data refresh failed")
-		return
+		return true, false, err
 	}
 
 	if includeID {
@@ -1021,12 +983,12 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) {
 			stats, err := a.deltaLog.MergeIntoDB(warmupCtx, a.db)
 			if err != nil {
 				a.logger.WithError(err).Warn("Failed to merge delta logs before snapshot upload")
-			} else {
-				a.logger.WithField("processed", stats.ObjectsProcessed).
-					WithField("merged", stats.ObjectsMerged).
-					WithField("skipped", stats.ObjectsSkipped).
-					Info("Delta logs merged before snapshot upload")
+				return true, false, err
 			}
+			a.logger.WithField("processed", stats.ObjectsProcessed).
+				WithField("merged", stats.ObjectsMerged).
+				WithField("skipped", stats.ObjectsSkipped).
+				Info("Delta logs merged before snapshot upload")
 		}
 
 		a.logger.Info("Uploading new snapshot to R2")
@@ -1034,31 +996,148 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) {
 		etag, uploadErr := a.snapshotMgr.UploadSnapshot(warmupCtx, a.db)
 		if uploadErr != nil {
 			a.logger.WithError(uploadErr).Error("Failed to upload snapshot to R2")
-		} else {
-			a.logger.WithField("etag", etag).Info("Snapshot uploaded to R2 successfully")
+			return true, false, uploadErr
+		}
+		a.logger.WithField("etag", etag).Info("Snapshot uploaded to R2 successfully")
+	}
+
+	return true, includeID, nil
+}
+
+// maintenanceLoop coordinates refresh/cleanup based on shared schedule state.
+func (a *Application) maintenanceLoop(ctx context.Context) {
+	a.logger.Debug("Maintenance scheduler started")
+	defer a.logger.Debug("Maintenance scheduler stopped")
+
+	refreshInterval := a.cfg.DataRefreshInterval
+	cleanupInterval := a.cfg.DataCleanupInterval
+	if refreshInterval <= 0 && cleanupInterval <= 0 {
+		a.logger.Warn("Maintenance scheduling disabled (refresh/cleanup intervals invalid)")
+		if !a.readinessState.IsReady() {
+			a.readinessState.MarkReady()
+		}
+		<-ctx.Done()
+		return
+	}
+
+	checkInterval := maintenanceCheckInterval(refreshInterval, cleanupInterval)
+	if checkInterval <= 0 {
+		checkInterval = time.Minute
+	}
+	logger := a.logger.WithField("check_interval", checkInterval.String())
+	logger.Info("Maintenance scheduler initialized")
+
+	ticker := time.NewTicker(checkInterval)
+	defer ticker.Stop()
+
+	initialRefresh := true
+	localState := maintenance.State{}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		now := time.Now().UTC()
+		state := localState
+		if a.scheduleStore != nil {
+			loaded, _, err := a.scheduleStore.Ensure(ctx)
+			if err != nil {
+				a.logger.WithError(err).Warn("Failed to load maintenance schedule state, using local fallback")
+			} else {
+				state = loaded
+			}
+		}
+
+		refreshDue := isMaintenanceDue(state.LastRefresh, refreshInterval, now)
+		cleanupDue := isMaintenanceDue(state.LastCleanup, cleanupInterval, now)
+
+		if initialRefresh && !refreshDue && !a.readinessState.IsReady() {
+			a.readinessState.MarkReady()
+			initialRefresh = false
+		}
+
+		if refreshDue {
+			ran, ready, err := a.runDataRefresh(ctx, initialRefresh)
+			if ready {
+				initialRefresh = false
+			}
+			if err != nil {
+				a.logger.WithError(err).Warn("Data refresh run failed")
+			} else if ran {
+				initialRefresh = false
+				completedAt := time.Now().UTC()
+				if a.scheduleStore != nil {
+					if err := a.scheduleStore.Update(ctx, func(s *maintenance.State) {
+						s.LastRefresh = completedAt.Unix()
+					}); err != nil {
+						a.logger.WithError(err).Warn("Failed to update refresh schedule state")
+					}
+				} else {
+					localState.LastRefresh = completedAt.Unix()
+				}
+			}
+		}
+
+		if cleanupDue {
+			ran, err := a.runDataCleanup(ctx)
+			if err != nil {
+				a.logger.WithError(err).Warn("Data cleanup run failed")
+			} else if ran {
+				completedAt := time.Now().UTC()
+				if a.scheduleStore != nil {
+					if err := a.scheduleStore.Update(ctx, func(s *maintenance.State) {
+						s.LastCleanup = completedAt.Unix()
+					}); err != nil {
+						a.logger.WithError(err).Warn("Failed to update cleanup schedule state")
+					}
+				} else {
+					localState.LastCleanup = completedAt.Unix()
+				}
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
 		}
 	}
 }
 
-func jitterDuration(base time.Duration) time.Duration {
+func maintenanceCheckInterval(refreshInterval, cleanupInterval time.Duration) time.Duration {
+	base := minPositiveDuration(refreshInterval, cleanupInterval)
 	if base <= 0 {
-		return base
+		return 0
 	}
-	jitter := base / 10
-	if jitter <= 0 {
-		return base
+	interval := min(max(base/10, time.Minute), 15*time.Minute)
+	return interval
+}
+
+func minPositiveDuration(a, b time.Duration) time.Duration {
+	if a <= 0 {
+		return b
 	}
-	maxN := big.NewInt(int64(jitter*2 + 1))
-	n, err := cryptorand.Int(cryptorand.Reader, maxN)
-	if err != nil {
-		return base
+	if b <= 0 {
+		return a
 	}
-	delta := time.Duration(n.Int64()) - jitter
-	next := base + delta
-	if next < time.Second {
-		return time.Second
+	if a < b {
+		return a
 	}
-	return next
+	return b
+}
+
+func isMaintenanceDue(lastUnix int64, interval time.Duration, now time.Time) bool {
+	if interval <= 0 {
+		return false
+	}
+	if lastUnix == 0 {
+		return true
+	}
+	last := time.Unix(lastUnix, 0).UTC()
+	return now.Sub(last) >= interval
 }
 
 // updateCacheSizeMetrics periodically records cache size to Prometheus.

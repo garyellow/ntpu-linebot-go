@@ -86,6 +86,7 @@ services:
       - NTPU_R2_LOCK_TTL=${NTPU_R2_LOCK_TTL:-1h}
       - NTPU_R2_POLL_INTERVAL=${NTPU_R2_POLL_INTERVAL:-15m}
       - NTPU_R2_DELTA_PREFIX=${NTPU_R2_DELTA_PREFIX:-deltas}
+      - NTPU_R2_SCHEDULE_KEY=${NTPU_R2_SCHEDULE_KEY:-schedules/maintenance.json}
     deploy:
       resources:
         limits:

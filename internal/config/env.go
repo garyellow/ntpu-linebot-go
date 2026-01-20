@@ -63,6 +63,7 @@ const (
 	EnvR2LockTTL         = "NTPU_R2_LOCK_TTL"
 	EnvR2PollInterval    = "NTPU_R2_POLL_INTERVAL"
 	EnvR2DeltaPrefix     = "NTPU_R2_DELTA_PREFIX"
+	EnvR2ScheduleKey     = "NTPU_R2_SCHEDULE_KEY"
 
 	// Sentry Feature
 	EnvSentryEnabled          = "NTPU_SENTRY_ENABLED"
