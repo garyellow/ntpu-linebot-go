@@ -267,7 +267,7 @@ semesterCache.Update() (shared)
 ### 資料品質
 - **完整性**：課程大綱頁面提供完整且準確的學程名稱
 - **正確性**：必/選修以課程列表頁為準（避免大綱缺欄位）
-- **時效性**：依 `NTPU_REFRESH_INTERVAL` 同步更新（最近 2 學期）
+- **時效性**：依 `NTPU_MAINTENANCE_REFRESH_INTERVAL` 同步更新（最近 2 學期）
 - **覆蓋範圍**：只包含有開課的學程
 
 ## 相關文件

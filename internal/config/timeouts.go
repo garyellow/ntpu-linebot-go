@@ -64,11 +64,14 @@ const (
 
 // Background job intervals
 const (
-	// DataRefreshIntervalDefault is the default interval for data refresh tasks.
-	DataRefreshIntervalDefault = 24 * time.Hour
+	// MaintenanceRefreshIntervalDefault is the default interval for refresh tasks.
+	MaintenanceRefreshIntervalDefault = 24 * time.Hour
 
-	// DataCleanupIntervalDefault is the default interval for data cleanup tasks.
-	DataCleanupIntervalDefault = 24 * time.Hour
+	// MaintenanceCleanupIntervalDefault is the default interval for cleanup tasks.
+	MaintenanceCleanupIntervalDefault = 24 * time.Hour
+
+	// R2SnapshotPollIntervalDefault is the default interval for polling R2 snapshots.
+	R2SnapshotPollIntervalDefault = 15 * time.Minute
 
 	// MetricsUpdateInterval is how often cache size metrics are updated.
 	MetricsUpdateInterval = 5 * time.Minute

@@ -161,7 +161,7 @@ LINE Webhook → Gin Handler
 - **Cache Strategy by Data Type**:
   - **Students**: Never expires, not refreshed (static data)
   - **Stickers**: Never expires, loaded once on startup
-  - **Contacts/Courses/Programs**: 7-day TTL, refreshed on `NTPU_REFRESH_INTERVAL`
+  - **Contacts/Courses/Programs**: 7-day TTL, refreshed on `NTPU_MAINTENANCE_REFRESH_INTERVAL`
   - **Syllabi**: 7-day TTL, auto-enabled when LLM API key is configured
 - TTL enforced at SQL level for contacts/courses/programs: `WHERE cached_at > ?`
 - **Syllabi table**: Stores syllabus content + SHA256 hash for incremental updates
@@ -385,7 +385,7 @@ task compose:up       # Start Docker Compose deployment (bot only)
 - **Scraper**: `NTPU_SCRAPER_TIMEOUT`, `NTPU_SCRAPER_MAX_RETRIES`
 - **Rate Limits**: `NTPU_USER_RATE_BURST`, `NTPU_USER_RATE_REFILL`, `NTPU_LLM_RATE_BURST`, `NTPU_LLM_RATE_REFILL`, `NTPU_LLM_RATE_DAILY`, `NTPU_GLOBAL_RATE_RPS`
 - **Startup**: `NTPU_WARMUP_WAIT` (default: `false`, gates /webhook only), `NTPU_WARMUP_GRACE_PERIOD` (default: `10m`, readiness grace period)
-- **Intervals**: `NTPU_REFRESH_INTERVAL`, `NTPU_CLEANUP_INTERVAL`
+- **Intervals**: `NTPU_MAINTENANCE_REFRESH_INTERVAL`, `NTPU_MAINTENANCE_CLEANUP_INTERVAL`, `NTPU_R2_SNAPSHOT_POLL_INTERVAL`
 - **Metrics**: `NTPU_METRICS_AUTH_ENABLED`, `NTPU_METRICS_USERNAME`, `NTPU_METRICS_PASSWORD`
 
 See `.env.example` for full documentation. Production: set `NTPU_WARMUP_WAIT=true` if you want /webhook to wait for warmup readiness.
@@ -506,7 +506,7 @@ Fallback → getHelpMessage() + Warning Log
 - TTL: 7 days (enforced at SQL level: `WHERE cached_at > ?`)
 - Scope: Only most recent 2 semesters with data
 - Trigger: Interval-based refresh (auto-enabled when LLM API key configured)
-- Cleanup: Expired entries deleted on `NTPU_CLEANUP_INTERVAL`
+- Cleanup: Expired entries deleted on `NTPU_MAINTENANCE_CLEANUP_INTERVAL`
 
 **Data Flow**:
 ```

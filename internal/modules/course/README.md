@@ -171,7 +171,7 @@ Carousel (max 40)       Carousel + Score        Single Bubble
 
 > 完整的資料時效策略請參考 [架構說明文件](/.github/copilot-instructions.md#data-layer-cache-first-strategy)
 
-- **TTL**：7 天（依 `NTPU_REFRESH_INTERVAL` 自動更新）
+- **TTL**：7 天（依 `NTPU_MAINTENANCE_REFRESH_INTERVAL` 自動更新）
 - **範圍**：最近 4 個學期的課程資料
 
 ### Syllabus 整合

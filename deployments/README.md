@@ -39,11 +39,20 @@ docker compose up -d
 - `NTPU_R2_SECRET_ACCESS_KEY` - R2 Secret Access Key
 - `NTPU_R2_BUCKET_NAME` - R2 Bucket
 - `NTPU_R2_SNAPSHOT_KEY` - 快照物件 key（預設：snapshots/cache.db.zst）
-- `NTPU_R2_LOCK_KEY` - 分散式鎖 key（預設：locks/crawler.json）
-- `NTPU_R2_LOCK_TTL` - 鎖 TTL
-- `NTPU_R2_POLL_INTERVAL` - 輪詢快照更新間隔
-- `NTPU_R2_DELTA_PREFIX` - cache miss delta log 前綴
+- `NTPU_R2_LOCK_KEY` - 分散式鎖 key（預設：locks/leader.json）
+- `NTPU_R2_LOCK_TTL` - 鎖 TTL（預設：1h）
+- `NTPU_R2_SNAPSHOT_POLL_INTERVAL` - follower 輪詢快照更新間隔（預設：15m）
+- `NTPU_R2_DELTA_PREFIX` - cache miss delta log 前綴（預設：deltas）
 - `NTPU_R2_SCHEDULE_KEY` - 刷新/清理排程狀態 key（預設：schedules/maintenance.json）
+
+### 可選項目（背景任務排程）
+
+- `NTPU_MAINTENANCE_REFRESH_INTERVAL` - 資料刷新任務間隔（預設：24h）
+- `NTPU_MAINTENANCE_CLEANUP_INTERVAL` - 資料清理任務間隔（預設：24h）
+- `NTPU_WARMUP_WAIT` - 是否等待首次 warmup 完成才接受 webhook（預設：false）
+- `NTPU_WARMUP_GRACE_PERIOD` - Warmup 就緒寬限期（預設：10m）
+
+> 未啟用 R2 時，排程狀態不會共享，僅在單一節點本地執行。
 
 ### Docker Compose 設定
 

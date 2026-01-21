@@ -172,7 +172,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 				SnapshotKey:    cfg.R2SnapshotKey,
 				LockKey:        cfg.R2LockKey,
 				LockTTL:        cfg.R2LockTTL,
-				PollInterval:   cfg.R2PollInterval,
+				PollInterval:   cfg.R2SnapshotPollInterval,
 				TempDir:        cfg.DataDir,
 				RequestTimeout: config.R2RequestTimeout,
 			})
@@ -911,7 +911,7 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) (bool,
 	defer cancel()
 
 	if includeID && a.snapshotMgr != nil && a.snapshotReady {
-		a.logger.Info("Snapshot already loaded, skipping initial refresh")
+		a.logger.Info("Snapshot already loaded from R2, initial refresh not needed")
 		a.readinessState.MarkReady()
 		return false, true, nil
 	}
@@ -1005,12 +1005,14 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) (bool,
 }
 
 // maintenanceLoop coordinates refresh/cleanup based on shared schedule state.
+// Startup behavior: marks ready immediately (no initial task execution).
+// Tasks are executed only when due time is reached based on last execution timestamp from R2/local state.
 func (a *Application) maintenanceLoop(ctx context.Context) {
 	a.logger.Debug("Maintenance scheduler started")
 	defer a.logger.Debug("Maintenance scheduler stopped")
 
-	refreshInterval := a.cfg.DataRefreshInterval
-	cleanupInterval := a.cfg.DataCleanupInterval
+	refreshInterval := a.cfg.MaintenanceRefreshInterval
+	cleanupInterval := a.cfg.MaintenanceCleanupInterval
 	if refreshInterval <= 0 && cleanupInterval <= 0 {
 		a.logger.Warn("Maintenance scheduling disabled (refresh/cleanup intervals invalid)")
 		if !a.readinessState.IsReady() {
@@ -1020,113 +1022,110 @@ func (a *Application) maintenanceLoop(ctx context.Context) {
 		return
 	}
 
-	checkInterval := maintenanceCheckInterval(refreshInterval, cleanupInterval)
-	if checkInterval <= 0 {
-		checkInterval = time.Minute
+	logger := a.logger.WithField("refresh_interval", refreshInterval.String())
+	if cleanupInterval > 0 {
+		logger = logger.WithField("cleanup_interval", cleanupInterval.String())
 	}
-	logger := a.logger.WithField("check_interval", checkInterval.String())
 	logger.Info("Maintenance scheduler initialized")
 
-	ticker := time.NewTicker(checkInterval)
-	defer ticker.Stop()
+	// Mark ready immediately on startup (no initial execution)
+	// Tasks will run when due time is reached via polling
+	if !a.readinessState.IsReady() {
+		a.readinessState.MarkReady()
+		logger.Debug("Marked ready on startup, tasks will execute when due")
+	}
 
-	initialRefresh := true
+	var refreshTicker *time.Ticker
+	var cleanupTicker *time.Ticker
+	if refreshInterval > 0 {
+		refreshTicker = time.NewTicker(refreshInterval)
+		defer refreshTicker.Stop()
+	}
+	if cleanupInterval > 0 {
+		cleanupTicker = time.NewTicker(cleanupInterval)
+		defer cleanupTicker.Stop()
+	}
+
 	localState := maintenance.State{}
+	resolveState := func(ctx context.Context) (maintenance.State, bool) {
+		state := localState
+		useLocal := a.scheduleStore == nil
+		if a.scheduleStore != nil {
+			loaded, _, err := a.scheduleStore.Ensure(ctx)
+			if err != nil {
+				a.logger.WithError(err).Warn("Failed to load maintenance schedule state, using local fallback")
+				useLocal = true
+			} else {
+				state = loaded
+			}
+		}
+		return state, useLocal
+	}
+	updateLocal := func(update func(*maintenance.State)) {
+		update(&localState)
+		localState.UpdatedAt = time.Now().UTC().Unix()
+	}
+	updateRemote := func(ctx context.Context, update func(*maintenance.State)) bool {
+		if a.scheduleStore == nil {
+			return false
+		}
+		if err := a.scheduleStore.Update(ctx, update); err != nil {
+			a.logger.WithError(err).Warn("Failed to update maintenance schedule state, falling back to local")
+			return false
+		}
+		return true
+	}
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		default:
-		}
-
-		now := time.Now().UTC()
-		state := localState
-		if a.scheduleStore != nil {
-			loaded, _, err := a.scheduleStore.Ensure(ctx)
-			if err != nil {
-				a.logger.WithError(err).Warn("Failed to load maintenance schedule state, using local fallback")
-			} else {
-				state = loaded
-			}
-		}
-
-		refreshDue := isMaintenanceDue(state.LastRefresh, refreshInterval, now)
-		cleanupDue := isMaintenanceDue(state.LastCleanup, cleanupInterval, now)
-
-		if initialRefresh && !refreshDue && !a.readinessState.IsReady() {
-			a.readinessState.MarkReady()
-			initialRefresh = false
-		}
-
-		if refreshDue {
-			ran, ready, err := a.runDataRefresh(ctx, initialRefresh)
-			if ready {
-				initialRefresh = false
-			}
-			if err != nil {
-				a.logger.WithError(err).Warn("Data refresh run failed")
-			} else if ran {
-				initialRefresh = false
-				completedAt := time.Now().UTC()
-				if a.scheduleStore != nil {
-					if err := a.scheduleStore.Update(ctx, func(s *maintenance.State) {
+		case <-tickerChannel(refreshTicker):
+			now := time.Now().UTC()
+			state, useLocal := resolveState(ctx)
+			if isMaintenanceDue(state.LastRefresh, refreshInterval, now) {
+				isInitialRefresh := state.LastRefresh == 0
+				ran, _, err := a.runDataRefresh(ctx, isInitialRefresh)
+				if err != nil {
+					a.logger.WithError(err).Warn("Data refresh run failed")
+				} else if ran {
+					completedAt := time.Now().UTC()
+					if useLocal || !updateRemote(ctx, func(s *maintenance.State) {
 						s.LastRefresh = completedAt.Unix()
-					}); err != nil {
-						a.logger.WithError(err).Warn("Failed to update refresh schedule state")
+					}) {
+						updateLocal(func(s *maintenance.State) {
+							s.LastRefresh = completedAt.Unix()
+						})
 					}
-				} else {
-					localState.LastRefresh = completedAt.Unix()
 				}
 			}
-		}
-
-		if cleanupDue {
-			ran, err := a.runDataCleanup(ctx)
-			if err != nil {
-				a.logger.WithError(err).Warn("Data cleanup run failed")
-			} else if ran {
-				completedAt := time.Now().UTC()
-				if a.scheduleStore != nil {
-					if err := a.scheduleStore.Update(ctx, func(s *maintenance.State) {
+		case <-tickerChannel(cleanupTicker):
+			now := time.Now().UTC()
+			state, useLocal := resolveState(ctx)
+			if isMaintenanceDue(state.LastCleanup, cleanupInterval, now) {
+				ran, err := a.runDataCleanup(ctx)
+				if err != nil {
+					a.logger.WithError(err).Warn("Data cleanup run failed")
+				} else if ran {
+					completedAt := time.Now().UTC()
+					if useLocal || !updateRemote(ctx, func(s *maintenance.State) {
 						s.LastCleanup = completedAt.Unix()
-					}); err != nil {
-						a.logger.WithError(err).Warn("Failed to update cleanup schedule state")
+					}) {
+						updateLocal(func(s *maintenance.State) {
+							s.LastCleanup = completedAt.Unix()
+						})
 					}
-				} else {
-					localState.LastCleanup = completedAt.Unix()
 				}
 			}
 		}
-
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
 	}
 }
 
-func maintenanceCheckInterval(refreshInterval, cleanupInterval time.Duration) time.Duration {
-	base := minPositiveDuration(refreshInterval, cleanupInterval)
-	if base <= 0 {
-		return 0
+func tickerChannel(ticker *time.Ticker) <-chan time.Time {
+	if ticker == nil {
+		return nil
 	}
-	interval := min(max(base/10, time.Minute), 15*time.Minute)
-	return interval
-}
-
-func minPositiveDuration(a, b time.Duration) time.Duration {
-	if a <= 0 {
-		return b
-	}
-	if b <= 0 {
-		return a
-	}
-	if a < b {
-		return a
-	}
-	return b
+	return ticker.C
 }
 
 func isMaintenanceDue(lastUnix int64, interval time.Duration, now time.Time) bool {
