@@ -790,7 +790,7 @@ func (h *Handler) formatContactResultsWithSearch(ctx context.Context, contacts [
 
 			// Add Title if available (secondary field, single-line)
 			if c.Title != "" && c.Type != "organization" {
-				titleRow := lineutil.NewInfoRow("🔖", "職稱", c.Title, lineutil.CarouselInfoRowStyle())
+				titleRow := lineutil.NewInfoRow("🏷️", "職稱", c.Title, lineutil.CarouselInfoRowStyle())
 				body.AddComponent(titleRow.FlexBox)
 			}
 

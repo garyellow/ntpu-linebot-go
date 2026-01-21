@@ -59,10 +59,12 @@ const (
 	//   - Relevance: Saturation/warmth gradient (green→blue→purple) creates clear hierarchy
 
 	// Semester Headers (學期標示 - 課程輪播)
-	// 藍色系明度漸變：明亮→標準→暗淡，直覺表達時間的新舊
+	// 藍色系明度漸變：明亮→標準→天空→灰藍→暗淡，直覺表達時間的新舊
 	ColorHeaderRecent     = "#3B82F6" // 🆕 最新學期 - bright blue (新鮮、活躍) - 4.6:1
-	ColorHeaderPrevious   = "#0891B2" // 📅 上個學期 - standard cyan (過渡) - 4.7:1
-	ColorHeaderHistorical = "#64748B" // 📦 過去學期 - dim slate (歷史、沉澱) - 4.6:1
+	ColorHeaderPrevious   = "#0891B2" // 📅 上個學期 - cyan (過渡) - 4.7:1
+	ColorHeaderThird      = "#0284C7" // 📆 上上學期 - sky blue (延伸) - 4.7:1
+	ColorHeaderFourth     = "#475569" // 🗓️ 上上上學期 - slate (過去) - 6.9:1
+	ColorHeaderHistorical = "#64748B" // 🗃️ 過去學期 - dim slate (歷史、沉澱) - 4.6:1
 
 	// Relevance Headers (相關性標示 - 智慧搜尋)
 	// 綠色/青綠色漸層系統：深青綠(優)→青綠(良)→翠綠(可)，直覺表達相關性強度

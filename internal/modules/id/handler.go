@@ -687,7 +687,7 @@ func (h *Handler) handleDepartmentCodesByDegree(degree DegreeType) []messaging_a
 		builder.WriteString("\n  資工碩 → 83")
 
 		// 其他
-		builder.WriteString("\n\n🏥 其他")
+		builder.WriteString("\n\n🧩 其他")
 		builder.WriteString("\n  智慧醫療英碩 → 91")
 
 		builder.WriteString("\n\n🎓 學士/博士班請按下方按鈕查詢")
@@ -1033,7 +1033,7 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	// Validate student ID format (8-9 digits)
 	if len(studentID) < 8 || len(studentID) > 9 || !stringutil.IsNumeric(studentID) {
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			"🔍 學號格式不正確\n\n學號應為 8-9 位數字\n例如：412345678",
+			"⚠️ 學號格式不正確\n\n學號應為 8-9 位數字\n例如：412345678",
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{

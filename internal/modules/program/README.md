@@ -124,8 +124,8 @@ CREATE TABLE course_programs (
 ### 學程輪播（Program Carousel）
 - **Colored Header**（藍色）：學程名稱
 - **Body**：
-  - 第一列：🎓 學程資訊 標籤（藍色）
-  - 學程類別（如有）
+    - 第一列：🎓/📚/📌 學程類別標籤（依學程類型）
+    - 學程類別（如有）
   - 課程數量統計
 - **Footer**：
   - 「查看課程」按鈕 → Postback: `program:courses$[學程名稱]`
@@ -147,8 +147,8 @@ CREATE TABLE course_programs (
 ### Quick Reply
 - **統一設計**：所有 Quick Reply 函數定義在 `internal/lineutil/builder.go`
 - **Actions**：
-  - `lineutil.QuickReplyProgramListAction()` - 🎓 學程列表
-  - `lineutil.QuickReplyProgramAction()` - 🎓 學程
+    - `lineutil.QuickReplyProgramListAction()` - 🗂️ 學程列表
+    - `lineutil.QuickReplyProgramAction()` - 🧭 學程
   - `lineutil.QuickReplyHelpAction()` - 📖 說明
 - **Navigation**：`lineutil.QuickReplyProgramNav()` 組合上述動作
 - **一致性**：與其他模組（course, id, contact, usage）保持相同模式
