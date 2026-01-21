@@ -208,7 +208,7 @@ R2 快照用於 **多節點部署** 的資料同步與快速啟動：
 - 啟動時會先嘗試載入快照；**若成功載入快照則略過首次資料刷新**（無快照由 leader 執行）
 - 啟動也會進行 leader lock 判斷，非 leader 會等待快照更新
 - cache miss 抓取結果會以 append-only delta log 保存在 R2，leader 合併後再上傳快照
-- 週期性資料刷新/清理由單一 leader 執行，**以「最長允許未刷新/未清理時間」為門檻**（依 `NTPU_DATA_REFRESH_INTERVAL` / `NTPU_DATA_CLEANUP_INTERVAL`）
+- 週期性資料刷新/清理由單一 leader 執行，**以「最長允許未刷新/未清理時間」為門檻**（依 `NTPU_MAINTENANCE_REFRESH_INTERVAL` / `NTPU_MAINTENANCE_CLEANUP_INTERVAL`）
 - 上次刷新/清理時間會儲存在 R2，所有節點共用
 - 清理任務會刪除 contacts/courses/historical_courses/programs/course_programs/syllabi 的過期資料並 VACUUM
 - SQLite 使用 WAL 模式時，`VACUUM` 後會執行 WAL checkpoint（TRUNCATE）與 optimize，確保磁碟空間回收
@@ -218,16 +218,20 @@ R2 快照用於 **多節點部署** 的資料同步與快速啟動：
 - 每個 R2 請求有固定 timeout，避免啟動或輪詢被卡住
 - **不建議** 多容器共用同一個 SQLite 檔案（請用 R2 快照同步）
 
+> 若未啟用 R2，刷新/清理仍會依 `NTPU_MAINTENANCE_REFRESH_INTERVAL` / `NTPU_MAINTENANCE_CLEANUP_INTERVAL` 於單一節點本地排程執行。
+
 啟用方式：在 `.env` 設定 `NTPU_R2_ENABLED=true`，並提供 `NTPU_R2_ACCOUNT_ID`、`NTPU_R2_ACCESS_KEY_ID`、`NTPU_R2_SECRET_ACCESS_KEY`、`NTPU_R2_BUCKET_NAME`。其餘參數可使用預設值。完整範例請見 [.env.example](.env.example)。
 
 可調參數（選用）：
 
+- `NTPU_R2_SNAPSHOT_KEY`：快照物件 key（預設: snapshots/cache.db.zst）
+- `NTPU_R2_LOCK_KEY`：分散式鎖 key（預設: locks/leader.json）
 - `NTPU_R2_SNAPSHOT_POLL_INTERVAL`：follower 輪詢快照更新的間隔（預設: 15m）
 - `NTPU_R2_LOCK_TTL`：分散式鎖 TTL，用於 leader election（預設: 1h）
 - `NTPU_R2_DELTA_PREFIX`：cache miss delta log 前綴（預設: deltas）
 - `NTPU_R2_SCHEDULE_KEY`：共享的刷新/清理排程狀態物件 key（預設: schedules/maintenance.json）
-- `NTPU_DATA_REFRESH_INTERVAL`：資料刷新任務間隔（預設: 24h）
-- `NTPU_DATA_CLEANUP_INTERVAL`：資料清理任務間隔（預設: 24h）
+- `NTPU_MAINTENANCE_REFRESH_INTERVAL`：資料刷新任務間隔（預設: 24h）
+- `NTPU_MAINTENANCE_CLEANUP_INTERVAL`：資料清理任務間隔（預設: 24h）
 
 ### 取得 LINE Bot 憑證
 

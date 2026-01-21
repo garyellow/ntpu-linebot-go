@@ -103,8 +103,8 @@ func TestBackgroundJobIntervals(t *testing.T) {
 		got      time.Duration
 		expected time.Duration
 	}{
-		{"DataRefreshIntervalDefault", DataRefreshIntervalDefault, 24 * time.Hour},
-		{"DataCleanupIntervalDefault", DataCleanupIntervalDefault, 24 * time.Hour},
+		{"MaintenanceRefreshIntervalDefault", MaintenanceRefreshIntervalDefault, 24 * time.Hour},
+		{"MaintenanceCleanupIntervalDefault", MaintenanceCleanupIntervalDefault, 24 * time.Hour},
 		{"MetricsUpdateInterval", MetricsUpdateInterval, 5 * time.Minute},
 		{"RateLimiterCleanupInterval", RateLimiterCleanupInterval, 5 * time.Minute},
 	}

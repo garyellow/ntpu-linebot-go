@@ -49,17 +49,15 @@ type Config struct {
 	ScraperMaxRetries int
 	ScraperBaseURLs   map[string][]string
 
-	// Background Task Scheduling
+	// Maintenance Scheduling
 	// NTPU_WARMUP_WAIT: if true, reject /webhook until warmup is ready (default: false)
 	// NTPU_WARMUP_GRACE_PERIOD: readiness grace period for initial warmup (default: 10m)
-	// NTPU_DATA_REFRESH_INTERVAL: interval for data refresh tasks (default: 24h)
-	// NTPU_DATA_CLEANUP_INTERVAL: interval for data cleanup tasks (default: 24h)
-	// NTPU_R2_SNAPSHOT_POLL_INTERVAL: interval for polling R2 snapshots (default: 15m)
-	WaitForWarmup             bool          // If true, reject /webhook until warmup is ready
-	WarmupGracePeriod         time.Duration // Readiness grace period for initial warmup
-	DataRefreshInterval       time.Duration // Interval for data refresh tasks
-	DataCleanupInterval       time.Duration // Interval for data cleanup tasks
-	R2SnapshotPollInterval    time.Duration // Interval for polling R2 snapshots (used when R2 enabled)
+	// NTPU_MAINTENANCE_REFRESH_INTERVAL: refresh interval (default: 24h)
+	// NTPU_MAINTENANCE_CLEANUP_INTERVAL: cleanup interval (default: 24h)
+	WaitForWarmup              bool          // If true, reject /webhook until warmup is ready
+	WarmupGracePeriod          time.Duration // Readiness grace period for initial warmup
+	MaintenanceRefreshInterval time.Duration // Interval for refresh tasks
+	MaintenanceCleanupInterval time.Duration // Interval for cleanup tasks
 
 	// ========================================================================
 	// Optional Features
@@ -83,16 +81,17 @@ type Config struct {
 	// Flag: NTPU_R2_ENABLED
 	// Enables distributed snapshot synchronization for multi-node deployments.
 	// Polling interval is configured via NTPU_R2_SNAPSHOT_POLL_INTERVAL (default: 15m)
-	R2Enabled     bool
-	R2AccountID   string        // Cloudflare Account ID
-	R2AccessKeyID string        // R2 Access Key ID
-	R2SecretKey   string        // R2 Secret Access Key
-	R2BucketName  string        // R2 Bucket name
-	R2SnapshotKey string        // Object key for snapshot (default: snapshots/cache.db.zst)
-	R2LockKey     string        // Object key for distributed lock (default: locks/crawler.json)
-	R2LockTTL     time.Duration // TTL for distributed lock (default: 1h)
-	R2DeltaPrefix string        // Prefix for delta logs (default: deltas)
-	R2ScheduleKey string        // Object key for maintenance schedule state (default: schedules/maintenance.json)
+	R2Enabled              bool
+	R2AccountID            string        // Cloudflare Account ID
+	R2AccessKeyID          string        // R2 Access Key ID
+	R2SecretKey            string        // R2 Secret Access Key
+	R2BucketName           string        // R2 Bucket name
+	R2SnapshotKey          string        // Object key for snapshot (default: snapshots/cache.db.zst)
+	R2LockKey              string        // Object key for distributed lock (default: locks/leader.json)
+	R2LockTTL              time.Duration // TTL for distributed lock (default: 1h)
+	R2SnapshotPollInterval time.Duration // Interval for polling R2 snapshots (default: 15m)
+	R2DeltaPrefix          string        // Prefix for delta logs (default: deltas)
+	R2ScheduleKey          string        // Object key for maintenance schedule state (default: schedules/maintenance.json)
 
 	// 3. Sentry Error Tracking
 	// Flag: NTPU_SENTRY_ENABLED
@@ -213,12 +212,11 @@ func Load() (*Config, error) {
 			},
 		},
 
-		// Background Task Scheduling
-		WaitForWarmup:          getBoolEnv(EnvWarmupWait, false),
-		WarmupGracePeriod:      getDurationEnv(EnvWarmupGracePeriod, 10*time.Minute),
-		DataRefreshInterval:    getDurationEnv(EnvDataRefreshInterval, DataRefreshIntervalDefault),
-		DataCleanupInterval:    getDurationEnv(EnvDataCleanupInterval, DataCleanupIntervalDefault),
-		R2SnapshotPollInterval: getDurationEnv(EnvR2SnapshotPollInterval, R2SnapshotPollIntervalDefault),
+		// Maintenance Scheduling
+		WaitForWarmup:              getBoolEnv(EnvWarmupWait, false),
+		WarmupGracePeriod:          getDurationEnv(EnvWarmupGracePeriod, 10*time.Minute),
+		MaintenanceRefreshInterval: getDurationEnv(EnvMaintenanceRefreshInterval, MaintenanceRefreshIntervalDefault),
+		MaintenanceCleanupInterval: getDurationEnv(EnvMaintenanceCleanupInterval, MaintenanceCleanupIntervalDefault),
 
 		// 1. LLM Features
 		LLMEnabled:             getBoolEnv(EnvLLMEnabled, false),
@@ -240,9 +238,10 @@ func Load() (*Config, error) {
 		R2SecretKey:            getEnv(EnvR2SecretAccessKey, ""),
 		R2BucketName:           getEnv(EnvR2BucketName, ""),
 		R2SnapshotKey:          getEnv(EnvR2SnapshotKey, "snapshots/cache.db.zst"),
-		R2LockKey:              getEnv(EnvR2LockKey, "locks/crawler.json"),
-		R2LockTTL:     getDurationEnv(EnvR2LockTTL, 30*time.Minute),
-		R2DeltaPrefix: getEnv(EnvR2DeltaPrefix, "deltas"),
+		R2LockKey:              getEnv(EnvR2LockKey, "locks/leader.json"),
+		R2LockTTL:              getDurationEnv(EnvR2LockTTL, time.Hour),
+		R2SnapshotPollInterval: getDurationEnv(EnvR2SnapshotPollInterval, R2SnapshotPollIntervalDefault),
+		R2DeltaPrefix:          getEnv(EnvR2DeltaPrefix, "deltas"),
 		R2ScheduleKey:          getEnv(EnvR2ScheduleKey, "schedules/maintenance.json"),
 
 		// 3. Sentry Error Tracking
@@ -297,11 +296,11 @@ func (c *Config) Validate() error {
 	if c.ScraperTimeout <= 0 {
 		errs = append(errs, fmt.Errorf("NTPU_SCRAPER_TIMEOUT must be positive, got %v", c.ScraperTimeout))
 	}
-	if c.DataRefreshInterval <= 0 {
-		errs = append(errs, fmt.Errorf("NTPU_DATA_REFRESH_INTERVAL must be positive, got %v", c.DataRefreshInterval))
+	if c.MaintenanceRefreshInterval <= 0 {
+		errs = append(errs, fmt.Errorf("NTPU_MAINTENANCE_REFRESH_INTERVAL must be positive, got %v", c.MaintenanceRefreshInterval))
 	}
-	if c.DataCleanupInterval <= 0 {
-		errs = append(errs, fmt.Errorf("NTPU_DATA_CLEANUP_INTERVAL must be positive, got %v", c.DataCleanupInterval))
+	if c.MaintenanceCleanupInterval <= 0 {
+		errs = append(errs, fmt.Errorf("NTPU_MAINTENANCE_CLEANUP_INTERVAL must be positive, got %v", c.MaintenanceCleanupInterval))
 	}
 
 	// 1. LLM Validation (only if enabled)

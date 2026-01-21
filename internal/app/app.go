@@ -1011,8 +1011,8 @@ func (a *Application) maintenanceLoop(ctx context.Context) {
 	a.logger.Debug("Maintenance scheduler started")
 	defer a.logger.Debug("Maintenance scheduler stopped")
 
-	refreshInterval := a.cfg.DataRefreshInterval
-	cleanupInterval := a.cfg.DataCleanupInterval
+	refreshInterval := a.cfg.MaintenanceRefreshInterval
+	cleanupInterval := a.cfg.MaintenanceCleanupInterval
 	if refreshInterval <= 0 && cleanupInterval <= 0 {
 		a.logger.Warn("Maintenance scheduling disabled (refresh/cleanup intervals invalid)")
 		if !a.readinessState.IsReady() {
@@ -1047,6 +1047,34 @@ func (a *Application) maintenanceLoop(ctx context.Context) {
 	}
 
 	localState := maintenance.State{}
+	resolveState := func(ctx context.Context) (maintenance.State, bool) {
+		state := localState
+		useLocal := a.scheduleStore == nil
+		if a.scheduleStore != nil {
+			loaded, _, err := a.scheduleStore.Ensure(ctx)
+			if err != nil {
+				a.logger.WithError(err).Warn("Failed to load maintenance schedule state, using local fallback")
+				useLocal = true
+			} else {
+				state = loaded
+			}
+		}
+		return state, useLocal
+	}
+	updateLocal := func(update func(*maintenance.State)) {
+		update(&localState)
+		localState.UpdatedAt = time.Now().UTC().Unix()
+	}
+	updateRemote := func(ctx context.Context, update func(*maintenance.State)) bool {
+		if a.scheduleStore == nil {
+			return false
+		}
+		if err := a.scheduleStore.Update(ctx, update); err != nil {
+			a.logger.WithError(err).Warn("Failed to update maintenance schedule state, falling back to local")
+			return false
+		}
+		return true
+	}
 
 	for {
 		select {
@@ -1054,15 +1082,7 @@ func (a *Application) maintenanceLoop(ctx context.Context) {
 			return
 		case <-tickerChannel(refreshTicker):
 			now := time.Now().UTC()
-			state := localState
-			if a.scheduleStore != nil {
-				loaded, _, err := a.scheduleStore.Ensure(ctx)
-				if err != nil {
-					a.logger.WithError(err).Warn("Failed to load maintenance schedule state, using local fallback")
-				} else {
-					state = loaded
-				}
-			}
+			state, useLocal := resolveState(ctx)
 			if isMaintenanceDue(state.LastRefresh, refreshInterval, now) {
 				isInitialRefresh := state.LastRefresh == 0
 				ran, _, err := a.runDataRefresh(ctx, isInitialRefresh)
@@ -1070,42 +1090,30 @@ func (a *Application) maintenanceLoop(ctx context.Context) {
 					a.logger.WithError(err).Warn("Data refresh run failed")
 				} else if ran {
 					completedAt := time.Now().UTC()
-					if a.scheduleStore != nil {
-						if err := a.scheduleStore.Update(ctx, func(s *maintenance.State) {
+					if useLocal || !updateRemote(ctx, func(s *maintenance.State) {
+						s.LastRefresh = completedAt.Unix()
+					}) {
+						updateLocal(func(s *maintenance.State) {
 							s.LastRefresh = completedAt.Unix()
-						}); err != nil {
-							a.logger.WithError(err).Warn("Failed to update refresh schedule state")
-						}
-					} else {
-						localState.LastRefresh = completedAt.Unix()
+						})
 					}
 				}
 			}
 		case <-tickerChannel(cleanupTicker):
 			now := time.Now().UTC()
-			state := localState
-			if a.scheduleStore != nil {
-				loaded, _, err := a.scheduleStore.Ensure(ctx)
-				if err != nil {
-					a.logger.WithError(err).Warn("Failed to load maintenance schedule state, using local fallback")
-				} else {
-					state = loaded
-				}
-			}
+			state, useLocal := resolveState(ctx)
 			if isMaintenanceDue(state.LastCleanup, cleanupInterval, now) {
 				ran, err := a.runDataCleanup(ctx)
 				if err != nil {
 					a.logger.WithError(err).Warn("Data cleanup run failed")
 				} else if ran {
 					completedAt := time.Now().UTC()
-					if a.scheduleStore != nil {
-						if err := a.scheduleStore.Update(ctx, func(s *maintenance.State) {
+					if useLocal || !updateRemote(ctx, func(s *maintenance.State) {
+						s.LastCleanup = completedAt.Unix()
+					}) {
+						updateLocal(func(s *maintenance.State) {
 							s.LastCleanup = completedAt.Unix()
-						}); err != nil {
-							a.logger.WithError(err).Warn("Failed to update cleanup schedule state")
-						}
-					} else {
-						localState.LastCleanup = completedAt.Unix()
+						})
 					}
 				}
 			}
