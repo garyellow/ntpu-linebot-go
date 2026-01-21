@@ -178,6 +178,7 @@ func TestSemesterCache_UpdateFromDB_NoData(t *testing.T) {
 	ctx := context.Background()
 
 	cache := NewSemesterCache()
+	cache.Update([]Semester{{Year: 114, Term: 2}})
 	semesters, err := cache.UpdateFromDB(ctx, db, 4)
 	if err != nil {
 		t.Fatalf("UpdateFromDB failed: %v", err)
@@ -186,7 +187,7 @@ func TestSemesterCache_UpdateFromDB_NoData(t *testing.T) {
 		t.Fatalf("Expected no semesters, got %d", len(semesters))
 	}
 	if cache.HasData() {
-		t.Fatalf("Expected cache to remain empty when no data exists")
+		t.Fatalf("Expected cache to be cleared when no data exists")
 	}
 }
 

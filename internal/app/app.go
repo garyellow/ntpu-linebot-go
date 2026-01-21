@@ -221,7 +221,6 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 				if scheduleErr != nil {
 					log.WithError(scheduleErr).Warn("Schedule store initialization failed, maintenance will fall back to local scheduling")
 				}
-
 			}
 		}
 	}
@@ -582,7 +581,7 @@ func refreshSemesterCacheFromDB(ctx context.Context, db *storage.DB, cache *cour
 	}
 	if len(semesters) == 0 {
 		log.WithField("reason", reason).
-			Info("Semester cache not updated (no cached semesters found)")
+			Info("Semester cache cleared (no cached semesters found)")
 		return
 	}
 

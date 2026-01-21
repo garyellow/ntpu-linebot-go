@@ -2,7 +2,7 @@ package course
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"sync"
 	"time"
 
@@ -44,14 +44,15 @@ func (c *SemesterCache) Update(semesters []Semester) {
 }
 
 // UpdateFromDB loads recent semesters from the database and updates the cache.
-// Returns the loaded semesters (if any). If no semesters are found, cache is unchanged.
+// Returns the loaded semesters (if any). If no semesters are found, the cache is cleared.
 func (c *SemesterCache) UpdateFromDB(ctx context.Context, db *storage.DB, limit int) ([]Semester, error) {
 	semesters, err := LoadRecentSemestersFromDB(ctx, db, limit)
 	if err != nil {
 		return nil, err
 	}
 	if len(semesters) == 0 {
-		return nil, nil
+		c.Update(nil)
+		return []Semester{}, nil
 	}
 	c.Update(semesters)
 	return semesters, nil
@@ -61,7 +62,7 @@ func (c *SemesterCache) UpdateFromDB(ctx context.Context, db *storage.DB, limit 
 // Returns semesters ordered by year DESC, term DESC.
 func LoadRecentSemestersFromDB(ctx context.Context, db *storage.DB, limit int) ([]Semester, error) {
 	if db == nil {
-		return nil, fmt.Errorf("semester cache: db is nil")
+		return nil, errors.New("semester cache: db is nil")
 	}
 	if limit <= 0 {
 		limit = 4
@@ -83,8 +84,9 @@ func LoadRecentSemestersFromDB(ctx context.Context, db *storage.DB, limit int) (
 	return semesters, nil
 }
 
-// GetRecentSemesters returns the 2 most recent semesters.
-// Returns (years, terms) slices for easy use by handlers.
+// GetRecentSemesters returns up to the 2 most recent semesters from the cache.
+// It returns parallel (years, terms) slices; if the cache is empty, a calendar-based
+// estimate is used instead.
 func (c *SemesterCache) GetRecentSemesters() ([]int, []int) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
