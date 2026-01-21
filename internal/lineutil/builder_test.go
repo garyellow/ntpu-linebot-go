@@ -959,13 +959,14 @@ func TestFormatSemester(t *testing.T) {
 
 // TestGetSemesterLabel tests the data-driven semester label logic
 func TestGetSemesterLabel(t *testing.T) {
-	// Test data: 4 semesters sorted newest first
-	// This simulates actual course data with 113-2, 113-1, 112-2, 112-1
+	// Test data: 5 semesters sorted newest first
+	// This simulates actual course data with 113-2, 113-1, 112-2, 112-1, 111-2
 	dataSemesters := []SemesterPair{
 		{Year: 113, Term: 2}, // Index 0: 最新學期
 		{Year: 113, Term: 1}, // Index 1: 上個學期
-		{Year: 112, Term: 2}, // Index 2: 過去學期
-		{Year: 112, Term: 1}, // Index 3: 過去學期
+		{Year: 112, Term: 2}, // Index 2: 上上學期
+		{Year: 112, Term: 1}, // Index 3: 上上上學期
+		{Year: 111, Term: 2}, // Index 4: 過去學期
 	}
 
 	tests := []struct {
@@ -996,18 +997,27 @@ func TestGetSemesterLabel(t *testing.T) {
 			wantColor:     ColorHeaderPrevious,
 		},
 		{
-			name:          "Third semester in data (過去學期)",
+			name:          "Third semester in data (上上學期)",
 			year:          112,
 			term:          2,
 			dataSemesters: dataSemesters,
+			wantEmoji:     "📅",
+			wantLabel:     "上上學期",
+			wantColor:     ColorHeaderPrevious,
+		},
+		{
+			name:          "Fourth semester in data (上上上學期)",
+			year:          112,
+			term:          1,
+			dataSemesters: dataSemesters,
 			wantEmoji:     "📦",
-			wantLabel:     "過去學期",
+			wantLabel:     "上上上學期",
 			wantColor:     ColorHeaderHistorical,
 		},
 		{
-			name:          "Fourth semester in data (過去學期)",
-			year:          112,
-			term:          1,
+			name:          "Fifth semester in data (過去學期)",
+			year:          111,
+			term:          2,
 			dataSemesters: dataSemesters,
 			wantEmoji:     "📦",
 			wantLabel:     "過去學期",
@@ -1015,8 +1025,8 @@ func TestGetSemesterLabel(t *testing.T) {
 		},
 		{
 			name:          "Semester not in data list (過去學期)",
-			year:          111,
-			term:          2,
+			year:          110,
+			term:          1,
 			dataSemesters: dataSemesters,
 			wantEmoji:     "📦",
 			wantLabel:     "過去學期",

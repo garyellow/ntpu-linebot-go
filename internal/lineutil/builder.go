@@ -480,14 +480,17 @@ func FormatSemesterShort(year, term int) string {
 // not based on calendar time.
 //
 // Label types (based on position in dataSemesters):
-//   - "🆕 最新學期" (White) - First semester in data (index 0, newest available data)
-//   - "📅 上個學期" (Blue) - Second semester in data (index 1)
-//   - "📦 過去學期" (Gray) - Third semester and older (index 2+)
+//   - "🆕 最新學期" - First semester in data (index 0, newest available data)
+//   - "📅 上個學期" - Second semester in data (index 1)
+//   - "📅 上上學期" - Third semester in data (index 2)
+//   - "📦 上上上學期" - Fourth semester in data (index 3)
+//   - "📦 過去學期" - Fifth semester and older (index 4+)
 //
 // Parameters:
 //   - year, term: The semester to get label for
-//   - dataSemesters: Unique semesters extracted from actual course data, sorted newest first.
-//     This should be derived from the search results, not calendar-based calculation.
+//   - dataSemesters: Unique semesters sorted newest first.
+//     Prefer the cached top semesters (data-driven) to ensure consistent labels
+//     across search modes; fall back to result-derived list if cache is unavailable.
 //
 // Returns: BodyLabelInfo with emoji/label and header background color (ColorHeader*).
 func GetSemesterLabel(year, term int, dataSemesters []SemesterPair) BodyLabelInfo {
@@ -509,8 +512,19 @@ func GetSemesterLabel(year, term int, dataSemesters []SemesterPair) BodyLabelInf
 					Label: "上個學期",
 					Color: ColorHeaderPrevious,
 				}
+			case 2:
+				return BodyLabelInfo{
+					Emoji: "📅",
+					Label: "上上學期",
+					Color: ColorHeaderPrevious,
+				}
+			case 3:
+				return BodyLabelInfo{
+					Emoji: "📦",
+					Label: "上上上學期",
+					Color: ColorHeaderHistorical,
+				}
 			default:
-				// Dark slate label for historical data
 				return BodyLabelInfo{
 					Emoji: "📦",
 					Label: "過去學期",
