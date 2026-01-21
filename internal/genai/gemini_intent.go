@@ -83,7 +83,7 @@ func (p *geminiIntentParser) Parse(ctx context.Context, text string) (*ParseResu
 	duration := time.Since(start)
 
 	if err != nil {
-		slog.WarnContext(ctx, "intent parsing API call failed",
+		slog.WarnContext(ctx, "Intent parsing API call failed",
 			"provider", "gemini",
 			"model", p.model,
 			"input_length", len(text),
@@ -97,7 +97,7 @@ func (p *geminiIntentParser) Parse(ctx context.Context, text string) (*ParseResu
 
 	// Log success with token usage
 	if parseErr == nil && result.UsageMetadata != nil {
-		slog.DebugContext(ctx, "intent parsing completed",
+		slog.DebugContext(ctx, "Intent parsing completed",
 			"provider", "gemini",
 			"model", p.model,
 			"input_tokens", result.UsageMetadata.PromptTokenCount,

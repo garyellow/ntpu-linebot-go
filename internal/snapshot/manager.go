@@ -285,7 +285,7 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 	cancel()
 	if err != nil {
 		if !errors.Is(err, r2client.ErrNotFound) {
-			slog.Warn("Snapshot poll head object failed", "error", err)
+			slog.Debug("Snapshot poll head object failed", "error", err)
 		}
 		return
 	}
@@ -308,7 +308,7 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 	if err != nil {
 		cancel()
 		if errors.Is(err, r2client.ErrPreconditionFailed) {
-			slog.Warn("Snapshot poll ETag changed during download, retrying later",
+			slog.Debug("Snapshot poll ETag changed during download, retrying later",
 				"expected_etag", remoteETag)
 			return
 		}

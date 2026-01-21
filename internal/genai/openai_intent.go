@@ -146,7 +146,7 @@ func (p *openaiIntentParser) Parse(ctx context.Context, text string) (*ParseResu
 	duration := time.Since(start)
 
 	if err != nil {
-		slog.WarnContext(ctx, "intent parsing API call failed",
+		slog.WarnContext(ctx, "Intent parsing API call failed",
 			"provider", p.provider,
 			"model", p.model,
 			"input_length", len(text),
@@ -160,7 +160,7 @@ func (p *openaiIntentParser) Parse(ctx context.Context, text string) (*ParseResu
 
 	// Log success with token usage
 	if parseErr == nil && resp.Usage.TotalTokens > 0 {
-		slog.DebugContext(ctx, "intent parsing completed",
+		slog.DebugContext(ctx, "Intent parsing completed",
 			"provider", p.provider,
 			"model", p.model,
 			"input_tokens", resp.Usage.PromptTokens,

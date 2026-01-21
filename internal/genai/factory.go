@@ -40,7 +40,7 @@ func CreateIntentParser(ctx context.Context, cfg LLMConfig) (IntentParser, error
 		for _, model := range models {
 			p, err := createIntentParserForProvider(ctx, provider, providerCfg.APIKey, model)
 			if err != nil {
-				slog.WarnContext(ctx, "failed to create intent parser",
+				slog.WarnContext(ctx, "Failed to create intent parser",
 					"provider", provider,
 					"model", model,
 					"error", err)
@@ -54,12 +54,12 @@ func CreateIntentParser(ctx context.Context, cfg LLMConfig) (IntentParser, error
 
 	// No providers available
 	if len(parsers) == 0 {
-		slog.InfoContext(ctx, "no LLM provider configured for intent parsing")
+		slog.InfoContext(ctx, "No LLM provider configured for intent parsing")
 		return nil, nil
 	}
 
 	// Log configuration
-	slog.InfoContext(ctx, "intent parser configured",
+	slog.InfoContext(ctx, "Intent parser configured",
 		"primary", parsers[0].Provider(),
 		"chainSize", len(parsers))
 
@@ -105,7 +105,7 @@ func CreateQueryExpander(ctx context.Context, cfg LLMConfig) (QueryExpander, err
 		for _, model := range models {
 			e, err := createExpanderForProvider(ctx, provider, providerCfg.APIKey, model)
 			if err != nil {
-				slog.WarnContext(ctx, "failed to create query expander",
+				slog.WarnContext(ctx, "Failed to create query expander",
 					"provider", provider,
 					"model", model,
 					"error", err)
@@ -119,11 +119,11 @@ func CreateQueryExpander(ctx context.Context, cfg LLMConfig) (QueryExpander, err
 
 	// No providers available
 	if len(expanders) == 0 {
-		slog.InfoContext(ctx, "no LLM provider configured for query expansion")
+		slog.InfoContext(ctx, "No LLM provider configured for query expansion")
 		return nil, nil
 	}
 
-	slog.InfoContext(ctx, "query expander configured",
+	slog.InfoContext(ctx, "Query expander configured",
 		"primary", expanders[0].Provider(),
 		"chainSize", len(expanders))
 
