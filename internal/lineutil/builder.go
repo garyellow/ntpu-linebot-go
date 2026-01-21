@@ -482,9 +482,9 @@ func FormatSemesterShort(year, term int) string {
 // Label types (based on position in dataSemesters):
 //   - "🆕 最新學期" - First semester in data (index 0, newest available data)
 //   - "📅 上個學期" - Second semester in data (index 1)
-//   - "📅 上上學期" - Third semester in data (index 2)
-//   - "📦 上上上學期" - Fourth semester in data (index 3)
-//   - "📦 過去學期" - Fifth semester and older (index 4+)
+//   - "📆 上上學期" - Third semester in data (index 2)
+//   - "🗓️ 上上上學期" - Fourth semester in data (index 3)
+//   - "🗃️ 過去學期" - Fifth semester and older (index 4+)
 //
 // Parameters:
 //   - year, term: The semester to get label for
@@ -499,34 +499,37 @@ func GetSemesterLabel(year, term int, dataSemesters []SemesterPair) BodyLabelInf
 		if sem.Year == year && sem.Term == term {
 			switch i {
 			case 0:
-				// White label for highest visibility
+				// Bright blue for newest - highest visibility
 				return BodyLabelInfo{
 					Emoji: "🆕",
 					Label: "最新學期",
 					Color: ColorHeaderRecent,
 				}
 			case 1:
-				// Blue label for clear distinction from latest
+				// Cyan for previous - clear distinction from newest
 				return BodyLabelInfo{
 					Emoji: "📅",
 					Label: "上個學期",
 					Color: ColorHeaderPrevious,
 				}
 			case 2:
+				// Sky blue for third - extended search tier 1
 				return BodyLabelInfo{
-					Emoji: "📅",
+					Emoji: "📆",
 					Label: "上上學期",
-					Color: ColorHeaderPrevious,
+					Color: ColorHeaderThird,
 				}
 			case 3:
+				// Slate for fourth - extended search tier 2
 				return BodyLabelInfo{
-					Emoji: "📦",
+					Emoji: "🗓️",
 					Label: "上上上學期",
-					Color: ColorHeaderHistorical,
+					Color: ColorHeaderFourth,
 				}
 			default:
+				// Dim slate for older - historical archive
 				return BodyLabelInfo{
-					Emoji: "📦",
+					Emoji: "🗃️",
 					Label: "過去學期",
 					Color: ColorHeaderHistorical,
 				}
@@ -535,7 +538,7 @@ func GetSemesterLabel(year, term int, dataSemesters []SemesterPair) BodyLabelInf
 	}
 	// Not in data list - treat as historical (shouldn't happen normally)
 	return BodyLabelInfo{
-		Emoji: "📦",
+		Emoji: "🗃️",
 		Label: "過去學期",
 		Color: ColorHeaderHistorical,
 	}
@@ -667,12 +670,12 @@ func QuickReplySmartSearchAction() QuickReplyItem {
 
 // QuickReplyProgramAction returns a "學程" quick reply item
 func QuickReplyProgramAction() QuickReplyItem {
-	return QuickReplyItem{Action: NewMessageAction("🎓 學程", "學程")}
+	return QuickReplyItem{Action: NewMessageAction("🧭 學程", "學程")}
 }
 
 // QuickReplyProgramListAction returns a "學程列表" quick reply item
 func QuickReplyProgramListAction() QuickReplyItem {
-	return QuickReplyItem{Action: NewMessageAction("🎓 學程列表", "學程列表")}
+	return QuickReplyItem{Action: NewMessageAction("🗂️ 學程列表", "學程列表")}
 }
 
 // QuickReplyUsageAction returns a "配額" quick reply item
@@ -707,7 +710,7 @@ func QuickReplyFeedbackAction() QuickReplyItem {
 
 // QuickReplyMainNav returns the main navigation quick reply items.
 // Use this for welcome messages, help messages, and general navigation.
-// Order: 📚 課程 → 🎯 學程 → 🎓 學號 → 📞 聯絡 → 🚨 緊急 → 📖 說明 → 💬 回報
+// Order: 📚 課程 → 🧭 學程 → 🎓 學號 → 📞 聯絡 → 🚨 緊急 → 📖 說明 → 💬 回報
 func QuickReplyMainNav() []QuickReplyItem {
 	return []QuickReplyItem{
 		QuickReplyCourseAction(),
@@ -722,7 +725,7 @@ func QuickReplyMainNav() []QuickReplyItem {
 
 // QuickReplyMainNavCompact returns compact main navigation (without emergency).
 // Use this for general error recovery or when space is limited.
-// Order: 📚 課程 → 🎯 學程 → 🎓 學號 → 📞 聯絡 → 📖 說明 → 💬 回報
+// Order: 📚 課程 → 🧭 學程 → 🎓 學號 → 📞 聯絡 → 📖 說明 → 💬 回報
 func QuickReplyMainNavCompact() []QuickReplyItem {
 	return []QuickReplyItem{
 		QuickReplyCourseAction(),
@@ -736,7 +739,7 @@ func QuickReplyMainNavCompact() []QuickReplyItem {
 
 // QuickReplyMainFeatures returns main features without help (for use in instruction messages).
 // Use this when the message itself is help/instruction content.
-// Order: 📚 課程 → 🎯 學程 → 🎓 學號 → 📞 聯絡 → 🚨 緊急 → 💬 回報
+// Order: 📚 課程 → 🧭 學程 → 🎓 學號 → 📞 聯絡 → 🚨 緊急 → 💬 回報
 func QuickReplyMainFeatures() []QuickReplyItem {
 	return []QuickReplyItem{
 		QuickReplyCourseAction(),
@@ -812,7 +815,7 @@ func QuickReplyUsageNav() []QuickReplyItem {
 
 // QuickReplyProgramNav returns quick reply items for program module navigation.
 // Use this after program-related responses.
-// Order: 🎓 學程列表 → 🎓 學程 → 📖 說明
+// Order: 🗂️ 學程列表 → 🧭 學程 → 📖 說明
 func QuickReplyProgramNav() []QuickReplyItem {
 	return []QuickReplyItem{
 		QuickReplyProgramListAction(),

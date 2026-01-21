@@ -273,7 +273,7 @@ func (p *Processor) buildWelcomeFlexMessage(nluEnabled bool, sender *messaging_a
 	// Hero section with blue theme
 	hero := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexText("泥好~~").WithSize("lg").WithColor(lineutil.ColorHeroText).WithWeight("bold").FlexText,
-		lineutil.NewFlexText("我是 NTPU 小工具 🔍").WithSize("md").WithColor(lineutil.ColorHeroText).WithMargin("sm").FlexText,
+		lineutil.NewFlexText("我是 NTPU 小工具 🧰").WithSize("md").WithColor(lineutil.ColorHeroText).WithMargin("sm").FlexText,
 	).
 		WithBackgroundColor(lineutil.ColorHeaderPrimary).
 		WithPaddingAll("xl").
@@ -313,7 +313,7 @@ func (p *Processor) buildWelcomeFlexMessage(nluEnabled bool, sender *messaging_a
 	// Body section (preallocate capacity: 1 initial + features + 3 data source elements)
 	bodyContents := make([]messaging_api.FlexComponentInterface, 0, 1+len(features)+3)
 	bodyContents = append(bodyContents,
-		lineutil.NewFlexText("🎯 主要功能").WithWeight("bold").WithColor(lineutil.ColorText).WithSize("sm").FlexText,
+		lineutil.NewFlexText("🧭 主要功能").WithWeight("bold").WithColor(lineutil.ColorText).WithSize("sm").FlexText,
 	)
 	bodyContents = append(bodyContents, features...)
 
@@ -556,7 +556,7 @@ func (p *Processor) getHelpMessage(context FallbackContext) []messaging_api.Mess
 	case FallbackGeneric:
 		fallthrough
 	default:
-		heroTitle = "🔍 NTPU 小工具"
+		heroTitle = "🧰 NTPU 小工具"
 		if nluEnabled {
 			heroSubtext = "直接對話或使用關鍵字查詢"
 		} else {
@@ -826,7 +826,7 @@ func (p *Processor) buildKeywordModeFlexMessage(nluEnabled bool, sender *messagi
 		lineutil.NewFlexSeparator().WithMargin("md").FlexSeparator,
 
 		// Program search
-		lineutil.NewFlexText("🎯 學程查詢").
+		lineutil.NewFlexText("🧭 學程查詢").
 			WithWeight("bold").
 			WithColor(lineutil.ColorText).
 			WithSize("sm").

@@ -286,7 +286,7 @@ msg := lineutil.NewTextMessageWithConsistentSender(text, sender)
 - 課程輪播 (Course): Colored Header (標題) → Body (標籤 + 資訊) → Footer
   - Header 使用 `NewColoredHeader()` 創建帶背景色的標題 (藍色/青色/灰色)
   - Body 第一列使用 `NewBodyLabel()` 顯示學期/相關性標籤 (文字顏色與 header 背景色一致)
-  - 學期標籤: `🆕 最新學期` (明亮藍色), `📅 上個學期` (青色), `📦 過去學期` (暗灰色)
+  - 學期標籤: `🆕 最新學期` (明亮藍色), `📅 上個學期` (青色), `🗃️ 過去學期` (暗灰色)
   - 相關性標籤: `🎯 最佳匹配` (深青綠色), `✨ 高度相關` (青綠色), `📋 部分相關` (翠綠色) - 智慧搜尋
   - **Footer 按鈕**: 「詳細資訊」按鈕顏色與 header 同步 (`labelInfo.Color`)，增強視覺協調性
   - **視覺效果**: Header 背景色 = Body Label 文字色 = Footer 按鈕色，創造完整的視覺線索

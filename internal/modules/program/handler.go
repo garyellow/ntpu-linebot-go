@@ -321,7 +321,7 @@ func (h *Handler) handleSearchPattern(ctx context.Context, text string, matches 
 	if searchTerm == "" {
 		// Return help message
 		sender := lineutil.GetSender(senderName, h.stickerManager)
-		helpText := "🎓 學程查詢說明\n\n" +
+		helpText := "🧭 學程查詢說明\n\n" +
 			"• 學程列表：查看所有學程\n" +
 			"• 學程 關鍵字：搜尋學程\n\n" +
 			"例如：\n" +
@@ -384,7 +384,7 @@ func (h *Handler) handleProgramList(ctx context.Context) []messaging_api.Message
 		programs = programs[:MaxProgramsPerSearch]
 	}
 
-	title := fmt.Sprintf("🎓 學程列表 (共 %d 個)", totalCount)
+	title := fmt.Sprintf("🧭 學程列表 (共 %d 個)", totalCount)
 	footer := "💡 輸入「學程 關鍵字」搜尋特定學程"
 
 	return h.formatProgramListResponse(programs, title, footer)

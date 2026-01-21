@@ -1772,7 +1772,7 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 		// Use course: prefix for proper postback routing
 		footer := lineutil.NewFlexBox("vertical",
 			lineutil.NewFlexButton(
-				lineutil.NewPostbackActionWithDisplayText("📝 詳細資訊", displayText, "course:"+course.UID),
+				lineutil.NewPostbackActionWithDisplayText("ℹ️ 詳細資訊", displayText, "course:"+course.UID),
 			).WithStyle("primary").WithColor(labelInfo.Color).WithHeight("sm").FlexButton,
 		).WithSpacing("sm")
 
@@ -2144,7 +2144,7 @@ func (h *Handler) buildSmartCourseBubble(course storage.Course, confidence float
 	}
 	footer := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexButton(
-			lineutil.NewPostbackActionWithDisplayText("📝 詳細資訊", displayText, "course:"+course.UID),
+			lineutil.NewPostbackActionWithDisplayText("ℹ️ 詳細資訊", displayText, "course:"+course.UID),
 		).WithStyle("primary").WithColor(labelInfo.Color).WithHeight("sm").FlexButton,
 	).WithSpacing("sm")
 
