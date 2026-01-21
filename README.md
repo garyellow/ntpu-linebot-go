@@ -190,6 +190,11 @@
 - `NTPU_SERVER_NAME`：穩定節點名稱，用於 log 與 Sentry 分辨來源
 - `NTPU_INSTANCE_ID`：實例識別（容器/Pod），用於 log/metrics 分辨短生命週期實例
 
+未設定時會自動嘗試取得（依序）：
+
+- `server_name`：`NODE_NAME` / `K8S_NODE_NAME` / `KUBE_NODE_NAME` / `MY_NODE_NAME` → hostname →（最後）`instance_id`
+- `instance_id`：`POD_UID` / `MY_POD_UID` / `POD_NAME` / `MY_POD_NAME` / `HOSTNAME` → hostname →（最後）`server_name`
+
 ### 錯誤追蹤（Sentry SDK，可選）
 
 本專案使用 Sentry SDK 進行錯誤追蹤。

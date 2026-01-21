@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -410,15 +411,39 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 }
 
 func resolveServerIdentity(cfg *config.Config, hostname string, now func() time.Time) (string, string) {
-	serverName := cfg.ServerName
-	instanceID := cfg.InstanceID
-	if hostname != "" && serverName == "" {
-		serverName = hostname
+	serverName := strings.TrimSpace(cfg.ServerName)
+	instanceID := strings.TrimSpace(cfg.InstanceID)
+	hostname = strings.TrimSpace(hostname)
+
+	if serverName == "" {
+		serverName = firstNonEmpty(
+			getEnvTrim("NODE_NAME"),
+			getEnvTrim("K8S_NODE_NAME"),
+			getEnvTrim("KUBE_NODE_NAME"),
+			getEnvTrim("MY_NODE_NAME"),
+		)
+		if serverName == "" {
+			serverName = hostname
+		}
 	}
+
+	if instanceID == "" {
+		instanceID = firstNonEmpty(
+			getEnvTrim("POD_UID"),
+			getEnvTrim("MY_POD_UID"),
+			getEnvTrim("POD_NAME"),
+			getEnvTrim("MY_POD_NAME"),
+			getEnvTrim("HOSTNAME"),
+		)
+		if instanceID == "" {
+			instanceID = hostname
+		}
+	}
+
 	if serverName == "" && instanceID != "" {
 		serverName = instanceID
 	}
-	if instanceID == "" {
+	if instanceID == "" && serverName != "" {
 		instanceID = serverName
 	}
 	if instanceID == "" {
@@ -428,6 +453,19 @@ func resolveServerIdentity(cfg *config.Config, hostname string, now func() time.
 		}
 	}
 	return serverName, instanceID
+}
+
+func getEnvTrim(key string) string {
+	return strings.TrimSpace(os.Getenv(key))
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func resolveLogVersion(cfg *config.Config) string {

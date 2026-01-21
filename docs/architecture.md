@@ -239,8 +239,8 @@ Follower Nodes
 - `event_id`：LINE `webhookEventId`（主關聯鍵）。
 - `message_id`：LINE `message.id`（若為 message event）。
 - `user_id`、`chat_id`：來源識別。
-- `server_name`：節點名稱（`NTPU_SERVER_NAME` 或 hostname）。
-- `instance_id`：實例識別（`NTPU_INSTANCE_ID` 或 server name）。
+- `server_name`：節點名稱（`NTPU_SERVER_NAME` 或自動偵測）。
+- `instance_id`：實例識別（`NTPU_INSTANCE_ID` 或自動偵測）。
 
 **避免過度記錄**：
 
@@ -251,7 +251,8 @@ Follower Nodes
 
 - 使用 Sentry Go SDK 進行錯誤追蹤。
 - 啟用方式：設定 `NTPU_SENTRY_ENABLED=true` 與 `NTPU_SENTRY_DSN`（格式：`https://$APPLICATION_TOKEN@$INGESTING_HOST/1`）。
-- `server_name` 來源：`NTPU_SERVER_NAME`（未設定則使用 hostname；必要時會回退到 instance id）。
+- `server_name` 來源（未設定時）：`NODE_NAME` / `K8S_NODE_NAME` / `KUBE_NODE_NAME` / `MY_NODE_NAME` → hostname →（最後）`instance_id`。
+- `instance_id` 來源（未設定時）：`POD_UID` / `MY_POD_UID` / `POD_NAME` / `MY_POD_NAME` / `HOSTNAME` → hostname →（最後）`server_name`。
 - 事件保護：預設移除請求標頭/Cookie/Body，並忽略 `context canceled`、`context deadline exceeded` 類型錯誤。
 - 中介層：Gin Middleware 先於 `gin.Recovery()`，可捕捉 panic 與 HTTP 錯誤上下文。
 
