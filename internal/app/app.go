@@ -950,7 +950,7 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) (bool,
 	warmupCtx, cancel := context.WithTimeout(ctx, config.WarmupProactive)
 	defer cancel()
 
-	if includeID && a.snapshotMgr != nil && a.snapshotReady != nil && a.snapshotReady.Load() {
+	if includeID && a.snapshotMgr != nil && a.snapshotReady.Load() {
 		a.logger.Info("Snapshot already loaded from R2, initial refresh not needed")
 		a.readinessState.MarkReady()
 		return false, true, nil
@@ -1120,7 +1120,24 @@ func (a *Application) maintenanceLoop(ctx context.Context) {
 		}
 
 		state, useLocal := resolveState(ctx)
-		forceInitial := a.snapshotMgr != nil && (a.snapshotReady == nil || !a.snapshotReady.Load())
+		snapshotReady := a.snapshotMgr != nil && a.snapshotReady.Load()
+		if snapshotReady && state.LastRefresh == 0 {
+			completedAt := time.Now().UTC()
+			if useLocal || !updateRemote(ctx, func(s *maintenance.State) {
+				s.LastRefresh = completedAt.Unix()
+			}) {
+				updateLocal(func(s *maintenance.State) {
+					s.LastRefresh = completedAt.Unix()
+				})
+			}
+			if !a.readinessState.WarmupCompleted() {
+				a.readinessState.MarkReady()
+				a.logger.Info("Initial refresh skipped due to snapshot; service marked ready")
+			}
+			return
+		}
+
+		forceInitial := a.snapshotMgr != nil && !a.snapshotReady.Load()
 		shouldRun := isMaintenanceDue(state.LastRefresh, refreshInterval, now) || forceInitial
 		if !shouldRun {
 			if !a.readinessState.WarmupCompleted() {
@@ -1134,18 +1151,13 @@ func (a *Application) maintenanceLoop(ctx context.Context) {
 		ran, _, err := a.runDataRefresh(ctx, isInitialRefresh)
 		if err != nil {
 			a.logger.WithError(err).Warn("Data refresh run failed")
+			if isInitialRefresh && !a.readinessState.WarmupCompleted() {
+				a.readinessState.MarkReady()
+				a.logger.Warn("Initial data refresh failed; service marked ready in degraded mode")
+			}
 			return
 		}
 		if ran {
-			completedAt := time.Now().UTC()
-			if useLocal || !updateRemote(ctx, func(s *maintenance.State) {
-				s.LastRefresh = completedAt.Unix()
-			}) {
-				updateLocal(func(s *maintenance.State) {
-					s.LastRefresh = completedAt.Unix()
-				})
-			}
-		} else if isInitialRefresh && a.snapshotReady != nil && a.snapshotReady.Load() {
 			completedAt := time.Now().UTC()
 			if useLocal || !updateRemote(ctx, func(s *maintenance.State) {
 				s.LastRefresh = completedAt.Unix()
