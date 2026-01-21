@@ -222,12 +222,6 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 					log.WithError(scheduleErr).Warn("Schedule store initialization failed, maintenance will fall back to local scheduling")
 				}
 
-				// Start background polling for new snapshots
-				snapshotMgr.StartPolling(ctx, hotSwapDB, cfg.DataDir, func(etag string) {
-					snapshotReady.Store(true)
-					readinessState.MarkReady()
-					log.WithField("etag", etag).Info("Snapshot hot-swap applied and service marked ready")
-				})
 			}
 		}
 	}
@@ -313,7 +307,9 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 
 	// Create shared semester cache for course and program handlers
 	semesterCache := course.NewSemesterCache()
+	refreshSemesterCacheFromDB(ctx, db, semesterCache, log, "startup")
 	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerMgr, deltaLog, bm25Index, queryExpander, llmLimiter, semesterCache)
+
 	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerMgr, cfg.Bot.MaxContactsPerSearch, deltaLog)
 	programHandler := program.NewHandler(db, m, log, stickerMgr, semesterCache)
 	usageHandler := usage.NewHandler(userLimiter, llmLimiter, log, stickerMgr)
@@ -406,6 +402,15 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		ReadTimeout:       config.WebhookHTTPRead,
 		WriteTimeout:      config.WebhookHTTPWrite,
 		IdleTimeout:       config.WebhookHTTPIdle,
+	}
+
+	if snapshotMgr != nil && hotSwapDB != nil {
+		snapshotMgr.StartPolling(ctx, hotSwapDB, cfg.DataDir, func(etag string) {
+			snapshotReady.Store(true)
+			readinessState.MarkReady()
+			refreshSemesterCacheFromDB(ctx, db, semesterCache, log, "snapshot_hot_swap")
+			log.WithField("etag", etag).Info("Snapshot hot-swap applied and service marked ready")
+		})
 	}
 
 	log.Info("Initialization complete")
@@ -558,6 +563,33 @@ func buildLLMConfig(cfg *config.Config) genai.LLMConfig {
 	}
 
 	return llmCfg
+}
+
+func refreshSemesterCacheFromDB(ctx context.Context, db *storage.DB, cache *course.SemesterCache, log *logger.Logger, reason string) {
+	if db == nil || cache == nil || log == nil {
+		return
+	}
+
+	refreshCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	semesters, err := cache.UpdateFromDB(refreshCtx, db, 4)
+	if err != nil {
+		log.WithError(err).
+			WithField("reason", reason).
+			Warn("Failed to refresh semester cache from database")
+		return
+	}
+	if len(semesters) == 0 {
+		log.WithField("reason", reason).
+			Info("Semester cache not updated (no cached semesters found)")
+		return
+	}
+
+	log.WithField("reason", reason).
+		WithField("semester_count", len(semesters)).
+		WithField("semesters", semesters).
+		Info("Semester cache refreshed from database")
 }
 
 func (a *Application) redirectToGitHub(c *gin.Context) {

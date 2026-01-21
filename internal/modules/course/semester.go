@@ -1,8 +1,12 @@
 package course
 
 import (
+	"context"
+	"fmt"
 	"sync"
 	"time"
+
+	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 )
 
 // Semester represents an academic semester with year and term.
@@ -39,6 +43,46 @@ func (c *SemesterCache) Update(semesters []Semester) {
 	c.semesters = semesters
 }
 
+// UpdateFromDB loads recent semesters from the database and updates the cache.
+// Returns the loaded semesters (if any). If no semesters are found, cache is unchanged.
+func (c *SemesterCache) UpdateFromDB(ctx context.Context, db *storage.DB, limit int) ([]Semester, error) {
+	semesters, err := LoadRecentSemestersFromDB(ctx, db, limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(semesters) == 0 {
+		return nil, nil
+	}
+	c.Update(semesters)
+	return semesters, nil
+}
+
+// LoadRecentSemestersFromDB retrieves recent semesters from the database (TTL-aware).
+// Returns semesters ordered by year DESC, term DESC.
+func LoadRecentSemestersFromDB(ctx context.Context, db *storage.DB, limit int) ([]Semester, error) {
+	if db == nil {
+		return nil, fmt.Errorf("semester cache: db is nil")
+	}
+	if limit <= 0 {
+		limit = 4
+	}
+
+	rows, err := db.GetDistinctRecentSemesters(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+
+	semesters := make([]Semester, 0, len(rows))
+	for _, row := range rows {
+		semesters = append(semesters, Semester{Year: row.Year, Term: row.Term})
+	}
+
+	return semesters, nil
+}
+
 // GetRecentSemesters returns the 2 most recent semesters.
 // Returns (years, terms) slices for easy use by handlers.
 func (c *SemesterCache) GetRecentSemesters() ([]int, []int) {
@@ -48,6 +92,9 @@ func (c *SemesterCache) GetRecentSemesters() ([]int, []int) {
 	if len(c.semesters) >= 2 {
 		return []int{c.semesters[0].Year, c.semesters[1].Year},
 			[]int{c.semesters[0].Term, c.semesters[1].Term}
+	}
+	if len(c.semesters) == 1 {
+		return []int{c.semesters[0].Year}, []int{c.semesters[0].Term}
 	}
 	// Fallback: no cached data yet, use calendar-based estimate
 	return getCalendarBasedSemesters(2)
