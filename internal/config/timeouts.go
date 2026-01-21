@@ -70,6 +70,9 @@ const (
 	// DataCleanupIntervalDefault is the default interval for data cleanup tasks.
 	DataCleanupIntervalDefault = 24 * time.Hour
 
+	// R2SnapshotPollIntervalDefault is the default interval for polling R2 snapshots.
+	R2SnapshotPollIntervalDefault = 15 * time.Minute
+
 	// MetricsUpdateInterval is how often cache size metrics are updated.
 	MetricsUpdateInterval = 5 * time.Minute
 

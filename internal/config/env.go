@@ -33,11 +33,12 @@ const (
 	EnvLLMRateRefill  = "NTPU_LLM_RATE_REFILL"
 	EnvLLMRateDaily   = "NTPU_LLM_RATE_DAILY"
 
-	// Startup
-	EnvWarmupWait        = "NTPU_WARMUP_WAIT"
-	EnvWarmupGracePeriod = "NTPU_WARMUP_GRACE_PERIOD"
-	EnvRefreshInterval   = "NTPU_REFRESH_INTERVAL"
-	EnvCleanupInterval   = "NTPU_CLEANUP_INTERVAL"
+	// Background Tasks
+	EnvWarmupWait             = "NTPU_WARMUP_WAIT"
+	EnvWarmupGracePeriod      = "NTPU_WARMUP_GRACE_PERIOD"
+	EnvDataRefreshInterval    = "NTPU_DATA_REFRESH_INTERVAL"
+	EnvDataCleanupInterval    = "NTPU_DATA_CLEANUP_INTERVAL"
+	EnvR2SnapshotPollInterval = "NTPU_R2_SNAPSHOT_POLL_INTERVAL"
 
 	// LLM Feature
 	EnvLLMEnabled             = "NTPU_LLM_ENABLED"
@@ -58,12 +59,11 @@ const (
 	EnvR2AccessKeyID     = "NTPU_R2_ACCESS_KEY_ID"
 	EnvR2SecretAccessKey = "NTPU_R2_SECRET_ACCESS_KEY"
 	EnvR2BucketName      = "NTPU_R2_BUCKET_NAME"
-	EnvR2SnapshotKey     = "NTPU_R2_SNAPSHOT_KEY"
-	EnvR2LockKey         = "NTPU_R2_LOCK_KEY"
-	EnvR2LockTTL         = "NTPU_R2_LOCK_TTL"
-	EnvR2PollInterval    = "NTPU_R2_POLL_INTERVAL"
-	EnvR2DeltaPrefix     = "NTPU_R2_DELTA_PREFIX"
-	EnvR2ScheduleKey     = "NTPU_R2_SCHEDULE_KEY"
+	EnvR2SnapshotKey = "NTPU_R2_SNAPSHOT_KEY"
+	EnvR2LockKey     = "NTPU_R2_LOCK_KEY"
+	EnvR2LockTTL     = "NTPU_R2_LOCK_TTL"
+	EnvR2DeltaPrefix = "NTPU_R2_DELTA_PREFIX"
+	EnvR2ScheduleKey = "NTPU_R2_SCHEDULE_KEY"
 
 	// Sentry Feature
 	EnvSentryEnabled          = "NTPU_SENTRY_ENABLED"

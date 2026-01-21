@@ -49,11 +49,17 @@ type Config struct {
 	ScraperMaxRetries int
 	ScraperBaseURLs   map[string][]string
 
-	// Startup Configuration
-	WaitForWarmup       bool          // If true, reject /webhook until warmup is ready (default: false)
-	WarmupGracePeriod   time.Duration // Readiness grace period for initial warmup (default: 10m)
-	DataRefreshInterval time.Duration // Interval for data refresh tasks
-	DataCleanupInterval time.Duration // Interval for data cleanup tasks
+	// Background Task Scheduling
+	// NTPU_WARMUP_WAIT: if true, reject /webhook until warmup is ready (default: false)
+	// NTPU_WARMUP_GRACE_PERIOD: readiness grace period for initial warmup (default: 10m)
+	// NTPU_DATA_REFRESH_INTERVAL: interval for data refresh tasks (default: 24h)
+	// NTPU_DATA_CLEANUP_INTERVAL: interval for data cleanup tasks (default: 24h)
+	// NTPU_R2_SNAPSHOT_POLL_INTERVAL: interval for polling R2 snapshots (default: 15m)
+	WaitForWarmup             bool          // If true, reject /webhook until warmup is ready
+	WarmupGracePeriod         time.Duration // Readiness grace period for initial warmup
+	DataRefreshInterval       time.Duration // Interval for data refresh tasks
+	DataCleanupInterval       time.Duration // Interval for data cleanup tasks
+	R2SnapshotPollInterval    time.Duration // Interval for polling R2 snapshots (used when R2 enabled)
 
 	// ========================================================================
 	// Optional Features
@@ -75,17 +81,18 @@ type Config struct {
 
 	// 2. R2 Snapshot Sync (Distributed Warmup)
 	// Flag: NTPU_R2_ENABLED
-	R2Enabled      bool
-	R2AccountID    string        // Cloudflare Account ID
-	R2AccessKeyID  string        // R2 Access Key ID
-	R2SecretKey    string        // R2 Secret Access Key
-	R2BucketName   string        // R2 Bucket name
-	R2SnapshotKey  string        // Object key for snapshot (default: snapshots/cache.db.zst)
-	R2LockKey      string        // Object key for distributed lock (default: locks/crawler.json)
-	R2LockTTL      time.Duration // TTL for distributed lock (default: 30m)
-	R2PollInterval time.Duration // Polling interval for new snapshots (default: 5m)
-	R2DeltaPrefix  string        // Prefix for delta logs (default: deltas)
-	R2ScheduleKey  string        // Object key for maintenance schedule state (default: schedules/maintenance.json)
+	// Enables distributed snapshot synchronization for multi-node deployments.
+	// Polling interval is configured via NTPU_R2_SNAPSHOT_POLL_INTERVAL (default: 15m)
+	R2Enabled     bool
+	R2AccountID   string        // Cloudflare Account ID
+	R2AccessKeyID string        // R2 Access Key ID
+	R2SecretKey   string        // R2 Secret Access Key
+	R2BucketName  string        // R2 Bucket name
+	R2SnapshotKey string        // Object key for snapshot (default: snapshots/cache.db.zst)
+	R2LockKey     string        // Object key for distributed lock (default: locks/crawler.json)
+	R2LockTTL     time.Duration // TTL for distributed lock (default: 1h)
+	R2DeltaPrefix string        // Prefix for delta logs (default: deltas)
+	R2ScheduleKey string        // Object key for maintenance schedule state (default: schedules/maintenance.json)
 
 	// 3. Sentry Error Tracking
 	// Flag: NTPU_SENTRY_ENABLED
@@ -206,11 +213,12 @@ func Load() (*Config, error) {
 			},
 		},
 
-		// Startup Configuration
-		WaitForWarmup:       getBoolEnv(EnvWarmupWait, false),
-		WarmupGracePeriod:   getDurationEnv(EnvWarmupGracePeriod, 10*time.Minute),
-		DataRefreshInterval: getDurationEnv(EnvRefreshInterval, DataRefreshIntervalDefault),
-		DataCleanupInterval: getDurationEnv(EnvCleanupInterval, DataCleanupIntervalDefault),
+		// Background Task Scheduling
+		WaitForWarmup:          getBoolEnv(EnvWarmupWait, false),
+		WarmupGracePeriod:      getDurationEnv(EnvWarmupGracePeriod, 10*time.Minute),
+		DataRefreshInterval:    getDurationEnv(EnvDataRefreshInterval, DataRefreshIntervalDefault),
+		DataCleanupInterval:    getDurationEnv(EnvDataCleanupInterval, DataCleanupIntervalDefault),
+		R2SnapshotPollInterval: getDurationEnv(EnvR2SnapshotPollInterval, R2SnapshotPollIntervalDefault),
 
 		// 1. LLM Features
 		LLMEnabled:             getBoolEnv(EnvLLMEnabled, false),
@@ -226,17 +234,16 @@ func Load() (*Config, error) {
 		CerebrasExpanderModels: getModelsEnv(EnvCerebrasExpanderModels),
 
 		// 2. R2 Snapshot Storage
-		R2Enabled:      getBoolEnv(EnvR2Enabled, false),
-		R2AccountID:    getEnv(EnvR2AccountID, ""),
-		R2AccessKeyID:  getEnv(EnvR2AccessKeyID, ""),
-		R2SecretKey:    getEnv(EnvR2SecretAccessKey, ""),
-		R2BucketName:   getEnv(EnvR2BucketName, ""),
-		R2SnapshotKey:  getEnv(EnvR2SnapshotKey, "snapshots/cache.db.zst"),
-		R2LockKey:      getEnv(EnvR2LockKey, "locks/crawler.json"),
-		R2LockTTL:      getDurationEnv(EnvR2LockTTL, 30*time.Minute),
-		R2PollInterval: getDurationEnv(EnvR2PollInterval, 5*time.Minute),
-		R2DeltaPrefix:  getEnv(EnvR2DeltaPrefix, "deltas"),
-		R2ScheduleKey:  getEnv(EnvR2ScheduleKey, "schedules/maintenance.json"),
+		R2Enabled:              getBoolEnv(EnvR2Enabled, false),
+		R2AccountID:            getEnv(EnvR2AccountID, ""),
+		R2AccessKeyID:          getEnv(EnvR2AccessKeyID, ""),
+		R2SecretKey:            getEnv(EnvR2SecretAccessKey, ""),
+		R2BucketName:           getEnv(EnvR2BucketName, ""),
+		R2SnapshotKey:          getEnv(EnvR2SnapshotKey, "snapshots/cache.db.zst"),
+		R2LockKey:              getEnv(EnvR2LockKey, "locks/crawler.json"),
+		R2LockTTL:     getDurationEnv(EnvR2LockTTL, 30*time.Minute),
+		R2DeltaPrefix: getEnv(EnvR2DeltaPrefix, "deltas"),
+		R2ScheduleKey:          getEnv(EnvR2ScheduleKey, "schedules/maintenance.json"),
 
 		// 3. Sentry Error Tracking
 		SentryEnabled:          getBoolEnv(EnvSentryEnabled, false),
@@ -291,10 +298,10 @@ func (c *Config) Validate() error {
 		errs = append(errs, fmt.Errorf("NTPU_SCRAPER_TIMEOUT must be positive, got %v", c.ScraperTimeout))
 	}
 	if c.DataRefreshInterval <= 0 {
-		errs = append(errs, fmt.Errorf("NTPU_REFRESH_INTERVAL must be positive, got %v", c.DataRefreshInterval))
+		errs = append(errs, fmt.Errorf("NTPU_DATA_REFRESH_INTERVAL must be positive, got %v", c.DataRefreshInterval))
 	}
 	if c.DataCleanupInterval <= 0 {
-		errs = append(errs, fmt.Errorf("NTPU_CLEANUP_INTERVAL must be positive, got %v", c.DataCleanupInterval))
+		errs = append(errs, fmt.Errorf("NTPU_DATA_CLEANUP_INTERVAL must be positive, got %v", c.DataCleanupInterval))
 	}
 
 	// 1. LLM Validation (only if enabled)
@@ -341,8 +348,8 @@ func (c *Config) Validate() error {
 		if c.R2LockTTL <= 0 {
 			errs = append(errs, fmt.Errorf("NTPU_R2_LOCK_TTL must be positive, got %v", c.R2LockTTL))
 		}
-		if c.R2PollInterval <= 0 {
-			errs = append(errs, fmt.Errorf("NTPU_R2_POLL_INTERVAL must be positive, got %v", c.R2PollInterval))
+		if c.R2SnapshotPollInterval <= 0 {
+			errs = append(errs, fmt.Errorf("NTPU_R2_SNAPSHOT_POLL_INTERVAL must be positive, got %v", c.R2SnapshotPollInterval))
 		}
 		if c.R2DeltaPrefix == "" {
 			errs = append(errs, errors.New("NTPU_R2_DELTA_PREFIX must not be empty when NTPU_R2_ENABLED=true"))
