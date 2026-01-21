@@ -837,9 +837,8 @@ func (h *Handler) handleTeacherCourseSearch(ctx context.Context, teacherName str
 	}
 
 	return h.formatCourseListResponseWithOptions(courses, FormatOptions{
-		TeacherName:      teacherName,
-		SearchKeyword:    teacherName,
-		IsExtendedSearch: false,
+		TeacherName:   teacherName,
+		SearchKeyword: teacherName,
 	})
 }
 
@@ -1650,8 +1649,7 @@ func extractUniqueSemesters(courses []storage.Course) []lineutil.SemesterPair {
 // FormatOptions configures course list formatting behavior.
 type FormatOptions struct {
 	SearchKeyword    string // Original search keyword (for "more semesters" Quick Reply)
-	IsExtendedSearch bool   // True if this is already an extended (4-semester) search
-	IsHistorical     bool   // True for year-specific search (removes label row, starts from semester info)
+	IsExtendedSearch bool   // True if this is already an extended (4-semester) search (controls quick reply)
 	TeacherName      string // If non-empty, shows teacher name as label and skips teacher info row
 }
 
@@ -1665,7 +1663,7 @@ func (h *Handler) formatCourseListResponse(courses []storage.Course) []messaging
 // formatCourseListResponseForHistorical formats courses with semester-only labels.
 // Used for historical course searches where relative labels ("最新學期") are misleading.
 func (h *Handler) formatCourseListResponseForHistorical(courses []storage.Course) []messaging_api.MessageInterface {
-	return h.formatCourseListResponseWithOptions(courses, FormatOptions{IsHistorical: true})
+	return h.formatCourseListResponseWithOptions(courses, FormatOptions{})
 }
 
 // formatCourseListResponseWithOptions formats courses with extended options.
@@ -1688,12 +1686,18 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 		return b.Term - a.Term // Term: 2 (下學期) before 1 (上學期)
 	})
 
-	// Extract unique semesters from sorted courses (data-driven, not calendar-based)
-	// This ensures label is based on actual data availability:
-	// - Index 0: 最新學期 (newest semester with data)
-	// - Index 1: 上個學期 (second newest)
-	// - Index 2+: 過去學期 (older semesters)
+	// Build data-driven semester order for labeling.
+	// Prefer cached top semesters (global, newest first). Fall back to result-derived list.
 	dataSemesters := extractUniqueSemesters(courses)
+	if h.semesterCache != nil && h.semesterCache.HasData() {
+		years, terms := h.semesterCache.GetAllSemesters()
+		if len(years) > 0 {
+			dataSemesters = make([]lineutil.SemesterPair, len(years))
+			for i := range years {
+				dataSemesters[i] = lineutil.SemesterPair{Year: years[i], Term: terms[i]}
+			}
+		}
+	}
 
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 	var messages []messaging_api.MessageInterface
@@ -1709,11 +1713,10 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 	bubbles := make([]messaging_api.FlexBubble, 0, len(courses))
 	for _, course := range courses {
 		// Determine display mode and get appropriate label info
-		// Four modes:
+		// Three modes:
 		// 1. Teacher mode: Shows teacher name as label, skips teacher info row
-		// 2. Historical mode: No label row, starts from semester info row (for year-specific search)
-		// 3. Extended search mode (更多學期): Uses 上上學期/上上上學期 labels for 3rd-4th semesters
-		// 4. Regular mode: Shows relative semester labels (最新學期/上個學期/過去學期)
+		// 2. Data-driven mode: Shows relative semester labels (最新/上個/上上/上上上/過去)
+		// 3. (Optional) Extended search flag only controls quick reply behavior
 		var labelInfo lineutil.BodyLabelInfo
 		var skipLabelRow bool
 		var skipTeacherRow bool
@@ -1722,18 +1725,8 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 			// Teacher mode: show teacher name as label, skip redundant teacher info row
 			labelInfo = lineutil.GetTeacherLabel(opts.TeacherName)
 			skipTeacherRow = true
-		} else if opts.IsHistorical {
-			// Historical mode: no label row, use historical color for header
-			labelInfo = lineutil.BodyLabelInfo{
-				Color: lineutil.ColorHeaderHistorical,
-			}
-			skipLabelRow = true
-		} else if opts.IsExtendedSearch {
-			// Extended search mode (更多學期): use 上上學期/上上上學期 labels
-			// to avoid misleading users since these are 3rd-4th semesters
-			labelInfo = lineutil.GetExtendedSemesterLabel(course.Year, course.Term, dataSemesters)
 		} else {
-			// Regular mode: use relative labels based on data position
+			// Data-driven mode: use relative labels based on data position
 			labelInfo = lineutil.GetSemesterLabel(course.Year, course.Term, dataSemesters)
 		}
 

@@ -1241,7 +1241,7 @@ func TestFilterCoursesBySemesters(t *testing.T) {
 	}
 }
 
-// TestFormatCourseListResponseWithOptions_Modes verifies the three display modes
+// TestFormatCourseListResponseWithOptions_Modes verifies the display modes
 func TestFormatCourseListResponseWithOptions_Modes(t *testing.T) {
 	t.Parallel()
 	h := setupTestHandler(t)
@@ -1261,14 +1261,7 @@ func TestFormatCourseListResponseWithOptions_Modes(t *testing.T) {
 		t.Error("Regular mode: expected messages, got 0")
 	}
 
-	// 2. Extended Mode (IsHistorical = true)
-	// Should produce message without label row, starting with semester info
-	msgsExtended := h.formatCourseListResponseWithOptions(courses, FormatOptions{IsHistorical: true})
-	if len(msgsExtended) == 0 {
-		t.Error("Extended mode: expected messages, got 0")
-	}
-
-	// 3. Teacher Mode (TeacherName set)
+	// 2. Teacher Mode (TeacherName set)
 	// Should produce message with Teacher label and NO teacher info row
 	msgsTeacher := h.formatCourseListResponseWithOptions(courses, FormatOptions{TeacherName: "Teacher A"})
 	if len(msgsTeacher) == 0 {
