@@ -1651,7 +1651,7 @@ func extractUniqueSemesters(courses []storage.Course) []lineutil.SemesterPair {
 type FormatOptions struct {
 	SearchKeyword    string // Original search keyword (for "more semesters" Quick Reply)
 	IsExtendedSearch bool   // True if this is already an extended (4-semester) search
-	IsHistorical     bool   // True for extended search (removes label row, starts from semester info)
+	IsHistorical     bool   // True for year-specific search (removes label row, starts from semester info)
 	TeacherName      string // If non-empty, shows teacher name as label and skips teacher info row
 }
 

@@ -1058,6 +1058,75 @@ func TestGetSemesterLabel(t *testing.T) {
 	}
 }
 
+func TestGetExtendedSemesterLabel(t *testing.T) {
+	dataSemesters := []SemesterPair{
+		{Year: 113, Term: 2},
+		{Year: 113, Term: 1},
+	}
+
+	tests := []struct {
+		name          string
+		year          int
+		term          int
+		dataSemesters []SemesterPair
+		wantEmoji     string
+		wantLabel     string
+		wantColor     string
+	}{
+		{
+			name:          "Newest extended semester (上上學期)",
+			year:          113,
+			term:          2,
+			dataSemesters: dataSemesters,
+			wantEmoji:     "📅",
+			wantLabel:     "上上學期",
+			wantColor:     ColorHeaderPrevious,
+		},
+		{
+			name:          "Older extended semester (上上上學期)",
+			year:          113,
+			term:          1,
+			dataSemesters: dataSemesters,
+			wantEmoji:     "📦",
+			wantLabel:     "上上上學期",
+			wantColor:     ColorHeaderHistorical,
+		},
+		{
+			name:          "Semester not in data list (上上上學期)",
+			year:          112,
+			term:          2,
+			dataSemesters: dataSemesters,
+			wantEmoji:     "📦",
+			wantLabel:     "上上上學期",
+			wantColor:     ColorHeaderHistorical,
+		},
+		{
+			name:          "Empty data list (上上上學期)",
+			year:          113,
+			term:          2,
+			dataSemesters: []SemesterPair{},
+			wantEmoji:     "📦",
+			wantLabel:     "上上上學期",
+			wantColor:     ColorHeaderHistorical,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			label := GetExtendedSemesterLabel(tt.year, tt.term, tt.dataSemesters)
+			if label.Emoji != tt.wantEmoji {
+				t.Errorf("GetExtendedSemesterLabel().Emoji = %q, want %q", label.Emoji, tt.wantEmoji)
+			}
+			if label.Label != tt.wantLabel {
+				t.Errorf("GetExtendedSemesterLabel().Label = %q, want %q", label.Label, tt.wantLabel)
+			}
+			if label.Color != tt.wantColor {
+				t.Errorf("GetExtendedSemesterLabel().Color = %q, want %q", label.Color, tt.wantColor)
+			}
+		})
+	}
+}
+
 func TestSetQuoteToken(t *testing.T) {
 	t.Parallel()
 

@@ -1,9 +1,25 @@
 package course
 
 import (
+	"context"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 )
+
+func setupSemesterTestDB(t *testing.T) *storage.DB {
+	t.Helper()
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	db, err := storage.New(context.Background(), dbPath, 168*time.Hour)
+	if err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return db
+}
 
 // TestSemesterCache tests the SemesterCache functionality
 func TestSemesterCache(t *testing.T) {
@@ -53,6 +69,21 @@ func TestSemesterCache(t *testing.T) {
 		}
 		if years[1] != 114 || terms[1] != 1 {
 			t.Errorf("Second semester: expected 114-1, got %d-%d", years[1], terms[1])
+		}
+	})
+
+	t.Run("GetRecentSemesters returns single semester when only one cached", func(t *testing.T) {
+		t.Parallel()
+		cache := NewSemesterCache()
+		semesters := []Semester{{Year: 114, Term: 2}}
+		cache.Update(semesters)
+
+		years, terms := cache.GetRecentSemesters()
+		if len(years) != 1 || len(terms) != 1 {
+			t.Fatalf("Expected 1 semester, got %d years and %d terms", len(years), len(terms))
+		}
+		if years[0] != 114 || terms[0] != 2 {
+			t.Errorf("Only semester: expected 114-2, got %d-%d", years[0], terms[0])
 		}
 	})
 
@@ -106,6 +137,57 @@ func TestSemesterCache(t *testing.T) {
 			t.Errorf("Expected 2 fallback semesters, got %d years and %d terms", len(years), len(terms))
 		}
 	})
+}
+
+func TestSemesterCache_UpdateFromDB(t *testing.T) {
+	db := setupSemesterTestDB(t)
+	ctx := context.Background()
+
+	courses := []*storage.Course{
+		{UID: "1142-001", Year: 114, Term: 2, No: "001", Title: "Course A"},
+		{UID: "1141-001", Year: 114, Term: 1, No: "002", Title: "Course B"},
+		{UID: "1132-001", Year: 113, Term: 2, No: "003", Title: "Course C"},
+	}
+	for _, c := range courses {
+		if err := db.SaveCourse(ctx, c); err != nil {
+			t.Fatalf("SaveCourse failed: %v", err)
+		}
+	}
+
+	cache := NewSemesterCache()
+	semesters, err := cache.UpdateFromDB(ctx, db, 4)
+	if err != nil {
+		t.Fatalf("UpdateFromDB failed: %v", err)
+	}
+	if len(semesters) != 3 {
+		t.Fatalf("Expected 3 semesters, got %d", len(semesters))
+	}
+	if semesters[0].Year != 114 || semesters[0].Term != 2 {
+		t.Errorf("First semester: expected 114-2, got %d-%d", semesters[0].Year, semesters[0].Term)
+	}
+	if semesters[1].Year != 114 || semesters[1].Term != 1 {
+		t.Errorf("Second semester: expected 114-1, got %d-%d", semesters[1].Year, semesters[1].Term)
+	}
+	if semesters[2].Year != 113 || semesters[2].Term != 2 {
+		t.Errorf("Third semester: expected 113-2, got %d-%d", semesters[2].Year, semesters[2].Term)
+	}
+}
+
+func TestSemesterCache_UpdateFromDB_NoData(t *testing.T) {
+	db := setupSemesterTestDB(t)
+	ctx := context.Background()
+
+	cache := NewSemesterCache()
+	semesters, err := cache.UpdateFromDB(ctx, db, 4)
+	if err != nil {
+		t.Fatalf("UpdateFromDB failed: %v", err)
+	}
+	if len(semesters) != 0 {
+		t.Fatalf("Expected no semesters, got %d", len(semesters))
+	}
+	if cache.HasData() {
+		t.Fatalf("Expected cache to remain empty when no data exists")
+	}
 }
 
 // TestGetCalendarBasedSemesters tests calendar-based semester calculation
