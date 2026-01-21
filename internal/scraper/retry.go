@@ -61,7 +61,7 @@ func RetryWithBackoff(ctx context.Context, maxRetries int, initialDelay time.Dur
 
 		// Log retry warning
 		if attempt < maxRetries {
-			slog.DebugContext(ctx, "Request failed, will retry",
+			slog.WarnContext(ctx, "Request failed, will retry",
 				"attempt", attempt+1,
 				"max_retries", maxRetries,
 				"duration_ms", time.Since(attemptStart).Milliseconds(),
