@@ -527,6 +527,44 @@ func GetSemesterLabel(year, term int, dataSemesters []SemesterPair) BodyLabelInf
 	}
 }
 
+// GetExtendedSemesterLabel returns label info for extended search (3rd-4th semesters).
+// This uses different labels than GetSemesterLabel to avoid misleading users:
+//   - "📅 上上學期" for the newest semester in extended results (3rd semester overall)
+//   - "📦 上上上學期" for older semesters in extended results (4th semester overall)
+//
+// Parameters:
+//   - year, term: The semester to get label for
+//   - dataSemesters: Unique semesters from extended search results, sorted newest first
+func GetExtendedSemesterLabel(year, term int, dataSemesters []SemesterPair) BodyLabelInfo {
+	// Find the position of this semester in the data-derived list
+	for i, sem := range dataSemesters {
+		if sem.Year == year && sem.Term == term {
+			switch i {
+			case 0:
+				// First in extended results = 3rd semester overall (上上學期)
+				return BodyLabelInfo{
+					Emoji: "📅",
+					Label: "上上學期",
+					Color: ColorHeaderPrevious,
+				}
+			default:
+				// Second or later in extended results = 4th semester overall (上上上學期)
+				return BodyLabelInfo{
+					Emoji: "📦",
+					Label: "上上上學期",
+					Color: ColorHeaderHistorical,
+				}
+			}
+		}
+	}
+	// Not in data list - treat as historical
+	return BodyLabelInfo{
+		Emoji: "📦",
+		Label: "上上上學期",
+		Color: ColorHeaderHistorical,
+	}
+}
+
 // GetTeacherLabel returns a label info for teacher-specific course list.
 // Used when displaying courses filtered by a specific teacher.
 // The teacher name is shown as the label, and the teacher info row can be skipped

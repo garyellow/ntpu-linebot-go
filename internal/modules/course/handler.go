@@ -1709,10 +1709,11 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 	bubbles := make([]messaging_api.FlexBubble, 0, len(courses))
 	for _, course := range courses {
 		// Determine display mode and get appropriate label info
-		// Three modes:
+		// Four modes:
 		// 1. Teacher mode: Shows teacher name as label, skips teacher info row
-		// 2. Historical/Extended mode: No label row, starts from semester info row
-		// 3. Regular mode: Shows relative semester labels (最新學期/上個學期/過去學期)
+		// 2. Historical mode: No label row, starts from semester info row (for year-specific search)
+		// 3. Extended search mode (更多學期): Uses 上上學期/上上上學期 labels for 3rd-4th semesters
+		// 4. Regular mode: Shows relative semester labels (最新學期/上個學期/過去學期)
 		var labelInfo lineutil.BodyLabelInfo
 		var skipLabelRow bool
 		var skipTeacherRow bool
@@ -1722,11 +1723,15 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 			labelInfo = lineutil.GetTeacherLabel(opts.TeacherName)
 			skipTeacherRow = true
 		} else if opts.IsHistorical {
-			// Historical/Extended mode: no label row, use historical color for header
+			// Historical mode: no label row, use historical color for header
 			labelInfo = lineutil.BodyLabelInfo{
 				Color: lineutil.ColorHeaderHistorical,
 			}
 			skipLabelRow = true
+		} else if opts.IsExtendedSearch {
+			// Extended search mode (更多學期): use 上上學期/上上上學期 labels
+			// to avoid misleading users since these are 3rd-4th semesters
+			labelInfo = lineutil.GetExtendedSemesterLabel(course.Year, course.Term, dataSemesters)
 		} else {
 			// Regular mode: use relative labels based on data position
 			labelInfo = lineutil.GetSemesterLabel(course.Year, course.Term, dataSemesters)
