@@ -27,7 +27,7 @@ func (db *DB) SaveStudent(ctx context.Context, student *Student) error {
 	start := time.Now()
 	_, err := db.Writer().ExecContext(ctx, query, student.ID, student.Name, student.Department, student.Year, time.Now().Unix())
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to save student",
+		slog.ErrorContext(ctx, "Failed to save student",
 			"student_id", student.ID,
 			"error", err)
 		return fmt.Errorf("failed to save student: %w", err)
@@ -35,7 +35,7 @@ func (db *DB) SaveStudent(ctx context.Context, student *Student) error {
 
 	// Warn on slow queries (>100ms)
 	if duration := time.Since(start); duration > 100*time.Millisecond {
-		slog.WarnContext(ctx, "slow database operation",
+		slog.WarnContext(ctx, "Slow database operation",
 			"operation", "SaveStudent",
 			"duration_ms", duration.Milliseconds(),
 			"student_id", student.ID)
@@ -65,7 +65,7 @@ func (db *DB) SaveStudentsBatch(ctx context.Context, students []*Student) error 
 	err := db.ExecBatchContext(ctx, query, func(stmt *sql.Stmt) error {
 		for _, student := range students {
 			if _, err := stmt.ExecContext(ctx, student.ID, student.Name, student.Department, student.Year, cachedAt); err != nil {
-				slog.ErrorContext(ctx, "failed to save student in batch",
+				slog.ErrorContext(ctx, "Failed to save student in batch",
 					"student_id", student.ID,
 					"error", err)
 				return fmt.Errorf("failed to save student %s: %w", student.ID, err)
@@ -80,13 +80,13 @@ func (db *DB) SaveStudentsBatch(ctx context.Context, students []*Student) error 
 
 	// Log batch statistics
 	duration := time.Since(start)
-	slog.DebugContext(ctx, "batch operation completed",
+	slog.DebugContext(ctx, "Batch operation completed",
 		"operation", "SaveStudentsBatch",
 		"count", len(students),
 		"duration_ms", duration.Milliseconds())
 
 	if duration > 500*time.Millisecond {
-		slog.WarnContext(ctx, "slow batch operation",
+		slog.WarnContext(ctx, "Slow batch operation",
 			"operation", "SaveStudentsBatch",
 			"count", len(students),
 			"duration_ms", duration.Milliseconds())
@@ -113,7 +113,7 @@ func (db *DB) GetStudentByID(ctx context.Context, id string) (*Student, error) {
 		return nil, nil
 	}
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to query student",
+		slog.ErrorContext(ctx, "Failed to query student",
 			"student_id", id,
 			"error", err)
 		return nil, fmt.Errorf("query student: %w", err)
@@ -161,7 +161,7 @@ func (db *DB) SearchStudentsByName(ctx context.Context, name string) (*StudentSe
 
 	rows, err := db.Reader().QueryContext(ctx, query, args...)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to search students",
+		slog.ErrorContext(ctx, "Failed to search students",
 			"search_term", name,
 			"error", err)
 		return nil, fmt.Errorf("query students: %w", err)
@@ -190,7 +190,7 @@ func (db *DB) SearchStudentsByName(ctx context.Context, name string) (*StudentSe
 
 	// Warn on slow queries
 	if duration := time.Since(start); duration > 100*time.Millisecond {
-		slog.WarnContext(ctx, "slow database query",
+		slog.WarnContext(ctx, "Slow database query",
 			"operation", "SearchStudentsByName",
 			"duration_ms", duration.Milliseconds(),
 			"search_term", name,

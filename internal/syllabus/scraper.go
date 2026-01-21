@@ -57,13 +57,13 @@ func (s *Scraper) ScrapeCourseDetail(ctx context.Context, course *storage.Course
 	}
 
 	start := time.Now()
-	slog.DebugContext(ctx, "scraping course detail",
+	slog.DebugContext(ctx, "Scraping course detail",
 		"uid", course.UID,
 		"detail_url", course.DetailURL)
 
 	doc, err := s.client.GetDocument(ctx, course.DetailURL)
 	if err != nil {
-		slog.WarnContext(ctx, "failed to scrape course detail",
+		slog.WarnContext(ctx, "Failed to scrape course detail",
 			"uid", course.UID,
 			"detail_url", course.DetailURL,
 			"duration_ms", time.Since(start).Milliseconds(),
@@ -80,7 +80,7 @@ func (s *Scraper) ScrapeCourseDetail(ctx context.Context, course *storage.Course
 	// This implements dual-source fusion: accurate names + correct types
 	programs := MatchProgramTypes(fullProgramNames, course.RawProgramReqs)
 
-	slog.DebugContext(ctx, "course detail scraped successfully",
+	slog.DebugContext(ctx, "Course detail scraped successfully",
 		"uid", course.UID,
 		"syllabus_empty", fields.IsEmpty(),
 		"full_names_count", len(fullProgramNames),

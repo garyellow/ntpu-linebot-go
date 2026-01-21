@@ -85,7 +85,7 @@ func (e *geminiQueryExpander) Expand(ctx context.Context, query string) (string,
 	duration := time.Since(start)
 
 	if err != nil {
-		slog.WarnContext(ctx, "query expansion API call failed",
+		slog.WarnContext(ctx, "Query expansion API call failed",
 			"provider", "gemini",
 			"model", e.model,
 			"query_length", len(query),
@@ -119,7 +119,7 @@ func (e *geminiQueryExpander) Expand(ctx context.Context, query string) (string,
 
 	// Log success with token usage
 	if resp.UsageMetadata != nil {
-		slog.DebugContext(ctx, "query expansion completed",
+		slog.DebugContext(ctx, "Query expansion completed",
 			"provider", "gemini",
 			"model", e.model,
 			"input_tokens", resp.UsageMetadata.PromptTokenCount,

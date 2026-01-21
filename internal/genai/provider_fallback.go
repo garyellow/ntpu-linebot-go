@@ -71,7 +71,7 @@ func (f *FallbackIntentParser) Parse(ctx context.Context, text string) (*ParseRe
 		lastErr = err
 		action := ClassifyError(err)
 
-		slog.WarnContext(ctx, "intent parser failed",
+		slog.WarnContext(ctx, "Intent parser failed",
 			"provider", provider,
 			"index", i,
 			"error", err,
@@ -88,7 +88,7 @@ func (f *FallbackIntentParser) Parse(ctx context.Context, text string) (*ParseRe
 		}
 
 		// Falling back to next parser
-		slog.InfoContext(ctx, "falling back to next intent parser",
+		slog.InfoContext(ctx, "Falling back to next intent parser",
 			"from_index", i,
 			"from_provider", provider,
 			"to_index", i+1,
@@ -135,7 +135,7 @@ func (f *FallbackIntentParser) parseWithRetry(ctx context.Context, parser Intent
 			return nil, fmt.Errorf("timeout during retry: %w", lastErr)
 		}
 
-		slog.DebugContext(ctx, "retrying intent parse",
+		slog.DebugContext(ctx, "Retrying intent parse",
 			"provider", parser.Provider(),
 			"attempt", attempt+1,
 			"backoff_ms", backoff.Milliseconds(),
@@ -242,7 +242,7 @@ func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (strin
 
 		// Check if we should fallback
 		action := ClassifyError(err)
-		slog.WarnContext(ctx, "query expander failed",
+		slog.WarnContext(ctx, "Query expander failed",
 			"provider", provider,
 			"index", i,
 			"error", err,
@@ -257,7 +257,7 @@ func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (strin
 		}
 
 		// Falling back to next expander
-		slog.InfoContext(ctx, "falling back to next query expander",
+		slog.InfoContext(ctx, "Falling back to next query expander",
 			"from_index", i,
 			"from_provider", provider,
 			"to_index", i+1,
@@ -299,7 +299,7 @@ func (f *FallbackQueryExpander) expandWithRetry(ctx context.Context, expander Qu
 			return query, fmt.Errorf("timeout during retry: %w", lastErr)
 		}
 
-		slog.DebugContext(ctx, "retrying query expansion",
+		slog.DebugContext(ctx, "Retrying query expansion",
 			"provider", expander.Provider(),
 			"attempt", attempt+1,
 			"backoff_ms", backoff.Milliseconds(),

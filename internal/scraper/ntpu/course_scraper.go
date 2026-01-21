@@ -314,7 +314,7 @@ func parseCoursesPage(ctx context.Context, doc *goquery.Document, year, term int
 
 		// Skip courses without a title (parsing error or invalid data)
 		if title == "" {
-			slog.DebugContext(ctx, "skipping course with empty title",
+			slog.DebugContext(ctx, "Skipping course with empty title",
 				"year", year,
 				"term", term,
 				"course_no", strings.TrimSpace(tds.Eq(3).Text()))

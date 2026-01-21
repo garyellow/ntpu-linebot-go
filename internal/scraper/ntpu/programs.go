@@ -61,7 +61,7 @@ func ScrapePrograms(ctx context.Context, client *scraper.Client) ([]ProgramInfo,
 		folderPrograms, err := scrapeFolderAllPages(ctx, client, baseURL, folder, seen)
 		if err != nil {
 			// Log error but continue with other folders for graceful degradation
-			slog.DebugContext(ctx, "failed to scrape program folder",
+			slog.DebugContext(ctx, "Failed to scrape program folder",
 				"folder_id", folder.ID,
 				"category", folder.Category,
 				"error", err)

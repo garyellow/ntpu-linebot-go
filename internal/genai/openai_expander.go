@@ -111,7 +111,7 @@ func (e *openaiQueryExpander) Expand(ctx context.Context, query string) (string,
 	duration := time.Since(start)
 
 	if err != nil {
-		slog.WarnContext(ctx, "query expansion API call failed",
+		slog.WarnContext(ctx, "Query expansion API call failed",
 			"provider", e.provider,
 			"model", e.model,
 			"query_length", len(query),
@@ -137,7 +137,7 @@ func (e *openaiQueryExpander) Expand(ctx context.Context, query string) (string,
 
 	// Log success with token usage
 	if resp.Usage.TotalTokens > 0 {
-		slog.DebugContext(ctx, "query expansion completed",
+		slog.DebugContext(ctx, "Query expansion completed",
 			"provider", e.provider,
 			"model", e.model,
 			"input_tokens", resp.Usage.PromptTokens,

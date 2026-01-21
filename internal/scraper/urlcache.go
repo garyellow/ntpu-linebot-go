@@ -105,7 +105,7 @@ func (c *URLCache) Get(ctx context.Context) (string, error) {
 			"new_url", baseURL,
 			"detection_duration_ms", time.Since(start).Milliseconds())
 	} else if oldURL == "" {
-		slog.DebugContext(ctx, "initial URL detected",
+		slog.DebugContext(ctx, "Initial URL detected",
 			"domain", c.domain,
 			"url", baseURL,
 			"detection_duration_ms", time.Since(start).Milliseconds())
