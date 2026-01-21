@@ -423,8 +423,9 @@ registry.Register(programHandler) // 學程查詢
 | historical_courses | 任意 | 按需快取（7 天 TTL） |
 
 **背景任務排程** (臺灣時間):
-- **Sticker**: 啟動時一次
+- **Sticker**: 啟動時一次（先載入 DB，若缺失才抓取）
 - **資料刷新任務** (interval-based): contact, course, syllabus（若設定 LLM API Key）
+    - 啟動時若「需要刷新」或快照缺失，會立即執行一次
 - **資料清理任務** (interval-based): 刪除過期資料（contacts/courses/historical_courses/programs/course_programs/syllabi）+ VACUUM
 
 ### 2. 智慧搜尋架構（可選）

@@ -210,10 +210,12 @@
 R2 快照用於 **多節點部署** 的資料同步與快速啟動：
 
 - 啟動時自動下載最新 SQLite 快照
-- 啟動時會先嘗試載入快照；**若成功載入快照則略過首次資料刷新**（無快照由 leader 執行）
+- 啟動時會先嘗試載入快照；**若成功載入快照則略過首次資料刷新**
+- 若快照不存在或下載失敗，啟動時會立即執行首次資料刷新（由 leader 負責）
 - 啟動也會進行 leader lock 判斷，非 leader 會等待快照更新
 - cache miss 抓取結果會以 append-only delta log 保存在 R2，leader 合併後再上傳快照
 - 週期性資料刷新/清理由單一 leader 執行，**以「最長允許未刷新/未清理時間」為門檻**（依 `NTPU_MAINTENANCE_REFRESH_INTERVAL` / `NTPU_MAINTENANCE_CLEANUP_INTERVAL`）
+- 若快照缺失，會優先執行一次初始刷新以確保資料一致性
 - 上次刷新/清理時間會儲存在 R2，所有節點共用
 - 清理任務會刪除 contacts/courses/historical_courses/programs/course_programs/syllabi 的過期資料並 VACUUM
 - SQLite 使用 WAL 模式時，`VACUUM` 後會執行 WAL checkpoint（TRUNCATE）與 optimize，確保磁碟空間回收
