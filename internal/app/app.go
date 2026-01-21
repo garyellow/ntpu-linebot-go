@@ -12,6 +12,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -53,7 +54,7 @@ type Application struct {
 	db             *storage.DB
 	hotSwapDB      *storage.HotSwapDB // Used when R2 is enabled
 	snapshotMgr    *snapshot.Manager  // R2 snapshot manager (nil if R2 disabled)
-	snapshotReady  bool               // True if a snapshot was successfully downloaded at startup
+	snapshotReady  *atomic.Bool       // True if a snapshot was successfully downloaded/applied
 	deltaLog       *delta.R2Log       // R2 delta log (nil if R2 disabled)
 	scheduleStore  *maintenance.R2ScheduleStore
 	metrics        *metrics.Metrics
@@ -155,7 +156,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	var scheduleStore *maintenance.R2ScheduleStore
 	useLocalDB := true // Flag to track if we should use local DB
 
-	snapshotReady := false
+	snapshotReady := &atomic.Bool{}
 	if cfg.IsR2Enabled() {
 		// R2 mode: try to download snapshot for fast startup
 		log.Info("R2 snapshot sync enabled, downloading latest snapshot")
@@ -192,7 +193,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 			} else {
 				log.WithField("etag", etag).Info("Downloaded snapshot from R2")
 				dbPath = snapshotPath
-				snapshotReady = true
+				snapshotReady.Store(true)
 			}
 
 			// Create HotSwapDB for runtime updates (even if snapshot download failed)
@@ -223,6 +224,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 
 				// Start background polling for new snapshots
 				snapshotMgr.StartPolling(ctx, hotSwapDB, cfg.DataDir, func(etag string) {
+					snapshotReady.Store(true)
 					readinessState.MarkReady()
 					log.WithField("etag", etag).Info("Snapshot hot-swap applied and service marked ready")
 				})
@@ -906,34 +908,34 @@ func (a *Application) runDataCleanup(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// refreshStickers loads stickers once on startup.
+// refreshStickers loads sticker cache on startup (DB first, fetch if missing).
 func (a *Application) refreshStickers(ctx context.Context) {
-	a.logger.Debug("Sticker refresh job started")
-	defer a.logger.Debug("Sticker refresh job stopped")
+	a.logger.Debug("Sticker load job started")
+	defer a.logger.Debug("Sticker load job stopped")
 
 	initialCtx, initialCancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer initialCancel()
 	a.performStickerRefresh(initialCtx)
 
 	<-ctx.Done()
-	a.logger.Debug("Sticker refresh received shutdown signal")
+	a.logger.Debug("Sticker load received shutdown signal")
 }
 
 func (a *Application) performStickerRefresh(ctx context.Context) {
-	a.logger.Info("Starting sticker refresh")
+	a.logger.Info("Starting sticker load")
 	startTime := time.Now()
 
 	refreshCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	if err := a.stickerManager.RefreshStickers(refreshCtx); err != nil {
-		a.logger.WithError(err).Error("Failed to refresh stickers")
+	if err := a.stickerManager.LoadStickers(refreshCtx); err != nil {
+		a.logger.WithError(err).Error("Failed to load stickers")
 	} else {
 		count := a.stickerManager.Count()
 		stats, _ := a.stickerManager.GetStats(refreshCtx)
 		a.logger.WithField("count", count).
 			WithField("stats", stats).
-			Info("Sticker refresh complete")
+			Info("Sticker load complete")
 	}
 
 	if a.metrics != nil {
@@ -948,7 +950,7 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) (bool,
 	warmupCtx, cancel := context.WithTimeout(ctx, config.WarmupProactive)
 	defer cancel()
 
-	if includeID && a.snapshotMgr != nil && a.snapshotReady {
+	if includeID && a.snapshotMgr != nil && a.snapshotReady.Load() {
 		a.logger.Info("Snapshot already loaded from R2, initial refresh not needed")
 		a.readinessState.MarkReady()
 		return false, true, nil
@@ -1043,8 +1045,9 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) (bool,
 }
 
 // maintenanceLoop coordinates refresh/cleanup based on shared schedule state.
-// Startup behavior: marks ready immediately (no initial task execution).
-// Tasks are executed only when due time is reached based on last execution timestamp from R2/local state.
+// Startup behavior: executes initial refresh immediately if due (or snapshot missing).
+// Readiness is marked only after initial refresh completes (or grace period elapses).
+// Tasks are executed when due time is reached based on last execution timestamp from R2/local state.
 func (a *Application) maintenanceLoop(ctx context.Context) {
 	a.logger.Debug("Maintenance scheduler started")
 	defer a.logger.Debug("Maintenance scheduler stopped")
@@ -1065,13 +1068,6 @@ func (a *Application) maintenanceLoop(ctx context.Context) {
 		logger = logger.WithField("cleanup_interval", cleanupInterval.String())
 	}
 	logger.Info("Maintenance scheduler initialized")
-
-	// Mark ready immediately on startup (no initial execution)
-	// Tasks will run when due time is reached via polling
-	if !a.readinessState.IsReady() {
-		a.readinessState.MarkReady()
-		logger.Debug("Marked ready on startup, tasks will execute when due")
-	}
 
 	var refreshTicker *time.Ticker
 	var cleanupTicker *time.Ticker
@@ -1114,47 +1110,103 @@ func (a *Application) maintenanceLoop(ctx context.Context) {
 		return true
 	}
 
+	runRefreshIfDue := func(now time.Time) {
+		if refreshInterval <= 0 {
+			if !a.readinessState.WarmupCompleted() {
+				a.readinessState.MarkReady()
+				a.logger.Info("Maintenance refresh disabled; service marked ready")
+			}
+			return
+		}
+
+		state, useLocal := resolveState(ctx)
+		snapshotReady := a.snapshotMgr != nil && a.snapshotReady.Load()
+		if snapshotReady && state.LastRefresh == 0 {
+			completedAt := time.Now().UTC()
+			if useLocal || !updateRemote(ctx, func(s *maintenance.State) {
+				s.LastRefresh = completedAt.Unix()
+			}) {
+				updateLocal(func(s *maintenance.State) {
+					s.LastRefresh = completedAt.Unix()
+				})
+			}
+			if !a.readinessState.WarmupCompleted() {
+				a.readinessState.MarkReady()
+				a.logger.Info("Initial refresh skipped due to snapshot; service marked ready")
+			}
+			return
+		}
+
+		forceInitial := a.snapshotMgr != nil && !a.snapshotReady.Load()
+		shouldRun := isMaintenanceDue(state.LastRefresh, refreshInterval, now) || forceInitial
+		if !shouldRun {
+			if !a.readinessState.WarmupCompleted() {
+				a.readinessState.MarkReady()
+				a.logger.Info("Initial refresh not required; service marked ready")
+			}
+			return
+		}
+
+		isInitialRefresh := state.LastRefresh == 0 || forceInitial
+		ran, _, err := a.runDataRefresh(ctx, isInitialRefresh)
+		if err != nil {
+			a.logger.WithError(err).Warn("Data refresh run failed")
+			if isInitialRefresh && !a.readinessState.WarmupCompleted() {
+				a.readinessState.MarkReady()
+				a.logger.Warn("Initial data refresh failed; service marked ready in degraded mode")
+			}
+			return
+		}
+		if ran {
+			completedAt := time.Now().UTC()
+			if useLocal || !updateRemote(ctx, func(s *maintenance.State) {
+				s.LastRefresh = completedAt.Unix()
+			}) {
+				updateLocal(func(s *maintenance.State) {
+					s.LastRefresh = completedAt.Unix()
+				})
+			}
+		}
+	}
+
+	runCleanupIfDue := func(now time.Time) {
+		if cleanupInterval <= 0 {
+			return
+		}
+		state, useLocal := resolveState(ctx)
+		if !isMaintenanceDue(state.LastCleanup, cleanupInterval, now) {
+			return
+		}
+		ran, err := a.runDataCleanup(ctx)
+		if err != nil {
+			a.logger.WithError(err).Warn("Data cleanup run failed")
+			return
+		}
+		if ran {
+			completedAt := time.Now().UTC()
+			if useLocal || !updateRemote(ctx, func(s *maintenance.State) {
+				s.LastCleanup = completedAt.Unix()
+			}) {
+				updateLocal(func(s *maintenance.State) {
+					s.LastCleanup = completedAt.Unix()
+				})
+			}
+		}
+	}
+
+	// Run once immediately on startup
+	now := time.Now().UTC()
+	runRefreshIfDue(now)
+	runCleanupIfDue(now)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-tickerChannel(refreshTicker):
-			now := time.Now().UTC()
-			state, useLocal := resolveState(ctx)
-			if isMaintenanceDue(state.LastRefresh, refreshInterval, now) {
-				isInitialRefresh := state.LastRefresh == 0
-				ran, _, err := a.runDataRefresh(ctx, isInitialRefresh)
-				if err != nil {
-					a.logger.WithError(err).Warn("Data refresh run failed")
-				} else if ran {
-					completedAt := time.Now().UTC()
-					if useLocal || !updateRemote(ctx, func(s *maintenance.State) {
-						s.LastRefresh = completedAt.Unix()
-					}) {
-						updateLocal(func(s *maintenance.State) {
-							s.LastRefresh = completedAt.Unix()
-						})
-					}
-				}
-			}
+			runRefreshIfDue(time.Now().UTC())
 		case <-tickerChannel(cleanupTicker):
-			now := time.Now().UTC()
-			state, useLocal := resolveState(ctx)
-			if isMaintenanceDue(state.LastCleanup, cleanupInterval, now) {
-				ran, err := a.runDataCleanup(ctx)
-				if err != nil {
-					a.logger.WithError(err).Warn("Data cleanup run failed")
-				} else if ran {
-					completedAt := time.Now().UTC()
-					if useLocal || !updateRemote(ctx, func(s *maintenance.State) {
-						s.LastCleanup = completedAt.Unix()
-					}) {
-						updateLocal(func(s *maintenance.State) {
-							s.LastCleanup = completedAt.Unix()
-						})
-					}
-				}
-			}
+			runCleanupIfDue(time.Now().UTC())
 		}
 	}
 }
