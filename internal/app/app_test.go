@@ -234,6 +234,18 @@ func TestResolveServerIdentity(t *testing.T) {
 	nowFunc := func() time.Time { return now }
 	generatedID := "instance-" + strconv.FormatInt(now.UnixNano(), 10)
 
+	envKeys := []string{
+		"NODE_NAME",
+		"K8S_NODE_NAME",
+		"KUBE_NODE_NAME",
+		"MY_NODE_NAME",
+		"POD_UID",
+		"MY_POD_UID",
+		"POD_NAME",
+		"MY_POD_NAME",
+		"HOSTNAME",
+	}
+
 	tests := []struct {
 		name       string
 		cfg        *config.Config
@@ -270,16 +282,41 @@ func TestResolveServerIdentity(t *testing.T) {
 			wantInst:   generatedID,
 		},
 		{
+			name:       "auto detect node and pod",
+			cfg:        &config.Config{},
+			hostname:   "",
+			wantServer: "node-9",
+			wantInst:   "pod-uid-123",
+		},
+		{
+			name:       "auto detect trims whitespace",
+			cfg:        &config.Config{},
+			hostname:   "",
+			wantServer: "node-9",
+			wantInst:   "pod-uid-123",
+		},
+		{
 			name:       "server only",
 			cfg:        &config.Config{ServerName: "srv-1"},
 			hostname:   "node-1",
 			wantServer: "srv-1",
-			wantInst:   "srv-1",
+			wantInst:   "node-1",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			for _, key := range envKeys {
+				t.Setenv(key, "")
+			}
+			switch tt.name {
+			case "auto detect node and pod":
+				t.Setenv("NODE_NAME", "node-9")
+				t.Setenv("POD_UID", "pod-uid-123")
+			case "auto detect trims whitespace":
+				t.Setenv("NODE_NAME", "  node-9  ")
+				t.Setenv("POD_UID", "\tpod-uid-123\n")
+			}
 			serverName, instanceID := resolveServerIdentity(tt.cfg, tt.hostname, nowFunc)
 			if serverName != tt.wantServer {
 				t.Fatalf("serverName = %q, want %q", serverName, tt.wantServer)
