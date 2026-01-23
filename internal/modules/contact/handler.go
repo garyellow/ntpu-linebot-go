@@ -368,10 +368,12 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 		createRow("🏥", "恩主公醫院", homHospital, ""),
 	).WithSpacing("sm").WithMargin("sm").FlexBox
 
-	// Footer: Quick Action Buttons
+	// Footer: Quick Action Buttons (one button per row for 6-char labels)
 	footer := lineutil.NewFlexBox("vertical",
-		lineutil.NewFlexButton(lineutil.NewURIAction("🚨 撥打三峽校安", "tel:"+sanxiaEmergencyPhone)).WithStyle("primary").WithColor(lineutil.ColorButtonDanger).WithHeight("sm").FlexButton,
-		lineutil.NewFlexButton(lineutil.NewURIAction("🚨 撥打臺北校安", "tel:"+taipeiEmergencyPhone)).WithStyle("primary").WithColor(lineutil.ColorButtonDanger).WithHeight("sm").FlexButton,
+		lineutil.NewFlexButton(lineutil.NewURIAction("🚨 撥打三峽專線", "tel:"+sanxiaEmergencyPhone)).WithStyle("primary").WithColor(lineutil.ColorButtonDanger).WithHeight("sm").FlexButton,
+		lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製三峽專線", sanxiaEmergencyPhone)).WithStyle("secondary").WithHeight("sm").FlexButton,
+		lineutil.NewFlexButton(lineutil.NewURIAction("🚨 撥打臺北專線", "tel:"+taipeiEmergencyPhone)).WithStyle("primary").WithColor(lineutil.ColorButtonDanger).WithHeight("sm").FlexButton,
+		lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製臺北專線", taipeiEmergencyPhone)).WithStyle("secondary").WithHeight("sm").FlexButton,
 		lineutil.NewFlexButton(lineutil.NewURIAction("ℹ️ 查看更多", "https://new.ntpu.edu.tw/safety")).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm").FlexButton,
 	).WithSpacing("sm")
 
@@ -379,7 +381,7 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 		header,
 		nil,
 		lineutil.NewFlexBox("vertical",
-			bodyLabel.FlexBox, // Body label as first row
+			bodyLabel.FlexBox,
 			sanxiaBox,
 			taipeiBox,
 			externalBox,
@@ -871,7 +873,7 @@ func (h *Handler) formatContactResultsWithSearch(ctx context.Context, contacts [
 				row1Buttons = append(row1Buttons,
 					lineutil.NewFlexButton(lineutil.NewURIAction("📞 撥打電話", telURI)).WithStyle("primary").WithColor(lineutil.ColorButtonAction).WithHeight("sm"))
 				row1Buttons = append(row1Buttons,
-					lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製號碼", c.Phone)).WithStyle("secondary").WithHeight("sm"))
+					lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製電話", c.Phone)).WithStyle("secondary").WithHeight("sm"))
 			} else if c.Extension != "" {
 				// Only short extension (< 5 digits), can still dial via main + extension
 				telURI := lineutil.BuildTelURI(sanxiaNormalPhone, c.Extension)
@@ -886,20 +888,25 @@ func (h *Handler) formatContactResultsWithSearch(ctx context.Context, contacts [
 				row2Buttons = append(row2Buttons,
 					lineutil.NewFlexButton(lineutil.NewURIAction("✉️ 寄送郵件", "mailto:"+c.Email)).WithStyle("primary").WithColor(lineutil.ColorButtonAction).WithHeight("sm"))
 				row2Buttons = append(row2Buttons,
-					lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製信箱", c.Email)).WithStyle("secondary").WithHeight("sm"))
+					lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製郵件", c.Email)).WithStyle("secondary").WithHeight("sm"))
 			}
 
-			// Row 3: Website button (standalone row for visibility) (外部連結使用藍色)
-			if c.Website != "" {
+			// Row 3: Website button (standalone row for individuals, or paired with members for organizations)
+			if c.Website != "" && c.Type != "organization" {
 				row3Buttons = append(row3Buttons,
 					lineutil.NewFlexButton(lineutil.NewURIAction("🌐 開啟網站", c.Website)).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
 			}
 
-			// Row 4: View Members button for organizations (separate row for better UX)
-			// Allows querying all members belonging to this organization
-			// Button color syncs with header for visual harmony
+			// Row 4: For organizations, combine website + members buttons on same row
+			// For individuals, this row is unused (website is in row3)
 			var row4Buttons []*lineutil.FlexButton
 			if c.Type == "organization" {
+				// Add website button to row4 (will be paired with members)
+				if c.Website != "" {
+					row4Buttons = append(row4Buttons,
+						lineutil.NewFlexButton(lineutil.NewURIAction("🌐 開啟網站", c.Website)).WithStyle("primary").WithColor(lineutil.ColorButtonExternal).WithHeight("sm"))
+				}
+				// Add members button to row4 (paired with website)
 				// DisplayText: 查看 {Name} 成員 (declarative style)
 				displayText := "查看 " + c.Name + " 成員"
 				if len([]rune(displayText)) > 40 {
