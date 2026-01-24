@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"strconv"
 	"sync"
@@ -22,6 +23,9 @@ type fakeR2Client struct {
 	forceCreateRace bool
 	matchFailCount  int
 	downloadErr     error
+	downloadErrs    []error
+	downloadCalls   int
+	downloadHook    func()
 	putNotExistsErr error
 	putIfMatchErr   error
 }
@@ -29,6 +33,16 @@ type fakeR2Client struct {
 func (f *fakeR2Client) Download(_ context.Context, _ string) (io.ReadCloser, string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	f.downloadCalls++
+	if f.downloadHook != nil {
+		f.downloadHook()
+	}
+	if len(f.downloadErrs) > 0 {
+		err := f.downloadErrs[0]
+		f.downloadErrs = f.downloadErrs[1:]
+		return nil, "", err
+	}
 
 	if f.downloadErr != nil {
 		return nil, "", f.downloadErr
@@ -222,5 +236,73 @@ func TestR2ScheduleStoreWithTimeout(t *testing.T) {
 	defer cancelNoTimeout()
 	if _, ok := ctxNoTimeout.Deadline(); ok {
 		t.Fatal("did not expect deadline for zero timeout")
+	}
+}
+
+func TestR2ScheduleStoreLoadRetriesTransientErrors(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeR2Client{
+		downloadErrs: []error{
+			errors.New("boom-1"),
+			errors.New("boom-2"),
+			errors.New("boom-3"),
+		},
+	}
+	store, err := NewR2ScheduleStore(client, "schedule.json", time.Second)
+	if err != nil {
+		t.Fatalf("NewR2ScheduleStore failed: %v", err)
+	}
+
+	_, _, _, err = store.Load(context.Background())
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if client.downloadCalls != 3 {
+		t.Fatalf("expected 3 attempts, got %d", client.downloadCalls)
+	}
+}
+
+func TestR2ScheduleStoreLoadDoesNotRetryContextCanceled(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeR2Client{
+		downloadErrs: []error{context.Canceled},
+	}
+	store, err := NewR2ScheduleStore(client, "schedule.json", time.Second)
+	if err != nil {
+		t.Fatalf("NewR2ScheduleStore failed: %v", err)
+	}
+
+	_, _, _, err = store.Load(context.Background())
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+	if client.downloadCalls != 1 {
+		t.Fatalf("expected 1 attempt, got %d", client.downloadCalls)
+	}
+}
+
+func TestR2ScheduleStoreLoadStopsOnCanceledContextDuringBackoff(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	client := &fakeR2Client{
+		downloadErrs: []error{errors.New("temporary")},
+		downloadHook: func() {
+			cancel()
+		},
+	}
+	store, err := NewR2ScheduleStore(client, "schedule.json", time.Second)
+	if err != nil {
+		t.Fatalf("NewR2ScheduleStore failed: %v", err)
+	}
+
+	_, _, _, err = store.Load(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+	if client.downloadCalls != 1 {
+		t.Fatalf("expected 1 attempt, got %d", client.downloadCalls)
 	}
 }

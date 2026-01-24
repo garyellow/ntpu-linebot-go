@@ -45,16 +45,50 @@ func NewR2ScheduleStore(client r2ScheduleClient, key string, requestTimeout time
 }
 
 // Load returns the current state and ETag. exists=false when the object is missing.
+// Retries transient errors up to 3 times; context cancellation is not retried.
 func (s *R2ScheduleStore) Load(ctx context.Context) (State, string, bool, error) {
+	const maxRetries = 3
+	var lastErr error
+
+	for attempt := range maxRetries {
+		state, etag, exists, err := s.loadOnce(ctx)
+		if err == nil {
+			return state, etag, exists, nil
+		}
+
+		// Don't retry context cancellation or deadline exceeded - these are intentional
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return State{}, "", false, err
+		}
+
+		lastErr = err
+
+		// Don't sleep after the last attempt
+		if attempt < maxRetries-1 {
+			select {
+			case <-ctx.Done():
+				return State{}, "", false, ctx.Err()
+			case <-time.After(100 * time.Millisecond * time.Duration(attempt+1)):
+				// Exponential backoff: 100ms, 200ms
+			}
+		}
+	}
+
+	return State{}, "", false, lastErr
+}
+
+// loadOnce performs a single load attempt.
+func (s *R2ScheduleStore) loadOnce(ctx context.Context) (State, string, bool, error) {
 	readCtx, cancel := s.withTimeout(ctx)
 	body, etag, err := s.client.Download(readCtx, s.key)
-	cancel()
 	if err != nil {
+		cancel()
 		if errors.Is(err, r2client.ErrNotFound) {
 			return State{}, "", false, nil
 		}
 		return State{}, "", false, fmt.Errorf("maintenance: download state: %w", err)
 	}
+	defer cancel()
 	defer func() {
 		_ = body.Close()
 	}()
