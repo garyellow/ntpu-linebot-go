@@ -1145,7 +1145,7 @@ func (a *Application) maintenanceLoop(ctx context.Context) {
 		if refreshInterval <= 0 {
 			if !a.readinessState.WarmupCompleted() {
 				a.readinessState.MarkReady()
-				a.logger.Info("Maintenance refresh disabled; service marked ready")
+				a.logger.Info("Maintenance refresh disabled, service marked ready")
 			}
 			return
 		}
@@ -1163,7 +1163,7 @@ func (a *Application) maintenanceLoop(ctx context.Context) {
 			}
 			if !a.readinessState.WarmupCompleted() {
 				a.readinessState.MarkReady()
-				a.logger.Info("Initial refresh skipped due to snapshot; service marked ready")
+				a.logger.Info("Initial refresh skipped due to snapshot, service marked ready")
 			}
 			return
 		}
@@ -1173,7 +1173,7 @@ func (a *Application) maintenanceLoop(ctx context.Context) {
 		if !shouldRun {
 			if !a.readinessState.WarmupCompleted() {
 				a.readinessState.MarkReady()
-				a.logger.Info("Initial refresh not required; service marked ready")
+				a.logger.Info("Initial refresh not required, service marked ready")
 			}
 			return
 		}
@@ -1184,7 +1184,7 @@ func (a *Application) maintenanceLoop(ctx context.Context) {
 			a.logger.WithError(err).Warn("Data refresh run failed")
 			if isInitialRefresh && !a.readinessState.WarmupCompleted() {
 				a.readinessState.MarkReady()
-				a.logger.Warn("Initial data refresh failed; service marked ready in degraded mode")
+				a.logger.Warn("Initial data refresh failed, service marked ready in degraded mode")
 			}
 			return
 		}
