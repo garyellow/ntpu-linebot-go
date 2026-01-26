@@ -637,25 +637,25 @@ func QuickReplyEmergencyAction() QuickReplyItem {
 	return QuickReplyItem{Action: NewMessageAction("🚨 緊急", "緊急")}
 }
 
-// QuickReplyBachelorDeptCodeAction returns a "學士系代碼" quick reply item
+// QuickReplyBachelorDeptCodeAction returns a "學士班系代碼" quick reply item
 func QuickReplyBachelorDeptCodeAction() QuickReplyItem {
-	return QuickReplyItem{Action: NewMessageAction("🎓 學士系代碼", "學士系代碼")}
+	return QuickReplyItem{Action: NewMessageAction("🎓 學士班系代碼", "學士系代碼")}
 }
 
-// QuickReplyMasterDeptCodeAction returns a "碩士系代碼" quick reply item
+// QuickReplyMasterDeptCodeAction returns a "碩士班系代碼" quick reply item
 func QuickReplyMasterDeptCodeAction() QuickReplyItem {
-	return QuickReplyItem{Action: NewMessageAction("📜 碩士系代碼", "碩士系代碼")}
+	return QuickReplyItem{Action: NewMessageAction("📜 碩士班系代碼", "碩士系代碼")}
 }
 
-// QuickReplyPhDDeptCodeAction returns a "博士系代碼" quick reply item
+// QuickReplyPhDDeptCodeAction returns a "博士班系代碼" quick reply item
 func QuickReplyPhDDeptCodeAction() QuickReplyItem {
-	return QuickReplyItem{Action: NewMessageAction("🎖️ 博士系代碼", "博士系代碼")}
+	return QuickReplyItem{Action: NewMessageAction("🎖️ 博士班系代碼", "博士系代碼")}
 }
 
-// QuickReplyDeptCodeAction returns a "學士系代碼" quick reply item (default to bachelor).
+// QuickReplyDeptCodeAction returns a "學士班系代碼" quick reply item (default to bachelor).
 // Note: Previously returned "所有系代碼", now defaults to bachelor for explicit degree selection.
 func QuickReplyDeptCodeAction() QuickReplyItem {
-	return QuickReplyItem{Action: NewMessageAction("📋 學士系代碼", "學士系代碼")}
+	return QuickReplyItem{Action: NewMessageAction("📋 學士班系代碼", "學士系代碼")}
 }
 
 // QuickReplyRetryAction creates a retry quick reply item with custom text
@@ -780,7 +780,7 @@ func QuickReplyCourseNav(smartSearchEnabled bool) []QuickReplyItem {
 
 // QuickReplyStudentNav returns quick reply items for student/ID module navigation.
 // Use this after student-related responses.
-// Order: 🎓 學號 → 📅 學年 → 📋 學士系代碼 → 📖 說明
+// Order: 🎓 學號 → 📅 學年 → 📋 學士班系代碼 → 📖 說明
 func QuickReplyStudentNav() []QuickReplyItem {
 	return []QuickReplyItem{
 		QuickReplyStudentAction(),

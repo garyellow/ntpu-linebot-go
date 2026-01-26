@@ -70,7 +70,7 @@ const (
 // IMPORTANT: More specific patterns (e.g., "系代碼") must have higher priority
 // than less specific ones (e.g., "系") to prevent incorrect matches.
 const (
-	PriorityDegreeDeptCode = 0 // Degree-specific: "學士系代碼", "碩士系代碼", "博士系代碼"
+	PriorityDegreeDeptCode = 0 // Degree-specific: "學士班系代碼", "碩士班系代碼", "博士班系代碼"
 	PriorityAllDeptCode    = 1 // Exact match: "所有系代碼" (legacy, maps to bachelor)
 	PriorityStudentID      = 2 // 8-9 digit numeric student ID
 	PriorityDepartment     = 3 // Department query (name or code) - Higher than Year
@@ -118,9 +118,10 @@ var (
 	allDeptCodeText = "所有系代碼"
 
 	// Degree-specific department code keywords (exact match)
-	bachelorDeptCodeKeywords = []string{"學士系代碼", "大學系代碼", "大學部系代碼"}
-	masterDeptCodeKeywords   = []string{"碩士系代碼", "碩班系代碼", "研究所系代碼"}
-	phdDeptCodeKeywords      = []string{"博士系代碼", "博班系代碼"}
+	// Support both 5-char (e.g., "學士系代碼") and 6-char (e.g., "學士班系代碼") formats
+	bachelorDeptCodeKeywords = []string{"學士班系代碼", "學士系代碼", "大學系代碼", "大學部系代碼"}
+	masterDeptCodeKeywords   = []string{"碩士班系代碼", "碩士系代碼", "碩班系代碼", "研究所系代碼"}
+	phdDeptCodeKeywords      = []string{"博士班系代碼", "博士系代碼", "博班系代碼"}
 )
 
 // NewHandler creates a new ID handler with required dependencies.
@@ -452,7 +453,7 @@ func (h *Handler) handleDepartmentPattern(ctx context.Context, text string, matc
 		// Provide guidance message
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		msg := lineutil.NewTextMessageWithConsistentSender(
-			"🔍 查詢系所資訊\n\n請輸入系名或系代碼：\n例如：「系 資工」或「系代碼 85」\n\n💡 提示：輸入「學士系代碼」查看完整對照表",
+			"🔍 查詢系所資訊\n\n請輸入系名或系代碼：\n例如：「系 資工」或「系代碼 85」\n\n💡 提示：輸入「學士班系代碼」查看完整對照表",
 			sender,
 		)
 		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyStudentNav())
@@ -1284,14 +1285,11 @@ func (h *Handler) formatStudentResponse(student *storage.Student) []messaging_ap
 		body.AddComponent(hint.FlexText)
 	}
 
-	// Footer: Action buttons (內部指令使用紫色)
+	// Footer: Action button (複製學號)
 	footer := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexButton(
 			lineutil.NewClipboardAction("📋 複製學號", student.ID),
 		).WithStyle("primary").WithColor(lineutil.ColorButtonAction).WithHeight("sm").FlexButton,
-		lineutil.NewFlexButton(
-			lineutil.NewMessageAction("🔍 查詢其他學號", "學號"),
-		).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm").FlexButton,
 	).WithSpacing("sm")
 
 	bubble := lineutil.NewFlexBubble(
