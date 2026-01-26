@@ -65,12 +65,15 @@ func TestCanHandle(t *testing.T) {
 		{"Single char '系' (natural query)", "系 資工", true},
 		{"Single char '所' (natural query)", "所 資工", true},
 
-		// Degree-specific department code keywords
+		// Degree-specific department code keywords (5-char and 6-char formats)
 		{"Bachelor dept code", "學士系代碼", true},
+		{"Bachelor dept code 6-char", "學士班系代碼", true},
 		{"Bachelor dept code alt", "大學部系代碼", true},
 		{"Master dept code", "碩士系代碼", true},
+		{"Master dept code 6-char", "碩士班系代碼", true},
 		{"Master dept code alt", "碩班系代碼", true},
 		{"PhD dept code", "博士系代碼", true},
+		{"PhD dept code 6-char", "博士班系代碼", true},
 		{"PhD dept code alt", "博班系代碼", true},
 		{"Legacy all dept code", "所有系代碼", true},
 
@@ -322,10 +325,13 @@ func TestHandleDepartmentCodesByDegree(t *testing.T) {
 		input     string
 		wantTitle string
 	}{
-		{"Bachelor", "學士系代碼", "學士班系代碼"},
+		{"Bachelor 5-char", "學士系代碼", "學士班系代碼"},
+		{"Bachelor 6-char", "學士班系代碼", "學士班系代碼"},
 		{"Bachelor alt", "大學部系代碼", "學士班系代碼"},
-		{"Master", "碩士系代碼", "碩士班系代碼"},
-		{"PhD", "博士系代碼", "博士班系代碼"},
+		{"Master 5-char", "碩士系代碼", "碩士班系代碼"},
+		{"Master 6-char", "碩士班系代碼", "碩士班系代碼"},
+		{"PhD 5-char", "博士系代碼", "博士班系代碼"},
+		{"PhD 6-char", "博士班系代碼", "博士班系代碼"},
 		{"Legacy all dept", "所有系代碼", "學士班系代碼"}, // legacy maps to bachelor
 	}
 

@@ -865,7 +865,7 @@ func (p *Processor) buildKeywordModeFlexMessage(nluEnabled bool, sender *messagi
 			WithColor(lineutil.ColorSubtext).
 			WithMargin("xs").
 			WithWrap(true).FlexText,
-		lineutil.NewFlexText("• 系代碼：學士系代碼 / 碩士系代碼").
+		lineutil.NewFlexText("• 系代碼：學士班系代碼 / 碩士班系代碼").
 			WithSize("xs").
 			WithColor(lineutil.ColorSubtext).
 			WithMargin("xs").
