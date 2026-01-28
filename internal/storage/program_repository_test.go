@@ -68,6 +68,7 @@ func TestGetProgramByName_SemesterFilters(t *testing.T) {
 
 	if result == nil {
 		t.Fatal("Expected program result, got nil")
+		return
 	}
 
 	if result.Name != programName {

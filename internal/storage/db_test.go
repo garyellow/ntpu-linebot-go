@@ -57,6 +57,7 @@ func TestNew_FileSystemDatabase(t *testing.T) {
 
 	if retrieved == nil {
 		t.Fatal("Expected student, got nil")
+		return
 	}
 
 	if retrieved.ID != student.ID {

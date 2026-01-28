@@ -5,6 +5,7 @@ package genai
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -27,18 +28,37 @@ type openaiQueryExpander struct {
 // Returns nil if apiKey is empty (expansion disabled).
 //
 // Parameters:
-//   - provider: The provider type (ProviderGroq, ProviderCerebras)
+//   - provider: The provider type (ProviderGroq, ProviderCerebras, ProviderOpenAI)
 //   - apiKey: The API key for the provider
 //   - model: The model name to use (uses provider defaults if empty)
-func newOpenAIQueryExpander(_ context.Context, provider Provider, apiKey, model string) (*openaiQueryExpander, error) {
+//   - endpoint: Custom base URL for ProviderOpenAI (ignored for other providers)
+func newOpenAIQueryExpander(_ context.Context, provider Provider, apiKey, model, endpoint string) (*openaiQueryExpander, error) {
 	if apiKey == "" {
 		return nil, nil //nolint:nilnil // Intentional: feature disabled when no API key
 	}
 
 	// Get the base URL for the provider
-	baseURL, ok := ProviderEndpoint[provider]
-	if !ok {
-		return nil, fmt.Errorf("unsupported OpenAI-compatible provider: %s", provider)
+	var baseURL string
+	switch provider {
+	case ProviderOpenAI:
+		// For ProviderOpenAI, a custom endpoint is required.
+		if endpoint == "" {
+			return nil, errors.New("endpoint is required for ProviderOpenAI")
+		}
+		baseURL = endpoint
+	default:
+		// For other providers (Groq, Cerebras), ignore any custom endpoint and use the predefined one.
+		if endpoint != "" {
+			slog.Warn("ignoring custom endpoint for non-OpenAI provider",
+				"provider", provider,
+				"endpoint", endpoint)
+		}
+		// Use predefined endpoint from ProviderEndpoint map
+		var ok bool
+		baseURL, ok = ProviderEndpoint[provider]
+		if !ok {
+			return nil, fmt.Errorf("unsupported OpenAI-compatible provider: %s", provider)
+		}
 	}
 
 	// Use default model if not specified
@@ -48,6 +68,9 @@ func newOpenAIQueryExpander(_ context.Context, provider Provider, apiKey, model 
 			model = DefaultGroqExpanderModels[0]
 		case ProviderCerebras:
 			model = DefaultCerebrasExpanderModels[0]
+		case ProviderOpenAI:
+			// OpenAI-compatible requires explicit model
+			return nil, errors.New("model is required for OpenAI-compatible provider")
 		default:
 			return nil, fmt.Errorf("no default model for provider: %s", provider)
 		}

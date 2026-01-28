@@ -523,6 +523,8 @@ func buildLLMConfig(cfg *config.Config) genai.LLMConfig {
 	llmCfg.Gemini.APIKey = cfg.GeminiAPIKey
 	llmCfg.Groq.APIKey = cfg.GroqAPIKey
 	llmCfg.Cerebras.APIKey = cfg.CerebrasAPIKey
+	llmCfg.OpenAI.APIKey = cfg.OpenAIAPIKey
+	llmCfg.OpenAI.Endpoint = cfg.OpenAIEndpoint
 
 	if len(cfg.GeminiIntentModels) > 0 {
 		llmCfg.Gemini.IntentModels = cfg.GeminiIntentModels
@@ -542,6 +544,12 @@ func buildLLMConfig(cfg *config.Config) genai.LLMConfig {
 	if len(cfg.CerebrasExpanderModels) > 0 {
 		llmCfg.Cerebras.ExpanderModels = cfg.CerebrasExpanderModels
 	}
+	if len(cfg.OpenAIIntentModels) > 0 {
+		llmCfg.OpenAI.IntentModels = cfg.OpenAIIntentModels
+	}
+	if len(cfg.OpenAIExpanderModels) > 0 {
+		llmCfg.OpenAI.ExpanderModels = cfg.OpenAIExpanderModels
+	}
 	if len(cfg.LLMProviders) > 0 {
 		providers := make([]genai.Provider, 0, len(cfg.LLMProviders))
 		for _, p := range cfg.LLMProviders {
@@ -552,6 +560,8 @@ func buildLLMConfig(cfg *config.Config) genai.LLMConfig {
 				providers = append(providers, genai.ProviderGroq)
 			case "cerebras":
 				providers = append(providers, genai.ProviderCerebras)
+			case "openai":
+				providers = append(providers, genai.ProviderOpenAI)
 			default:
 				slog.Warn("Ignoring unknown provider", "name", p)
 			}

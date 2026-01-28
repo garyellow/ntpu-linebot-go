@@ -27,6 +27,8 @@ const (
 	ProviderGroq Provider = "groq"
 	// ProviderCerebras represents Cerebras's API (OpenAI-compatible, ultra-fast inference).
 	ProviderCerebras Provider = "cerebras"
+	// ProviderOpenAI represents OpenAI-compatible endpoints (self-hosted, custom endpoint).
+	ProviderOpenAI Provider = "openai"
 )
 
 // ProviderEndpoint defines the base URL for OpenAI-compatible providers.
@@ -38,6 +40,9 @@ var ProviderEndpoint = map[Provider]string{
 
 // IsOpenAICompatible returns true if the provider uses OpenAI-compatible API.
 func (p Provider) IsOpenAICompatible() bool {
+	if p == ProviderOpenAI {
+		return true
+	}
 	_, ok := ProviderEndpoint[p]
 	return ok
 }
@@ -112,6 +117,10 @@ type ProviderConfig struct {
 	// APIKey is the API key for the provider.
 	APIKey string
 
+	// Endpoint is the custom base URL for OpenAI-compatible providers.
+	// Only used by ProviderOpenAI; other providers use ProviderEndpoint map.
+	Endpoint string
+
 	// IntentModels is the ordered list of models for intent parsing.
 	// First model is primary, rest are fallbacks tried in order.
 	IntentModels []string
@@ -136,6 +145,9 @@ type LLMConfig struct {
 
 	// Cerebras configuration (OpenAI-compatible)
 	Cerebras ProviderConfig
+
+	// OpenAI configuration (OpenAI-compatible, custom endpoint)
+	OpenAI ProviderConfig
 
 	// RetryConfig for retry behavior
 	RetryConfig RetryConfig
@@ -185,7 +197,7 @@ const (
 
 // HasAnyProvider returns true if at least one provider is configured.
 func (c *LLMConfig) HasAnyProvider() bool {
-	return c.Gemini.APIKey != "" || c.Groq.APIKey != "" || c.Cerebras.APIKey != ""
+	return c.Gemini.APIKey != "" || c.Groq.APIKey != "" || c.Cerebras.APIKey != "" || (c.OpenAI.APIKey != "" && c.OpenAI.Endpoint != "")
 }
 
 // HasProvider returns true if the specified provider is configured with an API key.
@@ -197,6 +209,8 @@ func (c *LLMConfig) HasProvider(p Provider) bool {
 		return c.Groq.APIKey != ""
 	case ProviderCerebras:
 		return c.Cerebras.APIKey != ""
+	case ProviderOpenAI:
+		return c.OpenAI.APIKey != "" && c.OpenAI.Endpoint != ""
 	default:
 		return false
 	}
@@ -211,6 +225,8 @@ func (c *LLMConfig) GetProviderConfig(p Provider) *ProviderConfig {
 		return &c.Groq
 	case ProviderCerebras:
 		return &c.Cerebras
+	case ProviderOpenAI:
+		return &c.OpenAI
 	default:
 		return nil
 	}
