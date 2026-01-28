@@ -10,12 +10,12 @@
 
 ## 支援的 LLM 提供者
 
-| 提供者 | 預設模型鏈 | 備註 |
-|--------|-----------|------|
-| **Gemini** | gemini-2.5-flash, gemini-2.5-flash-lite | Google AI Studio |
-| **Groq** | meta-llama/llama-4-maverick-17b-128e-instruct, llama-3.3-70b-versatile | OpenAI-compatible |
-| **Cerebras** | llama-3.3-70b, llama-3.1-8b | OpenAI-compatible |
-| **OpenAI-Compatible** | (自訂) | 支援 Ollama, LM Studio, vLLM 等 |
+| 提供者 | IntentParser 預設模型鏈 | QueryExpander 預設模型鏈 | 備註 |
+|--------|------------------------|----------------------------|------|
+| **Gemini** | gemini-2.5-flash, gemini-2.5-flash-lite | gemini-2.5-flash, gemini-2.5-flash-lite | Google AI Studio |
+| **Groq** | meta-llama/llama-4-maverick-17b-128e-instruct, llama-3.3-70b-versatile | meta-llama/llama-4-scout-17b-16e-instruct, llama-3.1-8b-instant | OpenAI-compatible |
+| **Cerebras** | llama-3.3-70b, llama-3.1-8b | llama-3.3-70b, llama-3.1-8b | OpenAI-compatible |
+| **OpenAI-Compatible** | (自訂) | (自訂) | 支援 Ollama, LM Studio, vLLM 等 |
 
 ## 檔案結構
 
@@ -227,8 +227,8 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 |---------|--------|
 | `NTPU_GEMINI_INTENT_MODELS` | gemini-2.5-flash,gemini-2.5-flash-lite |
 | `NTPU_GEMINI_EXPANDER_MODELS` | gemini-2.5-flash,gemini-2.5-flash-lite |
-| `NTPU_GROQ_INTENT_MODELS` | llama-4-maverick,llama-3.3-70b-versatile |
-| `NTPU_GROQ_EXPANDER_MODELS` | llama-4-scout,llama-3.1-8b-instant |
+| `NTPU_GROQ_INTENT_MODELS` | meta-llama/llama-4-maverick-17b-128e-instruct,llama-3.3-70b-versatile |
+| `NTPU_GROQ_EXPANDER_MODELS` | meta-llama/llama-4-scout-17b-16e-instruct,llama-3.1-8b-instant |
 | `NTPU_CEREBRAS_INTENT_MODELS` | llama-3.3-70b,llama-3.1-8b |
 | `NTPU_CEREBRAS_EXPANDER_MODELS` | llama-3.3-70b,llama-3.1-8b |
 | `NTPU_OPENAI_INTENT_MODELS` | (無預設值) |
