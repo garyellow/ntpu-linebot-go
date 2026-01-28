@@ -53,6 +53,28 @@ func TestNewOpenAIIntentParser_Cerebras(t *testing.T) {
 	}
 }
 
+func TestNewOpenAIIntentParser_OpenAIRequiresEndpoint(t *testing.T) {
+	t.Parallel()
+	parser, err := newOpenAIIntentParser(context.Background(), ProviderOpenAI, "test-key", "gpt-4o-mini", "")
+	if err == nil {
+		t.Fatal("Expected error for missing OpenAI endpoint")
+	}
+	if parser != nil {
+		t.Error("Expected nil parser on error")
+	}
+}
+
+func TestNewOpenAIIntentParser_OpenAIRequiresModel(t *testing.T) {
+	t.Parallel()
+	parser, err := newOpenAIIntentParser(context.Background(), ProviderOpenAI, "test-key", "", "http://localhost:1234/v1/")
+	if err == nil {
+		t.Fatal("Expected error for missing OpenAI model")
+	}
+	if parser != nil {
+		t.Error("Expected nil parser on error")
+	}
+}
+
 func TestOpenAIIntentParser_ParseNil(t *testing.T) {
 	t.Parallel()
 	var nilParser *openaiIntentParser

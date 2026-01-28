@@ -13,7 +13,7 @@
 | 提供者 | 預設模型鏈 | 備註 |
 |--------|-----------|------|
 | **Gemini** | gemini-2.5-flash, gemini-2.5-flash-lite | Google AI Studio |
-| **Groq** | llama-4-maverick, llama-3.3-70b-versatile | OpenAI-compatible |
+| **Groq** | meta-llama/llama-4-maverick-17b-128e-instruct, llama-3.3-70b-versatile | OpenAI-compatible |
 | **Cerebras** | llama-3.3-70b, llama-3.1-8b | OpenAI-compatible |
 | **OpenAI-Compatible** | (自訂) | 支援 Ollama, LM Studio, vLLM 等 |
 
@@ -95,7 +95,7 @@ llmConfig := genai.LLMConfig{
     Gemini: genai.ProviderConfig{APIKey: geminiKey},
     Groq: genai.ProviderConfig{APIKey: groqKey},
     Cerebras: genai.ProviderConfig{APIKey: cerebrasKey},
-    OpenAI: genai.ProviderConfig{APIKey: openaiKey, Endpoint: "http://localhost:1234/v1/"},
+    OpenAI: genai.ProviderConfig{APIKey: openaiKey, Endpoint: "http://localhost:1234/v1/", IntentModels: []string{"gpt-4o-mini"}},
     Providers: []genai.Provider{genai.ProviderGemini, genai.ProviderGroq, genai.ProviderCerebras, genai.ProviderOpenAI},
 }
 parser, err := genai.CreateIntentParser(ctx, llmConfig)
@@ -154,7 +154,7 @@ llmConfig := genai.LLMConfig{
     Gemini: genai.ProviderConfig{APIKey: geminiKey},
     Groq: genai.ProviderConfig{APIKey: groqKey},
     Cerebras: genai.ProviderConfig{APIKey: cerebrasKey},
-    OpenAI: genai.ProviderConfig{APIKey: openaiKey, Endpoint: "http://localhost:1234/v1/"},
+    OpenAI: genai.ProviderConfig{APIKey: openaiKey, Endpoint: "http://localhost:1234/v1/", ExpanderModels: []string{"gpt-4o-mini"}},
     Providers: []genai.Provider{genai.ProviderGemini, genai.ProviderGroq, genai.ProviderCerebras, genai.ProviderOpenAI},
 }
 expander, err := genai.CreateQueryExpander(ctx, llmConfig)

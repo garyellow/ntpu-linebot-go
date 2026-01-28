@@ -5,6 +5,7 @@ package genai
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -38,10 +39,20 @@ func newOpenAIQueryExpander(_ context.Context, provider Provider, apiKey, model,
 
 	// Get the base URL for the provider
 	var baseURL string
-	if endpoint != "" {
-		// Use custom endpoint (ProviderOpenAI)
+	switch provider {
+	case ProviderOpenAI:
+		// For ProviderOpenAI, a custom endpoint is required.
+		if endpoint == "" {
+			return nil, errors.New("endpoint is required for ProviderOpenAI")
+		}
 		baseURL = endpoint
-	} else {
+	default:
+		// For other providers (Groq, Cerebras), ignore any custom endpoint and use the predefined one.
+		if endpoint != "" {
+			slog.Warn("ignoring custom endpoint for non-OpenAI provider",
+				"provider", provider,
+				"endpoint", endpoint)
+		}
 		// Use predefined endpoint from ProviderEndpoint map
 		var ok bool
 		baseURL, ok = ProviderEndpoint[provider]
@@ -59,7 +70,7 @@ func newOpenAIQueryExpander(_ context.Context, provider Provider, apiKey, model,
 			model = DefaultCerebrasExpanderModels[0]
 		case ProviderOpenAI:
 			// OpenAI-compatible requires explicit model
-			return nil, fmt.Errorf("model is required for OpenAI-compatible provider")
+			return nil, errors.New("model is required for OpenAI-compatible provider")
 		default:
 			return nil, fmt.Errorf("no default model for provider: %s", provider)
 		}

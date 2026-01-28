@@ -50,6 +50,28 @@ func TestNewOpenAIQueryExpander_Cerebras(t *testing.T) {
 	}
 }
 
+func TestNewOpenAIQueryExpander_OpenAIRequiresEndpoint(t *testing.T) {
+	t.Parallel()
+	expander, err := newOpenAIQueryExpander(context.Background(), ProviderOpenAI, "test-key", "gpt-4o-mini", "")
+	if err == nil {
+		t.Fatal("Expected error for missing OpenAI endpoint")
+	}
+	if expander != nil {
+		t.Error("Expected nil expander on error")
+	}
+}
+
+func TestNewOpenAIQueryExpander_OpenAIRequiresModel(t *testing.T) {
+	t.Parallel()
+	expander, err := newOpenAIQueryExpander(context.Background(), ProviderOpenAI, "test-key", "", "http://localhost:1234/v1/")
+	if err == nil {
+		t.Fatal("Expected error for missing OpenAI model")
+	}
+	if expander != nil {
+		t.Error("Expected nil expander on error")
+	}
+}
+
 func TestOpenAIQueryExpander_ExpandNil(t *testing.T) {
 	t.Parallel()
 	var nilExpander *openaiQueryExpander

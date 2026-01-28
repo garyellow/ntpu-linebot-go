@@ -20,6 +20,7 @@ func TestNewMultiHandler_NilFiltering(t *testing.T) {
 	mh := NewMultiHandler(nil, jsonHandler, nil)
 	if mh == nil {
 		t.Fatal("NewMultiHandler returned nil")
+		return
 	}
 	if len(mh.handlers) != 1 {
 		t.Errorf("Expected 1 handler after filtering nils, got %d", len(mh.handlers))

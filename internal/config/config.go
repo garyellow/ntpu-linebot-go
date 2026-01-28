@@ -344,6 +344,18 @@ func (c *Config) Validate() error {
 		if c.OpenAIEndpoint != "" && !strings.HasPrefix(c.OpenAIEndpoint, "http://") && !strings.HasPrefix(c.OpenAIEndpoint, "https://") {
 			errs = append(errs, fmt.Errorf("NTPU_OPENAI_ENDPOINT must start with http:// or https://, got %q", c.OpenAIEndpoint))
 		}
+		if c.OpenAIAPIKey != "" && c.OpenAIEndpoint != "" {
+			var hasOpenAIProvider bool
+			for _, p := range c.LLMProviders {
+				if p == "openai" {
+					hasOpenAIProvider = true
+					break
+				}
+			}
+			if hasOpenAIProvider && len(c.OpenAIIntentModels) == 0 && len(c.OpenAIExpanderModels) == 0 {
+				errs = append(errs, errors.New("NTPU_OPENAI_INTENT_MODELS or NTPU_OPENAI_EXPANDER_MODELS is required when OpenAI provider is enabled"))
+			}
+		}
 	}
 
 	// 2. R2 Validation (only if enabled)

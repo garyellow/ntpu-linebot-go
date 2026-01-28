@@ -42,10 +42,19 @@ func newOpenAIIntentParser(_ context.Context, provider Provider, apiKey, model, 
 
 	// Get the base URL for the provider
 	var baseURL string
-	if endpoint != "" {
-		// Use custom endpoint (ProviderOpenAI)
+	switch provider {
+	case ProviderOpenAI:
+		if endpoint == "" {
+			return nil, errors.New("endpoint is required for OpenAI-compatible provider")
+		}
+		// Use custom endpoint only for ProviderOpenAI
 		baseURL = endpoint
-	} else {
+	default:
+		if endpoint != "" {
+			slog.Warn("ignoring custom endpoint for non-OpenAI provider",
+				"provider", provider,
+				"endpoint", endpoint)
+		}
 		// Use predefined endpoint from ProviderEndpoint map
 		var ok bool
 		baseURL, ok = ProviderEndpoint[provider]
@@ -63,7 +72,7 @@ func newOpenAIIntentParser(_ context.Context, provider Provider, apiKey, model, 
 			model = DefaultCerebrasIntentModels[0]
 		case ProviderOpenAI:
 			// OpenAI-compatible requires explicit model
-			return nil, fmt.Errorf("model is required for OpenAI-compatible provider")
+			return nil, errors.New("model is required for OpenAI-compatible provider")
 		default:
 			return nil, fmt.Errorf("no default model for provider: %s", provider)
 		}

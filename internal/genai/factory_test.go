@@ -109,6 +109,27 @@ func TestLLMConfig_HasAnyProvider(t *testing.T) {
 			},
 			expected: true,
 		},
+		{
+			name: "openai key only",
+			cfg: LLMConfig{
+				OpenAI: ProviderConfig{APIKey: "openai-key"},
+			},
+			expected: false,
+		},
+		{
+			name: "openai endpoint only",
+			cfg: LLMConfig{
+				OpenAI: ProviderConfig{Endpoint: "http://localhost:1234/v1/"},
+			},
+			expected: false,
+		},
+		{
+			name: "openai key and endpoint",
+			cfg: LLMConfig{
+				OpenAI: ProviderConfig{APIKey: "openai-key", Endpoint: "http://localhost:1234/v1/"},
+			},
+			expected: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -135,6 +156,19 @@ func TestLLMConfig_HasProvider(t *testing.T) {
 	}
 	if cfg.HasProvider("unknown") {
 		t.Error("HasProvider(unknown) should return false")
+	}
+
+	openAICfg := LLMConfig{
+		OpenAI: ProviderConfig{APIKey: "openai-key", Endpoint: "http://localhost:1234/v1/"},
+	}
+	if !openAICfg.HasProvider(ProviderOpenAI) {
+		t.Error("HasProvider(OpenAI) should return true when key and endpoint are set")
+	}
+	openAIBadCfg := LLMConfig{
+		OpenAI: ProviderConfig{APIKey: "openai-key"},
+	}
+	if openAIBadCfg.HasProvider(ProviderOpenAI) {
+		t.Error("HasProvider(OpenAI) should return false when endpoint is missing")
 	}
 }
 
@@ -171,6 +205,14 @@ func TestLLMConfig_ConfiguredProviders(t *testing.T) {
 				Cerebras:  ProviderConfig{APIKey: "cerebras-key"},
 			},
 			expected: []Provider{ProviderGemini, ProviderGroq, ProviderCerebras},
+		},
+		{
+			name: "openai configured",
+			cfg: LLMConfig{
+				Providers: []Provider{ProviderOpenAI},
+				OpenAI:    ProviderConfig{APIKey: "openai-key", Endpoint: "http://localhost:1234/v1/"},
+			},
+			expected: []Provider{ProviderOpenAI},
 		},
 		{
 			name: "none configured",
