@@ -40,17 +40,25 @@ const (
 	EnvMaintenanceCleanupInterval = "NTPU_MAINTENANCE_CLEANUP_INTERVAL"
 
 	// LLM Feature
-	EnvLLMEnabled             = "NTPU_LLM_ENABLED"
-	EnvLLMProviders           = "NTPU_LLM_PROVIDERS"
-	EnvGeminiAPIKey           = "NTPU_GEMINI_API_KEY"
-	EnvGroqAPIKey             = "NTPU_GROQ_API_KEY"
+	EnvLLMEnabled   = "NTPU_LLM_ENABLED"
+	EnvLLMProviders = "NTPU_LLM_PROVIDERS"
+	// Gemini
+	EnvGeminiAPIKey         = "NTPU_GEMINI_API_KEY"
+	EnvGeminiIntentModels   = "NTPU_GEMINI_INTENT_MODELS"
+	EnvGeminiExpanderModels = "NTPU_GEMINI_EXPANDER_MODELS"
+	// Groq
+	EnvGroqAPIKey         = "NTPU_GROQ_API_KEY"
+	EnvGroqIntentModels   = "NTPU_GROQ_INTENT_MODELS"
+	EnvGroqExpanderModels = "NTPU_GROQ_EXPANDER_MODELS"
+	// Cerebras
 	EnvCerebrasAPIKey         = "NTPU_CEREBRAS_API_KEY"
-	EnvGeminiIntentModels     = "NTPU_GEMINI_INTENT_MODELS"
-	EnvGeminiExpanderModels   = "NTPU_GEMINI_EXPANDER_MODELS"
-	EnvGroqIntentModels       = "NTPU_GROQ_INTENT_MODELS"
-	EnvGroqExpanderModels     = "NTPU_GROQ_EXPANDER_MODELS"
 	EnvCerebrasIntentModels   = "NTPU_CEREBRAS_INTENT_MODELS"
 	EnvCerebrasExpanderModels = "NTPU_CEREBRAS_EXPANDER_MODELS"
+	// OpenAI-Compatible
+	EnvOpenAIAPIKey         = "NTPU_OPENAI_API_KEY"
+	EnvOpenAIEndpoint       = "NTPU_OPENAI_ENDPOINT"
+	EnvOpenAIIntentModels   = "NTPU_OPENAI_INTENT_MODELS"
+	EnvOpenAIExpanderModels = "NTPU_OPENAI_EXPANDER_MODELS"
 
 	// R2 Snapshot Feature
 	EnvR2Enabled              = "NTPU_R2_ENABLED"

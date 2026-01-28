@@ -31,18 +31,27 @@ type openaiIntentParser struct {
 // Returns nil if apiKey is empty (NLU disabled).
 //
 // Parameters:
-//   - provider: The provider type (ProviderGroq, ProviderCerebras)
+//   - provider: The provider type (ProviderGroq, ProviderCerebras, ProviderOpenAI)
 //   - apiKey: The API key for the provider
 //   - model: The model name to use (uses provider defaults if empty)
-func newOpenAIIntentParser(_ context.Context, provider Provider, apiKey, model string) (*openaiIntentParser, error) {
+//   - endpoint: Custom base URL for ProviderOpenAI (ignored for other providers)
+func newOpenAIIntentParser(_ context.Context, provider Provider, apiKey, model, endpoint string) (*openaiIntentParser, error) {
 	if apiKey == "" {
 		return nil, nil //nolint:nilnil // Intentional: NLU disabled when no API key
 	}
 
 	// Get the base URL for the provider
-	baseURL, ok := ProviderEndpoint[provider]
-	if !ok {
-		return nil, fmt.Errorf("unsupported OpenAI-compatible provider: %s", provider)
+	var baseURL string
+	if endpoint != "" {
+		// Use custom endpoint (ProviderOpenAI)
+		baseURL = endpoint
+	} else {
+		// Use predefined endpoint from ProviderEndpoint map
+		var ok bool
+		baseURL, ok = ProviderEndpoint[provider]
+		if !ok {
+			return nil, fmt.Errorf("unsupported OpenAI-compatible provider: %s", provider)
+		}
 	}
 
 	// Use default model if not specified
@@ -52,6 +61,9 @@ func newOpenAIIntentParser(_ context.Context, provider Provider, apiKey, model s
 			model = DefaultGroqIntentModels[0]
 		case ProviderCerebras:
 			model = DefaultCerebrasIntentModels[0]
+		case ProviderOpenAI:
+			// OpenAI-compatible requires explicit model
+			return nil, fmt.Errorf("model is required for OpenAI-compatible provider")
 		default:
 			return nil, fmt.Errorf("no default model for provider: %s", provider)
 		}

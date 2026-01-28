@@ -1,23 +1,21 @@
 # genai
 
-封裝 LLM API 功能，提供 NLU 意圖解析和查詢擴展，支援多提供者 (Gemini + Groq + Cerebras) 自動故障轉移。
+封裝 LLM API 功能，提供 NLU 意圖解析和查詢擴展，支援多提供者自動故障轉移。
 
 ## 功能
 
 - **IntentParser**: NLU 意圖解析器（Function Calling 實作）
 - **QueryExpander**: 查詢擴展器（同義詞、縮寫、翻譯）
-- **Multi-Provider Fallback**: 自動故障轉移和重試機制（支援 3 個提供者）
+- **Multi-Provider Fallback**: 自動故障轉移和重試機制
 
 ## 支援的 LLM 提供者
 
-| 提供者 | 用途 | 預設模型鏈（逗號分隔 fallback）| 特色 |
-|--------|------|-------------------------------|------|
-| **Gemini** | Intent | `gemini-2.5-flash, gemini-2.5-flash-lite` | 高品質、多模態 |
-| **Gemini** | Expander | `gemini-2.5-flash, gemini-2.5-flash-lite` | 高品質、多模態 |
-| **Groq** | Intent | `llama-4-maverick-17b-128e-instruct, llama-3.3-70b-versatile` | 極速推論 (~900 TPS) |
-| **Groq** | Expander | `llama-4-scout-17b-16e-instruct, llama-3.1-8b-instant` | 極速推論 (~750 TPS) |
-| **Cerebras** | Intent | `llama-3.3-70b, llama-3.1-8b` | 超高速推論 |
-| **Cerebras** | Expander | `llama-3.3-70b, llama-3.1-8b` | 超高速推論 |
+| 提供者 | 預設模型鏈 | 備註 |
+|--------|-----------|------|
+| **Gemini** | gemini-2.5-flash, gemini-2.5-flash-lite | Google AI Studio |
+| **Groq** | llama-4-maverick, llama-3.3-70b-versatile | OpenAI-compatible |
+| **Cerebras** | llama-3.3-70b, llama-3.1-8b | OpenAI-compatible |
+| **OpenAI-Compatible** | (自訂) | 支援 Ollama, LM Studio, vLLM 等 |
 
 ## 檔案結構
 
@@ -45,16 +43,16 @@ internal/genai/
 ┌─────────────────────────────────────────────────┐
 │  FallbackIntentParser / FallbackQueryExpander   │
 ├─────────────────────────────────────────────────┤
-│  1. 主要提供者重試 (Full Jitter Backoff)        │
-│     - 429/5xx → 重試 (最多 2 次)                │
-│     - 400/401/403 → 直接失敗                    │
-│                                                  │
-│  2. 提供者故障轉移                               │
-│     - 主要提供者失敗 → 備援提供者               │
+│  1. 主要提供者重試 (Full Jitter Backoff)          │
+│     - 429/5xx → 重試 (最多 2 次)                 │
+│     - 400/401/403 → 直接失敗                     │
+│                                                 │
+│  2. 提供者故障轉移                                │
+│     - 主要提供者失敗 → 備援提供者                  │
 │     - 記錄 metrics (ntpu_llm_fallback_total)    │
-│                                                  │
-│  3. 優雅降級 (QueryExpander only)               │
-│     - 全部失敗 → 返回原始查詢                   │
+│                                                 │
+│  3. 優雅降級 (QueryExpander only)                │
+│     - 全部失敗 → 返回原始查詢                      │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -97,8 +95,8 @@ llmConfig := genai.LLMConfig{
     Gemini: genai.ProviderConfig{APIKey: geminiKey},
     Groq: genai.ProviderConfig{APIKey: groqKey},
     Cerebras: genai.ProviderConfig{APIKey: cerebrasKey},
-    Providers: []genai.Provider{genai.ProviderGemini, genai.ProviderGroq, genai.ProviderCerebras},
-    RetryConfig: genai.RetryConfig{MaxAttempts: 2, InitialDelay: 500*time.Millisecond, MaxDelay: 3*time.Second},
+    OpenAI: genai.ProviderConfig{APIKey: openaiKey, Endpoint: "http://localhost:1234/v1/"},
+    Providers: []genai.Provider{genai.ProviderGemini, genai.ProviderGroq, genai.ProviderCerebras, genai.ProviderOpenAI},
 }
 parser, err := genai.CreateIntentParser(ctx, llmConfig)
 if err != nil {
@@ -156,8 +154,8 @@ llmConfig := genai.LLMConfig{
     Gemini: genai.ProviderConfig{APIKey: geminiKey},
     Groq: genai.ProviderConfig{APIKey: groqKey},
     Cerebras: genai.ProviderConfig{APIKey: cerebrasKey},
-    Providers: []genai.Provider{genai.ProviderGemini, genai.ProviderGroq, genai.ProviderCerebras},
-    RetryConfig: genai.RetryConfig{MaxAttempts: 2, InitialDelay: 500*time.Millisecond, MaxDelay: 3*time.Second},
+    OpenAI: genai.ProviderConfig{APIKey: openaiKey, Endpoint: "http://localhost:1234/v1/"},
+    Providers: []genai.Provider{genai.ProviderGemini, genai.ProviderGroq, genai.ProviderCerebras, genai.ProviderOpenAI},
 }
 expander, err := genai.CreateQueryExpander(ctx, llmConfig)
 if err != nil {
@@ -208,39 +206,33 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 |---------|--------|------|
 | `NTPU_LLM_ENABLED` | false | 是否啟用 LLM 功能（需搭配 API Key） |
 
-#### LLM Provider Keys
+#### LLM Provider 設定
 
-| 變數名稱 | 必填 | 說明 |
-|---------|------|------|
-| `NTPU_GEMINI_API_KEY` | 任一 | Google AI Studio API Key |
-| `NTPU_GROQ_API_KEY` | 任一 | Groq API Key |
-| `NTPU_CEREBRAS_API_KEY` | 任一 | Cerebras API Key |
+| 變數名稱 | 說明 |
+|---------|------|
+| `NTPU_GEMINI_API_KEY` | Gemini API Key |
+| `NTPU_GROQ_API_KEY` | Groq API Key |
+| `NTPU_CEREBRAS_API_KEY` | Cerebras API Key |
+| `NTPU_OPENAI_API_KEY` | OpenAI-Compatible API Key |
+| `NTPU_OPENAI_ENDPOINT` | OpenAI-Compatible Endpoint URL |
+| `NTPU_LLM_PROVIDERS` | 提供者順序（預設：gemini,groq,cerebras）|
 
-> **注意**: 需先設定 `NTPU_LLM_ENABLED=true`，且至少提供一個 API Key 才能啟用 LLM 功能
-
-#### Provider Selection
-
-| 變數名稱 | 預設值 | 說明 |
-|---------|--------|------|
-| `NTPU_LLM_PROVIDERS` | gemini,groq,cerebras | 提供者鏈（依序故障轉移）|
-
-> **注意**: 只有配置了 API Key 的提供者才會被使用
+> **注意**: 需設定 `NTPU_LLM_ENABLED=true` 且至少一個 API Key。OpenAI-Compatible 需同時設定 API Key 和 Endpoint。
 
 #### Model Configuration
 
-模型配置使用逗號分隔的 fallback chain 格式。第一個模型為主要模型，其餘為備援模型（依序嘗試）。
+模型使用逗號分隔，第一個為主要模型，其餘為備援模型。
 
-| 變數名稱 | 預設值 | 說明 |
-|---------|--------|------|
-| `NTPU_GEMINI_INTENT_MODELS` | gemini-2.5-flash,gemini-2.5-flash-lite | Gemini 意圖解析模型鏈 |
-| `NTPU_GEMINI_EXPANDER_MODELS` | gemini-2.5-flash,gemini-2.5-flash-lite | Gemini 查詢擴展模型鏈 |
-| `NTPU_GROQ_INTENT_MODELS` | llama-4-maverick...,llama-3.3-70b-versatile | Groq 意圖解析模型鏈 |
-| `NTPU_GROQ_EXPANDER_MODELS` | llama-4-scout...,llama-3.1-8b-instant | Groq 查詢擴展模型鏈 |
-| `NTPU_CEREBRAS_INTENT_MODELS` | llama-3.3-70b,llama-3.1-8b | Cerebras 意圖解析模型鏈 |
-| `NTPU_CEREBRAS_EXPANDER_MODELS` | llama-3.3-70b,llama-3.1-8b | Cerebras 查詢擴展模型鏈 |
-
-> **💡 提示**：可添加更多 fallback 模型，例如：
-> `NTPU_GEMINI_INTENT_MODELS=gemini-2.5-flash,gemini-2.5-flash-lite,gemini-2.0-flash`
+| 變數名稱 | 預設值 |
+|---------|--------|
+| `NTPU_GEMINI_INTENT_MODELS` | gemini-2.5-flash,gemini-2.5-flash-lite |
+| `NTPU_GEMINI_EXPANDER_MODELS` | gemini-2.5-flash,gemini-2.5-flash-lite |
+| `NTPU_GROQ_INTENT_MODELS` | llama-4-maverick,llama-3.3-70b-versatile |
+| `NTPU_GROQ_EXPANDER_MODELS` | llama-4-scout,llama-3.1-8b-instant |
+| `NTPU_CEREBRAS_INTENT_MODELS` | llama-3.3-70b,llama-3.1-8b |
+| `NTPU_CEREBRAS_EXPANDER_MODELS` | llama-3.3-70b,llama-3.1-8b |
+| `NTPU_OPENAI_INTENT_MODELS` | (無預設值) |
+| `NTPU_OPENAI_EXPANDER_MODELS` | (無預設值) |
 
 #### Rate Limiting
 
@@ -252,9 +244,10 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 
 ### 獲取 API Key
 
-- **Gemini**: [Google AI Studio](https://aistudio.google.com/apikey)
-- **Groq**: [Groq Console](https://console.groq.com/keys)
-- **Cerebras**: [Cerebras Platform](https://cloud.cerebras.ai/)
+- **Gemini**: https://aistudio.google.com/apikey
+- **Groq**: https://console.groq.com/keys
+- **Cerebras**: https://cloud.cerebras.ai/
+- **OpenAI-Compatible**: 依服務而定（Ollama, LM Studio, vLLM 等）
 
 ## Metrics
 

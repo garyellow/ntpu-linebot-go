@@ -38,7 +38,7 @@ func CreateIntentParser(ctx context.Context, cfg LLMConfig) (IntentParser, error
 
 		// Create parsers for each model
 		for _, model := range models {
-			p, err := createIntentParserForProvider(ctx, provider, providerCfg.APIKey, model)
+			p, err := createIntentParserForProvider(ctx, provider, providerCfg, model)
 			if err != nil {
 				slog.WarnContext(ctx, "Failed to create intent parser",
 					"provider", provider,
@@ -67,13 +67,16 @@ func CreateIntentParser(ctx context.Context, cfg LLMConfig) (IntentParser, error
 }
 
 // createIntentParserForProvider creates an IntentParser for a specific provider.
-func createIntentParserForProvider(ctx context.Context, provider Provider, apiKey, model string) (IntentParser, error) {
+func createIntentParserForProvider(ctx context.Context, provider Provider, cfg *ProviderConfig, model string) (IntentParser, error) {
 	switch provider {
 	case ProviderGemini:
-		return newGeminiIntentParser(ctx, apiKey, model)
+		return newGeminiIntentParser(ctx, cfg.APIKey, model)
 	case ProviderGroq, ProviderCerebras:
-		// OpenAI-compatible providers
-		return newOpenAIIntentParser(ctx, provider, apiKey, model)
+		// OpenAI-compatible providers with fixed endpoints
+		return newOpenAIIntentParser(ctx, provider, cfg.APIKey, model, "")
+	case ProviderOpenAI:
+		// OpenAI-compatible with custom endpoint
+		return newOpenAIIntentParser(ctx, provider, cfg.APIKey, model, cfg.Endpoint)
 	default:
 		return nil, nil
 	}
@@ -103,7 +106,7 @@ func CreateQueryExpander(ctx context.Context, cfg LLMConfig) (QueryExpander, err
 
 		// Create expanders for each model
 		for _, model := range models {
-			e, err := createExpanderForProvider(ctx, provider, providerCfg.APIKey, model)
+			e, err := createExpanderForProvider(ctx, provider, providerCfg, model)
 			if err != nil {
 				slog.WarnContext(ctx, "Failed to create query expander",
 					"provider", provider,
@@ -131,13 +134,16 @@ func CreateQueryExpander(ctx context.Context, cfg LLMConfig) (QueryExpander, err
 }
 
 // createExpanderForProvider creates a QueryExpander for a specific provider.
-func createExpanderForProvider(ctx context.Context, provider Provider, apiKey, model string) (QueryExpander, error) {
+func createExpanderForProvider(ctx context.Context, provider Provider, cfg *ProviderConfig, model string) (QueryExpander, error) {
 	switch provider {
 	case ProviderGemini:
-		return newGeminiQueryExpander(ctx, apiKey, model)
+		return newGeminiQueryExpander(ctx, cfg.APIKey, model)
 	case ProviderGroq, ProviderCerebras:
-		// OpenAI-compatible providers
-		return newOpenAIQueryExpander(ctx, provider, apiKey, model)
+		// OpenAI-compatible providers with fixed endpoints
+		return newOpenAIQueryExpander(ctx, provider, cfg.APIKey, model, "")
+	case ProviderOpenAI:
+		// OpenAI-compatible with custom endpoint
+		return newOpenAIQueryExpander(ctx, provider, cfg.APIKey, model, cfg.Endpoint)
 	default:
 		return nil, nil
 	}
@@ -152,6 +158,9 @@ func getDefaultIntentModels(provider Provider) []string {
 		return DefaultGroqIntentModels
 	case ProviderCerebras:
 		return DefaultCerebrasIntentModels
+	case ProviderOpenAI:
+		// OpenAI-compatible custom endpoint has no default models
+		return nil
 	default:
 		return nil
 	}
@@ -166,6 +175,9 @@ func getDefaultExpanderModels(provider Provider) []string {
 		return DefaultGroqExpanderModels
 	case ProviderCerebras:
 		return DefaultCerebrasExpanderModels
+	case ProviderOpenAI:
+		// OpenAI-compatible custom endpoint has no default models
+		return nil
 	default:
 		return nil
 	}

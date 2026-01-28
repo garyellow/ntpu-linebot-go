@@ -7,7 +7,7 @@ import (
 
 func TestNewOpenAIQueryExpander_NilWithEmptyKey(t *testing.T) {
 	t.Parallel()
-	expander, err := newOpenAIQueryExpander(context.Background(), ProviderGroq, "", "")
+	expander, err := newOpenAIQueryExpander(context.Background(), ProviderGroq, "", "", "")
 	if err != nil {
 		t.Errorf("Expected nil error for empty key, got: %v", err)
 	}
@@ -19,7 +19,7 @@ func TestNewOpenAIQueryExpander_NilWithEmptyKey(t *testing.T) {
 func TestNewOpenAIQueryExpander_ValidKey(t *testing.T) {
 	t.Parallel()
 	// Test with mock API key (won't make actual API calls)
-	expander, err := newOpenAIQueryExpander(context.Background(), ProviderGroq, "test-api-key", "llama-3.1-8b-instant")
+	expander, err := newOpenAIQueryExpander(context.Background(), ProviderGroq, "test-api-key", "llama-3.1-8b-instant", "")
 	if err != nil {
 		t.Fatalf("Expected no error for valid config, got: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestNewOpenAIQueryExpander_ValidKey(t *testing.T) {
 
 func TestNewOpenAIQueryExpander_Cerebras(t *testing.T) {
 	t.Parallel()
-	expander, err := newOpenAIQueryExpander(context.Background(), ProviderCerebras, "test-key", "llama-3.3-70b")
+	expander, err := newOpenAIQueryExpander(context.Background(), ProviderCerebras, "test-key", "llama-3.3-70b", "")
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestOpenAIQueryExpander_Close(t *testing.T) {
 	}
 
 	// expander with valid client
-	expander, _ := newOpenAIQueryExpander(context.Background(), ProviderGroq, "test-key", "")
+	expander, _ := newOpenAIQueryExpander(context.Background(), ProviderGroq, "test-key", "", "")
 	if expander != nil {
 		err = expander.Close()
 		if err != nil {
@@ -106,7 +106,7 @@ func TestOpenAIQueryExpander_Close(t *testing.T) {
 func TestOpenAIQueryExpander_ExpandWithCancellation(t *testing.T) {
 	t.Parallel()
 
-	expander, err := newOpenAIQueryExpander(context.Background(), ProviderGroq, "test-key", "")
+	expander, err := newOpenAIQueryExpander(context.Background(), ProviderGroq, "test-key", "", "")
 	if err != nil {
 		t.Fatalf("Failed to create expander: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestOpenAIQueryExpander_ExpandWithCancellation(t *testing.T) {
 func TestOpenAIQueryExpander_ExpandEmptyQuery(t *testing.T) {
 	t.Parallel()
 
-	expander, err := newOpenAIQueryExpander(context.Background(), ProviderGroq, "test-key", "")
+	expander, err := newOpenAIQueryExpander(context.Background(), ProviderGroq, "test-key", "", "")
 	if err != nil {
 		t.Fatalf("Failed to create expander: %v", err)
 	}

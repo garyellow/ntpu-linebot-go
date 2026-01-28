@@ -7,7 +7,7 @@ import (
 
 func TestNewOpenAIIntentParser_NilWithEmptyKey(t *testing.T) {
 	t.Parallel()
-	parser, err := newOpenAIIntentParser(context.Background(), ProviderGroq, "", "")
+	parser, err := newOpenAIIntentParser(context.Background(), ProviderGroq, "", "", "")
 	if err != nil {
 		t.Errorf("Expected nil error for empty key, got: %v", err)
 	}
@@ -19,7 +19,7 @@ func TestNewOpenAIIntentParser_NilWithEmptyKey(t *testing.T) {
 func TestNewOpenAIIntentParser_ValidKey(t *testing.T) {
 	t.Parallel()
 	// Test with mock API key (won't make actual API calls)
-	parser, err := newOpenAIIntentParser(context.Background(), ProviderGroq, "test-api-key", "llama-3.3-70b")
+	parser, err := newOpenAIIntentParser(context.Background(), ProviderGroq, "test-api-key", "llama-3.3-70b", "")
 	if err != nil {
 		t.Fatalf("Expected no error for valid config, got: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestNewOpenAIIntentParser_ValidKey(t *testing.T) {
 
 func TestNewOpenAIIntentParser_Cerebras(t *testing.T) {
 	t.Parallel()
-	parser, err := newOpenAIIntentParser(context.Background(), ProviderCerebras, "test-key", "llama-3.3-70b")
+	parser, err := newOpenAIIntentParser(context.Background(), ProviderCerebras, "test-key", "llama-3.3-70b", "")
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestOpenAIIntentParser_Close(t *testing.T) {
 	}
 
 	// parser with valid client
-	parser, _ := newOpenAIIntentParser(context.Background(), ProviderGroq, "test-key", "")
+	parser, _ := newOpenAIIntentParser(context.Background(), ProviderGroq, "test-key", "", "")
 	if parser != nil {
 		err = parser.Close()
 		if err != nil {
@@ -109,7 +109,7 @@ func TestOpenAIIntentParser_Close(t *testing.T) {
 func TestOpenAIIntentParser_ParseWithCancellation(t *testing.T) {
 	t.Parallel()
 
-	parser, err := newOpenAIIntentParser(context.Background(), ProviderGroq, "test-key", "")
+	parser, err := newOpenAIIntentParser(context.Background(), ProviderGroq, "test-key", "", "")
 	if err != nil {
 		t.Fatalf("Failed to create parser: %v", err)
 	}

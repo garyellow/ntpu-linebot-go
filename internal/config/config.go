@@ -65,17 +65,25 @@ type Config struct {
 
 	// 1. LLM Features (NLU, Query Expansion)
 	// Flag: NTPU_LLM_ENABLED
-	LLMEnabled             bool
-	GeminiAPIKey           string
-	GroqAPIKey             string
+	LLMEnabled   bool
+	LLMProviders []string // Ordered list of LLM providers for fallback
+	// Gemini
+	GeminiAPIKey         string
+	GeminiIntentModels   []string
+	GeminiExpanderModels []string
+	// Groq
+	GroqAPIKey         string
+	GroqIntentModels   []string
+	GroqExpanderModels []string
+	// Cerebras
 	CerebrasAPIKey         string
-	LLMProviders           []string // Ordered list of LLM providers for fallback
-	GeminiIntentModels     []string
-	GeminiExpanderModels   []string
-	GroqIntentModels       []string
-	GroqExpanderModels     []string
 	CerebrasIntentModels   []string
 	CerebrasExpanderModels []string
+	// OpenAI-Compatible
+	OpenAIAPIKey         string
+	OpenAIEndpoint       string
+	OpenAIIntentModels   []string
+	OpenAIExpanderModels []string
 
 	// 2. R2 Snapshot Sync (Distributed Warmup)
 	// Flag: NTPU_R2_ENABLED
@@ -230,6 +238,10 @@ func Load() (*Config, error) {
 		GroqExpanderModels:     getModelsEnv(EnvGroqExpanderModels),
 		CerebrasIntentModels:   getModelsEnv(EnvCerebrasIntentModels),
 		CerebrasExpanderModels: getModelsEnv(EnvCerebrasExpanderModels),
+		OpenAIAPIKey:           getEnv(EnvOpenAIAPIKey, ""),
+		OpenAIEndpoint:         getEnv(EnvOpenAIEndpoint, ""),
+		OpenAIIntentModels:     getModelsEnv(EnvOpenAIIntentModels),
+		OpenAIExpanderModels:   getModelsEnv(EnvOpenAIExpanderModels),
 
 		// 2. R2 Snapshot Storage
 		R2Enabled:              getBoolEnv(EnvR2Enabled, false),
@@ -305,10 +317,10 @@ func (c *Config) Validate() error {
 
 	// 1. LLM Validation (only if enabled)
 	if c.IsLLMEnabled() {
-		if c.GeminiAPIKey == "" && c.GroqAPIKey == "" && c.CerebrasAPIKey == "" {
-			errs = append(errs, errors.New("NTPU_LLM_ENABLED=true requires at least one API key (NTPU_GEMINI_API_KEY, NTPU_GROQ_API_KEY, NTPU_CEREBRAS_API_KEY)"))
+		if c.GeminiAPIKey == "" && c.GroqAPIKey == "" && c.CerebrasAPIKey == "" && c.OpenAIAPIKey == "" {
+			errs = append(errs, errors.New("NTPU_LLM_ENABLED=true requires at least one API key (NTPU_GEMINI_API_KEY, NTPU_GROQ_API_KEY, NTPU_CEREBRAS_API_KEY, NTPU_OPENAI_API_KEY)"))
 		}
-		validProviders := map[string]struct{}{"gemini": {}, "groq": {}, "cerebras": {}}
+		validProviders := map[string]struct{}{"gemini": {}, "groq": {}, "cerebras": {}, "openai": {}}
 		var hasSupported bool
 		for _, p := range c.LLMProviders {
 			if _, ok := validProviders[p]; ok {
@@ -320,7 +332,17 @@ func (c *Config) Validate() error {
 			}
 		}
 		if !hasSupported {
-			errs = append(errs, errors.New("NTPU_LLM_PROVIDERS must include at least one of: gemini, groq, cerebras"))
+			errs = append(errs, errors.New("NTPU_LLM_PROVIDERS must include at least one of: gemini, groq, cerebras, openai"))
+		}
+		// OpenAI-compatible endpoint requires both API key and endpoint
+		if c.OpenAIAPIKey != "" && c.OpenAIEndpoint == "" {
+			errs = append(errs, errors.New("NTPU_OPENAI_ENDPOINT is required when NTPU_OPENAI_API_KEY is set"))
+		}
+		if c.OpenAIEndpoint != "" && c.OpenAIAPIKey == "" {
+			errs = append(errs, errors.New("NTPU_OPENAI_API_KEY is required when NTPU_OPENAI_ENDPOINT is set"))
+		}
+		if c.OpenAIEndpoint != "" && !strings.HasPrefix(c.OpenAIEndpoint, "http://") && !strings.HasPrefix(c.OpenAIEndpoint, "https://") {
+			errs = append(errs, fmt.Errorf("NTPU_OPENAI_ENDPOINT must start with http:// or https://, got %q", c.OpenAIEndpoint))
 		}
 	}
 
