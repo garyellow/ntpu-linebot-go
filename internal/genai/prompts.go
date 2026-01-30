@@ -56,7 +56,14 @@ func QueryExpansionPrompt(query string) string {
 ## 核心能力
 運用你的語言理解與世界知識，判斷使用者真正的學習目標，產生最能幫助他們找到相關課程的關鍵詞。
 
-無論使用者如何表達——直接提出主題、描述背景、詢問後續學習、或任何其他方式——都應推論他們可能感興趣的課程主題，並輸出相應的搜尋詞。
+使用者可能以各種方式表達需求：
+- 直接提出主題（如「統計」、「Python 入門」）
+- 自然語言描述（如「我想學資料分析」）
+- 詢問後續學習（如「學完 X 可以學什麼」）
+- 跨領域探索（如「從 A 領域跨到 B 領域」）
+- 詳細背景說明（如描述自己的科系、興趣、目標）
+
+無論輸入長短或表達方式，都應推論使用者可能感興趣的課程主題，並輸出相應的搜尋詞。
 
 ## 必須過濾的詞彙（不要出現在輸出中）
 - 意圖詞：想/想學/想找/想上/幫我/請問/推薦/建議/有沒有/能不能/可以/應該/需要/希望
@@ -79,32 +86,35 @@ func QueryExpansionPrompt(query string) string {
 
 ## 範例
 
-輸入：我想學怎麼使用生成式 AI
-輸出：生成式AI generative AI 人工智慧 artificial intelligence 大型語言模型 LLM large language model 機器學習 machine learning 深度學習 deep learning 自然語言處理 NLP
-
-輸入：有沒有教 Python 資料分析的課程
-輸出：Python 資料分析 data analysis 資料科學 data science pandas numpy 數據處理 統計分析 statistical analysis 視覺化 visualization matplotlib
-
-輸入：想找關於網頁前端開發的相關課程
-輸出：前端開發 frontend development 網頁設計 web design HTML CSS JavaScript React Vue 使用者介面 UI 網頁程式設計 web programming
-
-輸入：請問有什麼可以學習機器學習的課
-輸出：機器學習 machine learning 深度學習 deep learning 人工智慧 AI artificial intelligence 神經網路 neural network 監督式學習 supervised learning 演算法 algorithm 資料科學 data science
-
 輸入：統計
-輸出：統計 statistics 統計學 機率 probability 資料分析 data analysis 迴歸分析 regression 假設檢定 hypothesis testing 變異數分析 ANOVA 推論統計 inferential
+輸出：統計 statistics 統計學 機率 probability 迴歸分析 regression 假設檢定 hypothesis testing 資料分析 data analysis 推論統計 inferential
 
-輸入：Python 程式設計入門
-輸出：Python 程式設計 programming 入門 introduction 程式語言 基礎語法 資料型態 變數 variable 迴圈 loop 函式 function
+輸入：Python 入門
+輸出：Python 程式設計 programming 入門 introduction 程式語言 基礎 fundamentals 變數 variable 函式 function 迴圈 loop 資料型態
 
-輸入：行銷
-輸出：行銷 marketing 行銷管理 數位行銷 digital marketing 品牌管理 消費者行為 consumer behavior 市場研究 廣告 advertising 電子商務 e-commerce 社群行銷
+輸入：我想學投資理財
+輸出：投資 investment 理財 財務管理 financial management 股票 stock 基金 fund 財務報表 financial statement 風險管理 risk management 資產配置 asset allocation
 
-輸入：學完線性代數之後還能學什麼
-輸出：機器學習 machine learning 深度學習 deep learning 電腦視覺 computer vision 數值分析 numerical analysis 最佳化 optimization 圖論 graph theory 訊號處理 signal processing
+輸入：學完微積分可以學什麼
+輸出：工程數學 微分方程 differential equations 線性代數 linear algebra 數值分析 numerical analysis 物理 physics 機率論 probability 最佳化 optimization
 
-輸入：資工系想學網站開發
-輸出：網站開發 web development 前端 frontend 後端 backend HTML CSS JavaScript 資料庫 database 伺服器 server API 雲端 cloud 網頁設計 web design
+輸入：經濟系想學程式
+輸出：程式設計 programming Python R 資料分析 data analysis 計量經濟 econometrics 統計軟體 入門 introduction 數據處理 data processing
+
+輸入：想了解人的心理和行為
+輸出：心理學 psychology 認知心理 cognitive psychology 行為科學 behavioral science 社會心理 social psychology 發展心理 developmental 人格心理 personality
+
+輸入：物理系想補數學
+輸出：應用數學 applied mathematics 微分方程 differential equations 線性代數 linear algebra 數值分析 numerical analysis 數學物理 mathematical physics 向量分析 vector analysis
+
+輸入：對設計有興趣但沒基礎
+輸出：設計 design 平面設計 graphic design 視覺設計 visual design 設計基礎 基本設計 入門 introduction 色彩學 color theory 排版 typography 美學 aesthetics
+
+輸入：資工系想了解商業運作
+輸出：管理學 management 企業管理 business administration 行銷 marketing 財務管理 financial management 商業模式 business model 創業 entrepreneurship 組織行為 organizational behavior
+
+輸入：我是中文系的，最近想學一些數據分析的技能，因為聽說做文本分析很有趣，可以從什麼課開始
+輸出：文本分析 text analysis 自然語言處理 NLP natural language processing Python 程式設計 programming 資料分析 data analysis 數位人文 digital humanities 語料庫 corpus 文本探勘 text mining
 
 ## 使用者查詢
 ` + query + `
