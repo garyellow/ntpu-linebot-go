@@ -46,7 +46,7 @@ services:
 
       # LLM
       - NTPU_LLM_ENABLED=${NTPU_LLM_ENABLED:-false}
-      - NTPU_LLM_PROVIDERS=${NTPU_LLM_PROVIDERS:-gemini,groq,cerebras}
+      - NTPU_LLM_PROVIDERS=${NTPU_LLM_PROVIDERS:-gemini,groq,cerebras,openai}
       # Gemini
       - NTPU_GEMINI_API_KEY=${NTPU_GEMINI_API_KEY:-}
       - NTPU_GEMINI_INTENT_MODELS=${NTPU_GEMINI_INTENT_MODELS:-}
