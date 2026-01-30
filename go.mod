@@ -1,24 +1,24 @@
 module github.com/garyellow/ntpu-linebot-go
 
-go 1.25.5
+go 1.25.6
 
 require (
 	github.com/PuerkitoBio/goquery v1.11.0
 	github.com/aws/aws-sdk-go-v2 v1.41.1
 	github.com/aws/aws-sdk-go-v2/config v1.32.7
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.7
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.95.1
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.96.0
 	github.com/aws/smithy-go v1.24.0
 	github.com/corpix/uarand v0.2.0
-	github.com/getsentry/sentry-go v0.41.0
-	github.com/getsentry/sentry-go/gin v0.41.0
+	github.com/getsentry/sentry-go v0.42.0
+	github.com/getsentry/sentry-go/gin v0.42.0
 	github.com/gin-gonic/gin v1.11.0
 	github.com/google/uuid v1.6.0
 	github.com/iwilltry42/bm25-go v0.0.0-20240909111832-a928590cc9da
 	github.com/joho/godotenv v1.5.1
 	github.com/klauspost/compress v1.18.3
 	github.com/line/line-bot-sdk-go/v8 v8.19.0
-	github.com/openai/openai-go/v3 v3.16.0
+	github.com/openai/openai-go/v3 v3.17.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/samber/slog-betterstack v1.4.2
 	github.com/stretchr/testify v1.11.1
@@ -106,7 +106,7 @@ require (
 	golang.org/x/exp v0.0.0-20260112195511-716be5621a96 // indirect
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260122232226-8e98ce8d340d // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260128011058-8636f8732409 // indirect
 	google.golang.org/grpc v1.78.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
