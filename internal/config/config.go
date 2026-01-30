@@ -231,7 +231,7 @@ func Load() (*Config, error) {
 		GeminiAPIKey:           getEnv(EnvGeminiAPIKey, ""),
 		GroqAPIKey:             getEnv(EnvGroqAPIKey, ""),
 		CerebrasAPIKey:         getEnv(EnvCerebrasAPIKey, ""),
-		LLMProviders:           getProvidersEnv(EnvLLMProviders, []string{"gemini", "groq", "cerebras"}),
+		LLMProviders:           getProvidersEnv(EnvLLMProviders, []string{"gemini", "groq", "cerebras", "openai"}),
 		GeminiIntentModels:     getModelsEnv(EnvGeminiIntentModels),
 		GeminiExpanderModels:   getModelsEnv(EnvGeminiExpanderModels),
 		GroqIntentModels:       getModelsEnv(EnvGroqIntentModels),

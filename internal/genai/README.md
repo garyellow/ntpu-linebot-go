@@ -215,7 +215,7 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 | `NTPU_CEREBRAS_API_KEY` | Cerebras API Key |
 | `NTPU_OPENAI_API_KEY` | OpenAI-Compatible API Key |
 | `NTPU_OPENAI_ENDPOINT` | OpenAI-Compatible Endpoint URL |
-| `NTPU_LLM_PROVIDERS` | 提供者順序（預設：gemini,groq,cerebras）|
+| `NTPU_LLM_PROVIDERS` | 提供者順序（預設：gemini,groq,cerebras,openai）|
 
 > **注意**: 需設定 `NTPU_LLM_ENABLED=true` 且至少一個 API Key。OpenAI-Compatible 需同時設定 API Key 和 Endpoint。
 

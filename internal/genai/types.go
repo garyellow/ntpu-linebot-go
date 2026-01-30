@@ -134,7 +134,7 @@ type ProviderConfig struct {
 type LLMConfig struct {
 	// Providers is the ordered list of providers to try.
 	// Fallback happens in order: first provider's models, then second, etc.
-	// Default: ["gemini", "groq", "cerebras"] (only those with API keys)
+	// Default: ["gemini", "groq", "cerebras", "openai"] (only those with API keys)
 	Providers []Provider
 
 	// Gemini configuration
@@ -185,7 +185,7 @@ var (
 	DefaultCerebrasExpanderModels = []string{"llama-3.3-70b", "llama-3.1-8b"}
 
 	// DefaultProviders is the default provider order for fallback.
-	DefaultProviders = []Provider{ProviderGemini, ProviderGroq, ProviderCerebras}
+	DefaultProviders = []Provider{ProviderGemini, ProviderGroq, ProviderCerebras, ProviderOpenAI}
 )
 
 // Retry configuration defaults
