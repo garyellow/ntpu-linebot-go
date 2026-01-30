@@ -812,7 +812,7 @@ func (p *Processor) buildKeywordModeFlexMessage(nluEnabled bool, sender *messagi
 			WithColor(lineutil.ColorSubtext).
 			WithMargin("sm").
 			WithWrap(true).FlexText,
-		lineutil.NewFlexText("• 智慧：找課 線上實體混合").
+		lineutil.NewFlexText("• 智慧：找課 我想學程式語言").
 			WithSize("xs").
 			WithColor(lineutil.ColorSubtext).
 			WithMargin("xs").

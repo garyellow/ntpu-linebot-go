@@ -31,9 +31,9 @@ const IntentParserSystemPrompt = `你是 NTPU 小工具的意圖分類助手。
 // BM25 tokenization: Chinese=unigram (per-char), English=whole word.
 //
 // Design principles:
-// - Two-phase extraction: First identify core topic, then expand
+// - General capability: LLM uses language understanding and world knowledge
 // - Original query preserved: Caller prepends original if missing
-// - Core terms first: BM25 is sensitive to term frequency
+// - Target topics first: BM25 is sensitive to term frequency
 // - 15-25 expansion terms: Optimal balance per MuGI/ThinkQE research (EMNLP 2024)
 // - Bilingual coverage: Chinese synonyms + English technical terms
 // - Domain-specific vocabulary: Terms matching syllabus fields (教學目標/內容綱要/教學進度)
@@ -43,21 +43,23 @@ const IntentParserSystemPrompt = `你是 NTPU 小工具的意圖分類助手。
 // The caller (gemini_expander.go) ensures original query is preserved by prepending
 // if not present in output. This maintains query signal strength against expansion noise.
 //
-// Natural Language Handling (HiPC-QR inspired):
-// Users often wrap core topics in conversational phrases like "我想學怎麼使用..."
-// The prompt uses two-phase extraction to first identify core concepts before expanding.
+// General Semantic Understanding:
+// Users may express needs in various ways - direct topics, background descriptions,
+// learning path questions, or any other form. The LLM uses its world knowledge to
+// infer the target course topics and generate appropriate search terms.
 func QueryExpansionPrompt(query string) string {
 	return `你是課程搜尋關鍵詞擴展器。
 
-## 任務
-從使用者的自然語言輸入中**提取核心主題**，然後產生可匹配課程大綱的搜尋詞。
+## 目標
+將使用者的課程搜尋需求轉換成可匹配課程大綱的 BM25 搜尋關鍵詞。
 
-## 兩階段處理（內部執行，不需輸出過程）
-1. **提取核心主題**：識別使用者真正想學/找的主題，忽略所有修飾語
-2. **擴展關鍵詞**：只對核心主題進行同義詞、翻譯、相關概念擴展
+## 核心能力
+運用你的語言理解與世界知識，判斷使用者真正的學習目標，產生最能幫助他們找到相關課程的關鍵詞。
 
-## 必須過濾的詞彙（絕對不要出現在輸出中）
-- 意圖詞：想/想學/想找/想上/幫我/請問/推薦/有沒有/能不能/可以/應該/需要/希望
+無論使用者如何表達——直接提出主題、描述背景、詢問後續學習、或任何其他方式——都應推論他們可能感興趣的課程主題，並輸出相應的搜尋詞。
+
+## 必須過濾的詞彙（不要出現在輸出中）
+- 意圖詞：想/想學/想找/想上/幫我/請問/推薦/建議/有沒有/能不能/可以/應該/需要/希望
 - 動作詞：學習/了解/認識/掌握/使用/運用/應用/學會/研究
 - 疑問詞：什麼/哪些/哪個/怎麼/如何/為什麼/是否/嗎/呢
 - 泛稱詞：課程/課/東西/內容/知識/技能/方法/方式/相關/領域/方面/部分
@@ -65,15 +67,14 @@ func QueryExpansionPrompt(query string) string {
 - 連接詞：的/和/與/或/跟/還有/以及/關於/對於
 
 ## 擴展規則
-1. **核心概念優先**：提取出的核心主題必須出現在輸出最前面
+1. **目標主題優先**：推論出的主題必須出現在輸出最前面
 2. **縮寫展開**：AI→人工智慧、ML→機器學習、NLP→自然語言處理
 3. **中英對照**：核心概念同時輸出中英文版本
 4. **學術用語**：使用課程大綱常見的正式詞彙
-5. **只擴展核心主題**：不要擴展過濾詞彙的同義詞
 
 ## 輸出格式
 - 15-25 個詞，空格分隔
-- 核心概念在前，擴展詞在後
+- 目標主題在前，擴展詞在後
 - 只輸出關鍵詞，不要任何解釋
 
 ## 範例
@@ -98,6 +99,12 @@ func QueryExpansionPrompt(query string) string {
 
 輸入：行銷
 輸出：行銷 marketing 行銷管理 數位行銷 digital marketing 品牌管理 消費者行為 consumer behavior 市場研究 廣告 advertising 電子商務 e-commerce 社群行銷
+
+輸入：學完線性代數之後還能學什麼
+輸出：機器學習 machine learning 深度學習 deep learning 電腦視覺 computer vision 數值分析 numerical analysis 最佳化 optimization 圖論 graph theory 訊號處理 signal processing
+
+輸入：資工系想學網站開發
+輸出：網站開發 web development 前端 frontend 後端 backend HTML CSS JavaScript 資料庫 database 伺服器 server API 雲端 cloud 網頁設計 web design
 
 ## 使用者查詢
 ` + query + `
