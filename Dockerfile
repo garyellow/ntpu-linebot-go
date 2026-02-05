@@ -1,7 +1,7 @@
 # Distroless variant (default) - minimal attack surface for production
 # For debugging/shell access, use Dockerfile.alpine instead
 
-FROM --platform=$BUILDPLATFORM golang:1.25.6-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.25.7-alpine AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
