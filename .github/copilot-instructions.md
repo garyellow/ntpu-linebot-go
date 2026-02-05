@@ -422,7 +422,7 @@ histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by 
 Multi-stage build (alpine builder + distroless runtime), healthcheck binary (no shell), volume permissions handled by application.
 
 **Build stages**:
-1. Builder: `golang:1.25.5-alpine` with CGO_ENABLED=0 for static binary
+1. Builder: `golang:1.25.7-alpine` with CGO_ENABLED=0 for static binary
 2. Runtime: `gcr.io/distroless/static-debian13:nonroot` (no shell, minimal attack surface)
 3. Healthcheck: Custom binary (no `curl` dependency)
 4. Volumes: `/data` (SQLite + cache), owned by nonroot:nonroot

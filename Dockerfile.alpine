@@ -1,7 +1,7 @@
 # Alpine variant for scenarios where distroless is not supported
 # This image includes a shell and package manager for debugging
 
-FROM --platform=$BUILDPLATFORM golang:1.25.6-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.25.7-alpine AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
