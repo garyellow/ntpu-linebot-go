@@ -338,28 +338,35 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 		return
 	}
 
-	// Validate the downloaded snapshot before swapping
-	validateDB, err := storage.New(ctx, newDBPath, hotSwapDB.DB().GetCacheTTL())
+	// Validate the downloaded snapshot before swapping (with timeout to prevent blocking)
+	validateCtx, validateCancel := m.withTimeout(ctx)
+	validateDB, err := storage.New(validateCtx, newDBPath, hotSwapDB.DB().GetCacheTTL())
 	if err != nil {
+		validateCancel()
 		slog.Error("Snapshot poll validation failed: cannot open", "error", err)
 		return
 	}
 
-	// Check integrity of the downloaded snapshot
-	if err := validateDB.CheckIntegrity(ctx); err != nil {
+	// Check integrity of the downloaded snapshot (with timeout)
+	if err := validateDB.CheckIntegrity(validateCtx); err != nil {
 		_ = validateDB.Close()
+		validateCancel()
 		slog.Error("Snapshot poll integrity check failed", "error", err)
 		return
 	}
 
 	// Close validation connection before hot-swap
 	_ = validateDB.Close()
+	validateCancel()
 
-	// Hot-swap the database
-	if err := hotSwapDB.Swap(ctx, newDBPath); err != nil {
+	// Hot-swap the database (with timeout to prevent filesystem stalls)
+	swapCtx, swapCancel := m.withTimeout(ctx)
+	if err := hotSwapDB.Swap(swapCtx, newDBPath); err != nil {
+		swapCancel()
 		slog.Error("Snapshot poll hot-swap failed", "error", err)
 		return
 	}
+	swapCancel()
 
 	// Mark swap as successful to prevent defer cleanup
 	swapSuccess = true

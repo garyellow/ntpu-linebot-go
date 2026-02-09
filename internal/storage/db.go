@@ -314,15 +314,17 @@ func (db *DB) CreateSnapshot(ctx context.Context, destPath string) error {
 	return nil
 }
 
-// CheckIntegrity runs PRAGMA integrity_check on the database.
+// CheckIntegrity runs PRAGMA quick_check on the database.
 // Returns nil if the database is OK, or an error describing the corruption.
+// Uses quick_check(1) for O(N) performance instead of integrity_check's O(N log N),
+// skipping UNIQUE constraint and index content verification (sufficient for snapshot validation).
 func (db *DB) CheckIntegrity(ctx context.Context) error {
 	db.mu.RLock()
 	reader := db.reader
 	db.mu.RUnlock()
 
 	var result string
-	err := reader.QueryRowContext(ctx, "PRAGMA integrity_check").Scan(&result)
+	err := reader.QueryRowContext(ctx, "PRAGMA quick_check(1)").Scan(&result)
 	if err != nil {
 		return fmt.Errorf("integrity check query failed: %w", err)
 	}
