@@ -56,7 +56,7 @@ docker compose up -d
 
 ### Docker Compose 設定
 
-- `NTPU_IMAGE_TAG` - 映像版本（預設：latest）
+- `NTPU_DOCKER_IMAGE` - 完整 Docker 映像名稱，包含 registry、repository 和 tag（預設：garyellow/ntpu-linebot-go:latest）
 - `NTPU_HOST_PORT` - Host 對外埠號（預設：10000）
 
 ### 可選項目（多點部署識別）

@@ -1,3 +1,5 @@
+// Package storage provides SQLite database operations for caching
+// student, course, contact, and sticker data with TTL management.
 package storage
 
 import (

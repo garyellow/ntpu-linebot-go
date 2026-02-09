@@ -302,12 +302,15 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 
 	// Download new snapshot to a unique path to avoid conflicts
 	newDBPath := filepath.Join(destDir, fmt.Sprintf("cache_%d.db", time.Now().UnixNano()))
+	var swapSuccess bool
 	defer func() {
-		// Clean up on error (hot-swap will handle cleanup on success)
-		if _, err := os.Stat(newDBPath); err == nil {
-			_ = os.Remove(newDBPath)
-			_ = os.Remove(newDBPath + "-wal")
-			_ = os.Remove(newDBPath + "-shm")
+		// Clean up on error only (hot-swap will handle cleanup on success)
+		if !swapSuccess {
+			if _, err := os.Stat(newDBPath); err == nil {
+				_ = os.Remove(newDBPath)
+				_ = os.Remove(newDBPath + "-wal")
+				_ = os.Remove(newDBPath + "-shm")
+			}
 		}
 	}()
 
@@ -357,6 +360,9 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 		slog.Error("Snapshot poll hot-swap failed", "error", err)
 		return
 	}
+
+	// Mark swap as successful to prevent defer cleanup
+	swapSuccess = true
 
 	m.mu.Lock()
 	if downloadedETag != "" {
