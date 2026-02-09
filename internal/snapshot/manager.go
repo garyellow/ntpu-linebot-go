@@ -273,6 +273,7 @@ func (m *Manager) StartPolling(ctx context.Context, hotSwapDB *storage.HotSwapDB
 }
 
 // pollOnce checks for a new snapshot and performs hot-swap if found.
+// The snapshot is validated and integrity-checked before swapping to ensure safety.
 func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, destDir string, onHotSwap func(string)) {
 	// Check current ETag
 	m.mu.RLock()
@@ -301,6 +302,14 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 
 	// Download new snapshot to a unique path to avoid conflicts
 	newDBPath := filepath.Join(destDir, fmt.Sprintf("cache_%d.db", time.Now().UnixNano()))
+	defer func() {
+		// Clean up on error (hot-swap will handle cleanup on success)
+		if _, err := os.Stat(newDBPath); err == nil {
+			_ = os.Remove(newDBPath)
+			_ = os.Remove(newDBPath + "-wal")
+			_ = os.Remove(newDBPath + "-shm")
+		}
+	}()
 
 	// Download and decompress with ETag consistency
 	downloadCtx, cancel := m.withTimeout(ctx)
@@ -323,16 +332,29 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 	// Stream decompress directly
 	if err := r2client.DecompressStream(body, newDBPath); err != nil {
 		slog.Error("Snapshot poll decompress failed", "error", err)
-		_ = os.Remove(newDBPath)
 		return
 	}
+
+	// Validate the downloaded snapshot before swapping
+	validateDB, err := storage.New(ctx, newDBPath, hotSwapDB.DB().GetCacheTTL())
+	if err != nil {
+		slog.Error("Snapshot poll validation failed: cannot open", "error", err)
+		return
+	}
+
+	// Check integrity of the downloaded snapshot
+	if err := validateDB.CheckIntegrity(ctx); err != nil {
+		_ = validateDB.Close()
+		slog.Error("Snapshot poll integrity check failed", "error", err)
+		return
+	}
+
+	// Close validation connection before hot-swap
+	_ = validateDB.Close()
 
 	// Hot-swap the database
 	if err := hotSwapDB.Swap(ctx, newDBPath); err != nil {
 		slog.Error("Snapshot poll hot-swap failed", "error", err)
-		_ = os.Remove(newDBPath)
-		_ = os.Remove(newDBPath + "-wal")
-		_ = os.Remove(newDBPath + "-shm")
 		return
 	}
 

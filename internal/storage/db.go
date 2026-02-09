@@ -1,5 +1,3 @@
-// Package storage provides SQLite database operations for caching
-// student, course, contact, and sticker data with TTL management.
 package storage
 
 import (
@@ -311,6 +309,26 @@ func (db *DB) CreateSnapshot(ctx context.Context, destPath string) error {
 	if _, err := db.ExecContext(ctx, "PRAGMA optimize"); err != nil {
 		return fmt.Errorf("create snapshot: optimize: %w", err)
 	}
+	return nil
+}
+
+// CheckIntegrity runs PRAGMA integrity_check on the database.
+// Returns nil if the database is OK, or an error describing the corruption.
+func (db *DB) CheckIntegrity(ctx context.Context) error {
+	db.mu.RLock()
+	reader := db.reader
+	db.mu.RUnlock()
+
+	var result string
+	err := reader.QueryRowContext(ctx, "PRAGMA integrity_check").Scan(&result)
+	if err != nil {
+		return fmt.Errorf("integrity check query failed: %w", err)
+	}
+
+	if result != "ok" {
+		return fmt.Errorf("database integrity check failed: %s", result)
+	}
+
 	return nil
 }
 
