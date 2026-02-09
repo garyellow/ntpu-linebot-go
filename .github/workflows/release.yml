@@ -1,6 +1,8 @@
-# This Action requires setting the following secrets:
+# This Action requires setting the following secret:
 #
 # - DOCKERHUB_TOKEN (create from https://hub.docker.com/settings/security)
+#
+# Docker image name is configured in _docker-build.yml env section
 
 name: Release
 

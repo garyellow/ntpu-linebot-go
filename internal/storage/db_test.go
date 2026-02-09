@@ -149,4 +149,35 @@ func TestClose_CleanShutdown(t *testing.T) {
 	}
 }
 
+// TestCheckIntegrity_HealthyDatabase tests integrity check on a healthy database
+func TestCheckIntegrity_HealthyDatabase(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	ctx := context.Background()
+	db, err := New(ctx, dbPath, 168*time.Hour)
+	if err != nil {
+		t.Fatalf("Failed to create database: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// Write some data to ensure database is functional
+	student := &Student{
+		ID:         "41247001",
+		Name:       "測試學生",
+		Department: "資訊工程學系",
+		Year:       112,
+	}
+
+	if err := db.SaveStudent(ctx, student); err != nil {
+		t.Fatalf("SaveStudent failed: %v", err)
+	}
+
+	// Check integrity on healthy database
+	if err := db.CheckIntegrity(ctx); err != nil {
+		t.Errorf("CheckIntegrity failed on healthy database: %v", err)
+	}
+}
+
 // setupTestDB helper is defined in repository_test.go
