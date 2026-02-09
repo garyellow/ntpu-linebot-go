@@ -1,6 +1,6 @@
 services:
   ntpu-linebot:
-    image: garyellow/ntpu-linebot-go:${NTPU_IMAGE_TAG:-latest}
+    image: ${NTPU_DOCKER_IMAGE:-garyellow/ntpu-linebot-go:latest}
     container_name: ntpu-linebot
     restart: unless-stopped
     ports:
