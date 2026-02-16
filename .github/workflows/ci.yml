@@ -159,7 +159,7 @@ jobs:
           $HOME/go/bin/govulncheck ./...
 
       - name: Run Security Scanner
-        uses: securego/gosec@master
+        uses: securego/gosec@v2.19.0
         with:
           args: '-no-fail -exclude-generated -fmt sarif -out gosec-results.sarif ./...'
 
