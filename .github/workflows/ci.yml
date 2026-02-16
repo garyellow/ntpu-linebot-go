@@ -222,7 +222,7 @@ jobs:
             VCS_REF=${{ github.sha }}
 
       - name: Scan Image
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           image-ref: ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}
           format: 'sarif'
