@@ -153,12 +153,10 @@ func QueryExpansionPrompt(query string) string {
 //	關鍵詞：[space-separated keywords]
 //
 // Parsing strategy:
-//  1. Look for "關鍵詞：" marker → extract everything after it
-//  2. Fallback: Look for "关键词：" (simplified Chinese variant)
-//  3. Fallback: If "分析：" exists, take everything after the analysis line
-//  4. Final fallback: Return entire output as-is (backward compatible)
+//  1. Look for "關鍵詞：" / "關鍵詞:" marker (繁/簡 × 全/半形冒號) → extract first line after marker
+//  2. Fallback: If "分析：" exists, take everything after the analysis line
 //
-// This ensures graceful degradation if the model doesn't follow the exact format.
+// Returns "" if no keywords can be extracted; callers should fall back to the original query.
 func ParseExpandedOutput(output string) string {
 	output = strings.TrimSpace(output)
 	if output == "" {
@@ -193,6 +191,5 @@ func ParseExpandedOutput(output string) string {
 		}
 	}
 
-	// Strategy 3: Return as-is (backward compatible with non-structured output)
-	return output
+	return ""
 }

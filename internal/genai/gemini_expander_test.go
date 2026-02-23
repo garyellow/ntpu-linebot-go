@@ -80,9 +80,9 @@ func TestParseExpandedOutput(t *testing.T) {
 			expected: "统计 statistics 概率 probability",
 		},
 		{
-			name:     "keywords only (no analysis) - backward compatible",
+			name:     "unstructured output without format markers returns empty",
 			input:    "統計 statistics 統計學 機率 probability",
-			expected: "統計 statistics 統計學 機率 probability",
+			expected: "",
 		},
 		{
 			name:     "empty input",
