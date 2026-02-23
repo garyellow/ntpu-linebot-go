@@ -43,7 +43,8 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 			Name: "course_search",
 			Description: `依課程名稱或教師姓名搜尋最近學期課程。
 
-觸發條件：輸入包含明確的課程名稱或教師姓名
+觸發條件：輸入包含明確、具體的課程名稱（如「微積分」「資料結構」）或教師姓名
+注意：若使用者描述的是學習目標或條件，而非具體課名，請使用 course_smart
 範例：微積分、資料結構、王小明老師、陳教授的課`,
 			Parameters: &genai.Schema{
 				Type: genai.TypeObject,
@@ -57,20 +58,26 @@ func BuildIntentFunctions() []*genai.FunctionDeclaration {
 			},
 		},
 
-		// Smart search by learning needs
+		// Smart search by learning needs (intent-aware)
 		{
 			Name: "course_smart",
 			Description: `依學習需求智慧搜尋課程。
 
-觸發條件：描述學習目標、興趣或需求，而非具體課名
-特徵詞：想學、有興趣、好過的、輕鬆的、XX相關
-範例：想學資料分析、好過的通識、AI相關課程`,
+觸發條件：使用者描述學習目標、興趣、條件或背景，而非輸入具體課程名稱
+包含：跨領域探索、學習路徑規劃、條件篩選、背景+目標描述
+範例：
+• 想學資料分析
+• 好過的通識
+• AI 相關課程
+• 我是資工系的，想了解金融
+• 學完微積分可以學什麼
+• 有什麼程式設計的入門課`,
 			Parameters: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
 					"query": {
 						Type:        genai.TypeString,
-						Description: "學習需求描述（保留原始表達）",
+						Description: "使用者的完整學習需求描述。必須保留原始表達，包含背景資訊、條件限制與學習目標。不要簡化或摘要。",
 					},
 				},
 				Required: []string{"query"},
