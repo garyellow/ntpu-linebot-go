@@ -157,13 +157,13 @@ func (h *Handler) formatProgramListResponse(programs []storage.Program, headerTi
 
 		// Show course counts if available
 		if prog.RequiredCount > 0 || prog.ElectiveCount > 0 {
-			entry.WriteString(fmt.Sprintf(" | 必修 %d 門 · 選修 %d 門", prog.RequiredCount, prog.ElectiveCount))
+			fmt.Fprintf(&entry, " | 必修 %d 門 · 選修 %d 門", prog.RequiredCount, prog.ElectiveCount)
 		}
 		entry.WriteString("\n")
 
 		// Add URL if available (LINE will auto-link), remove https:// prefix to save chars
 		if prog.URL != "" {
-			entry.WriteString(fmt.Sprintf("📎 %s\n", strings.TrimPrefix(prog.URL, "https://")))
+			fmt.Fprintf(&entry, "📎 %s\n", strings.TrimPrefix(prog.URL, "https://"))
 		}
 
 		entryStr := entry.String()

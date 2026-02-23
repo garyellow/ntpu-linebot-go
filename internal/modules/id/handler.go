@@ -833,7 +833,7 @@ func (h *Handler) handleDepartmentNameQuery(deptName string) []messaging_api.Mes
 			if len(degMatches) > 0 {
 				fmt.Fprintf(&builder, "\n🎓 %s\n", deg)
 				for _, m := range degMatches {
-					builder.WriteString(fmt.Sprintf("  • %s → %s\n", m.name, m.code))
+					fmt.Fprintf(&builder, "  • %s → %s\n", m.name, m.code)
 				}
 			}
 		}
@@ -898,7 +898,7 @@ func (h *Handler) handleDepartmentCodeQuery(code string) []messaging_api.Message
 		var builder strings.Builder
 		fmt.Fprintf(&builder, "🔍 系代碼 %s 對應多個系所：\n", code)
 		for _, m := range matches {
-			builder.WriteString(fmt.Sprintf("\n• %s（%s）", m.name, m.degree))
+			fmt.Fprintf(&builder, "\n• %s（%s）", m.name, m.degree)
 		}
 		msg := lineutil.NewTextMessageWithConsistentSender(builder.String(), sender)
 		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyStudentNav())
@@ -1647,16 +1647,16 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 		displayName = "法律系" + deptName
 	}
 
-	builder.WriteString(fmt.Sprintf("%d學年度%s%s學生名單：\n\n", year, displayName, departmentType))
+	fmt.Fprintf(&builder, "%d學年度%s%s學生名單：\n\n", year, displayName, departmentType)
 
 	// Collect CachedAt values for time footer
 	cachedAts := make([]int64, len(students))
 	for i, student := range students {
-		builder.WriteString(fmt.Sprintf("%s  %s\n", student.ID, student.Name))
+		fmt.Fprintf(&builder, "%s  %s\n", student.ID, student.Name)
 		cachedAts[i] = student.CachedAt
 	}
 
-	builder.WriteString(fmt.Sprintf("\n%d學年度%s%s共有%d位學生", year, displayName, departmentType, len(students)))
+	fmt.Fprintf(&builder, "\n%d學年度%s%s共有%d位學生", year, displayName, departmentType, len(students))
 
 	// Add cache time footer
 	minCachedAt := lineutil.MinCachedAt(cachedAts...)

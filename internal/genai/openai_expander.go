@@ -153,6 +153,14 @@ func (e *openaiQueryExpander) Expand(ctx context.Context, query string) (string,
 		return query, nil
 	}
 
+	// Parse structured output (extract keywords from "分析：... 關鍵詞：..." format)
+	// The Think-then-Expand pattern produces analysis + keywords;
+	// we only need the keywords for BM25 search.
+	result = ParseExpandedOutput(result)
+	if result == "" {
+		return query, nil
+	}
+
 	// Ensure original query is preserved (prepend if not present)
 	if !strings.Contains(result, query) {
 		result = query + " " + result

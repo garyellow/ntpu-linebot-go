@@ -28,7 +28,7 @@ func run() int {
 		return 1
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req) //nolint:gosec // G704: healthcheck calls localhost only
 	if err != nil {
 		return 1
 	}

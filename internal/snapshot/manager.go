@@ -95,7 +95,7 @@ func (m *Manager) DownloadSnapshot(ctx context.Context, destDir string) (string,
 	// Stream download to temp file
 	if _, err := io.Copy(compressedFile, body); err != nil {
 		_ = compressedFile.Close()
-		_ = os.Remove(compressedPath)
+		_ = os.Remove(compressedPath) //nolint:gosec // G703: path is constructed internally from temp dir
 		return "", "", fmt.Errorf("write compressed data: %w", err)
 	}
 	if err := compressedFile.Close(); err != nil {
@@ -113,7 +113,7 @@ func (m *Manager) DownloadSnapshot(ctx context.Context, destDir string) (string,
 		_ = os.Remove(dbTempPath)
 	}()
 
-	compressedReader, err := os.Open(compressedPath)
+	compressedReader, err := os.Open(compressedPath) //nolint:gosec // G703: path is constructed internally from temp dir
 	if err != nil {
 		return "", "", fmt.Errorf("open compressed file: %w", err)
 	}
@@ -443,11 +443,11 @@ func (m *Manager) withTimeout(ctx context.Context) (context.Context, context.Can
 }
 
 func replaceFile(src, dst string) error {
-	if err := os.Rename(src, dst); err == nil {
+	if err := os.Rename(src, dst); err == nil { //nolint:gosec // G703: paths are constructed internally
 		return nil
 	}
 	if err := os.Remove(dst); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	return os.Rename(src, dst)
+	return os.Rename(src, dst) //nolint:gosec // G703: paths are constructed internally
 }

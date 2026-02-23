@@ -115,7 +115,7 @@ type RetryConfig struct {
 // ProviderConfig holds configuration for a single LLM provider.
 type ProviderConfig struct {
 	// APIKey is the API key for the provider.
-	APIKey string
+	APIKey string //nolint:gosec // G117: field name matches secret pattern but is not a secret itself
 
 	// Endpoint is the custom base URL for OpenAI-compatible providers.
 	// Only used by ProviderOpenAI; other providers use ProviderEndpoint map.
