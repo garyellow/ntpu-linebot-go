@@ -570,9 +570,9 @@ func formatSemesters(semesters []course.Semester) string {
 	}
 
 	var result strings.Builder
-	result.WriteString(fmt.Sprintf("%d-%d", semesters[0].Year, semesters[0].Term))
+	fmt.Fprintf(&result, "%d-%d", semesters[0].Year, semesters[0].Term)
 	for i := 1; i < len(semesters); i++ {
-		result.WriteString(fmt.Sprintf(", %d-%d", semesters[i].Year, semesters[i].Term))
+		fmt.Fprintf(&result, ", %d-%d", semesters[i].Year, semesters[i].Term)
 	}
 	return result.String()
 }

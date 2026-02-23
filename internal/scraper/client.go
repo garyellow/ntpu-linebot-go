@@ -125,7 +125,7 @@ func (c *Client) doRequest(ctx context.Context, method, reqURL, body string) (*h
 
 		// Perform request
 		var httpErr error
-		resp, httpErr = c.httpClient.Do(req)
+		resp, httpErr = c.httpClient.Do(req) //nolint:gosec // G704: URL is validated and rate-limited by scraper
 		if httpErr != nil {
 			lastErr = fmt.Errorf("request failed: %w", httpErr)
 			return lastErr
@@ -263,7 +263,7 @@ func (c *Client) TryFailoverURLs(ctx context.Context, domain string) (string, er
 
 		req.Header.Set("User-Agent", c.randomUserAgent())
 
-		resp, err := c.httpClient.Do(req)
+		resp, err := c.httpClient.Do(req) //nolint:gosec // G704: URL comes from internal failover list
 		if err != nil {
 			continue
 		}

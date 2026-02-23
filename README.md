@@ -172,7 +172,7 @@
 
 ### 環境需求
 
-- Go 1.25+（Go 直接執行）
+- Go 1.26（Go 直接執行）
 - Docker + Docker Compose（容器部署）
 - LLM API Key（可選，需 `NTPU_LLM_ENABLED=true` 才啟用 AI 功能）：
   - [Gemini](https://aistudio.google.com/apikey)

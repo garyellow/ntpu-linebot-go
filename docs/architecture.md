@@ -506,7 +506,7 @@ go func() {
 
 **並行執行模組**:
 ```go
-// Refresh 模組使用 WaitGroup 並行執行 (Go 1.25+)
+// Refresh 模組使用 WaitGroup 並行執行 (Go 1.26)
 var wg sync.WaitGroup
 for _, module := range modules {
     wg.Go(func() {
