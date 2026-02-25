@@ -54,7 +54,7 @@ func (s *Store) Record(userID string, intent Intent) {
 		intents: make([]Intent, 0, s.maxIntents),
 		maxSize: s.maxIntents,
 	})
-	sess := val.(*userSession)
+	sess, _ := val.(*userSession)
 
 	sess.mu.Lock()
 	defer sess.mu.Unlock()
@@ -85,7 +85,7 @@ func (s *Store) GetRecentIntents(userID string) []Intent {
 	if !ok {
 		return nil
 	}
-	sess := val.(*userSession)
+	sess, _ := val.(*userSession)
 
 	sess.mu.Lock()
 	defer sess.mu.Unlock()
@@ -128,7 +128,7 @@ func (s *Store) FormatContext(userID string) string {
 func (s *Store) Cleanup() {
 	cutoff := time.Now().Add(-s.ttl)
 	s.sessions.Range(func(key, value any) bool {
-		sess := value.(*userSession)
+		sess, _ := value.(*userSession)
 		sess.mu.Lock()
 		hasValid := false
 		for _, i := range sess.intents {

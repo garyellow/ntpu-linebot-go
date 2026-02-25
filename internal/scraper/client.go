@@ -325,7 +325,7 @@ func (c *Client) GetBaseURLs(domain string) []string {
 func (c *Client) waitForDomain(ctx context.Context, reqURL string) error {
 	parsed, err := url.Parse(reqURL)
 	if err != nil {
-		return nil // Don't block on parse errors; let the request itself fail
+		return nil //nolint:nilerr // Don't block on parse errors; let the request itself fail
 	}
 
 	host := parsed.Hostname()

@@ -306,14 +306,15 @@ func (db *DB) CreateSnapshot(ctx context.Context, destPath string) error {
 		return errors.New("snapshot path is required")
 	}
 
-	// Clean and validate the destination path to prevent path traversal
-	cleanPath := filepath.Clean(destPath)
-	if cleanPath != destPath {
-		// Log the mismatch but use the clean path
-		destPath = cleanPath
-	}
+	// Validate the raw destination path to prevent obvious path traversal sequences
 	if strings.Contains(destPath, "..") {
 		return errors.New("snapshot path must not contain path traversal")
+	}
+
+	// Clean and normalize the destination path as defense-in-depth
+	cleanPath := filepath.Clean(destPath)
+	if cleanPath != destPath {
+		destPath = cleanPath
 	}
 
 	_ = os.Remove(destPath)
