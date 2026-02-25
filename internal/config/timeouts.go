@@ -78,6 +78,9 @@ const (
 
 	// RateLimiterCleanupInterval is how often inactive user rate limiters are cleaned.
 	RateLimiterCleanupInterval = 5 * time.Minute
+
+	// SessionCleanupInterval is how often expired session entries are pruned.
+	SessionCleanupInterval = 5 * time.Minute
 )
 
 // Warmup timeouts

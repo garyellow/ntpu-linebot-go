@@ -755,7 +755,7 @@ func (a *Application) cleanupSessionStore(ctx context.Context) {
 		return
 	}
 
-	ticker := time.NewTicker(config.RateLimiterCleanupInterval)
+	ticker := time.NewTicker(config.SessionCleanupInterval)
 	defer ticker.Stop()
 
 	for {

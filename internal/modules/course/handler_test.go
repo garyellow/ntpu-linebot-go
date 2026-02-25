@@ -15,6 +15,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
+	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -1398,4 +1399,87 @@ func TestHandlePostback_TeacherCourse(t *testing.T) {
 	if len(msgs) == 0 {
 		t.Error("Expected messages for teacher course postback, got none")
 	}
+}
+
+// TestSuggestSimilarCourses tests that suggestSimilarCourses returns partial matches
+// when a multi-word keyword has no exact results.
+func TestSuggestSimilarCourses(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Create handler with segmenter injected
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	db, err := storage.New(ctx, dbPath, 168*time.Hour)
+	if err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	baseURLs := map[string][]string{
+		"lms": {"https://lms.ntpu.edu.tw"},
+		"sea": {"https://sea.cc.ntpu.edu.tw"},
+	}
+	scraperClient := scraper.NewClient(30*time.Second, 3, baseURLs)
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	log := logger.New("info")
+	stickerMgr := sticker.NewManager(db, scraperClient, log)
+	seg := stringutil.NewSegmenter()
+
+	h := NewHandler(db, scraperClient, m, log, stickerMgr, nil, nil, nil, nil, nil, seg)
+
+	// Seed DB with courses
+	courses := []*storage.Course{
+		{UID: "1132U0001", Year: 113, Term: 2, No: "U0001", Title: "線性代數"},
+		{UID: "1132U0002", Year: 113, Term: 2, No: "U0002", Title: "微積分"},
+		{UID: "1132U0003", Year: 113, Term: 2, No: "U0003", Title: "線性規劃"},
+	}
+	for _, c := range courses {
+		if err := db.SaveCourse(ctx, c); err != nil {
+			t.Fatalf("SaveCourse failed: %v", err)
+		}
+	}
+
+	t.Run("returns suggestions from partial tokens", func(t *testing.T) {
+		// "線性代數進階" should segment into tokens containing "線性代數", "線性", "進階" etc.
+		// "線性代數" and "線性規劃" should match via partial tokens.
+		suggestions := h.suggestSimilarCourses(ctx, "線性代數進階", 3)
+		if len(suggestions) == 0 {
+			t.Error("Expected suggestions for '線性代數進階', got none")
+		}
+		// At least "線性代數" should appear
+		found := false
+		for _, s := range suggestions {
+			if s == "線性代數" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Expected '線性代數' in suggestions, got %v", suggestions)
+		}
+	})
+
+	t.Run("nil segmenter returns nil", func(t *testing.T) {
+		hNoSeg := NewHandler(db, scraperClient, m, log, stickerMgr, nil, nil, nil, nil, nil, nil)
+		suggestions := hNoSeg.suggestSimilarCourses(ctx, "線性代數進階", 3)
+		if suggestions != nil {
+			t.Errorf("Expected nil with no segmenter, got %v", suggestions)
+		}
+	})
+
+	t.Run("respects maxSuggestions", func(t *testing.T) {
+		suggestions := h.suggestSimilarCourses(ctx, "線性代數進階", 1)
+		if len(suggestions) > 1 {
+			t.Errorf("Expected at most 1 suggestion, got %d", len(suggestions))
+		}
+	})
+
+	t.Run("no suggestions for unrelated keyword", func(t *testing.T) {
+		suggestions := h.suggestSimilarCourses(ctx, "完全不相關的詞彙", 3)
+		// May or may not return suggestions depending on tokenization;
+		// just verify no panic
+		_ = suggestions
+	})
 }

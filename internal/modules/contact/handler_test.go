@@ -14,6 +14,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
+	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -514,4 +515,69 @@ func TestFormatContactResults_OrganizationNoCourseButton(t *testing.T) {
 	if len(msgs) == 0 {
 		t.Error("Expected messages for organization contact, got none")
 	}
+}
+
+// TestSuggestSimilarContacts tests that suggestSimilarContacts returns partial matches
+// when a multi-word keyword has no exact results.
+func TestSuggestSimilarContacts(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Create handler with segmenter injected
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	db, err := storage.New(ctx, dbPath, 168*time.Hour)
+	if err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	baseURLs := map[string][]string{
+		"lms": {"https://lms.ntpu.edu.tw"},
+		"sea": {"https://sea.cc.ntpu.edu.tw"},
+	}
+	scraperClient := scraper.NewClient(30*time.Second, 3, baseURLs)
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	log := logger.New("info")
+	stickerMgr := sticker.NewManager(db, scraperClient, log)
+	seg := stringutil.NewSegmenter()
+
+	h := NewHandler(db, scraperClient, m, log, stickerMgr, 100, nil, seg)
+
+	// Seed DB with contacts
+	contacts := []*storage.Contact{
+		{UID: "c001", Type: "organization", Name: "資訊工程學系", Organization: "電機資訊學院"},
+		{UID: "c002", Type: "organization", Name: "電機工程學系", Organization: "電機資訊學院"},
+		{UID: "c003", Type: "individual", Name: "王大明", Title: "教授", Organization: "資訊工程學系"},
+	}
+	for _, c := range contacts {
+		if err := db.SaveContact(ctx, c); err != nil {
+			t.Fatalf("SaveContact failed: %v", err)
+		}
+	}
+
+	t.Run("returns suggestions from partial tokens", func(t *testing.T) {
+		// "資訊工程研究所" should segment to tokens containing "資訊工程", "資訊", "工程", "研究所" etc.
+		// "資訊工程學系" should match via partial tokens.
+		suggestions := h.suggestSimilarContacts(ctx, "資訊工程研究所", 3)
+		if len(suggestions) == 0 {
+			t.Error("Expected suggestions for '資訊工程研究所', got none")
+		}
+	})
+
+	t.Run("nil segmenter returns nil", func(t *testing.T) {
+		hNoSeg := NewHandler(db, scraperClient, m, log, stickerMgr, 100, nil, nil)
+		suggestions := hNoSeg.suggestSimilarContacts(ctx, "資訊工程研究所", 3)
+		if suggestions != nil {
+			t.Errorf("Expected nil with no segmenter, got %v", suggestions)
+		}
+	})
+
+	t.Run("respects maxSuggestions", func(t *testing.T) {
+		suggestions := h.suggestSimilarContacts(ctx, "資訊工程研究所", 1)
+		if len(suggestions) > 1 {
+			t.Errorf("Expected at most 1 suggestion, got %d", len(suggestions))
+		}
+	})
 }

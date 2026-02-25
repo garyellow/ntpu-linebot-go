@@ -107,6 +107,7 @@ func TestBackgroundJobIntervals(t *testing.T) {
 		{"MaintenanceCleanupIntervalDefault", MaintenanceCleanupIntervalDefault, 24 * time.Hour},
 		{"MetricsUpdateInterval", MetricsUpdateInterval, 5 * time.Minute},
 		{"RateLimiterCleanupInterval", RateLimiterCleanupInterval, 5 * time.Minute},
+		{"SessionCleanupInterval", SessionCleanupInterval, 5 * time.Minute},
 	}
 
 	for _, tt := range tests {
