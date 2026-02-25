@@ -7,10 +7,10 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"unicode"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
+	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/syllabus"
 	"github.com/iwilltry42/bm25-go/bm25"
 )
@@ -19,6 +19,15 @@ import (
 // Each semester independently gets up to this many results.
 const (
 	MaxSearchResults = 10
+
+	// MinConfidence is the minimum relative confidence score for a search result
+	// to be included. Results below this threshold are filtered out as noise.
+	//
+	// Rationale (small corpus, ~2000-5000 docs):
+	//   - BM25 absolute scores vary across queries, so we use relative scoring
+	//   - Score ratio ≥ 0.25 filters out tail noise while retaining partially relevant results
+	//   - Based on industry best practices for small-corpus BM25 search
+	MinConfidence = 0.25
 )
 
 // SearchResult represents a search result with confidence score.
@@ -64,6 +73,7 @@ type BM25Index struct {
 	semesterIndexes map[SemesterKey]*semesterIndex // Per-semester BM25 indexes
 	allSemesters    []SemesterKey                  // All semesters sorted (newest first)
 
+	seg         *stringutil.Segmenter // Chinese word segmenter (shared)
 	logger      *logger.Logger
 	mu          sync.RWMutex
 	initialized bool
@@ -88,10 +98,15 @@ type BM25Result struct {
 	Rank     int     // Rank position (1-indexed)
 }
 
-// NewBM25Index creates a new BM25 index
-func NewBM25Index(log *logger.Logger) *BM25Index {
+// NewBM25Index creates a new BM25 index with shared Chinese segmenter.
+// The segmenter must be pre-initialized; if nil, a new one is created.
+func NewBM25Index(log *logger.Logger, seg *stringutil.Segmenter) *BM25Index {
+	if seg == nil {
+		seg = stringutil.NewSegmenter()
+	}
 	return &BM25Index{
 		semesterIndexes: make(map[SemesterKey]*semesterIndex),
+		seg:             seg,
 		logger:          log,
 	}
 }
@@ -216,7 +231,7 @@ func (idx *BM25Index) buildSemesterIndex(syllabi []*storage.Syllabus) (*semester
 	// Build BM25 engine for this semester (independent IDF).
 	// NewBM25Okapi consumes the corpus to build its internal index; after this point we only
 	// access document content through the engine, not via the original corpus slice.
-	engine, err := bm25.NewBM25Okapi(corpus, tokenizeChinese, 1.5, 0.75, nil)
+	engine, err := bm25.NewBM25Okapi(corpus, idx.Tokenize, 1.5, 0.75, nil)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -235,13 +250,13 @@ func (idx *BM25Index) getNewestTwoSemesters() []SemesterKey {
 }
 
 // searchSemester performs BM25 search on a specific semester's index.
-func (semIdx *semesterIndex) search(query string, topN int) []BM25Result {
+func (semIdx *semesterIndex) search(query string, topN int, tokenizer func(string) []string) []BM25Result {
 	if semIdx == nil || semIdx.engine == nil {
 		return nil
 	}
 
 	// Tokenize query
-	queryTokens := tokenizeChinese(query)
+	queryTokens := tokenizer(query)
 	if len(queryTokens) == 0 {
 		return nil
 	}
@@ -340,7 +355,7 @@ func (idx *BM25Index) SearchCourses(_ context.Context, query string, topN int) (
 		}
 
 		// Search this semester's index
-		semResults := semIdx.search(query, topN)
+		semResults := semIdx.search(query, topN, idx.Tokenize)
 		if len(semResults) == 0 {
 			continue
 		}
@@ -350,13 +365,20 @@ func (idx *BM25Index) SearchCourses(_ context.Context, query string, topN int) (
 
 		// Calculate relative confidence within this semester
 		for _, r := range semResults {
+			confidence := computeRelativeConfidence(r.Score, maxScore)
+
+			// Filter out low-confidence results (noise)
+			if confidence < MinConfidence {
+				continue
+			}
+
 			results = append(results, SearchResult{
 				UID:        r.UID,
 				Title:      r.Title,
 				Teachers:   r.Teachers,
 				Year:       r.Year,
 				Term:       r.Term,
-				Confidence: computeRelativeConfidence(r.Score, maxScore),
+				Confidence: confidence,
 			})
 		}
 	}
@@ -440,54 +462,10 @@ func (idx *BM25Index) Count() int {
 	return total
 }
 
-// tokenizeChinese performs tokenization optimized for Chinese text
-// Strategy:
-// 1. Lowercase for case-insensitive matching
-// 2. Split on whitespace and punctuation
-// 3. Keep individual CJK characters as tokens (unigrams only)
-// 4. Keep non-CJK words as single tokens
-func tokenizeChinese(text string) []string {
-	text = strings.ToLower(text)
-
-	var tokens []string
-	var currentWord strings.Builder
-
-	for _, r := range text {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			// Check if this is a CJK character
-			if isCJK(r) {
-				// Flush any pending non-CJK word
-				if currentWord.Len() > 0 {
-					tokens = append(tokens, currentWord.String())
-					currentWord.Reset()
-				}
-				// Add individual character (unigram only)
-				tokens = append(tokens, string(r))
-			} else {
-				// Non-CJK: accumulate into word
-				currentWord.WriteRune(r)
-			}
-		} else {
-			// Separator (whitespace, punctuation)
-			if currentWord.Len() > 0 {
-				tokens = append(tokens, currentWord.String())
-				currentWord.Reset()
-			}
-		}
-	}
-
-	// Don't forget trailing word
-	if currentWord.Len() > 0 {
-		tokens = append(tokens, currentWord.String())
-	}
-
-	return tokens
-}
-
-// isCJK returns true if the rune is a CJK character
-func isCJK(r rune) bool {
-	return unicode.Is(unicode.Han, r) || // Chinese
-		unicode.Is(unicode.Hiragana, r) || // Japanese Hiragana
-		unicode.Is(unicode.Katakana, r) || // Japanese Katakana
-		unicode.Is(unicode.Hangul, r) // Korean
+// Tokenize performs tokenization using the shared Chinese segmenter.
+// This method is used both for indexing and querying.
+// Delegates to Segmenter.CutSearch which handles lowercasing, CJK segmentation,
+// non-CJK word splitting, and deduplication.
+func (idx *BM25Index) Tokenize(text string) []string {
+	return idx.seg.CutSearch(text)
 }

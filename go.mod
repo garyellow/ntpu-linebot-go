@@ -13,6 +13,7 @@ require (
 	github.com/getsentry/sentry-go v0.42.0
 	github.com/getsentry/sentry-go/gin v0.42.0
 	github.com/gin-gonic/gin v1.11.0
+	github.com/go-ego/gse v1.0.0
 	github.com/google/uuid v1.6.0
 	github.com/iwilltry42/bm25-go v0.0.0-20240909111832-a928590cc9da
 	github.com/joho/godotenv v1.5.1
@@ -94,6 +95,7 @@ require (
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.1 // indirect
+	github.com/vcaesar/cedar v0.20.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.65.0 // indirect
 	go.opentelemetry.io/otel v1.40.0 // indirect

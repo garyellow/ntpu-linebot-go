@@ -54,8 +54,8 @@ func setupTestHandler(t *testing.T) *Handler {
 	stickerManager := sticker.NewManager(db, scraperClient, log)
 
 	idHandler := id.NewHandler(db, scraperClient, m, log, stickerManager, nil)
-	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerManager, 100, nil)
-	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerManager, nil, nil, nil, nil, nil)
+	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerManager, 100, nil, nil)
+	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerManager, nil, nil, nil, nil, nil, nil)
 
 	botRegistry := bot.NewRegistry()
 	botRegistry.Register(contactHandler)

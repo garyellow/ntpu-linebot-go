@@ -3,6 +3,47 @@ package stringutil
 
 import "strings"
 
+// SanitizeText performs complete text sanitization:
+// 1. Trim spaces
+// 2. Normalize whitespace
+// 3. Remove punctuation
+// 4. Final normalization
+func SanitizeText(text string) string {
+	text = strings.TrimSpace(text)
+	text = NormalizeWhitespace(text)
+	text = RemovePunctuation(text)
+	return NormalizeWhitespace(text)
+}
+
+// NormalizeWhitespace collapses all whitespace sequences into a single space.
+func NormalizeWhitespace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
+// RemovePunctuation removes all punctuation, keeping only ASCII alphanumeric,
+// spaces, CJK Unified Ideographs (U+4E00-U+9FFF), and CJK Extension A (U+3400-U+4DBF).
+// CJK fullwidth space (U+3000) is converted to ASCII space.
+func RemovePunctuation(s string) string {
+	var result strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z',
+			r >= 'A' && r <= 'Z',
+			r >= '0' && r <= '9',
+			r == ' ',
+			r >= 0x4E00 && r <= 0x9FFF,
+			r >= 0x3400 && r <= 0x4DBF:
+			result.WriteRune(r)
+		case r >= 0x3000 && r <= 0x303F:
+			if r == 0x3000 {
+				result.WriteRune(' ')
+			}
+		default:
+		}
+	}
+	return result.String()
+}
+
 // IsNumeric checks if a string contains only digits.
 // Returns false for empty strings.
 func IsNumeric(s string) bool {

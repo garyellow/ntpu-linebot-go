@@ -8,6 +8,11 @@ import (
 
 // InitSchema creates all necessary tables and indexes.
 // Note: WAL mode is configured in db.go's configureConnection function.
+//
+// STRICT mode: Tables use SQLite STRICT mode for type enforcement.
+// CREATE TABLE IF NOT EXISTS with STRICT only applies when the table is first created.
+// For existing databases, the tables remain in their original mode (non-STRICT).
+// This is acceptable because Go's database/sql always binds typed parameters.
 func InitSchema(ctx context.Context, db *sql.DB) error {
 	// Create students table
 	if err := createStudentsTable(ctx, db); err != nil {
@@ -56,7 +61,7 @@ func createStudentsTable(ctx context.Context, db *sql.DB) error {
 		year INTEGER,
 		department TEXT,
 		cached_at INTEGER NOT NULL
-	);
+	) STRICT;
 	CREATE INDEX IF NOT EXISTS idx_students_name ON students(name);
 	CREATE INDEX IF NOT EXISTS idx_students_year_dept ON students(year, department);
 	CREATE INDEX IF NOT EXISTS idx_students_cached_at ON students(cached_at);
@@ -85,7 +90,7 @@ func createContactsTable(ctx context.Context, db *sql.DB) error {
 		location TEXT,
 		superior TEXT,
 		cached_at INTEGER NOT NULL
-	);
+	) STRICT;
 	CREATE INDEX IF NOT EXISTS idx_contacts_name ON contacts(name);
 	CREATE INDEX IF NOT EXISTS idx_contacts_type ON contacts(type);
 	CREATE INDEX IF NOT EXISTS idx_contacts_organization ON contacts(organization);
@@ -114,7 +119,7 @@ func createCoursesTable(ctx context.Context, db *sql.DB) error {
 		detail_url TEXT,
 		note TEXT,
 		cached_at INTEGER NOT NULL
-	);
+	) STRICT;
 	CREATE INDEX IF NOT EXISTS idx_courses_title ON courses(title);
 	CREATE INDEX IF NOT EXISTS idx_courses_year_term ON courses(year, term);
 	CREATE INDEX IF NOT EXISTS idx_courses_teachers ON courses(teachers);
@@ -134,7 +139,7 @@ func createStickersTable(ctx context.Context, db *sql.DB) error {
 		url TEXT PRIMARY KEY,
 		source TEXT NOT NULL CHECK(source IN ('spy_family', 'ichigo', 'fallback')),
 		cached_at INTEGER NOT NULL
-	);
+	) STRICT;
 	CREATE INDEX IF NOT EXISTS idx_stickers_source ON stickers(source);
 	CREATE INDEX IF NOT EXISTS idx_stickers_cached_at ON stickers(cached_at);
 	`
@@ -164,7 +169,7 @@ func createHistoricalCoursesTable(ctx context.Context, db *sql.DB) error {
 		detail_url TEXT,
 		note TEXT,
 		cached_at INTEGER NOT NULL
-	);
+	) STRICT;
 	CREATE INDEX IF NOT EXISTS idx_historical_courses_title ON historical_courses(title);
 	CREATE INDEX IF NOT EXISTS idx_historical_courses_year_term ON historical_courses(year, term);
 	CREATE INDEX IF NOT EXISTS idx_historical_courses_teachers ON historical_courses(teachers);
@@ -193,7 +198,7 @@ func createSyllabiTable(ctx context.Context, db *sql.DB) error {
 		schedule TEXT,
 		content_hash TEXT NOT NULL,
 		cached_at INTEGER NOT NULL
-	);
+	) STRICT;
 	CREATE INDEX IF NOT EXISTS idx_syllabi_year_term ON syllabi(year, term);
 	CREATE INDEX IF NOT EXISTS idx_syllabi_content_hash ON syllabi(content_hash);
 	CREATE INDEX IF NOT EXISTS idx_syllabi_cached_at ON syllabi(cached_at);
@@ -216,7 +221,7 @@ func createProgramsTable(ctx context.Context, db *sql.DB) error {
 		category TEXT NOT NULL,
 		url TEXT NOT NULL,
 		cached_at INTEGER NOT NULL DEFAULT 0
-	);
+	) STRICT;
 	CREATE INDEX IF NOT EXISTS idx_programs_cached_at ON programs(cached_at);
 	`
 
@@ -238,7 +243,7 @@ func createCourseProgramsTable(ctx context.Context, db *sql.DB) error {
 		course_type TEXT NOT NULL,
 		cached_at INTEGER NOT NULL,
 		PRIMARY KEY (course_uid, program_name)
-	);
+	) STRICT;
 	CREATE INDEX IF NOT EXISTS idx_course_programs_program ON course_programs(program_name);
 	CREATE INDEX IF NOT EXISTS idx_course_programs_course ON course_programs(course_uid);
 	CREATE INDEX IF NOT EXISTS idx_course_programs_type ON course_programs(course_type);

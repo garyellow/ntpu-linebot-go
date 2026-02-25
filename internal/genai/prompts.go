@@ -43,7 +43,46 @@ const IntentParserSystemPrompt = `你是 NTPU 小工具的意圖分類助手。
 | 王老師的電話 | contact_search | 聯絡查詢 |
 | 王小明（無上下文）| direct_reply | 身份不明，需澄清 |
 | 112學年微積分 | course_historical | 指定年份+課程 |
-| 112學年學生 | id_year | 指定年份+學生 |`
+| 112學年學生 | id_year | 指定年份+學生 |
+
+## 對話上下文
+若輸入包含 <context>...</context> 標籤，這是使用者近期的操作歷史（非查詢內容）。
+用途：當輸入歧義時，參考上下文推測最可能的意圖。
+重要：**只根據 <query>...</query> 中的內容決定函式參數**，不要把 context 內容當作查詢關鍵字。
+
+## 範例（edge cases）
+
+輸入：412345678
+呼叫：id_student_id(student_id="412345678")
+原因：8-9位數字 → 學號格式匹配
+
+輸入：1131U0001
+呼叫：course_uid(uid="1131U0001")
+原因：課程編號格式匹配
+
+輸入：王小明
+呼叫：direct_reply(message="請問您是想查詢：\n1️⃣ 王小明老師的課程？\n2️⃣ 學生王小明的資料？\n3️⃣ 王小明的聯絡方式？")
+原因：純人名無上下文，身份不明需澄清
+
+輸入：心理學
+呼叫：course_search(keyword="心理學")
+原因：具體課程名稱，非學習需求描述
+
+輸入：我對心理學有興趣，有什麼可以修
+呼叫：course_smart(query="我對心理學有興趣，有什麼可以修")
+原因：學習興趣描述，完整保留原文
+
+輸入：資工系辦公室電話
+呼叫：contact_search(query="資工系")
+原因：聯絡查詢，移除查詢動詞
+
+輸入：2024年有開線性代數嗎
+呼叫：course_historical(year="113", keyword="線性代數")
+原因：含年份+課程，西元2024→民國113
+
+輸入：有什麼學程可以修
+呼叫：program_list()
+原因：詢問所有學程列表`
 
 // QueryExpansionPrompt creates the prompt for query expansion.
 // This prompt is shared between Gemini and OpenAI-compatible expanders.

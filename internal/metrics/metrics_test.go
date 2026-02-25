@@ -44,6 +44,9 @@ func TestNew(t *testing.T) {
 		{"SearchResults", func() bool { return m.SearchResults != nil }},
 		{"IndexSize", func() bool { return m.IndexSize != nil }},
 
+		// Intent Distribution metrics
+		{"IntentTotal", func() bool { return m.IntentTotal != nil }},
+
 		// Rate limiter metrics
 		{"RateLimiterDropped", func() bool { return m.RateLimiterDropped != nil }},
 		{"RateLimiterUsers", func() bool { return m.RateLimiterUsers != nil }},
@@ -241,6 +244,33 @@ func TestSetIndexSize(t *testing.T) {
 
 	m.SetIndexSize("bm25", 1000)
 	m.SetIndexSize("bm25", 2000) // Update index size
+}
+
+// ============================================
+// Intent Distribution metrics tests
+// ============================================
+
+func TestRecordIntent(t *testing.T) {
+	t.Parallel()
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	testCases := []struct {
+		module string
+		intent string
+		source string
+	}{
+		{"course", "search", "keyword"},
+		{"course", "smart", "nlu"},
+		{"contact", "search", "keyword"},
+		{"id", "student_id", "nlu"},
+		{"program", "list", "nlu"},
+		{"course", "", "keyword"},
+	}
+
+	for _, tc := range testCases {
+		m.RecordIntent(tc.module, tc.intent, tc.source)
+	}
 }
 
 // ============================================

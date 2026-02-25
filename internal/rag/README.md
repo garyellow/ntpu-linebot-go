@@ -64,7 +64,7 @@ Search Flow:
 - **可靠維護者**：由 [k3d-io/k3d](https://github.com/k3d-io/k3d) (⭐6.1k) 維護者維護
 - **已修復 IDF 問題**：解決了常見 Go BM25 庫的負 IDF 值問題
 - **BM25Okapi 參數**：k1=1.5, b=0.75（標準值）
-- **中文分詞**：CJK 字元使用 Unigram（單字元），非 CJK 保持完整詞彙
+- **中文分詞**：使用共享 `stringutil.Segmenter` (gse 搜尋優化分詞)，非 CJK 保持完整詞彙
 - **大小寫不敏感**：所有 token 轉為小寫
 - **線程安全**：使用 `sync.RWMutex` 保護索引操作
 
@@ -157,12 +157,12 @@ Week 2: AWS Academy
 ## 使用
 
 ```go
-// 初始化 BM25 索引
-bm25Index := rag.NewBM25Index(logger)
+// 初始化 BM25 索引（使用共享中文分詞器）
+seg := stringutil.NewSegmenter()
+bm25Index := rag.NewBM25Index(logger, seg)
 
-// 載入資料（自動按學期分組）
-syllabi, _ := db.GetAllSyllabi(ctx)
-bm25Index.Initialize(syllabi)
+// 從資料庫載入資料（自動按學期分組）
+err := bm25Index.Initialize(ctx, db)
 
 // 搜尋課程（返回最新 2 學期，各取 Top-10）
 results, err := bm25Index.SearchCourses(ctx, "雲端運算 AWS", 10)
