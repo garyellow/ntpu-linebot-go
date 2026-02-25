@@ -547,11 +547,11 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 		suggestions := h.suggestSimilarContacts(ctx, searchTerm, 3)
 		if len(suggestions) > 0 {
 			helpText += "\n\n🔎 您是不是在找："
-			var helpTextSb550 strings.Builder
+			var sb strings.Builder
 			for _, s := range suggestions {
-				helpTextSb550.WriteString("\n• " + s)
+				sb.WriteString("\n• " + s)
 			}
-			helpText += helpTextSb550.String()
+			helpText += sb.String()
 		}
 
 		msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)

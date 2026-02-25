@@ -1123,11 +1123,11 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 	suggestions := h.suggestSimilarCourses(ctx, searchTerm, 3)
 	if len(suggestions) > 0 {
 		helpText += "\n\n🔎 您是不是在找："
-		var helpTextSb1126 strings.Builder
+		var sb strings.Builder
 		for _, s := range suggestions {
-			helpTextSb1126.WriteString("\n• " + s)
+			sb.WriteString("\n• " + s)
 		}
-		helpText += helpTextSb1126.String()
+		helpText += sb.String()
 	}
 
 	msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
@@ -1995,11 +1995,11 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 		suggestions := h.suggestSimilarCourses(ctx, query, 3)
 		if len(suggestions) > 0 {
 			helpText += "\n\n🔎 您是不是在找："
-			var helpTextSb1996 strings.Builder
+			var sb strings.Builder
 			for _, s := range suggestions {
-				helpTextSb1996.WriteString("\n• " + s)
+				sb.WriteString("\n• " + s)
 			}
-			helpText += helpTextSb1996.String()
+			helpText += sb.String()
 		}
 
 		msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)

@@ -99,10 +99,10 @@ type BM25Result struct {
 }
 
 // NewBM25Index creates a new BM25 index with shared Chinese segmenter.
-// The segmenter must be pre-initialized; if nil, a new one is created.
+// The segmenter must be pre-initialized and non-nil.
 func NewBM25Index(log *logger.Logger, seg *stringutil.Segmenter) *BM25Index {
 	if seg == nil {
-		seg = stringutil.NewSegmenter()
+		panic("bm25: segmenter must not be nil")
 	}
 	return &BM25Index{
 		semesterIndexes: make(map[SemesterKey]*semesterIndex),

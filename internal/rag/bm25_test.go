@@ -12,9 +12,13 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
 )
 
-// newTestSegmenter creates a shared segmenter for test use
+// testSegmenter is a shared segmenter for all tests in this package.
+// gse uses global state, so NewSegmenter must not be called concurrently.
+var testSegmenter = stringutil.NewSegmenter()
+
+// newTestSegmenter returns the shared segmenter for test use.
 func newTestSegmenter() *stringutil.Segmenter {
-	return stringutil.NewSegmenter()
+	return testSegmenter
 }
 
 // setupTestDB creates an isolated temp file database for testing

@@ -137,11 +137,12 @@ func (s *Store) Cleanup() {
 				break
 			}
 		}
-		sess.mu.Unlock()
-
 		if !hasValid {
+			// Delete while holding the lock to prevent a concurrent Record()
+			// from inserting a fresh intent between unlock and delete.
 			s.sessions.Delete(key)
 		}
+		sess.mu.Unlock()
 		return true
 	})
 }
