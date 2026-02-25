@@ -15,7 +15,9 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 	"github.com/garyellow/ntpu-linebot-go/internal/ratelimit"
+	"github.com/garyellow/ntpu-linebot-go/internal/session"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
+	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 	"github.com/line/line-bot-sdk-go/v8/linebot/webhook"
 )
@@ -33,6 +35,7 @@ type Processor struct {
 	stickerManager *sticker.Manager
 	logger         *logger.Logger
 	metrics        *metrics.Metrics
+	sessionStore   *session.Store // Lightweight per-user conversation context
 
 	// Configuration
 	webhookTimeout time.Duration
@@ -47,6 +50,7 @@ type ProcessorConfig struct {
 	StickerManager *sticker.Manager
 	Logger         *logger.Logger
 	Metrics        *metrics.Metrics
+	SessionStore   *session.Store // Optional: per-user conversation context
 	BotConfig      *config.BotConfig
 }
 
@@ -65,6 +69,7 @@ func NewProcessor(cfg ProcessorConfig) *Processor {
 		stickerManager: cfg.StickerManager,
 		logger:         cfg.Logger,
 		metrics:        cfg.Metrics,
+		sessionStore:   cfg.SessionStore,
 		webhookTimeout: cfg.BotConfig.WebhookTimeout,
 	}
 }
@@ -151,7 +156,7 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 	}
 
 	// Sanitize input: normalize whitespace, remove punctuation
-	text = sanitizeText(text)
+	text = stringutil.SanitizeText(text)
 	if len(text) == 0 {
 		return nil, nil // Empty after sanitization
 	}
@@ -172,7 +177,20 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 	defer cancel()
 
 	// Dispatch to appropriate bot module based on CanHandle
-	if msgs := p.registry.DispatchMessage(processCtx, text); len(msgs) > 0 {
+	if msgs, handlerName := p.registry.DispatchMessage(processCtx, text); len(msgs) > 0 {
+		if p.metrics != nil {
+			p.metrics.RecordIntent(handlerName, "", "keyword")
+		}
+		// Record keyword match in session for conversation context
+		// Skip "usage" module — it doesn't contribute to NLU disambiguation
+		if p.sessionStore != nil && handlerName != "" && handlerName != "usage" {
+			userID := ctxutil.GetUserID(processCtx)
+			p.sessionStore.Record(userID, session.Intent{
+				Module: handlerName,
+				Action: "keyword",
+				Params: map[string]string{"query": text},
+			})
+		}
 		lineutil.SetQuoteTokenToFirst(msgs, ctxutil.GetQuoteToken(processCtx))
 		return msgs, nil
 	}
@@ -372,7 +390,7 @@ func (p *Processor) handleUnmatchedMessage(ctx context.Context, source webhook.S
 				return p.getHelpMessage(FallbackGeneric), nil
 			}
 			// Apply same sanitization as original text processing
-			sanitizedText = sanitizeText(mentionlessText)
+			sanitizedText = stringutil.SanitizeText(mentionlessText)
 			if sanitizedText == "" {
 				return p.getHelpMessage(FallbackGeneric), nil
 			}
@@ -397,7 +415,17 @@ func (p *Processor) handleWithNLU(ctx context.Context, text string, source webho
 		return rateLimitMsg, nil
 	}
 
-	result, err := p.intentParser.Parse(ctx, text)
+	// Prepend conversation context for better NLU disambiguation
+	// Uses XML-like tags so LLM can clearly distinguish context from the actual query
+	nluInput := text
+	if p.sessionStore != nil {
+		userID := ctxutil.GetUserID(ctx)
+		if ctxStr := p.sessionStore.FormatContext(userID); ctxStr != "" {
+			nluInput = "<context>" + ctxStr + "</context>\n<query>" + text + "</query>"
+		}
+	}
+
+	result, err := p.intentParser.Parse(ctx, nluInput)
 
 	if err != nil {
 		p.logger.WithError(err).WarnContext(ctx, "NLU intent parsing failed")
@@ -421,6 +449,21 @@ func (p *Processor) handleWithNLU(ctx context.Context, text string, source webho
 
 // dispatchIntent dispatches the parsed intent to the appropriate handler.
 func (p *Processor) dispatchIntent(ctx context.Context, result *genai.ParseResult) ([]messaging_api.MessageInterface, error) {
+	// Record NLU intent for metrics
+	if p.metrics != nil {
+		p.metrics.RecordIntent(result.Module, result.Intent, "nlu")
+	}
+
+	// Record NLU intent in session for conversation context
+	if p.sessionStore != nil && result.Module != "help" && result.Module != "direct_reply" {
+		userID := ctxutil.GetUserID(ctx)
+		p.sessionStore.Record(userID, session.Intent{
+			Module: result.Module,
+			Action: result.Intent,
+			Params: result.Params,
+		})
+	}
+
 	if result.Module == "help" {
 		return p.getDetailedInstructionMessages(), nil
 	}
@@ -1223,43 +1266,4 @@ func (p *Processor) buildLLMRateLimitFlexMessage(sender *messaging_api.Sender) *
 	msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyMainNavCompact())
 
 	return msg
-}
-
-// Helper functions
-
-// sanitizeText performs complete text sanitization:
-// 1. Trim spaces
-// 2. Normalize whitespace
-// 3. Remove punctuation
-// 4. Final normalization
-func sanitizeText(text string) string {
-	text = strings.TrimSpace(text)
-	text = normalizeWhitespace(text)
-	text = removePunctuation(text)
-	return normalizeWhitespace(text)
-}
-
-func normalizeWhitespace(s string) string {
-	return strings.Join(strings.Fields(s), " ")
-}
-
-func removePunctuation(s string) string {
-	var result strings.Builder
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z',
-			r >= 'A' && r <= 'Z',
-			r >= '0' && r <= '9',
-			r == ' ',
-			r >= 0x4E00 && r <= 0x9FFF,
-			r >= 0x3400 && r <= 0x4DBF:
-			result.WriteRune(r)
-		case r >= 0x3000 && r <= 0x303F:
-			if r == 0x3000 {
-				result.WriteRune(' ')
-			}
-		default:
-		}
-	}
-	return result.String()
 }

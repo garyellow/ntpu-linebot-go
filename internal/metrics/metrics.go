@@ -92,6 +92,12 @@ type Metrics struct {
 	IndexSize *prometheus.GaugeVec // documents in BM25 index
 
 	// ============================================
+	// Intent Distribution (NLU analysis)
+	// Tracks which intents are triggered and how
+	// ============================================
+	IntentTotal *prometheus.CounterVec // intent triggers by module, intent, source
+
+	// ============================================
 	// Rate Limiter (USE Method)
 	// Request throttling
 	// ============================================
@@ -295,6 +301,20 @@ func New(registry *prometheus.Registry) *Metrics {
 		),
 
 		// ============================================
+		// Intent Distribution metrics
+		// ============================================
+		IntentTotal: promauto.With(registry).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "ntpu_intent_total",
+				Help: "Total intent triggers by module, intent, and source",
+			},
+			// module: course, id, contact, program, usage, help, direct_reply
+			// intent: search, smart, uid, extended, historical, student_id, year, department, emergency, list, courses, query, ""
+			// source: keyword (matched by CanHandle), nlu (matched by NLU intent parser)
+			[]string{"module", "intent", "source"},
+		),
+
+		// ============================================
 		// Rate Limiter metrics
 		// ============================================
 		RateLimiterDropped: promauto.With(registry).NewCounterVec(
@@ -418,6 +438,14 @@ func (m *Metrics) RecordSearch(searchType, status string, duration float64, resu
 // index: bm25
 func (m *Metrics) SetIndexSize(index string, count int) {
 	m.IndexSize.WithLabelValues(index).Set(float64(count))
+}
+
+// RecordIntent records an intent trigger.
+// module: course, id, contact, program, usage, help, direct_reply
+// intent: search, smart, uid, etc. (empty string for modules without sub-intents)
+// source: keyword (matched by CanHandle), nlu (matched by NLU intent parser)
+func (m *Metrics) RecordIntent(module, intent, source string) {
+	m.IntentTotal.WithLabelValues(module, intent, source).Inc()
 }
 
 // ============================================

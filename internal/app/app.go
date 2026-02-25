@@ -35,9 +35,11 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/ratelimit"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	internalSentry "github.com/garyellow/ntpu-linebot-go/internal/sentry"
+	"github.com/garyellow/ntpu-linebot-go/internal/session"
 	"github.com/garyellow/ntpu-linebot-go/internal/snapshot"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
+	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/warmup"
 	"github.com/garyellow/ntpu-linebot-go/internal/webhook"
 	sentrygin "github.com/getsentry/sentry-go/gin"
@@ -68,6 +70,7 @@ type Application struct {
 	queryExpander  genai.QueryExpander // Interface type for multi-provider support
 	llmLimiter     *ratelimit.KeyedLimiter
 	userLimiter    *ratelimit.KeyedLimiter
+	sessionStore   *session.Store
 	semesterCache  *course.SemesterCache  // Shared cache for semester data (updated by refresh task)
 	readinessState *warmup.ReadinessState // Tracks initial refresh completion for readiness
 	wg             sync.WaitGroup         // Track background goroutines for graceful shutdown
@@ -252,7 +255,10 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	scraperClient := scraper.NewClient(cfg.ScraperTimeout, cfg.ScraperMaxRetries, cfg.ScraperBaseURLs)
 	stickerMgr := sticker.NewManager(db, scraperClient, log)
 
-	bm25Index := rag.NewBM25Index(log)
+	// Shared Chinese word segmenter for BM25 + suggest features
+	seg := stringutil.NewSegmenter()
+
+	bm25Index := rag.NewBM25Index(log, seg)
 	if err := bm25Index.Initialize(ctx, db); err != nil {
 		log.WithError(err).Warn("BM25 initialization failed")
 	}
@@ -307,9 +313,9 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	// Create shared semester cache for course and program handlers
 	semesterCache := course.NewSemesterCache()
 	refreshSemesterCacheFromDB(ctx, db, semesterCache, log, "startup")
-	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerMgr, deltaLog, bm25Index, queryExpander, llmLimiter, semesterCache)
+	courseHandler := course.NewHandler(db, scraperClient, m, log, stickerMgr, deltaLog, bm25Index, queryExpander, llmLimiter, semesterCache, seg)
 
-	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerMgr, cfg.Bot.MaxContactsPerSearch, deltaLog)
+	contactHandler := contact.NewHandler(db, scraperClient, m, log, stickerMgr, cfg.Bot.MaxContactsPerSearch, deltaLog, seg)
 	programHandler := program.NewHandler(db, m, log, stickerMgr, semesterCache)
 	usageHandler := usage.NewHandler(userLimiter, llmLimiter, log, stickerMgr)
 
@@ -320,6 +326,9 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	botRegistry.Register(programHandler)
 	botRegistry.Register(usageHandler)
 
+	// Create session store for lightweight per-user conversation context (3 intents, 5 min TTL)
+	sessionStore := session.NewStore(3, 5*time.Minute)
+
 	processor := bot.NewProcessor(bot.ProcessorConfig{
 		Registry:       botRegistry,
 		IntentParser:   intentParser,
@@ -328,6 +337,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		StickerManager: stickerMgr,
 		Logger:         log,
 		Metrics:        m,
+		SessionStore:   sessionStore,
 		BotConfig:      &cfg.Bot,
 	})
 
@@ -379,6 +389,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		queryExpander:  queryExpander,
 		llmLimiter:     llmLimiter,
 		userLimiter:    userLimiter,
+		sessionStore:   sessionStore,
 		semesterCache:  semesterCache,
 		readinessState: readinessState,
 	}
@@ -731,8 +742,30 @@ func (a *Application) startBackgroundJobs(ctx context.Context) {
 		a.updateCacheSizeMetrics(ctx)
 	})
 	a.wg.Go(func() {
+		a.cleanupSessionStore(ctx)
+	})
+	a.wg.Go(func() {
 		a.refreshStickers(ctx)
 	})
+}
+
+// cleanupSessionStore periodically removes expired in-memory session entries.
+func (a *Application) cleanupSessionStore(ctx context.Context) {
+	if a.sessionStore == nil {
+		return
+	}
+
+	ticker := time.NewTicker(config.SessionCleanupInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			a.sessionStore.Cleanup()
+		}
+	}
 }
 
 // startHTTPServer starts the HTTP server in a goroutine.

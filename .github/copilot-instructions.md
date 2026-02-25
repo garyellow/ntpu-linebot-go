@@ -56,17 +56,19 @@ LINE chatbot "NTPU 小工具" for NTPU (National Taipei University) providing st
 1. Logger (slog with custom ContextHandler)
 2. Database (SQLite + WAL mode)
 3. Metrics (Prometheus registry)
-4. Scraper Client (rate-limited HTTP client)
+4. Scraper Client (rate-limited HTTP client with per-domain rate limiting)
 5. Sticker Manager (avatar URLs)
-6. BM25 Index (load from DB syllabi)
-7. GenAI (IntentParser + QueryExpander with fallback, auto-enabled if API keys present)
-8. LLMRateLimiter (per-user hourly token bucket, 60 burst, 30/hour refill)
-9. UserRateLimiter (per-user request token bucket, webhook protection)
-10. Handlers (id, course, contact, program with DI)
-11. Registry (handler registration and dispatch)
-12. Processor (message/intent routing with rate limiting)
-13. Webhook (LINE event handler with async processing)
-14. HTTP Server (Gin with security headers, routes, graceful shutdown)
+6. Chinese Segmenter (shared gse word segmenter for BM25 + suggest)
+7. BM25 Index (load from DB syllabi, uses shared segmenter)
+8. GenAI (IntentParser + QueryExpander with fallback, auto-enabled if API keys present)
+9. LLMRateLimiter (per-user hourly token bucket, 60 burst, 30/hour refill)
+10. UserRateLimiter (per-user request token bucket, webhook protection)
+11. Handlers (id, course, contact, program with DI, segmenter injected)
+12. Registry (handler registration and dispatch)
+13. SessionStore (per-user conversation context, 3 intents, 5 min TTL)
+14. Processor (message/intent routing with rate limiting and session context)
+15. Webhook (LINE event handler with async processing)
+16. HTTP Server (Gin with security headers, routes, graceful shutdown)
 ```
 
 ## Architecture: Async Webhook Processing
@@ -170,7 +172,8 @@ LINE Webhook → Gin Handler
 **BM25 Index** (`internal/rag/`):
 - [iwilltry42/bm25-go](https://github.com/iwilltry42/bm25-go) (k1=1.5, b=0.75)
 - In-memory index rebuilt on startup from SQLite
-- Chinese tokenization (unigram for CJK), 1 course = 1 document
+- Chinese tokenization via shared `stringutil.Segmenter` (gse search-optimized word segmentation), 1 course = 1 document
+- Min confidence filter (0.25) removes low-relevance noise
 - Combined with LLM Query Expansion (auto-enabled when LLM API key configured)
 
 **Background Jobs** (Taiwan time/Asia/Taipei):
@@ -201,7 +204,7 @@ LINE Webhook → Gin Handler
 
 ## Rate Limiting
 
-**Scraper** (`internal/scraper/client.go`): No fixed delay between successful requests, exponential backoff on failure (1s initial, max 10 retries, ±25% jitter), 60s HTTP timeout per request
+**Scraper** (`internal/scraper/client.go`): Per-domain rate limiting (burst=3, 5 rps via token bucket), exponential backoff on failure (1s initial, max 10 retries, ±25% jitter), 60s HTTP timeout per request
 
 **Webhook**: Per-user (15 tokens, 1 token/10s refill), global (100 rps), silently drops excess requests
 
@@ -397,6 +400,7 @@ Wrap errors with context (`fmt.Errorf(..., %w)`), structured logging with fields
 ## Scraper Client
 
 Multiple base URLs per domain (LMS/SEA), automatic failover on 500+ errors, URLCache for performance.
+Per-domain rate limiting (burst=3, 5 rps) prevents overwhelming individual servers.
 
 ## Debugging
 
@@ -462,7 +466,7 @@ Fallback → getHelpMessage() + Warning Log
 - Function Calling (AUTO mode): Model chooses function call or text response
 - 9 intent functions: `course_search`, `course_smart`, `course_uid`, `id_search`, `id_student_id`, `id_department`, `contact_search`, `contact_emergency`, `help`
 - Group @Bot detection: Uses `mention.Index` and `mention.Length` for precise removal
-- Metrics: `ntpu_llm_total{provider,operation}`, `ntpu_llm_duration_seconds{provider}`, `ntpu_llm_fallback_total`
+- Metrics: `ntpu_llm_total{provider,operation}`, `ntpu_llm_duration_seconds{provider}`, `ntpu_llm_fallback_total`, `ntpu_intent_total{module,intent,source}`
 
 **Implementation Pattern**:
 - `genai.IntentParser`: Interface for NLU parsing (implemented by Gemini and OpenAI-compatible)
@@ -533,4 +537,7 @@ User Query (`找課`/`學程`) → BM25/SQL Search (read-only) → Return cached
 - **Query expander**: `internal/genai/gemini_expander.go` / `internal/genai/openai_expander.go` (LLM-based query expansion for Gemini/Groq/Cerebras)
 - **NLU intent parser**: `internal/genai/gemini_intent.go` / `internal/genai/openai_intent.go` (Function Calling with Close method for Gemini/Groq/Cerebras)
 - **Syllabus scraper**: `internal/syllabus/scraper.go` (extracts syllabus, parses full program names, and fuses with list-page types; ONLY called by refresh task)
+- **Chinese segmenter**: `internal/stringutil/segmenter.go` (shared gse word segmenter for BM25 indexing + suggest features)
+- **String utilities**: `internal/stringutil/strings.go` (SanitizeText, ContainsAllRunes, etc.)
+- **Session store**: `internal/session/store.go` (per-user conversation context for NLU disambiguation)
 - **Timeout constants**: `internal/config/timeouts.go` (all timeout/interval constants)

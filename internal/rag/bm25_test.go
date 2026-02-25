@@ -9,7 +9,17 @@ import (
 
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
+	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
 )
+
+// testSegmenter is a shared segmenter for all tests in this package.
+// gse uses global state, so NewSegmenter must not be called concurrently.
+var testSegmenter = stringutil.NewSegmenter()
+
+// newTestSegmenter returns the shared segmenter for test use.
+func newTestSegmenter() *stringutil.Segmenter {
+	return testSegmenter
+}
 
 // setupTestDB creates an isolated temp file database for testing
 func setupTestDB(t *testing.T) *storage.DB {
@@ -29,7 +39,7 @@ func setupTestDB(t *testing.T) *storage.DB {
 
 func TestNewBM25Index(t *testing.T) {
 	log := logger.New("debug")
-	idx := NewBM25Index(log)
+	idx := NewBM25Index(log, newTestSegmenter())
 
 	if idx == nil {
 		t.Fatal("NewBM25Index() returned nil")
@@ -46,7 +56,7 @@ func TestBM25Index_Initialize(t *testing.T) {
 	defer func() { _ = db.Close() }()
 	ctx := context.Background()
 
-	idx := NewBM25Index(log)
+	idx := NewBM25Index(log, newTestSegmenter())
 
 	syllabi := []*storage.Syllabus{
 		{
@@ -96,7 +106,7 @@ func TestBM25Index_InitializeEmpty(t *testing.T) {
 	defer func() { _ = db.Close() }()
 	ctx := context.Background()
 
-	idx := NewBM25Index(log)
+	idx := NewBM25Index(log, newTestSegmenter())
 
 	if err := idx.Initialize(ctx, db); err != nil {
 		t.Fatalf("Initialize() error = %v", err)
@@ -120,7 +130,7 @@ func TestBM25Index_PerSemesterIndexing(t *testing.T) {
 	defer func() { _ = db.Close() }()
 	ctx := context.Background()
 
-	idx := NewBM25Index(log)
+	idx := NewBM25Index(log, newTestSegmenter())
 
 	// Create syllabi from 3 different semesters
 	syllabi := []*storage.Syllabus{
@@ -150,7 +160,7 @@ func TestBM25Index_SearchCourses_PerSemesterTopK(t *testing.T) {
 	defer func() { _ = db.Close() }()
 	ctx := context.Background()
 
-	idx := NewBM25Index(log)
+	idx := NewBM25Index(log, newTestSegmenter())
 
 	// Create syllabi: 15 courses per semester (114-1 and 113-2), all matching "程式"
 	// This ensures we have MORE than 10 courses per semester to verify the limit
@@ -242,7 +252,7 @@ func TestBM25Index_SearchCourses_IndependentConfidence(t *testing.T) {
 	defer func() { _ = db.Close() }()
 	ctx := context.Background()
 
-	idx := NewBM25Index(log)
+	idx := NewBM25Index(log, newTestSegmenter())
 
 	// Create syllabi: each semester has courses with "雲端"
 	syllabi := []*storage.Syllabus{
@@ -289,7 +299,7 @@ func TestBM25Index_SearchCourses_NewestTwoSemesters(t *testing.T) {
 	defer func() { _ = db.Close() }()
 	ctx := context.Background()
 
-	idx := NewBM25Index(log)
+	idx := NewBM25Index(log, newTestSegmenter())
 
 	// Create courses in 4 semesters, all matching "雲端"
 	syllabi := []*storage.Syllabus{
@@ -333,7 +343,7 @@ func TestBM25Index_SearchCourses_EmptyQuery(t *testing.T) {
 	defer func() { _ = db.Close() }()
 	ctx := context.Background()
 
-	idx := NewBM25Index(log)
+	idx := NewBM25Index(log, newTestSegmenter())
 
 	syllabi := []*storage.Syllabus{
 		{UID: "1131U0001", Title: "雲端運算", Year: 113, Term: 1, Objectives: "雲端基礎"},
@@ -372,7 +382,7 @@ func TestBM25Index_SearchCourses_NoMatch(t *testing.T) {
 	defer func() { _ = db.Close() }()
 	ctx := context.Background()
 
-	idx := NewBM25Index(log)
+	idx := NewBM25Index(log, newTestSegmenter())
 
 	syllabi := []*storage.Syllabus{
 		{UID: "1131U0001", Title: "雲端運算", Year: 113, Term: 1, Objectives: "雲端基礎"},
@@ -396,77 +406,68 @@ func TestBM25Index_SearchCourses_NoMatch(t *testing.T) {
 	}
 }
 
-func TestTokenizeChinese(t *testing.T) {
+func TestTokenize(t *testing.T) {
 	t.Parallel()
+
+	log := logger.New("error")
+	idx := NewBM25Index(log, newTestSegmenter())
+
 	tests := []struct {
-		name   string
-		input  string
-		expect []string
+		name      string
+		input     string
+		expectLen int      // Minimum number of expected tokens (gse may produce sub-words)
+		expectAll []string // Tokens that MUST be present in the output
 	}{
 		{
-			name:   "Chinese characters as unigrams",
-			input:  "雲端",
-			expect: []string{"雲", "端"},
+			name:      "Chinese word segmentation",
+			input:     "雲端",
+			expectLen: 1,
+			expectAll: []string{"雲端"},
 		},
 		{
-			name:   "English word kept intact",
-			input:  "AWS",
-			expect: []string{"aws"}, // lowercase
+			name:      "English word kept intact",
+			input:     "AWS",
+			expectLen: 1,
+			expectAll: []string{"aws"}, // lowercase
 		},
 		{
-			name:   "Mixed Chinese and English",
-			input:  "雲端運算 cloud computing",
-			expect: []string{"雲", "端", "運", "算", "cloud", "computing"},
+			name:      "Mixed Chinese and English",
+			input:     "雲端運算 cloud computing",
+			expectLen: 3,
+			expectAll: []string{"cloud", "computing"},
 		},
 		{
-			name:   "Empty string",
-			input:  "",
-			expect: nil,
+			name:      "Empty string",
+			input:     "",
+			expectLen: 0,
 		},
 		{
-			name:   "Punctuation ignored",
-			input:  "Hello, 世界!",
-			expect: []string{"hello", "世", "界"},
+			name:      "Punctuation ignored",
+			input:     "Hello, 世界!",
+			expectLen: 2,
+			expectAll: []string{"hello"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := tokenizeChinese(tt.input)
-			if len(result) != len(tt.expect) {
-				t.Errorf("tokenizeChinese(%q) = %v, want %v", tt.input, result, tt.expect)
+			result := idx.Tokenize(tt.input)
+			if len(result) < tt.expectLen {
+				t.Errorf("Tokenize(%q) returned %d tokens %v, want at least %d", tt.input, len(result), result, tt.expectLen)
 				return
 			}
-			for i, token := range result {
-				if token != tt.expect[i] {
-					t.Errorf("tokenizeChinese(%q)[%d] = %q, want %q", tt.input, i, token, tt.expect[i])
+			for _, expected := range tt.expectAll {
+				found := false
+				for _, token := range result {
+					if token == expected {
+						found = true
+						break
+					}
 				}
-			}
-		})
-	}
-}
-
-func TestIsCJK(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		r    rune
-		want bool
-	}{
-		{'雲', true},  // Chinese
-		{'あ', true},  // Japanese Hiragana
-		{'ア', true},  // Japanese Katakana
-		{'한', true},  // Korean
-		{'a', false}, // English
-		{'1', false}, // Number
-		{'!', false}, // Punctuation
-	}
-
-	for _, tt := range tests {
-		t.Run(string(tt.r), func(t *testing.T) {
-			t.Parallel()
-			if got := isCJK(tt.r); got != tt.want {
-				t.Errorf("isCJK(%q) = %v, want %v", tt.r, got, tt.want)
+				if !found {
+					t.Errorf("Tokenize(%q) = %v, missing expected token %q", tt.input, result, expected)
+				}
 			}
 		})
 	}

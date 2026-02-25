@@ -1,4 +1,4 @@
-package bot
+package stringutil
 
 import (
 	"strings"
@@ -25,9 +25,9 @@ func TestNormalizeWhitespace(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := normalizeWhitespace(tt.input)
+			got := NormalizeWhitespace(tt.input)
 			if got != tt.want {
-				t.Errorf("normalizeWhitespace(%q) = %q, want %q", tt.input, got, tt.want)
+				t.Errorf("NormalizeWhitespace(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
 	}
@@ -77,9 +77,9 @@ func TestRemovePunctuation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := removePunctuation(tt.input)
+			got := RemovePunctuation(tt.input)
 			if got != tt.want {
-				t.Errorf("removePunctuation(%q) = %q, want %q", tt.input, got, tt.want)
+				t.Errorf("RemovePunctuation(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
 	}
@@ -108,12 +108,39 @@ func TestSanitizationPipeline(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Apply the full pipeline (matching webhook handler logic)
-			step1 := normalizeWhitespace(tt.input)
-			step2 := removePunctuation(step1)
+			step1 := NormalizeWhitespace(tt.input)
+			step2 := RemovePunctuation(step1)
 			got := strings.TrimSpace(step2) // Final trim (as done in handler)
 
 			if got != tt.want {
 				t.Errorf("Pipeline(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestSanitizeText tests the complete SanitizeText function
+func TestSanitizeText(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"Simple text", "hello world", "hello world"},
+		{"Extra spaces", "  hello  world  ", "hello world"},
+		{"With punctuation", "課程：微積分！", "課程微積分"},
+		{"Complex", "  學號  「412345678」  ", "學號 412345678"},
+		{"Empty", "", ""},
+		{"Only punctuation", "！？。", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := SanitizeText(tt.input)
+			if got != tt.want {
+				t.Errorf("SanitizeText(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
 	}

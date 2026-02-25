@@ -29,14 +29,14 @@ func (r *Registry) Register(h Handler) {
 }
 
 // DispatchMessage dispatches a text message to the first handler that can handle it.
-// Returns nil if no handler matches.
-func (r *Registry) DispatchMessage(ctx context.Context, text string) []messaging_api.MessageInterface {
+// Returns nil messages and empty handler name if no handler matches.
+func (r *Registry) DispatchMessage(ctx context.Context, text string) ([]messaging_api.MessageInterface, string) {
 	for _, h := range r.handlers {
 		if h.CanHandle(text) {
-			return h.HandleMessage(ctx, text)
+			return h.HandleMessage(ctx, text), h.Name()
 		}
 	}
-	return nil
+	return nil, ""
 }
 
 // DispatchPostback dispatches a postback event using structured data.

@@ -137,6 +137,12 @@ func configureConnection(ctx context.Context, conn *sql.DB, readOnly bool) error
 		if _, err := conn.ExecContext(ctx, "PRAGMA query_only=ON"); err != nil {
 			return fmt.Errorf("failed to set query-only mode: %w", err)
 		}
+
+		// Enable memory-mapped I/O for read-only connections (64 MB)
+		// Improves read performance by avoiding read() syscalls for cached pages
+		if _, err := conn.ExecContext(ctx, "PRAGMA mmap_size=67108864"); err != nil {
+			return fmt.Errorf("failed to set mmap size: %w", err)
+		}
 	}
 
 	return nil
@@ -293,10 +299,24 @@ func (db *DB) SwapConnections(newDB *DB) (oldWriter, oldReader *sql.DB, oldPath 
 
 // CreateSnapshot creates a consistent snapshot of the database at destPath.
 // It uses VACUUM INTO to produce a compact, consistent copy.
+// Path is cleaned and validated as defense-in-depth; destPath comes from internal
+// logic (not user input), so the risk is minimal.
 func (db *DB) CreateSnapshot(ctx context.Context, destPath string) error {
 	if destPath == "" {
 		return errors.New("snapshot path is required")
 	}
+
+	// Validate the raw destination path to prevent obvious path traversal sequences
+	if strings.Contains(destPath, "..") {
+		return errors.New("snapshot path must not contain path traversal")
+	}
+
+	// Clean and normalize the destination path as defense-in-depth
+	cleanPath := filepath.Clean(destPath)
+	if cleanPath != destPath {
+		destPath = cleanPath
+	}
+
 	_ = os.Remove(destPath)
 
 	query := fmt.Sprintf("VACUUM INTO '%s'", escapeSQLiteString(destPath))

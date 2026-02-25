@@ -18,23 +18,39 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/corpix/uarand"
+	"github.com/garyellow/ntpu-linebot-go/internal/ratelimit"
 	"golang.org/x/text/encoding/traditionalchinese"
 	"golang.org/x/text/transform"
 )
 
-// Client is an HTTP client for web scraping with retry and URL failover
+// Client is an HTTP client for web scraping with retry, URL failover, and per-domain rate limiting
 type Client struct {
-	httpClient *http.Client
-	maxRetries int
-	baseURLs   map[string][]string // Base URLs for failover by domain
-	mu         sync.RWMutex
+	httpClient     *http.Client
+	maxRetries     int
+	baseURLs       map[string][]string           // Base URLs for failover by domain
+	domainLimiters map[string]*ratelimit.Limiter // Per-domain rate limiters
+	mu             sync.RWMutex
 }
 
-// NewClient creates a new scraper client with URL failover support
+// DefaultDomainRPS is the default per-domain requests per second limit.
+// Conservative enough to avoid triggering anti-scraping measures on NTPU servers.
+const DefaultDomainRPS = 5.0
+
+// NewClient creates a new scraper client with URL failover and per-domain rate limiting.
 // timeout: HTTP request timeout (e.g., 60s)
 // maxRetries: max retry attempts with exponential backoff (e.g., 10)
 // baseURLs: map of domain to list of base URLs for failover
+//
+// Each domain gets an independent rate limiter (burst: 3, refill: 5/sec)
+// to prevent overwhelming any single server.
 func NewClient(timeout time.Duration, maxRetries int, baseURLs map[string][]string) *Client {
+	// Create per-domain rate limiters
+	domainLimiters := make(map[string]*ratelimit.Limiter, len(baseURLs))
+	for domain := range baseURLs {
+		// Burst of 3 allows small batches, refill at 5/sec sustains moderate throughput
+		domainLimiters[domain] = ratelimit.New(3, DefaultDomainRPS)
+	}
+
 	return &Client{
 		httpClient: &http.Client{
 			Timeout: timeout,
@@ -46,14 +62,15 @@ func NewClient(timeout time.Duration, maxRetries int, baseURLs map[string][]stri
 				ResponseHeaderTimeout: 30 * time.Second,
 			},
 		},
-		maxRetries: maxRetries,
-		baseURLs:   baseURLs,
+		maxRetries:     maxRetries,
+		baseURLs:       baseURLs,
+		domainLimiters: domainLimiters,
 	}
 }
 
 // GetDocument performs a GET request and parses the response as HTML.
 // Includes retry with exponential backoff, gzip decompression, and Big5 encoding conversion.
-// No fixed delay between requests - relies on retry backoff for rate limiting.
+// Per-domain rate limiting is applied automatically before each request attempt.
 func (c *Client) GetDocument(ctx context.Context, reqURL string) (*goquery.Document, error) {
 	resp, err := c.doRequest(ctx, "GET", reqURL, "")
 	if err != nil {
@@ -76,7 +93,7 @@ func (c *Client) PostFormDocument(ctx context.Context, postURL string, formData 
 
 // PostFormDocumentRaw performs a POST request with raw form data string and parses the response as HTML.
 // Use this when you need custom encoding (e.g., Big5) instead of standard UTF-8 url.Values encoding.
-// No fixed delay between requests - relies on retry backoff for rate limiting.
+// Per-domain rate limiting is applied automatically before each request attempt.
 func (c *Client) PostFormDocumentRaw(ctx context.Context, postURL, formDataStr string) (*goquery.Document, error) {
 	resp, err := c.doRequest(ctx, "POST", postURL, formDataStr)
 	if err != nil {
@@ -96,11 +113,17 @@ func (c *Client) PostFormDocumentRaw(ctx context.Context, postURL, formDataStr s
 // This is the core request method used by GetDocument and PostFormDocumentRaw.
 // Returns the response on success; caller is responsible for closing the body.
 // Retry starts from 1 second with exponential backoff up to maxRetries (default: 10).
+// Per-domain rate limiting is applied before each attempt.
 func (c *Client) doRequest(ctx context.Context, method, reqURL, body string) (*http.Response, error) {
 	var resp *http.Response
 	var lastErr error
 
 	err := RetryWithBackoff(ctx, c.maxRetries, 1*time.Second, func() error {
+		// Apply per-domain rate limiting before each retry attempt
+		if err := c.waitForDomain(ctx, reqURL); err != nil {
+			return fmt.Errorf("domain rate limit wait: %w", err)
+		}
+
 		// Create request with optional body
 		var bodyReader io.Reader = http.NoBody
 		if body != "" {
@@ -292,6 +315,44 @@ func (c *Client) GetBaseURLs(domain string) []string {
 	result := make([]string, len(urls))
 	copy(result, urls)
 	return result
+}
+
+// waitForDomain applies per-domain rate limiting before a request.
+// It extracts the hostname from the URL and waits for the matching domain limiter.
+// If no limiter matches the domain, the request proceeds immediately.
+// Note: The nested loop over baseURLs is O(domains × URLs-per-domain) per call,
+// which is negligible for the current ≤3 domains. No need to pre-build a lookup map.
+func (c *Client) waitForDomain(ctx context.Context, reqURL string) error {
+	parsed, err := url.Parse(reqURL)
+	if err != nil {
+		return nil //nolint:nilerr // Don't block on parse errors; let the request itself fail
+	}
+
+	host := parsed.Hostname()
+
+	c.mu.RLock()
+	// Match domain limiter by checking if any configured base URL shares the same host
+	var limiter *ratelimit.Limiter
+	for domain, urls := range c.baseURLs {
+		for _, baseURL := range urls {
+			if parsedBase, err := url.Parse(baseURL); err == nil {
+				if parsedBase.Hostname() == host {
+					limiter = c.domainLimiters[domain]
+					break
+				}
+			}
+		}
+		if limiter != nil {
+			break
+		}
+	}
+	c.mu.RUnlock()
+
+	if limiter == nil {
+		return nil // No limiter configured for this domain
+	}
+
+	return limiter.Wait(ctx)
 }
 
 // IsNetworkError checks if the error is a network error or a temporary server error.

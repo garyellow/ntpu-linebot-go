@@ -48,6 +48,7 @@ type Handler struct {
 	queryExpander  genai.QueryExpander // Interface for multi-provider support
 	llmRateLimiter *ratelimit.KeyedLimiter
 	semesterCache  *SemesterCache // Shared cache updated by warmup
+	seg            *stringutil.Segmenter
 
 	// matchers contains all pattern-handler pairs sorted by priority.
 	// Shared by CanHandle and HandleMessage for consistent routing.
@@ -142,6 +143,7 @@ func NewHandler(
 	queryExpander genai.QueryExpander, // Interface for multi-provider support
 	llmRateLimiter *ratelimit.KeyedLimiter,
 	semesterCache *SemesterCache, // Shared cache (nil = create new)
+	seg *stringutil.Segmenter, // Shared segmenter for suggest (nil = disabled)
 ) *Handler {
 	// Use provided cache or create new one
 	if semesterCache == nil {
@@ -159,6 +161,7 @@ func NewHandler(
 		queryExpander:  queryExpander,
 		llmRateLimiter: llmRateLimiter,
 		semesterCache:  semesterCache,
+		seg:            seg,
 	}
 
 	// Initialize Pattern-Action Table
@@ -1116,12 +1119,30 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 		helpText += "\n• 智慧搜尋：「找課 " + searchTerm + "」"
 	}
 
+	// Try to find similar courses as suggestions
+	suggestions := h.suggestSimilarCourses(ctx, searchTerm, 3)
+	if len(suggestions) > 0 {
+		helpText += "\n\n🔎 您是不是在找："
+		var sb strings.Builder
+		for _, s := range suggestions {
+			sb.WriteString("\n• " + s)
+		}
+		helpText += sb.String()
+	}
+
 	msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
 
 	// Build quick reply items (consistent order as search results)
 	var quickReplyItems []lineutil.QuickReplyItem
 
-	// Add "更多" button FIRST for visibility (only for non-extended search)
+	// Add suggestion quick replies FIRST for easy tap
+	for _, s := range suggestions {
+		quickReplyItems = append(quickReplyItems,
+			lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("📚 "+lineutil.TruncateRunes(s, 17), "課程 "+s)},
+		)
+	}
+
+	// Add "更多" button for visibility (only for non-extended search)
 	if !extended {
 		quickReplyItems = append(quickReplyItems, lineutil.QuickReplyMoreCoursesCompact(searchTerm))
 	}
@@ -1967,13 +1988,34 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 		log.InfoContext(searchCtx, "No smart search results found")
 		h.metrics.RecordSearch(searchType, "no_results", time.Since(startTime).Seconds(), 0)
 		sender := lineutil.GetSender(senderName, h.stickerManager)
-		msg := lineutil.NewTextMessageWithConsistentSender(
-			"🔍 未找到相關課程\n\n💡 建議嘗試\n• 換個描述方式或關鍵字\n• 使用精確搜尋：「課程 課名」\n\n👨‍🏫 查詢教師資訊？\n請使用：「聯絡 教師名」或「教授 教師名」", sender)
-		msg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+
+		helpText := "🔍 未找到相關課程\n\n💡 建議嘗試\n• 換個描述方式或關鍵字\n• 使用精確搜尋：「課程 課名」\n\n👨‍🏫 查詢教師資訊？\n請使用：「聯絡 教師名」或「教授 教師名」"
+
+		// Try to find similar courses as suggestions
+		suggestions := h.suggestSimilarCourses(ctx, query, 3)
+		if len(suggestions) > 0 {
+			helpText += "\n\n🔎 您是不是在找："
+			var sb strings.Builder
+			for _, s := range suggestions {
+				sb.WriteString("\n• " + s)
+			}
+			helpText += sb.String()
+		}
+
+		msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
+
+		quickReplyItems := []lineutil.QuickReplyItem{}
+		for _, s := range suggestions {
+			quickReplyItems = append(quickReplyItems,
+				lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("📚 "+lineutil.TruncateRunes(s, 17), "課程 "+s)},
+			)
+		}
+		quickReplyItems = append(quickReplyItems,
 			lineutil.QuickReplyCourseAction(),
 			lineutil.QuickReplySmartSearchAction(),
 			lineutil.QuickReplyHelpAction(),
-		})
+		)
+		msg.QuickReply = lineutil.NewQuickReply(quickReplyItems)
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -2206,4 +2248,49 @@ func getRelevanceLabel(confidence float32) lineutil.BodyLabelInfo {
 		Label: "部分相關",
 		Color: lineutil.ColorHeaderMedium,
 	}
+}
+
+// suggestSimilarCourses uses word segmentation to find potential matches.
+// Returns up to maxSuggestions unique course titles when the full keyword yields no results.
+// Uses gse CutSearch to break the keyword into meaningful words, then searches each.
+// At most 3 tokens are tried to bound DB queries in the no-results path.
+func (h *Handler) suggestSimilarCourses(ctx context.Context, keyword string, maxSuggestions int) []string {
+	if h.seg == nil {
+		return nil
+	}
+
+	words := h.seg.CutSearch(keyword)
+	if len(words) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]bool)
+	var suggestions []string
+	tried := 0
+
+	for _, word := range words {
+		if word == keyword || len([]rune(word)) <= 1 {
+			continue // Skip the original keyword and single-char tokens (too broad)
+		}
+		tried++
+		if tried > 3 {
+			break // Bound DB queries to avoid excessive scanning
+		}
+		courses, err := h.db.SearchCoursesByTitle(ctx, word)
+		if err != nil {
+			continue
+		}
+
+		for _, c := range courses {
+			if !seen[c.Title] {
+				seen[c.Title] = true
+				suggestions = append(suggestions, c.Title)
+				if len(suggestions) >= maxSuggestions {
+					return suggestions
+				}
+			}
+		}
+	}
+
+	return suggestions
 }

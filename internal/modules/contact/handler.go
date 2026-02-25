@@ -21,6 +21,7 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/sliceutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
+	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 )
 
@@ -34,6 +35,7 @@ type Handler struct {
 	stickerManager   *sticker.Manager
 	maxContactsLimit int // Maximum contacts per search (from config)
 	deltaRecorder    delta.Recorder
+	seg              *stringutil.Segmenter
 
 	// matchers contains all pattern-handler pairs sorted by priority.
 	// Shared by CanHandle and HandleMessage for consistent routing.
@@ -122,6 +124,7 @@ func NewHandler(
 	stickerManager *sticker.Manager,
 	maxContactsLimit int,
 	deltaRecorder delta.Recorder,
+	seg *stringutil.Segmenter, // Shared segmenter for suggest (nil = disabled)
 ) *Handler {
 	h := &Handler{
 		db:               db,
@@ -131,6 +134,7 @@ func NewHandler(
 		stickerManager:   stickerManager,
 		maxContactsLimit: maxContactsLimit,
 		deltaRecorder:    deltaRecorder,
+		seg:              seg,
 	}
 	h.initializeMatchers()
 	return h
@@ -533,11 +537,33 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 
 	if len(contacts) == 0 {
 		h.metrics.RecordScraperRequest(ModuleName, "not_found", time.Since(startTime).Seconds())
-		msg := lineutil.NewTextMessageWithConsistentSender(fmt.Sprintf(
+
+		helpText := fmt.Sprintf(
 			"🔍 查無「%s」的聯絡資料\n\n💡 建議\n• 確認關鍵字拼寫是否正確\n• 嘗試使用單位全名或簡稱\n• 若查詢人名，可嘗試只輸入姓氏",
 			searchTerm,
-		), sender)
-		msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyContactNav())
+		)
+
+		// Try to find similar contacts as suggestions
+		suggestions := h.suggestSimilarContacts(ctx, searchTerm, 3)
+		if len(suggestions) > 0 {
+			helpText += "\n\n🔎 您是不是在找："
+			var sb strings.Builder
+			for _, s := range suggestions {
+				sb.WriteString("\n• " + s)
+			}
+			helpText += sb.String()
+		}
+
+		msg := lineutil.NewTextMessageWithConsistentSender(helpText, sender)
+
+		quickReplyItems := []lineutil.QuickReplyItem{}
+		for _, s := range suggestions {
+			quickReplyItems = append(quickReplyItems,
+				lineutil.QuickReplyItem{Action: lineutil.NewMessageAction("👤 "+lineutil.TruncateRunes(s, 17), "聯絡 "+s)},
+			)
+		}
+		quickReplyItems = append(quickReplyItems, lineutil.QuickReplyContactNav()...)
+		msg.QuickReply = lineutil.NewQuickReply(quickReplyItems)
 		return []messaging_api.MessageInterface{msg}
 	}
 
@@ -1078,4 +1104,52 @@ func countMatchRunes(c storage.Contact, searchTerm string) int {
 	}
 
 	return count
+}
+
+// suggestSimilarContacts uses word segmentation to find potential matches.
+// Returns up to maxSuggestions unique contact names/organizations when the full keyword yields no results.
+// At most 3 tokens are tried to bound DB queries in the no-results path.
+func (h *Handler) suggestSimilarContacts(ctx context.Context, keyword string, maxSuggestions int) []string {
+	if h.seg == nil {
+		return nil
+	}
+
+	words := h.seg.CutSearch(keyword)
+	if len(words) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]bool)
+	var suggestions []string
+	tried := 0
+
+	for _, word := range words {
+		if word == keyword || len([]rune(word)) <= 1 {
+			continue // Skip the original keyword and single-char tokens (too broad)
+		}
+		tried++
+		if tried > 3 {
+			break // Bound DB queries to avoid excessive scanning
+		}
+		contacts, err := h.db.SearchContactsByName(ctx, word)
+		if err != nil {
+			continue
+		}
+
+		for _, c := range contacts {
+			label := c.Name
+			if c.Type == "organization" && c.Organization != "" {
+				label = c.Organization
+			}
+			if !seen[label] {
+				seen[label] = true
+				suggestions = append(suggestions, label)
+				if len(suggestions) >= maxSuggestions {
+					return suggestions
+				}
+			}
+		}
+	}
+
+	return suggestions
 }
