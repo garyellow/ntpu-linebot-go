@@ -17,6 +17,9 @@ import (
 	_ "modernc.org/sqlite" // SQLite driver for database/sql
 )
 
+// ErrDatabaseClosed is returned when an operation is attempted on a closed database.
+var ErrDatabaseClosed = errors.New("database is closed")
+
 // DB wraps SQLite database connections with read/write separation.
 // Writer uses a single connection to avoid SQLITE_BUSY errors.
 // Reader uses multiple connections for parallel queries.
@@ -26,6 +29,7 @@ type DB struct {
 	reader   *sql.DB
 	path     string
 	cacheTTL time.Duration
+	closed   bool
 }
 
 // New creates a new database with read/write separation and initializes the schema.
@@ -158,10 +162,16 @@ func configureConnection(ctx context.Context, conn *sql.DB, readOnly bool) error
 // Close closes both reader and writer database connections.
 // Runs PRAGMA optimize on the writer before closing to persist query planner statistics,
 // ensuring optimal query plans on next startup.
+// Close is idempotent: subsequent calls return nil without error.
 // Returns all errors joined together.
 func (db *DB) Close(ctx context.Context) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
+
+	if db.closed {
+		return nil
+	}
+	db.closed = true
 
 	var errs []error
 
@@ -182,13 +192,11 @@ func (db *DB) Close(ctx context.Context) error {
 		if err := db.reader.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("close reader: %w", err))
 		}
-		db.reader = nil
 	}
 	if db.writer != nil {
 		if err := db.writer.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("close writer: %w", err))
 		}
-		db.writer = nil
 	}
 	return errors.Join(errs...)
 }
@@ -219,8 +227,12 @@ func (db *DB) Path() string {
 // ExecContext executes a write query with context on the writer connection
 func (db *DB) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	db.mu.RLock()
+	closed := db.closed
 	writer := db.writer
 	db.mu.RUnlock()
+	if closed {
+		return nil, ErrDatabaseClosed
+	}
 	return writer.ExecContext(ctx, query, args...)
 }
 
