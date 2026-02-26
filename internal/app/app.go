@@ -827,11 +827,11 @@ func (a *Application) shutdown() error {
 
 	// Close database (use HotSwapDB if R2 is enabled)
 	if a.hotSwapDB != nil {
-		if err := a.hotSwapDB.Close(); err != nil {
+		if err := a.hotSwapDB.Close(shutdownCtx); err != nil {
 			a.logger.WithError(err).WithField("component", "hotswap_database").Error("Component close error")
 		}
 	} else if a.db != nil {
-		if err := a.db.Close(); err != nil {
+		if err := a.db.Close(shutdownCtx); err != nil {
 			a.logger.WithError(err).WithField("component", "database").Error("Component close error")
 		}
 	}

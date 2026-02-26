@@ -32,7 +32,7 @@ func setupTestApp(t *testing.T) *Application {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
 	// Register cleanup to close database before temp directory removal
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() { _ = db.Close(context.Background()) })
 
 	// Create test metrics with a new registry
 	registry := prometheus.NewRegistry()
@@ -53,7 +53,7 @@ func setupTestApp(t *testing.T) *Application {
 func TestLivenessCheckHealthy(t *testing.T) {
 	t.Parallel()
 	app := setupTestApp(t)
-	defer func() { _ = app.db.Close() }()
+	defer func() { _ = app.db.Close(context.Background()) }()
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -83,7 +83,7 @@ func TestLivenessCheckAlwaysSucceeds(t *testing.T) {
 	t.Parallel()
 	app := setupTestApp(t)
 
-	_ = app.db.Close()
+	_ = app.db.Close(context.Background())
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -102,13 +102,13 @@ func TestLivenessCheckAlwaysSucceeds(t *testing.T) {
 func TestReadinessCheckDatabaseFailure(t *testing.T) {
 	t.Parallel()
 	app := setupTestApp(t)
-	defer func() { _ = app.db.Close() }()
+	defer func() { _ = app.db.Close(context.Background()) }()
 
 	// Mark ready to bypass refresh check so we hit the database check
 	app.readinessState.MarkReady()
 
 	// Close database to simulate failure
-	_ = app.db.Close()
+	_ = app.db.Close(context.Background())
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -141,7 +141,7 @@ func TestReadinessCheckDatabaseFailure(t *testing.T) {
 func TestReadinessCheckContextTimeout(t *testing.T) {
 	t.Parallel()
 	app := setupTestApp(t)
-	defer func() { _ = app.db.Close() }()
+	defer func() { _ = app.db.Close(context.Background()) }()
 
 	// Mark ready to bypass refresh check
 	app.readinessState.MarkReady()
@@ -180,7 +180,7 @@ func TestReadinessCheckContextTimeout(t *testing.T) {
 func TestReadinessCheckCacheStats(t *testing.T) {
 	t.Parallel()
 	app := setupTestApp(t)
-	defer func() { _ = app.db.Close() }()
+	defer func() { _ = app.db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// Mark ready to bypass refresh check
@@ -332,7 +332,7 @@ func TestResolveServerIdentity(t *testing.T) {
 func TestGetCacheStats(t *testing.T) {
 	t.Parallel()
 	app := setupTestApp(t)
-	defer func() { _ = app.db.Close() }()
+	defer func() { _ = app.db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// With healthy database, should return counts (even if zero)
@@ -362,7 +362,7 @@ func TestGetCacheStatsWithDatabaseError(t *testing.T) {
 	app := setupTestApp(t)
 
 	// Close database to simulate failure
-	if err := app.db.Close(); err != nil {
+	if err := app.db.Close(context.Background()); err != nil {
 		t.Fatalf("Failed to close database: %v", err)
 	}
 
@@ -384,7 +384,7 @@ func TestGetCacheStatsWithDatabaseError(t *testing.T) {
 func TestGetFeatures(t *testing.T) {
 	t.Parallel()
 	app := setupTestApp(t)
-	defer func() { _ = app.db.Close() }()
+	defer func() { _ = app.db.Close(context.Background()) }()
 
 	features := app.getFeatures()
 	if features == nil {
@@ -408,7 +408,7 @@ func TestGetFeatures(t *testing.T) {
 func TestReadinessCheckDuringRefresh(t *testing.T) {
 	t.Parallel()
 	app := setupTestApp(t)
-	defer func() { _ = app.db.Close() }()
+	defer func() { _ = app.db.Close(context.Background()) }()
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -440,7 +440,7 @@ func TestReadinessCheckDuringRefresh(t *testing.T) {
 func TestReadinessCheckAfterRefreshComplete(t *testing.T) {
 	t.Parallel()
 	app := setupTestApp(t)
-	defer func() { _ = app.db.Close() }()
+	defer func() { _ = app.db.Close(context.Background()) }()
 
 	// Mark refresh as complete
 	app.readinessState.MarkReady()
@@ -471,7 +471,7 @@ func TestReadinessCheckAfterTimeout(t *testing.T) {
 	t.Parallel()
 	// Setup app with very short timeout
 	app := setupTestApp(t)
-	defer func() { _ = app.db.Close() }()
+	defer func() { _ = app.db.Close(context.Background()) }()
 
 	// Override readiness state with short timeout
 	app.readinessState = warmup.NewReadinessState(50 * time.Millisecond)
@@ -495,7 +495,7 @@ func TestReadinessCheckAfterTimeout(t *testing.T) {
 func TestWebhookRejectsDuringRefresh(t *testing.T) {
 	t.Parallel()
 	app := setupTestApp(t)
-	defer func() { _ = app.db.Close() }()
+	defer func() { _ = app.db.Close(context.Background()) }()
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -543,7 +543,7 @@ func TestReadinessCheck_WarmupWaitDisabledStillBlocks(t *testing.T) {
 	// Setup app with WaitForWarmup = false
 	app := setupTestApp(t)
 	app.cfg.WaitForWarmup = false
-	defer func() { _ = app.db.Close() }()
+	defer func() { _ = app.db.Close(context.Background()) }()
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -567,7 +567,7 @@ func TestWebhookAllowsWhenWarmupWaitDisabled(t *testing.T) {
 	t.Parallel()
 	app := setupTestApp(t)
 	app.cfg.WaitForWarmup = false
-	defer func() { _ = app.db.Close() }()
+	defer func() { _ = app.db.Close(context.Background()) }()
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()

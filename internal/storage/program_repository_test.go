@@ -10,7 +10,7 @@ import (
 func TestGetProgramByName_SemesterFilters(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// 1. Setup Data
@@ -84,7 +84,7 @@ func TestGetProgramByName_SemesterFilters(t *testing.T) {
 func TestSearchPrograms_SemesterFilters(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	programName := "資訊工程學系"

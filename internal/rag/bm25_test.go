@@ -33,7 +33,7 @@ func setupTestDB(t *testing.T) *storage.DB {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
 	// Register cleanup to close database before temp directory removal
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() { _ = db.Close(context.Background()) })
 	return db
 }
 
@@ -53,7 +53,7 @@ func TestNewBM25Index(t *testing.T) {
 func TestBM25Index_Initialize(t *testing.T) {
 	log := logger.New("debug")
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	idx := NewBM25Index(log, newTestSegmenter())
@@ -103,7 +103,7 @@ func TestBM25Index_Initialize(t *testing.T) {
 func TestBM25Index_InitializeEmpty(t *testing.T) {
 	log := logger.New("debug")
 	db := setupTestDB(t) // Empty DB
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	idx := NewBM25Index(log, newTestSegmenter())
@@ -127,7 +127,7 @@ func TestBM25Index_PerSemesterIndexing(t *testing.T) {
 	log := logger.New("debug")
 
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	idx := NewBM25Index(log, newTestSegmenter())
@@ -157,7 +157,7 @@ func TestBM25Index_PerSemesterIndexing(t *testing.T) {
 func TestBM25Index_SearchCourses_PerSemesterTopK(t *testing.T) {
 	log := logger.New("debug")
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	idx := NewBM25Index(log, newTestSegmenter())
@@ -249,7 +249,7 @@ func TestBM25Index_SearchCourses_PerSemesterTopK(t *testing.T) {
 func TestBM25Index_SearchCourses_IndependentConfidence(t *testing.T) {
 	log := logger.New("debug")
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	idx := NewBM25Index(log, newTestSegmenter())
@@ -296,7 +296,7 @@ func TestBM25Index_SearchCourses_IndependentConfidence(t *testing.T) {
 func TestBM25Index_SearchCourses_NewestTwoSemesters(t *testing.T) {
 	log := logger.New("debug")
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	idx := NewBM25Index(log, newTestSegmenter())
@@ -340,7 +340,7 @@ func TestBM25Index_SearchCourses_NewestTwoSemesters(t *testing.T) {
 func TestBM25Index_SearchCourses_EmptyQuery(t *testing.T) {
 	log := logger.New("debug")
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	idx := NewBM25Index(log, newTestSegmenter())
@@ -379,7 +379,7 @@ func TestBM25Index_SearchCourses_EmptyQuery(t *testing.T) {
 func TestBM25Index_SearchCourses_NoMatch(t *testing.T) {
 	log := logger.New("debug")
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	idx := NewBM25Index(log, newTestSegmenter())

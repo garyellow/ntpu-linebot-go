@@ -19,7 +19,7 @@ func TestNew_FileSystemDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create database: %v", err)
 	}
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 
 	// Verify database files exist
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
@@ -76,7 +76,7 @@ func TestNew_NestedDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create database with nested path: %v", err)
 	}
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 
 	// Verify directory created
 	if _, err := os.Stat(filepath.Dir(dbPath)); os.IsNotExist(err) {
@@ -93,7 +93,7 @@ func TestNew_NestedDirectory(t *testing.T) {
 func TestPing_DatabaseConnectivity(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -128,7 +128,7 @@ func TestClose_CleanShutdown(t *testing.T) {
 	}
 
 	// Close database
-	if err := db.Close(); err != nil {
+	if err := db.Close(context.Background()); err != nil {
 		t.Errorf("Close returned error: %v", err)
 	}
 
@@ -137,7 +137,7 @@ func TestClose_CleanShutdown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to reopen database after close: %v", err)
 	}
-	defer func() { _ = db2.Close() }()
+	defer func() { _ = db2.Close(context.Background()) }()
 
 	retrieved, err := db2.GetStudentByID(ctx, student.ID)
 	if err != nil {
@@ -160,7 +160,7 @@ func TestCheckIntegrity_HealthyDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create database: %v", err)
 	}
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 
 	// Write some data to ensure database is functional
 	student := &Student{

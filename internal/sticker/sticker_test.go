@@ -21,7 +21,7 @@ func setupTestDB(t *testing.T) *storage.DB {
 	require.NoError(t, err)
 
 	// Register cleanup to close database before temp directory removal
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() { _ = db.Close(context.Background()) })
 
 	return db
 }

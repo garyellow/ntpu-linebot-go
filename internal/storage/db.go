@@ -159,7 +159,7 @@ func configureConnection(ctx context.Context, conn *sql.DB, readOnly bool) error
 // Runs PRAGMA optimize on the writer before closing to persist query planner statistics,
 // ensuring optimal query plans on next startup.
 // Returns all errors joined together.
-func (db *DB) Close() error {
+func (db *DB) Close(ctx context.Context) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
@@ -170,10 +170,10 @@ func (db *DB) Close() error {
 	// then optimize persists updated statistics for future query planning.
 	// See: https://www.sqlite.org/pragma.html#pragma_optimize
 	if db.writer != nil {
-		if _, err := db.writer.ExecContext(context.Background(), "PRAGMA analysis_limit=400"); err != nil {
+		if _, err := db.writer.ExecContext(ctx, "PRAGMA analysis_limit=400"); err != nil {
 			errs = append(errs, fmt.Errorf("set analysis_limit: %w", err))
 		}
-		if _, err := db.writer.ExecContext(context.Background(), "PRAGMA optimize"); err != nil {
+		if _, err := db.writer.ExecContext(ctx, "PRAGMA optimize"); err != nil {
 			errs = append(errs, fmt.Errorf("optimize: %w", err))
 		}
 	}
