@@ -182,11 +182,13 @@ func (db *DB) Close(ctx context.Context) error {
 		if err := db.reader.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("close reader: %w", err))
 		}
+		db.reader = nil
 	}
 	if db.writer != nil {
 		if err := db.writer.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("close writer: %w", err))
 		}
+		db.writer = nil
 	}
 	return errors.Join(errs...)
 }
