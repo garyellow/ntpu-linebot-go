@@ -61,7 +61,7 @@ func (h *HotSwapDB) Swap(ctx context.Context, newDBPath string) error {
 
 	// Validate new database is accessible
 	if err := newDB.Ping(ctx); err != nil {
-		_ = newDB.Close()
+		_ = newDB.Close(ctx)
 		return fmt.Errorf("hotswap: ping new db: %w", err)
 	}
 
@@ -105,12 +105,12 @@ func (h *HotSwapDB) Path() string {
 }
 
 // Close closes the current database connection.
-func (h *HotSwapDB) Close() error {
+func (h *HotSwapDB) Close(ctx context.Context) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	if h.current != nil {
-		return h.current.Close()
+		return h.current.Close(ctx)
 	}
 	return nil
 }

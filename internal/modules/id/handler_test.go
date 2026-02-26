@@ -27,7 +27,7 @@ func setupTestHandler(t *testing.T) *Handler {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() { _ = db.Close(context.Background()) })
 
 	baseURLs := map[string][]string{
 		"lms": {"https://lms.ntpu.edu.tw"},

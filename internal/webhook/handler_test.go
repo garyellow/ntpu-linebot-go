@@ -38,7 +38,7 @@ func setupTestHandler(t *testing.T) *Handler {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
 	// Register cleanup to close database before temp directory removal
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() { _ = db.Close(context.Background()) })
 
 	baseURLs := map[string][]string{
 		"lms": {"https://lms.ntpu.edu.tw"},

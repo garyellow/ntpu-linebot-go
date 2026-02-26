@@ -17,7 +17,7 @@ func setupSemesterTestDB(t *testing.T) *storage.DB {
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() { _ = db.Close(context.Background()) })
 	return db
 }
 

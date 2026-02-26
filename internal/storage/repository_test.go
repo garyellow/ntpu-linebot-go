@@ -21,13 +21,13 @@ func setupTestDB(t *testing.T) *DB {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
 	// Register cleanup to close database before temp directory removal
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() { _ = db.Close(context.Background()) })
 	return db
 }
 
 func TestSaveAndGetCourses(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	student := &Student{
@@ -70,7 +70,7 @@ func TestSaveAndGetCourses(t *testing.T) {
 // TestSearchStudentsByName tests core search logic (critical user feature)
 func TestSearchStudentsByName(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	students := []*Student{
@@ -147,7 +147,7 @@ func TestSearchStudentsByName(t *testing.T) {
 // TestSaveStudentsBatch tests batch student save operation
 func TestSaveStudentsBatch(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	students := []*Student{
@@ -180,7 +180,7 @@ func TestSaveStudentsBatch(t *testing.T) {
 // TestSaveContactsBatch tests batch contact save operation
 func TestSaveContactsBatch(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	contacts := []*Contact{
@@ -213,7 +213,7 @@ func TestSaveContactsBatch(t *testing.T) {
 // TestSaveCoursesBatch tests batch course save operation
 func TestSaveCoursesBatch(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	courses := []*Course{
@@ -259,7 +259,7 @@ func TestSaveCoursesBatch(t *testing.T) {
 // TestSearchContactsByName tests core contact search (critical for directory lookup)
 func TestSearchContactsByName(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	contacts := []*Contact{
@@ -287,7 +287,7 @@ func TestSearchContactsByName(t *testing.T) {
 // TestSearchContactsFuzzy tests SQL-based character-set matching for contacts
 func TestSearchContactsFuzzy(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	contacts := []*Contact{
@@ -327,7 +327,7 @@ func TestSearchContactsFuzzy(t *testing.T) {
 // TestCourseArrayHandling tests JSON array serialization (critical for course data)
 func TestCourseArrayHandling(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	course := &Course{
@@ -364,7 +364,7 @@ func TestCourseArrayHandling(t *testing.T) {
 
 func TestStudentDataNeverExpires(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// Insert student
@@ -407,7 +407,7 @@ func TestStudentDataNeverExpires(t *testing.T) {
 
 func TestDeleteExpiredContacts(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// Insert fresh contact
@@ -465,7 +465,7 @@ func TestDeleteExpiredContacts(t *testing.T) {
 
 func TestDeleteExpiredCourses(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// Insert fresh course
@@ -520,7 +520,7 @@ func TestDeleteExpiredCourses(t *testing.T) {
 
 func TestStickerDataNeverExpires(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// Insert fresh sticker
@@ -550,7 +550,7 @@ func TestStickerDataNeverExpires(t *testing.T) {
 // TestGetCoursesByRecentSemesters tests retrieving courses with TTL filtering
 func TestGetCoursesByRecentSemesters(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// Insert fresh courses from different semesters
@@ -624,7 +624,7 @@ func TestGetCoursesByRecentSemesters(t *testing.T) {
 // TestGetDistinctRecentSemesters tests retrieving distinct recent semesters
 func TestGetDistinctRecentSemesters(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// Insert courses from different semesters
@@ -713,7 +713,7 @@ func TestGetDistinctRecentSemesters(t *testing.T) {
 // TestGetCoursesByRecentSemestersEmpty tests the method with empty database
 func TestGetCoursesByRecentSemestersEmpty(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// Verify the method works with empty database
@@ -733,7 +733,7 @@ func TestGetCoursesByRecentSemestersEmpty(t *testing.T) {
 // TestSaveHistoricalCourse tests single historical course save with conflict handling
 func TestSaveHistoricalCourse(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	course := &Course{
@@ -790,7 +790,7 @@ func TestSaveHistoricalCourse(t *testing.T) {
 // TestSaveHistoricalCoursesBatch tests batch historical course save
 func TestSaveHistoricalCoursesBatch(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	courses := []*Course{
@@ -848,7 +848,7 @@ func TestSaveHistoricalCoursesBatch(t *testing.T) {
 // TestSaveHistoricalCoursesBatchEmpty tests batch save with empty slice
 func TestSaveHistoricalCoursesBatchEmpty(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// Test with empty slice - should return nil without error
@@ -861,7 +861,7 @@ func TestSaveHistoricalCoursesBatchEmpty(t *testing.T) {
 // TestSearchHistoricalCoursesByYearAndTitle tests search with title filter
 func TestSearchHistoricalCoursesByYearAndTitle(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	courses := []*Course{
@@ -923,7 +923,7 @@ func TestSearchHistoricalCoursesByYearAndTitle(t *testing.T) {
 // TestSearchHistoricalCoursesByYearAndTitleTooLong tests search term length validation
 func TestSearchHistoricalCoursesByYearAndTitleTooLong(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// Create a search term longer than 100 characters
@@ -938,7 +938,7 @@ func TestSearchHistoricalCoursesByYearAndTitleTooLong(t *testing.T) {
 // TestSearchHistoricalCoursesByYear tests year-only search
 func TestSearchHistoricalCoursesByYear(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	courses := []*Course{
@@ -980,7 +980,7 @@ func TestSearchHistoricalCoursesByYear(t *testing.T) {
 // TestDeleteExpiredHistoricalCourses tests TTL-based cleanup
 func TestDeleteExpiredHistoricalCourses(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// Insert fresh course
@@ -1035,7 +1035,7 @@ func TestDeleteExpiredHistoricalCourses(t *testing.T) {
 // TestCountHistoricalCourses tests counting functionality
 func TestCountHistoricalCourses(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// Count empty table
@@ -1068,7 +1068,7 @@ func TestCountHistoricalCourses(t *testing.T) {
 // TestCountCoursesBySemester tests counting courses by semester
 func TestCountCoursesBySemester(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// Count empty table
@@ -1133,7 +1133,7 @@ func TestCountCoursesBySemester(t *testing.T) {
 // TestHistoricalCoursesArrayHandling tests JSON array serialization/deserialization
 func TestHistoricalCoursesArrayHandling(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	course := &Course{
@@ -1180,7 +1180,7 @@ func TestHistoricalCoursesArrayHandling(t *testing.T) {
 // TestHistoricalCoursesTTLFiltering tests that expired courses are not returned
 func TestHistoricalCoursesTTLFiltering(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// Insert fresh course
@@ -1230,7 +1230,7 @@ func TestHistoricalCoursesTTLFiltering(t *testing.T) {
 
 func TestSaveSyllabus(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	syllabus := &Syllabus{
@@ -1287,7 +1287,7 @@ func TestSaveSyllabus(t *testing.T) {
 
 func TestSaveSyllabus_Upsert(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// Save initial syllabus
@@ -1341,7 +1341,7 @@ func TestSaveSyllabus_Upsert(t *testing.T) {
 
 func TestSaveSyllabusBatch(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	syllabi := []*Syllabus{
@@ -1406,7 +1406,7 @@ func TestSaveSyllabusBatch(t *testing.T) {
 
 func TestSaveSyllabusBatch_Empty(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// Empty batch should succeed
@@ -1423,7 +1423,7 @@ func TestSaveSyllabusBatch_Empty(t *testing.T) {
 
 func TestGetSyllabusContentHash(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// Test non-existent syllabus
@@ -1461,7 +1461,7 @@ func TestGetSyllabusContentHash(t *testing.T) {
 
 func TestGetSyllabusByUID_NotFound(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	_, err := db.GetSyllabusByUID(ctx, "nonexistent")
@@ -1472,7 +1472,7 @@ func TestGetSyllabusByUID_NotFound(t *testing.T) {
 
 func TestGetAllSyllabi(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// Test empty result
@@ -1505,7 +1505,7 @@ func TestGetAllSyllabi(t *testing.T) {
 
 func TestGetSyllabiByYearTerm(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// Insert syllabi for different year/terms
@@ -1546,7 +1546,7 @@ func TestGetSyllabiByYearTerm(t *testing.T) {
 
 func TestDeleteExpiredSyllabi(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// Insert fresh syllabus
@@ -1604,7 +1604,7 @@ func TestDeleteExpiredSyllabi(t *testing.T) {
 
 func TestCountSyllabi(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// Test empty count
@@ -1638,7 +1638,7 @@ func TestCountSyllabi(t *testing.T) {
 // TestDeleteHistoricalCoursesByYearTerm verifies cleanup logic
 func TestDeleteHistoricalCoursesByYearTerm(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// Insert historical courses for different semesters
@@ -1695,7 +1695,7 @@ func TestDeleteHistoricalCoursesByYearTerm(t *testing.T) {
 // TestGetProgramCoursesFiltering verifies semester filtering logic for programs
 func TestGetProgramCoursesFiltering(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	// Insert courses
@@ -1761,7 +1761,7 @@ func TestGetProgramCoursesFiltering(t *testing.T) {
 // TestSearchCoursesByTeacherFuzzy tests SQL-based fuzzy character-set matching for teacher names
 func TestSearchCoursesByTeacherFuzzy(t *testing.T) {
 	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	courses := []*Course{

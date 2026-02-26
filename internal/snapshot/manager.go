@@ -349,14 +349,14 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 
 	// Check integrity of the downloaded snapshot (with timeout)
 	if err := validateDB.CheckIntegrity(validateCtx); err != nil {
-		_ = validateDB.Close()
+		_ = validateDB.Close(validateCtx)
 		validateCancel()
 		slog.Error("Snapshot poll integrity check failed", "error", err)
 		return
 	}
 
 	// Close validation connection before hot-swap
-	_ = validateDB.Close()
+	_ = validateDB.Close(validateCtx)
 	validateCancel()
 
 	// Hot-swap the database (with timeout to prevent filesystem stalls)

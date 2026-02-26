@@ -17,6 +17,9 @@ import (
 	_ "modernc.org/sqlite" // SQLite driver for database/sql
 )
 
+// ErrDatabaseClosed is returned when an operation is attempted on a closed database.
+var ErrDatabaseClosed = errors.New("database is closed")
+
 // DB wraps SQLite database connections with read/write separation.
 // Writer uses a single connection to avoid SQLITE_BUSY errors.
 // Reader uses multiple connections for parallel queries.
@@ -26,6 +29,7 @@ type DB struct {
 	reader   *sql.DB
 	path     string
 	cacheTTL time.Duration
+	closed   bool
 }
 
 // New creates a new database with read/write separation and initializes the schema.
@@ -122,6 +126,13 @@ func configureConnection(ctx context.Context, conn *sql.DB, readOnly bool) error
 		return fmt.Errorf("failed to enable foreign keys: %w", err)
 	}
 
+	// Increase page cache to 8 MB (negative value = KiB units).
+	// Default 2 MB is tight for ~2000-5000 cached courses/syllabi;
+	// 8 MB keeps more B-tree pages resident and reduces I/O.
+	if _, err := conn.ExecContext(ctx, "PRAGMA cache_size=-8192"); err != nil {
+		return fmt.Errorf("failed to set cache size: %w", err)
+	}
+
 	// Store temporary tables in memory for faster queries
 	if _, err := conn.ExecContext(ctx, "PRAGMA temp_store=MEMORY"); err != nil {
 		return fmt.Errorf("failed to set temp store: %w", err)
@@ -149,12 +160,34 @@ func configureConnection(ctx context.Context, conn *sql.DB, readOnly bool) error
 }
 
 // Close closes both reader and writer database connections.
+// Runs PRAGMA optimize on the writer before closing to persist query planner statistics,
+// ensuring optimal query plans on next startup.
+// Close is idempotent: subsequent calls return nil without error.
 // Returns all errors joined together.
-func (db *DB) Close() error {
+func (db *DB) Close(ctx context.Context) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
+	if db.closed {
+		return nil
+	}
+	db.closed = true
+
 	var errs []error
+
+	// Run PRAGMA optimize on the writer before closing.
+	// analysis_limit=400 caps per-index analysis to ~400 pages for bounded runtime,
+	// then optimize persists updated statistics for future query planning.
+	// See: https://www.sqlite.org/pragma.html#pragma_optimize
+	if db.writer != nil {
+		if _, err := db.writer.ExecContext(ctx, "PRAGMA analysis_limit=400"); err != nil {
+			errs = append(errs, fmt.Errorf("set analysis_limit: %w", err))
+		}
+		if _, err := db.writer.ExecContext(ctx, "PRAGMA optimize"); err != nil {
+			errs = append(errs, fmt.Errorf("optimize: %w", err))
+		}
+	}
+
 	if db.reader != nil {
 		if err := db.reader.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("close reader: %w", err))
@@ -194,8 +227,12 @@ func (db *DB) Path() string {
 // ExecContext executes a write query with context on the writer connection
 func (db *DB) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	db.mu.RLock()
+	closed := db.closed
 	writer := db.writer
 	db.mu.RUnlock()
+	if closed {
+		return nil, ErrDatabaseClosed
+	}
 	return writer.ExecContext(ctx, query, args...)
 }
 
@@ -328,6 +365,9 @@ func (db *DB) CreateSnapshot(ctx context.Context, destPath string) error {
 		return fmt.Errorf("create snapshot: wal checkpoint: %w", err)
 	}
 
+	if _, err := db.ExecContext(ctx, "PRAGMA analysis_limit=400"); err != nil {
+		return fmt.Errorf("create snapshot: set analysis_limit: %w", err)
+	}
 	if _, err := db.ExecContext(ctx, "PRAGMA optimize"); err != nil {
 		return fmt.Errorf("create snapshot: optimize: %w", err)
 	}
