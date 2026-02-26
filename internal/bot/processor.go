@@ -416,12 +416,12 @@ func (p *Processor) handleWithNLU(ctx context.Context, text string, source webho
 	}
 
 	// Prepend conversation context for better NLU disambiguation
-	// Uses XML-like tags so LLM can clearly distinguish context from the actual query
-	nluInput := text
+	// Always wrap with <query> tags for consistent format; add <context> only when present
+	nluInput := "<query>" + text + "</query>"
 	if p.sessionStore != nil {
 		userID := ctxutil.GetUserID(ctx)
 		if ctxStr := p.sessionStore.FormatContext(userID); ctxStr != "" {
-			nluInput = "<context>" + ctxStr + "</context>\n<query>" + text + "</query>"
+			nluInput = "<context>" + ctxStr + "</context>\n" + nluInput
 		}
 	}
 
