@@ -76,7 +76,7 @@ func (e *geminiQueryExpander) Expand(ctx context.Context, query string) (string,
 	prompt := QueryExpansionPrompt(query)
 
 	config := &genai.GenerateContentConfig{
-		Temperature:     genai.Ptr[float32](0.3), // Low temperature for consistent expansion
+		Temperature:     genai.Ptr[float32](0.2), // Lower temperature reduces lexical drift for BM25
 		MaxOutputTokens: 200,
 	}
 

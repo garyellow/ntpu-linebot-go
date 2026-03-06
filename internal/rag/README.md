@@ -63,7 +63,7 @@ Search Flow:
 
 - **可靠維護者**：由 [k3d-io/k3d](https://github.com/k3d-io/k3d) (⭐6.1k) 維護者維護
 - **已修復 IDF 問題**：解決了常見 Go BM25 庫的負 IDF 值問題
-- **BM25Okapi 參數**：k1=1.5, b=0.75（標準值）
+- **BM25Okapi 參數**：k1=1.2, b=0.75（業界標準預設值，Lucene/Elasticsearch/Azure 共識）
 - **中文分詞**：使用共享 `stringutil.Segmenter` (gse 搜尋優化分詞)，非 CJK 保持完整詞彙
 - **大小寫不敏感**：所有 token 轉為小寫
 - **線程安全**：使用 `sync.RWMutex` 保護索引操作

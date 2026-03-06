@@ -157,32 +157,30 @@ type LLMConfig struct {
 // First element is primary model, subsequent elements are fallbacks.
 var (
 	// DefaultGeminiIntentModels is the default model chain for Gemini intent parsing.
-	// gemini-2.5-flash offers excellent function calling with fast inference.
-	// gemini-2.5-flash-lite provides faster, cost-efficient fallback.
-	DefaultGeminiIntentModels = []string{"gemini-2.5-flash", "gemini-2.5-flash-lite"}
+	// gemini-3.1-pro-preview is the latest Gemini 3 Pro model (confirmed on ai.google.dev/gemini-api/docs/gemini-3).
+	// Fallbacks prefer stronger reasoning quality before lower-latency models.
+	DefaultGeminiIntentModels = []string{"gemini-3.1-pro-preview", "gemini-2.5-pro", "gemini-2.5-flash"}
 
 	// DefaultGeminiExpanderModels is the default model chain for Gemini query expansion.
-	DefaultGeminiExpanderModels = []string{"gemini-2.5-flash", "gemini-2.5-flash-lite"}
+	// Query expansion quality benefits more from stronger reasoning than from lower latency.
+	DefaultGeminiExpanderModels = []string{"gemini-3.1-pro-preview", "gemini-2.5-pro", "gemini-2.5-flash"}
 
 	// DefaultGroqIntentModels is the default model chain for Groq intent parsing.
-	// Llama 4 Maverick (Preview) offers excellent function calling with fast inference (~900 TPS).
-	// llama-3.3-70b-versatile is Production-grade fallback with strong accuracy.
-	DefaultGroqIntentModels = []string{"meta-llama/llama-4-maverick-17b-128e-instruct", "llama-3.3-70b-versatile"}
+	// Production: gpt-oss-120b (120B, 500 t/s), llama-3.3-70b-versatile (70B, 280 t/s), gpt-oss-20b (20B, 1000 t/s), llama-3.1-8b-instant (8B, 560 t/s).
+	// Preview: qwen/qwen3-32b (32B, 400 t/s) - included for stronger Chinese tool-call support.
+	DefaultGroqIntentModels = []string{"openai/gpt-oss-120b", "llama-3.3-70b-versatile", "qwen/qwen3-32b", "openai/gpt-oss-20b", "llama-3.1-8b-instant"}
 
 	// DefaultGroqExpanderModels is the default model chain for Groq query expansion.
-	// Llama 4 Scout (Preview) offers efficient query expansion with fast inference (~750 TPS).
-	// llama-3.1-8b-instant is Production-grade fallback.
-	DefaultGroqExpanderModels = []string{"meta-llama/llama-4-scout-17b-16e-instruct", "llama-3.1-8b-instant"}
+	// qwen/qwen3-32b placed before gpt-oss-20b and llama-70b for stronger Chinese semantic expansion.
+	DefaultGroqExpanderModels = []string{"openai/gpt-oss-120b", "qwen/qwen3-32b", "openai/gpt-oss-20b", "llama-3.3-70b-versatile", "llama-3.1-8b-instant"}
 
 	// DefaultCerebrasIntentModels is the default model chain for Cerebras intent parsing.
-	// llama-3.3-70b offers strong function calling with ultra-fast inference.
-	// llama-3.1-8b provides fast fallback.
-	DefaultCerebrasIntentModels = []string{"llama-3.3-70b", "llama-3.1-8b"}
+	// zai-glm-4.7 (preview, #1 Berkeley BFCL tool-calling leaderboard) → gpt-oss-120b (production) → qwen-3-235b (preview, 235B total/22B active MoE) → llama3.1-8b (production).
+	DefaultCerebrasIntentModels = []string{"zai-glm-4.7", "gpt-oss-120b", "qwen-3-235b-a22b-instruct-2507", "llama3.1-8b"}
 
 	// DefaultCerebrasExpanderModels is the default model chain for Cerebras query expansion.
-	// llama-3.3-70b offers strong query expansion with ultra-fast inference.
-	// llama-3.1-8b provides fast fallback.
-	DefaultCerebrasExpanderModels = []string{"llama-3.3-70b", "llama-3.1-8b"}
+	// qwen-3-235b leads for best Chinese semantic expansion (235B Qwen3 MoE); zai-glm-4.7 is the strong Chinese fallback.
+	DefaultCerebrasExpanderModels = []string{"qwen-3-235b-a22b-instruct-2507", "zai-glm-4.7", "gpt-oss-120b", "llama3.1-8b"}
 
 	// DefaultProviders is the default provider order for fallback.
 	DefaultProviders = []Provider{ProviderGemini, ProviderGroq, ProviderCerebras, ProviderOpenAI}

@@ -24,9 +24,11 @@ const (
 	// to be included. Results below this threshold are filtered out as noise.
 	//
 	// Rationale (small corpus, ~2000-5000 docs):
-	//   - BM25 absolute scores vary across queries, so we use relative scoring
+	//   - BM25 absolute scores are query-dependent and not comparable across queries
+	//   - We use relative scoring (score/maxScore) which is the academic consensus approach
+	//     (Arampatzis et al., 2009: Normal-Exponential mixture model for BM25 score distributions)
 	//   - Score ratio ≥ 0.25 filters out tail noise while retaining partially relevant results
-	//   - Based on industry best practices for small-corpus BM25 search
+	//   - Per-semester relative scoring ensures fair cutoff within each semester's IDF context
 	MinConfidence = 0.25
 )
 
@@ -231,7 +233,16 @@ func (idx *BM25Index) buildSemesterIndex(syllabi []*storage.Syllabus) (*semester
 	// Build BM25 engine for this semester (independent IDF).
 	// NewBM25Okapi consumes the corpus to build its internal index; after this point we only
 	// access document content through the engine, not via the original corpus slice.
-	engine, err := bm25.NewBM25Okapi(corpus, idx.Tokenize, 1.5, 0.75, nil)
+	//
+	// BM25 Parameters (industry standard defaults - Lucene/Elasticsearch/Azure):
+	//   k1 = 1.2: Term frequency saturation. Lower values mean faster saturation,
+	//             suitable for expanded queries (8-16 terms) where most terms appear once.
+	//   b  = 0.75: Document length normalization. Standard default, appropriate for
+	//             variable-length documents (title + objectives + outline + schedule).
+	//
+	// References: Stanford IR textbook, Elasticsearch docs, Azure AI Search defaults,
+	// bilingual Chinese/English experiments (KDD05), Korean biomedical TREC system.
+	engine, err := bm25.NewBM25Okapi(corpus, idx.Tokenize, 1.2, 0.75, nil)
 	if err != nil {
 		return nil, 0, err
 	}

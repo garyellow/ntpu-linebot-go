@@ -12,9 +12,9 @@
 
 | 提供者 | IntentParser 預設模型鏈 | QueryExpander 預設模型鏈 | 備註 |
 |--------|------------------------|----------------------------|------|
-| **Gemini** | gemini-2.5-flash, gemini-2.5-flash-lite | gemini-2.5-flash, gemini-2.5-flash-lite | Google AI Studio |
-| **Groq** | meta-llama/llama-4-maverick-17b-128e-instruct, llama-3.3-70b-versatile | meta-llama/llama-4-scout-17b-16e-instruct, llama-3.1-8b-instant | OpenAI-compatible |
-| **Cerebras** | llama-3.3-70b, llama-3.1-8b | llama-3.3-70b, llama-3.1-8b | OpenAI-compatible |
+| **Gemini** | gemini-3.1-pro-preview, gemini-2.5-pro, gemini-2.5-flash | gemini-3.1-pro-preview, gemini-2.5-pro, gemini-2.5-flash | Google AI Studio |
+| **Groq** | openai/gpt-oss-120b, llama-3.3-70b-versatile, qwen/qwen3-32b, openai/gpt-oss-20b, llama-3.1-8b-instant | openai/gpt-oss-120b, qwen/qwen3-32b, openai/gpt-oss-20b, llama-3.3-70b-versatile, llama-3.1-8b-instant | OpenAI-compatible |
+| **Cerebras** | zai-glm-4.7, gpt-oss-120b, qwen-3-235b-a22b-instruct-2507, llama3.1-8b | qwen-3-235b-a22b-instruct-2507, zai-glm-4.7, gpt-oss-120b, llama3.1-8b | OpenAI-compatible |
 | **OpenAI-Compatible** | (自訂) | (自訂) | 支援 Ollama, LM Studio, vLLM 等 |
 
 ## 檔案結構
@@ -225,12 +225,12 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 
 | 變數名稱 | 預設值 |
 |---------|--------|
-| `NTPU_GEMINI_INTENT_MODELS` | gemini-2.5-flash,gemini-2.5-flash-lite |
-| `NTPU_GEMINI_EXPANDER_MODELS` | gemini-2.5-flash,gemini-2.5-flash-lite |
-| `NTPU_GROQ_INTENT_MODELS` | meta-llama/llama-4-maverick-17b-128e-instruct,llama-3.3-70b-versatile |
-| `NTPU_GROQ_EXPANDER_MODELS` | meta-llama/llama-4-scout-17b-16e-instruct,llama-3.1-8b-instant |
-| `NTPU_CEREBRAS_INTENT_MODELS` | llama-3.3-70b,llama-3.1-8b |
-| `NTPU_CEREBRAS_EXPANDER_MODELS` | llama-3.3-70b,llama-3.1-8b |
+| `NTPU_GEMINI_INTENT_MODELS` | gemini-3.1-pro-preview,gemini-2.5-pro,gemini-2.5-flash |
+| `NTPU_GEMINI_EXPANDER_MODELS` | gemini-3.1-pro-preview,gemini-2.5-pro,gemini-2.5-flash |
+| `NTPU_GROQ_INTENT_MODELS` | openai/gpt-oss-120b,llama-3.3-70b-versatile,qwen/qwen3-32b,openai/gpt-oss-20b,llama-3.1-8b-instant |
+| `NTPU_GROQ_EXPANDER_MODELS` | openai/gpt-oss-120b,qwen/qwen3-32b,openai/gpt-oss-20b,llama-3.3-70b-versatile,llama-3.1-8b-instant |
+| `NTPU_CEREBRAS_INTENT_MODELS` | zai-glm-4.7,gpt-oss-120b,qwen-3-235b-a22b-instruct-2507,llama3.1-8b |
+| `NTPU_CEREBRAS_EXPANDER_MODELS` | qwen-3-235b-a22b-instruct-2507,zai-glm-4.7,gpt-oss-120b,llama3.1-8b |
 | `NTPU_OPENAI_INTENT_MODELS` | (無預設值) |
 | `NTPU_OPENAI_EXPANDER_MODELS` | (無預設值) |
 

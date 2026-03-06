@@ -125,7 +125,7 @@ func (e *openaiQueryExpander) Expand(ctx context.Context, query string) (string,
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage(prompt),
 		},
-		Temperature: openai.Float(0.3), // Low temperature for consistent expansion
+		Temperature: openai.Float(0.2), // Lower temperature reduces lexical drift for BM25
 		MaxTokens:   openai.Int(200),
 	}
 
