@@ -170,7 +170,7 @@ LINE Webhook → Gin Handler
 - **course_programs table**: Junction table for course-program relationships (course_uid, program_name, course_type, cached_at)
 
 **BM25 Index** (`internal/rag/`):
-- [iwilltry42/bm25-go](https://github.com/iwilltry42/bm25-go) (k1=1.5, b=0.75)
+- [iwilltry42/bm25-go](https://github.com/iwilltry42/bm25-go) (k1=1.2, b=0.75)
 - In-memory index rebuilt on startup from SQLite
 - Chinese tokenization via shared `stringutil.Segmenter` (gse search-optimized word segmentation), 1 course = 1 document
 - Min confidence filter (0.25) removes low-relevance noise
@@ -477,9 +477,9 @@ Fallback → getHelpMessage() + Warning Log
 - `genai.ParseResult`: Module, Intent, Params, ClarificationText, FunctionName
 
 **Default Models**:
-- Gemini: `gemini-2.5-flash` (primary), `gemini-2.5-flash-lite` (fallback)
-- Groq: `meta-llama/llama-4-maverick-17b-128e-instruct` (intent), `meta-llama/llama-4-scout-17b-16e-instruct` (expander), with Llama 3.x Production fallbacks
-- Cerebras: `llama-3.3-70b` (primary), `llama-3.1-8b` (fallback)
+- Gemini: `gemini-3.1-pro-preview` (intent), `gemini-3.1-pro-preview` (expander), with `gemini-2.5-pro` / `gemini-2.5-flash` fallbacks
+- Groq: `openai/gpt-oss-120b` (primary), intent chain: `llama-3.3-70b-versatile` → `qwen/qwen3-32b` → `gpt-oss-20b` → `llama-3.1-8b-instant`; expander chain: `qwen/qwen3-32b` → `gpt-oss-20b` → `llama-3.3-70b-versatile` → `llama-3.1-8b-instant`
+- Cerebras: intent `zai-glm-4.7` → `gpt-oss-120b` → `qwen-3-235b-a22b-instruct-2507` → `llama3.1-8b`; expander `qwen-3-235b-a22b-instruct-2507` → `zai-glm-4.7` → `gpt-oss-120b` → `llama3.1-8b`
 
 ## Syllabus Module
 

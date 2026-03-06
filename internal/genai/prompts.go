@@ -93,22 +93,23 @@ const IntentParserSystemPrompt = `你是 NTPU 小工具的意圖分類助手。
 // QueryExpansionPrompt creates the prompt for query expansion.
 // This prompt is shared between Gemini and OpenAI-compatible expanders.
 //
-// Uses Think-then-Expand pattern (inspired by ThinkQE, Lei et al. EMNLP 2024):
-// 1. Analysis phase: LLM reasons about user's actual intent and learning goal
-// 2. Keywords phase: LLM generates BM25 search terms based on analysis
+// Uses a high-precision Think-then-Expand pattern:
+// 1. Analysis phase: infer the user's actual intent and search facets
+// 2. Keywords phase: generate a tightly controlled lexical query for BM25
 //
 // The structured output (分析 + 關鍵詞) is parsed by ParseExpandedOutput():
 // - Only the 關鍵詞 line is used for BM25 search
 // - The 分析 line guides the LLM's reasoning but is discarded
 //
 // Design principles:
-// - Intent-aware expansion: Understand what user truly needs before generating terms
+// - Intent-aware expansion: understand what the user truly needs before generating terms
+// - High precision over breadth: limit drift-prone generic expansions
 // - Cross-disciplinary awareness: "CS student interested in finance" → finance courses
-// - Original query preserved: Caller prepends original if missing in keywords
-// - Target topics first: BM25 is sensitive to term frequency
-// - 15-25 expansion terms: Optimal balance per MuGI/ThinkQE research
-// - Bilingual coverage: Chinese synonyms + English technical terms
-// - Domain-specific vocabulary: Terms matching syllabus fields
+// - Original query preserved: caller prepends original if missing in keywords
+// - Target topics first: BM25 is sensitive to term frequency and early lexical cues
+// - Compact expansions: prefer 8-16 high-value terms instead of long noisy lists
+// - Bilingual coverage: Chinese synonyms + English technical terms when they improve recall
+// - Domain-specific vocabulary: terms matching syllabus fields
 //
 // BM25 Reweighting Note (Zhang et al., EMNLP 2024):
 // The caller ensures original query is preserved by prepending if not present.
@@ -133,57 +134,64 @@ func QueryExpansionPrompt(query string) string {
 2. **中英對照**：核心概念同時輸出中英文
 3. **學術用語**：使用課程大綱常見的正式詞彙（教學目標/內容綱要/教學進度）
 4. **縮寫展開**：AI→人工智慧、ML→機器學習、NLP→自然語言處理
-5. **15-25 個詞**，空格分隔
+5. **8-16 個高價值詞**，空格分隔，寧少勿濫
+
+## 精準度規則
+1. **保留原始實體**：人名、領域名、方法名、縮寫不可刪掉
+2. **避免語意漂移**：不要因為聯想過度，把查詢擴成太廣的相鄰領域
+3. **具體查詢少擴展**：若原查詢已很明確，只補正式名稱、英文名、常見別稱
+4. **條件式查詢重視 facet**：把先修背景、應用領域、技能目標拆成少量精準 facet
+5. **避免重複**：不要輸出同義重複、泛用贅詞、只是換句話說的低價值詞
 
 ## 過濾規則（不可出現在關鍵詞中）
 意圖詞/動作詞/疑問詞/泛稱詞/修飾詞/連接詞
-例：想/學習/什麼/課程/一些/的/和/有沒有/推薦/相關/了解
+例：想/學習/什麼/課程/一些/的/和/有沒有/推薦/相關/了解/幫我/可以/適合
 
 ## 輸出格式（嚴格遵守）
 分析：[一句話描述使用者真正的學習目標與搜尋方向]
-關鍵詞：[15-25個搜尋詞 空格分隔]
+關鍵詞：[8-16個高價值搜尋詞 空格分隔]
 
 ## 範例
 
 輸入：統計
 分析：使用者想學統計學相關知識
-關鍵詞：統計 statistics 統計學 機率 probability 迴歸分析 regression 假設檢定 hypothesis testing 資料分析 data analysis 推論統計 inferential
+關鍵詞：統計 statistics 統計學 機率 probability 迴歸分析 regression 假設檢定 hypothesis testing 推論統計
 
 輸入：Python 入門
 分析：使用者想學 Python 程式語言基礎
-關鍵詞：Python 程式設計 programming 入門 introduction 程式語言 基礎 fundamentals 變數 variable 函式 function 迴圈 loop 資料型態
+關鍵詞：Python 程式設計 programming 程式語言 fundamentals 變數 variable 函式 function 迴圈 loop
 
 輸入：我想學投資理財
 分析：使用者想學投資與財務管理
-關鍵詞：投資 investment 理財 財務管理 financial management 股票 stock 基金 fund 財務報表 financial statement 風險管理 risk management 資產配置 asset allocation
+關鍵詞：投資 investment 理財 財務管理 financial management 股票 stock 基金 fund 風險管理 risk management
 
 輸入：學完微積分可以學什麼
 分析：已修完微積分，想找進階銜接的數學或應用課程
-關鍵詞：工程數學 微分方程 differential equations 線性代數 linear algebra 數值分析 numerical analysis 物理 physics 機率論 probability 最佳化 optimization
+關鍵詞：工程數學 微分方程 differential equations 線性代數 linear algebra 數值分析 numerical analysis 最佳化 optimization
 
 輸入：經濟系想學程式
 分析：經濟系學生想學程式，應找適合非資工背景的程式與數據分析課程
-關鍵詞：程式設計 programming Python R 資料分析 data analysis 計量經濟 econometrics 統計軟體 入門 introduction 數據處理 data processing
+關鍵詞：程式設計 programming Python R 資料分析 data analysis 計量經濟 econometrics 數據處理 data processing
 
 輸入：我是資工系的，但我對金融領域有興趣，可以修什麼課
 分析：資工背景想跨入金融，應找金融相關且偏重量化分析與程式應用的課程
-關鍵詞：金融科技 FinTech 量化分析 quantitative analysis 財務工程 financial engineering 投資學 investment 金融 finance 程式交易 algorithmic trading 資料分析 data analysis 風險管理 risk management 統計 statistics 機器學習 machine learning
+關鍵詞：金融科技 FinTech 量化分析 quantitative analysis 財務工程 financial engineering 投資學 investment 金融 finance 程式交易 algorithmic trading
 
 輸入：想了解人的心理和行為
 分析：對人類心理與行為科學有興趣
-關鍵詞：心理學 psychology 認知心理 cognitive psychology 行為科學 behavioral science 社會心理 social psychology 發展心理 developmental 人格心理 personality
+關鍵詞：心理學 psychology 認知心理 cognitive psychology 行為科學 behavioral science 社會心理 social psychology
 
 輸入：我是中文系的，最近想學一些數據分析的技能，聽說做文本分析很有趣
 分析：中文系學生想學數據分析，特別是文本分析方向，找數位人文與 NLP 相關課程
-關鍵詞：文本分析 text analysis 自然語言處理 NLP natural language processing Python 程式設計 programming 資料分析 data analysis 數位人文 digital humanities 語料庫 corpus 文本探勘 text mining
+關鍵詞：文本分析 text analysis 自然語言處理 NLP Python 程式設計 programming 數位人文 digital humanities 文本探勘 text mining
 
 輸入：對設計有興趣但沒基礎
 分析：想學設計但無基礎，需要入門級設計課程
-關鍵詞：設計 design 平面設計 graphic design 視覺設計 visual design 設計基礎 基本設計 入門 introduction 色彩學 color theory 排版 typography 美學 aesthetics
+關鍵詞：設計 design 平面設計 graphic design 視覺設計 visual design 設計基礎 色彩學 color theory 排版 typography
 
 輸入：我想找資安方面的進階課，之前學過網路概論跟作業系統
 分析：有網路和作業系統基礎的學生想深入資訊安全領域
-關鍵詞：資訊安全 information security 網路安全 network security 密碼學 cryptography 滲透測試 penetration testing 系統安全 system security 資安 cybersecurity 惡意程式 malware 數位鑑識 digital forensics
+關鍵詞：資訊安全 information security 網路安全 network security 密碼學 cryptography 滲透測試 penetration testing 系統安全 system security
 
 ## 使用者查詢
 ` + query + `
