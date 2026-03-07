@@ -200,7 +200,7 @@ LINE ID：[ @148wrcch ](https://line.me/R/ti/p/@148wrcch)
 
 ### 需要準備什麼
 
-- Go 1.26.0，或 Docker / Docker Compose
+- Go 1.26.1，或 Docker / Docker Compose
 - LINE Messaging API 的 Channel Secret 與 Channel Access Token
 - 若要啟用 AI 功能，需設定 `NTPU_LLM_ENABLED=true` 並提供至少一組 LLM API Key
 
