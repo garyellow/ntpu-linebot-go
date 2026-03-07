@@ -122,6 +122,16 @@ func TestParseExpandedOutput(t *testing.T) {
 			input:    "Analysis: user wants AI courses\nKeywords: artificial intelligence AI machine learning",
 			expected: "artificial intelligence AI machine learning",
 		},
+		{
+			name:     "academic keyword starting with 分析 is not rejected",
+			input:    "分析化學 analytical chemistry chromatography",
+			expected: "分析化學 analytical chemistry chromatography",
+		},
+		{
+			name:     "analysis label line with colon is still rejected in strategy 3",
+			input:    "分析：使用者想學分析化學\n分析化學 analytical chemistry",
+			expected: "分析化學 analytical chemistry",
+		},
 	}
 
 	for _, tc := range tests {

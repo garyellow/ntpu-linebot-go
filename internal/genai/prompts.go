@@ -216,8 +216,9 @@ func QueryExpansionPrompt(query string) string {
 //	關鍵詞：[space-separated keywords]
 //
 // Parsing strategy:
-//  1. Look for "關鍵詞：" / "關鍵詞:" marker (繁/簡 × 全/半形冒號) → extract first line after marker
-//  2. Fallback: If "分析：" exists, take everything after the analysis line
+//  1. Look for "關鍵詞：" / "關鍵詞:" marker (繁/簡 × 全/半形冒號; also English "Keywords:") → extract first line after marker
+//  2. Fallback: If "分析：" exists, take first keyword-looking line after the analysis line
+//  3. Last resort: Accept the first keyword-looking plain line for providers that skip the structured format
 //
 // Returns "" if no keywords can be extracted; callers should fall back to the original query.
 func ParseExpandedOutput(output string) string {
@@ -342,13 +343,15 @@ func looksLikeKeywordLine(line string) bool {
 	if line == "" {
 		return false
 	}
-	for _, prefix := range []string{"分析", "輸入", "範例", "任務", "第一步", "第二步"} {
+	// Match only label-followed-by-colon patterns to avoid rejecting legitimate
+	// keyword terms that share a prefix (e.g. "分析化學", "任務導向教學", "step-wise regression").
+	for _, prefix := range []string{"分析：", "分析:", "輸入：", "輸入:", "範例：", "範例:", "任務：", "任務:", "第一步：", "第一步:", "第二步：", "第二步:"} {
 		if strings.HasPrefix(line, prefix) {
 			return false
 		}
 	}
 	lowerLine := strings.ToLower(line)
-	for _, prefix := range []string{"analysis", "input", "example", "task", "step", "reasoning"} {
+	for _, prefix := range []string{"analysis:", "input:", "example:", "task:", "step:", "reasoning:"} {
 		if strings.HasPrefix(lowerLine, prefix) {
 			return false
 		}
