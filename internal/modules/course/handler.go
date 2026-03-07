@@ -1932,12 +1932,13 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 		if h.llmRateLimiter != nil && chatID != "" && !h.llmRateLimiter.Allow(chatID) {
 			log.WarnContext(searchCtx, "LLM rate limit exceeded for query expansion")
 			h.metrics.RecordSearch(searchType, "rate_limited", time.Since(startTime).Seconds(), 0)
+			retryQRs := append([]lineutil.QuickReplyItem{lineutil.QuickReplyRetryAction("課程 " + query)}, lineutil.QuickReplyCourseNav(false)...)
 			return []messaging_api.MessageInterface{
 				lineutil.ErrorMessageWithQuickReply(
 					"智慧搜尋需要 AI 輔助，今日 AI 配額已用完\n\n建議改用精確搜尋\n• 課程 微積分\n• 課程 王小明",
 					sender,
 					"課程 "+query,
-					lineutil.QuickReplyCourseNav(false)...,
+					retryQRs...,
 				),
 			}
 		}
@@ -1946,12 +1947,13 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 		if err != nil {
 			log.WithError(err).WarnContext(searchCtx, "Query expansion failed, smart search aborted")
 			h.metrics.RecordSearch(searchType, "expansion_failed", time.Since(startTime).Seconds(), 0)
+			retryQRs := append([]lineutil.QuickReplyItem{lineutil.QuickReplyRetryAction("課程 " + query)}, lineutil.QuickReplyCourseNav(false)...)
 			return []messaging_api.MessageInterface{
 				lineutil.ErrorMessageWithQuickReply(
 					"智慧搜尋暫時無法使用\n\n建議改用精確搜尋\n• 課程 微積分\n• 課程 王小明",
 					sender,
 					"課程 "+query,
-					lineutil.QuickReplyCourseNav(false)...,
+					retryQRs...,
 				),
 			}
 		}

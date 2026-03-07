@@ -181,6 +181,10 @@ func (e *openaiQueryExpander) Expand(ctx context.Context, query string) (string,
 		slog.WarnContext(ctx, "Query expansion output not parseable",
 			"provider", e.provider,
 			"model", e.model,
+			"raw_output_length", len([]rune(rawOutput)))
+		slog.DebugContext(ctx, "Query expansion unparseable raw output",
+			"provider", e.provider,
+			"model", e.model,
 			"raw_output", truncateLogValue(rawOutput, 200))
 		return query, fmt.Errorf("expansion output not parseable from %s model %s", e.provider, e.model)
 	}

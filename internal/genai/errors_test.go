@@ -156,6 +156,28 @@ func TestClassifyError(t *testing.T) {
 			expected: ActionFail,
 		},
 
+		// Model output structural errors (non-transient, fallback to next provider)
+		{
+			name:     "empty response from model",
+			err:      errors.New("empty response from groq model my-model"),
+			expected: ActionFallback,
+		},
+		{
+			name:     "empty text in response from model",
+			err:      errors.New("empty text in response from gemini model my-model"),
+			expected: ActionFallback,
+		},
+		{
+			name:     "expansion output not parseable",
+			err:      errors.New("expansion output not parseable from cerebras model my-model"),
+			expected: ActionFallback,
+		},
+		{
+			name:     "expanded query empty after building",
+			err:      errors.New("expanded query empty after building from groq model my-model"),
+			expected: ActionFallback,
+		},
+
 		// Unknown errors default to retry
 		{
 			name:     "unknown error",

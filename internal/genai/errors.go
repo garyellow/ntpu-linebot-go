@@ -130,6 +130,13 @@ func ClassifyError(err error) ErrorAction {
 		return ActionFail
 	}
 
+	// Check for structural model output errors (non-transient: wrong/empty model output).
+	// These won't improve with retries on the same model, so fall back to the next provider.
+	if containsAny(errStr, "empty response from", "empty text in response from",
+		"expansion output not parseable", "expanded query empty after building") {
+		return ActionFallback
+	}
+
 	// Default: retry for unknown errors (conservative approach)
 	return ActionRetry
 }
