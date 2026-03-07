@@ -132,6 +132,32 @@ func TestParseExpandedOutput(t *testing.T) {
 			input:    "分析：使用者想學分析化學\n分析化學 analytical chemistry",
 			expected: "分析化學 analytical chemistry",
 		},
+		// Thinking model outputs (Qwen3 on Groq/Cerebras default to raw reasoning format)
+		{
+			name:     "thinking block before structured output is stripped",
+			input:    "<think>\n我需要分析這個課程查詢...\n關鍵詞：不對這是思考中的內容\n</think>\n分析：使用者想學統計\n關鍵詞：統計 statistics 機率 probability",
+			expected: "統計 statistics 機率 probability",
+		},
+		{
+			name:     "thinking block with only newline content is stripped",
+			input:    "<think>\n\n</think>\n統計 statistics 機率 probability",
+			expected: "統計 statistics 機率 probability",
+		},
+		{
+			name:     "unclosed thinking block returns empty",
+			input:    "<think>\n推理中，從未閉合...",
+			expected: "",
+		},
+		{
+			name:     "multiple thinking blocks are all stripped",
+			input:    "<think>first block</think> <think>second block</think>\n關鍵詞：計算機 電腦 computer",
+			expected: "計算機 電腦 computer",
+		},
+		{
+			name:     "thinking block is entire content returns empty",
+			input:    "<think>full output is thinking</think>",
+			expected: "",
+		},
 	}
 
 	for _, tc := range tests {

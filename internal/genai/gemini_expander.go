@@ -96,7 +96,7 @@ func (e *geminiQueryExpander) Expand(ctx context.Context, query string) (string,
 	}
 
 	if resp == nil || len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil {
-		return query, nil
+		return query, fmt.Errorf("empty response from gemini model %s", e.model)
 	}
 
 	// Extract expanded query from response
@@ -109,7 +109,7 @@ func (e *geminiQueryExpander) Expand(ctx context.Context, query string) (string,
 
 	rawOutput := strings.TrimSpace(expanded.String())
 	if rawOutput == "" {
-		return query, nil
+		return query, fmt.Errorf("empty text in response from gemini model %s", e.model)
 	}
 
 	// Parse structured output (extract keywords from "分析：... 關鍵詞：..." format)
@@ -117,12 +117,16 @@ func (e *geminiQueryExpander) Expand(ctx context.Context, query string) (string,
 	// we only need the keywords for BM25 search.
 	parsedKeywords := ParseExpandedOutput(rawOutput)
 	if parsedKeywords == "" {
-		return query, nil
+		slog.WarnContext(ctx, "Query expansion output not parseable",
+			"provider", "gemini",
+			"model", e.model,
+			"raw_output", truncateLogValue(rawOutput, 200))
+		return query, fmt.Errorf("expansion output not parseable from gemini model %s", e.model)
 	}
 
 	finalQuery := BuildExpandedQuery(query, parsedKeywords)
 	if finalQuery == "" {
-		return query, nil
+		return query, fmt.Errorf("expanded query empty after building from gemini model %s", e.model)
 	}
 
 	args := []any{

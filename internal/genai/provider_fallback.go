@@ -214,10 +214,10 @@ func NewFallbackQueryExpander(cfg RetryConfig, expanders ...QueryExpander) *Fall
 }
 
 // Expand tries the expanders in order with retry, then falls back if needed.
-// On complete failure, returns the original query (graceful degradation).
+// On complete failure, returns an error so the caller can handle it explicitly.
 func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (string, error) {
 	if f == nil || len(f.expanders) == 0 {
-		return query, nil // Graceful degradation
+		return query, nil // feature disabled, not a failure
 	}
 
 	totalStart := time.Now()
@@ -249,11 +249,10 @@ func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (strin
 			"action", action,
 			"duration_ms", time.Since(start).Milliseconds())
 
-		// If error is not recoverable or no more fallbacks, degrade gracefully
+		// If error is not recoverable or no more fallbacks, propagate error to caller
 		if action == ActionFail || i == len(f.expanders)-1 {
 			recordExpanderError(provider, err)
-			// Graceful degradation: return original query
-			return query, nil
+			return query, err
 		}
 
 		// Falling back to next expander
@@ -264,7 +263,8 @@ func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (strin
 			"to_provider", f.expanders[i+1].Provider())
 	}
 
-	return query, nil // Always return original query on failure
+	// unreachable: loop always returns via ActionFail or last-expander check above
+	return query, fmt.Errorf("all %d query expanders failed", len(f.expanders))
 }
 
 // expandWithRetry attempts expansion with retry logic.

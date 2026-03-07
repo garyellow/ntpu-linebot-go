@@ -271,7 +271,7 @@ func TestFallbackQueryExpander_Expand_PrimarySuccess(t *testing.T) {
 	}
 }
 
-func TestFallbackQueryExpander_Expand_GracefulDegradation(t *testing.T) {
+func TestFallbackQueryExpander_Expand_AllProvidersFailed(t *testing.T) {
 	t.Parallel()
 	primary := &mockQueryExpander{
 		expandFunc: func(_ context.Context, _ string) (string, error) {
@@ -295,13 +295,13 @@ func TestFallbackQueryExpander_Expand_GracefulDegradation(t *testing.T) {
 
 	expander := NewFallbackQueryExpander(cfg, primary, fallback)
 
-	// Should return original query on complete failure (graceful degradation)
+	// Should return original query AND an error when all providers fail
 	result, err := expander.Expand(context.Background(), "original")
-	if err != nil {
-		t.Errorf("Expand() error = %v, want nil (graceful degradation)", err)
+	if err == nil {
+		t.Error("Expand() should return error when all expanders fail")
 	}
 	if result != "original" {
-		t.Errorf("Expand() = %q, want %q (original query)", result, "original")
+		t.Errorf("Expand() = %q, want %q (original query preserved on failure)", result, "original")
 	}
 }
 
@@ -310,7 +310,7 @@ func TestFallbackQueryExpander_Expand_NilExpander(t *testing.T) {
 	var expander *FallbackQueryExpander
 	result, err := expander.Expand(context.Background(), "test")
 	if err != nil {
-		t.Errorf("Expand() error = %v, want nil", err)
+		t.Errorf("Expand() on nil expander (feature disabled) should return no error, got: %v", err)
 	}
 	if result != "test" {
 		t.Errorf("Expand() = %q, want %q (original)", result, "test")
@@ -362,12 +362,12 @@ func TestFallbackQueryExpander_ContextCancellation(t *testing.T) {
 	cancel() // Cancel immediately
 
 	result, err := expander.Expand(ctx, "test")
-	// Should return original query due to graceful degradation
+	// Should return original query on cancellation
 	if result != "test" {
 		t.Errorf("Expand() = %q, want %q on cancellation", result, "test")
 	}
-	// Error should be nil due to graceful degradation
-	if err != nil {
-		t.Logf("Note: Expand() returned error = %v (acceptable for canceled context)", err)
+	// Error should be returned (context cancellation is not graceful degradation)
+	if err == nil {
+		t.Error("Expand() should return error on context cancellation")
 	}
 }

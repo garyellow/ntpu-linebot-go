@@ -1926,38 +1926,41 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 	// about webhook sources or user sessions, it just uses the chatID from context.
 	expandedQuery := query
 	if h.hasQueryExpander() {
-		// Check LLM rate limit if limiter is available and we have a chatID in context
-		// The chatID is injected by webhook handler via ctxutil.WithChatID
 		chatID := ctxutil.GetChatID(ctx)
-		if h.llmRateLimiter != nil && chatID != "" {
-			if !h.llmRateLimiter.Allow(chatID) {
-				log.DebugContext(searchCtx, "LLM rate limit exceeded for query expansion, using original query")
-				// Graceful degradation: continue with original query instead of failing
-			} else {
-				// Rate limit OK, proceed with expansion
-				expanded, err := h.queryExpander.Expand(searchCtx, query)
-				if err != nil {
-					log.WithError(err).DebugContext(searchCtx, "Query expansion failed, using original query")
-				} else if expanded != query {
-					expandedQuery = expanded
-					log.WithFields(map[string]any{
-						"original": query,
-						"expanded": expandedQuery,
-					}).DebugContext(searchCtx, "Query expanded")
-				}
+		sender := lineutil.GetSender(senderName, h.stickerManager)
+
+		if h.llmRateLimiter != nil && chatID != "" && !h.llmRateLimiter.Allow(chatID) {
+			log.WarnContext(searchCtx, "LLM rate limit exceeded for query expansion")
+			h.metrics.RecordSearch(searchType, "rate_limited", time.Since(startTime).Seconds(), 0)
+			return []messaging_api.MessageInterface{
+				lineutil.ErrorMessageWithQuickReply(
+					"智慧搜尋需要 AI 輔助，今日 AI 配額已用完\n\n建議改用精確搜尋\n• 課程 微積分\n• 課程 王小明",
+					sender,
+					"課程 "+query,
+					lineutil.QuickReplyCourseNav(false)...,
+				),
 			}
-		} else {
-			// No rate limiting configured, proceed with expansion
-			expanded, err := h.queryExpander.Expand(searchCtx, query)
-			if err != nil {
-				log.WithError(err).DebugContext(searchCtx, "Query expansion failed, using original query")
-			} else if expanded != query {
-				expandedQuery = expanded
-				log.WithFields(map[string]any{
-					"original": query,
-					"expanded": expandedQuery,
-				}).DebugContext(searchCtx, "Query expanded")
+		}
+
+		expanded, err := h.queryExpander.Expand(searchCtx, query)
+		if err != nil {
+			log.WithError(err).WarnContext(searchCtx, "Query expansion failed, smart search aborted")
+			h.metrics.RecordSearch(searchType, "expansion_failed", time.Since(startTime).Seconds(), 0)
+			return []messaging_api.MessageInterface{
+				lineutil.ErrorMessageWithQuickReply(
+					"智慧搜尋暫時無法使用\n\n建議改用精確搜尋\n• 課程 微積分\n• 課程 王小明",
+					sender,
+					"課程 "+query,
+					lineutil.QuickReplyCourseNav(false)...,
+				),
 			}
+		}
+		if expanded != query {
+			expandedQuery = expanded
+			log.WithFields(map[string]any{
+				"original": query,
+				"expanded": expandedQuery,
+			}).DebugContext(searchCtx, "Query expanded")
 		}
 	}
 
