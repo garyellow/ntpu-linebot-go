@@ -169,7 +169,7 @@ func (s *R2ScheduleStore) Update(ctx context.Context, updater func(*State)) erro
 	return errors.New("maintenance: failed to update state after retries")
 }
 
-func (s *R2ScheduleStore) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+func (s *R2ScheduleStore) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) { //nolint:gosec // G118: caller receives and must invoke the returned cancel func
 	if s.requestTimeout <= 0 {
 		return context.WithCancel(ctx)
 	}

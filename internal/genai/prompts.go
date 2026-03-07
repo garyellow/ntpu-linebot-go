@@ -107,7 +107,7 @@ const IntentParserSystemPrompt = `你是 NTPU 小工具的意圖分類助手。
 // - Cross-disciplinary awareness: "CS student interested in finance" → finance courses
 // - Original query preserved lexically: caller keeps the original query intent as compact keyword terms
 // - Target topics first: BM25 is sensitive to term frequency and early lexical cues
-// - Compact expansions: prefer 8-16 high-value terms instead of long noisy lists
+// - Compact expansions: prefer 6-14 high-value terms instead of long noisy lists
 // - Bilingual coverage: Chinese synonyms + English technical terms when they improve recall
 // - Domain-specific vocabulary: terms matching syllabus fields
 //
@@ -153,7 +153,7 @@ func QueryExpansionPrompt(query string) string {
 
 ## 輸出格式（嚴格遵守）
 分析：[一句話描述使用者真正的學習目標與搜尋方向]
-關鍵詞：[8-16個高價值搜尋詞 空格分隔]
+關鍵詞：[6-14個高價值搜尋詞 空格分隔]
 
 ## 額外限制
 1. 關鍵詞行只能輸出搜尋詞，不可重複整句使用者原文；若原文有重要片段，請拆成詞保留
@@ -227,7 +227,7 @@ func ParseExpandedOutput(output string) string {
 	}
 
 	// Strategy 1: Look for "關鍵詞：" or "關鍵詞:" marker
-	for _, marker := range []string{"關鍵詞：", "關鍵詞:", "关键词：", "关键词:", "keywords:", "keywords："} {
+	for _, marker := range []string{"關鍵詞：", "關鍵詞:", "关键词：", "关键词:", "Keywords:", "Keywords：", "keywords:", "keywords："} {
 		if idx := strings.Index(output, marker); idx != -1 {
 			keywords := strings.TrimSpace(output[idx+len(marker):])
 			// Take only the first line of keywords (in case model adds extra text)
@@ -277,8 +277,17 @@ func BuildExpandedQuery(query, expanded string) string {
 		return normalizeKeywordLine(expanded)
 	}
 
-	// Drop the exact raw query if the model echoed it before adding keywords.
-	cleanedExpanded := strings.ReplaceAll(expanded, query, " ")
+	// Drop a leading exact raw query if the model echoed it before adding keywords.
+	cleanedExpanded := strings.TrimSpace(expanded)
+	trimmedQuery := strings.TrimSpace(query)
+	if trimmedQuery != "" {
+		switch {
+		case cleanedExpanded == trimmedQuery:
+			cleanedExpanded = ""
+		case strings.HasPrefix(cleanedExpanded, trimmedQuery+" "):
+			cleanedExpanded = strings.TrimSpace(cleanedExpanded[len(trimmedQuery):])
+		}
+	}
 	cleanedExpanded = normalizeKeywordLine(cleanedExpanded)
 	originalKeywords := extractOriginalQueryKeywords(query)
 	expandedKeywords := strings.Fields(cleanedExpanded)
@@ -338,6 +347,12 @@ func looksLikeKeywordLine(line string) bool {
 			return false
 		}
 	}
+	lowerLine := strings.ToLower(line)
+	for _, prefix := range []string{"analysis", "input", "example", "task", "step", "reasoning"} {
+		if strings.HasPrefix(lowerLine, prefix) {
+			return false
+		}
+	}
 	return true
 }
 
@@ -348,7 +363,7 @@ func extractOriginalQueryKeywords(query string) []string {
 	}
 
 	for _, phrase := range []string{
-		"我是", "我對", "我想找", "我想學", "我想", "想學點", "想學一些", "想學", "想了解", "最近想", "最近", "但我對", "但是我對", "可以修什麼", "可以修哪些", "有什麼可以修", "有什麼課", "推薦修", "推薦我", "推薦", "修哪些課", "修什麼課", "修哪些", "修什麼", "哪些課", "什麼課", "有興趣", "請問", "幫我", "一下", "一些", "相關的", "相關", "方面", "知識", "課程", "課", "嗎", "呢", "吧", "的",
+		"我是", "我對", "我想找", "我想學", "我想", "想學點", "想學一些", "想學", "想了解", "最近想", "最近", "但我對", "但是我對", "可以修什麼", "可以修哪些", "有什麼可以修", "有什麼課", "推薦修", "推薦我", "推薦", "修哪些課", "修什麼課", "修哪些", "修什麼", "哪些課", "什麼課", "有興趣", "請問", "幫我", "一下", "一些", "相關的", "相關", "方面", "知識", "課程",
 	} {
 		cleaned = strings.ReplaceAll(cleaned, phrase, " ")
 	}
@@ -372,7 +387,43 @@ func extractOriginalQueryKeywords(query string) []string {
 		")", " ",
 	)
 	cleaned = replacer.Replace(cleaned)
-	return dedupeTerms(strings.Fields(cleaned))
+
+	terms := make([]string, 0, len(strings.Fields(cleaned)))
+	for _, term := range strings.Fields(cleaned) {
+		term = strings.TrimSpace(term)
+		term = strings.TrimRight(term, "的嗎呢吧")
+		if term == "" {
+			continue
+		}
+
+		parts := []string{term}
+		if strings.Contains(term, "的") {
+			rawParts := strings.Split(term, "的")
+			splitParts := make([]string, 0, len(rawParts))
+			canSplit := true
+			for _, part := range rawParts {
+				part = strings.TrimSpace(part)
+				if part == "" {
+					canSplit = false
+					break
+				}
+				splitParts = append(splitParts, part)
+			}
+			if canSplit {
+				parts = splitParts
+			}
+		}
+
+		for _, part := range parts {
+			switch part {
+			case "課", "的", "嗎", "呢", "吧":
+				continue
+			}
+			terms = append(terms, part)
+		}
+	}
+
+	return dedupeTerms(terms)
 }
 
 func dedupeTerms(terms []string) []string {

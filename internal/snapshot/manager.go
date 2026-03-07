@@ -435,7 +435,7 @@ func (m *Manager) CurrentETag() string {
 // ErrNotFound indicates no snapshot exists in R2.
 var ErrNotFound = errors.New("snapshot: not found")
 
-func (m *Manager) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+func (m *Manager) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) { //nolint:gosec // G118: caller receives and must invoke the returned cancel func
 	if m.config.RequestTimeout <= 0 {
 		return context.WithCancel(ctx)
 	}

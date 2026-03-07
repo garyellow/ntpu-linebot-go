@@ -117,6 +117,11 @@ func TestParseExpandedOutput(t *testing.T) {
 			input:    "- 關鍵詞：金融科技、FinTech、量化分析、quantitative analysis",
 			expected: "金融科技 FinTech 量化分析 quantitative analysis",
 		},
+		{
+			name:     "english analysis line is ignored in fallback parsing",
+			input:    "Analysis: user wants AI courses\nKeywords: artificial intelligence AI machine learning",
+			expected: "artificial intelligence AI machine learning",
+		},
 	}
 
 	for _, tc := range tests {
@@ -156,6 +161,18 @@ func TestBuildExpandedQuery(t *testing.T) {
 			query:    "AWS",
 			expanded: "Amazon Web Services 雲端服務 cloud computing",
 			expected: "AWS Amazon Web Services 雲端服務 cloud computing",
+		},
+		{
+			name:     "does not strip query substrings inside legitimate tokens",
+			query:    "AI",
+			expanded: "AIML artificial intelligence machine learning",
+			expected: "AI AIML artificial intelligence machine learning",
+		},
+		{
+			name:     "trims filler particles without corrupting meaningful terms",
+			query:    "我是中文系的，最近想學一些文本分析的技能",
+			expanded: "文本分析 text analysis NLP digital humanities",
+			expected: "中文系 文本分析 技能 text analysis NLP digital humanities",
 		},
 	}
 
