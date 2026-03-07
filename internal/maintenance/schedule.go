@@ -79,7 +79,11 @@ func (s *R2ScheduleStore) Load(ctx context.Context) (State, string, bool, error)
 
 // loadOnce performs a single load attempt.
 func (s *R2ScheduleStore) loadOnce(ctx context.Context) (State, string, bool, error) {
-	readCtx, cancel := s.withTimeout(ctx)
+	readCtx := ctx
+	cancel := func() {}
+	if s.requestTimeout > 0 {
+		readCtx, cancel = context.WithTimeout(ctx, s.requestTimeout)
+	}
 	body, etag, err := s.client.Download(readCtx, s.key)
 	if err != nil {
 		cancel()
@@ -118,7 +122,11 @@ func (s *R2ScheduleStore) Ensure(ctx context.Context) (State, string, error) {
 		return State{}, "", fmt.Errorf("maintenance: marshal state: %w", err)
 	}
 
-	writeCtx, cancel := s.withTimeout(ctx)
+	writeCtx := ctx
+	cancel := func() {}
+	if s.requestTimeout > 0 {
+		writeCtx, cancel = context.WithTimeout(ctx, s.requestTimeout)
+	}
 	created, createdETag, err := s.client.PutObjectIfNotExists(writeCtx, s.key, bytes.NewReader(data), "application/json")
 	cancel()
 	if err != nil {
@@ -155,7 +163,11 @@ func (s *R2ScheduleStore) Update(ctx context.Context, updater func(*State)) erro
 			return fmt.Errorf("maintenance: marshal state: %w", err)
 		}
 
-		writeCtx, cancel := s.withTimeout(ctx)
+		writeCtx := ctx
+		cancel := func() {}
+		if s.requestTimeout > 0 {
+			writeCtx, cancel = context.WithTimeout(ctx, s.requestTimeout)
+		}
 		updated, _, err := s.client.PutObjectIfMatch(writeCtx, s.key, bytes.NewReader(data), etag, "application/json")
 		cancel()
 		if err != nil {
@@ -167,11 +179,4 @@ func (s *R2ScheduleStore) Update(ctx context.Context, updater func(*State)) erro
 	}
 
 	return errors.New("maintenance: failed to update state after retries")
-}
-
-func (s *R2ScheduleStore) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
-	if s.requestTimeout <= 0 {
-		return context.WithCancel(ctx)
-	}
-	return context.WithTimeout(ctx, s.requestTimeout)
 }

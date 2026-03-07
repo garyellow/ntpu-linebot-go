@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
@@ -22,7 +23,7 @@ func TestMetricsAuthMiddleware_NoPasswordBypass(t *testing.T) {
 	})
 
 	// Request without auth header should succeed
-	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -37,7 +38,7 @@ func TestMetricsAuthMiddleware_ValidCredentials(t *testing.T) {
 	})
 
 	// Request with valid auth header
-	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil)
 	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("prometheus:secret123")))
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -64,7 +65,7 @@ func TestMetricsAuthMiddleware_InvalidCredentials(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil)
 			req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(tt.username+":"+tt.password)))
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
@@ -82,7 +83,7 @@ func TestMetricsAuthMiddleware_NoAuthHeader(t *testing.T) {
 	})
 
 	// Request without auth header when password is configured
-	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -108,7 +109,7 @@ func TestMetricsAuthMiddleware_MalformedAuthHeader(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil)
 			if tt.header != "" {
 				req.Header.Set("Authorization", tt.header)
 			}

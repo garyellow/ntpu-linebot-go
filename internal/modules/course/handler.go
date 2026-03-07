@@ -1962,9 +1962,17 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 	}
 
 	log.WithFields(map[string]any{
-		"type":     searchType,
-		"original": query,
-		"expanded": expandedQuery,
+		"type":                searchType,
+		"original":            query,
+		"expanded":            expandedQuery,
+		"used_query_expander": expandedQuery != query,
+	}).DebugContext(searchCtx, "Smart search query prepared")
+
+	log.WithFields(map[string]any{
+		"type":                  searchType,
+		"query_length":          len(query),
+		"expanded_query_length": len(expandedQuery),
+		"used_query_expander":   expandedQuery != query,
 	}).InfoContext(searchCtx, "Performing smart search")
 
 	// Perform BM25 search

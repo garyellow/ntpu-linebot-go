@@ -88,7 +88,7 @@ func (f *FallbackIntentParser) Parse(ctx context.Context, text string) (*ParseRe
 		}
 
 		// Falling back to next parser
-		slog.InfoContext(ctx, "Falling back to next intent parser",
+		slog.DebugContext(ctx, "Falling back to next intent parser",
 			"from_index", i,
 			"from_provider", provider,
 			"to_index", i+1,
@@ -257,7 +257,7 @@ func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (strin
 		}
 
 		// Falling back to next expander
-		slog.InfoContext(ctx, "Falling back to next query expander",
+		slog.DebugContext(ctx, "Falling back to next query expander",
 			"from_index", i,
 			"from_provider", provider,
 			"to_index", i+1,

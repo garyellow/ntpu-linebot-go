@@ -107,38 +107,45 @@ func (e *geminiQueryExpander) Expand(ctx context.Context, query string) (string,
 		}
 	}
 
-	result := strings.TrimSpace(expanded.String())
-	if result == "" {
+	rawOutput := strings.TrimSpace(expanded.String())
+	if rawOutput == "" {
 		return query, nil
 	}
 
 	// Parse structured output (extract keywords from "分析：... 關鍵詞：..." format)
 	// The Think-then-Expand pattern produces analysis + keywords;
 	// we only need the keywords for BM25 search.
-	result = ParseExpandedOutput(result)
-	if result == "" {
+	parsedKeywords := ParseExpandedOutput(rawOutput)
+	if parsedKeywords == "" {
 		return query, nil
 	}
 
-	// Ensure original query is preserved (prepend if not present)
-	if !strings.Contains(result, query) {
-		result = query + " " + result
+	finalQuery := BuildExpandedQuery(query, parsedKeywords)
+	if finalQuery == "" {
+		return query, nil
 	}
 
-	// Log success with token usage
+	args := []any{
+		"provider", "gemini",
+		"model", e.model,
+		"raw_output", truncateLogValue(rawOutput, 600),
+		"parsed_keywords", parsedKeywords,
+		"final_query", finalQuery,
+		"duration_ms", duration.Milliseconds(),
+		"original_length", len(query),
+		"expanded_length", len(finalQuery),
+	}
+
 	if resp.UsageMetadata != nil {
-		slog.DebugContext(ctx, "Query expansion completed",
-			"provider", "gemini",
-			"model", e.model,
+		args = append(args,
 			"input_tokens", resp.UsageMetadata.PromptTokenCount,
 			"output_tokens", resp.UsageMetadata.CandidatesTokenCount,
 			"total_tokens", resp.UsageMetadata.TotalTokenCount,
-			"duration_ms", duration.Milliseconds(),
-			"original_length", len(query),
-			"expanded_length", len(result))
+		)
 	}
+	slog.DebugContext(ctx, "Query expansion completed", args...)
 
-	return result, nil
+	return finalQuery, nil
 }
 
 // Provider returns the provider type for this expander.

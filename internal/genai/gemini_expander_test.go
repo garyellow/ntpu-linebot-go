@@ -54,6 +54,9 @@ func TestQueryExpansionPrompt_IntentAnalysis(t *testing.T) {
 	if !strings.Contains(prompt, "跨領域") {
 		t.Error("Prompt should mention cross-disciplinary awareness")
 	}
+	if !strings.Contains(prompt, "允許受控推論") {
+		t.Error("Prompt should explicitly allow bounded inference for keyword expansion")
+	}
 }
 
 func TestParseExpandedOutput(t *testing.T) {
@@ -80,9 +83,9 @@ func TestParseExpandedOutput(t *testing.T) {
 			expected: "统计 statistics 概率 probability",
 		},
 		{
-			name:     "unstructured output without format markers returns empty",
+			name:     "unstructured keyword line is accepted",
 			input:    "統計 statistics 統計學 機率 probability",
-			expected: "",
+			expected: "統計 statistics 統計學 機率 probability",
 		},
 		{
 			name:     "empty input",
@@ -109,6 +112,26 @@ func TestParseExpandedOutput(t *testing.T) {
 			input:    "分析：資工背景想跨入金融，應找金融相關且偏重量化分析與程式應用的課程\n關鍵詞：金融科技 FinTech 量化分析 quantitative analysis 財務工程 financial engineering",
 			expected: "金融科技 FinTech 量化分析 quantitative analysis 財務工程 financial engineering",
 		},
+		{
+			name:     "markdown keyword label is normalized",
+			input:    "- 關鍵詞：金融科技、FinTech、量化分析、quantitative analysis",
+			expected: "金融科技 FinTech 量化分析 quantitative analysis",
+		},
+		{
+			name:     "english analysis line is ignored in fallback parsing",
+			input:    "Analysis: user wants AI courses\nKeywords: artificial intelligence AI machine learning",
+			expected: "artificial intelligence AI machine learning",
+		},
+		{
+			name:     "academic keyword starting with 分析 is not rejected",
+			input:    "分析化學 analytical chemistry chromatography",
+			expected: "分析化學 analytical chemistry chromatography",
+		},
+		{
+			name:     "analysis label line with colon is still rejected in strategy 3",
+			input:    "分析：使用者想學分析化學\n分析化學 analytical chemistry",
+			expected: "分析化學 analytical chemistry",
+		},
 	}
 
 	for _, tc := range tests {
@@ -117,6 +140,58 @@ func TestParseExpandedOutput(t *testing.T) {
 			result := ParseExpandedOutput(tc.input)
 			if result != tc.expected {
 				t.Errorf("ParseExpandedOutput(%q) = %q, want %q", tc.input, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestBuildExpandedQuery(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		query    string
+		expanded string
+		expected string
+	}{
+		{
+			name:     "keeps original signal as compact terms",
+			query:    "我是資工系的想學點金融知識推薦修哪些課",
+			expanded: "金融科技 FinTech 量化分析 quantitative analysis 財務工程 financial engineering",
+			expected: "資工系 金融 金融科技 FinTech 量化分析 quantitative analysis 財務工程 financial engineering",
+		},
+		{
+			name:     "drops echoed raw query before merging",
+			query:    "我是資工系的想學點金融知識推薦修哪些課",
+			expanded: "我是資工系的想學點金融知識推薦修哪些課 金融科技 FinTech 量化分析 quantitative analysis",
+			expected: "資工系 金融 金融科技 FinTech 量化分析 quantitative analysis",
+		},
+		{
+			name:     "short keyword query still preserved",
+			query:    "AWS",
+			expanded: "Amazon Web Services 雲端服務 cloud computing",
+			expected: "AWS Amazon Web Services 雲端服務 cloud computing",
+		},
+		{
+			name:     "does not strip query substrings inside legitimate tokens",
+			query:    "AI",
+			expanded: "AIML artificial intelligence machine learning",
+			expected: "AI AIML artificial intelligence machine learning",
+		},
+		{
+			name:     "trims filler particles without corrupting meaningful terms",
+			query:    "我是中文系的，最近想學一些文本分析的技能",
+			expanded: "文本分析 text analysis NLP digital humanities",
+			expected: "中文系 文本分析 技能 text analysis NLP digital humanities",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result := BuildExpandedQuery(tc.query, tc.expanded)
+			if result != tc.expected {
+				t.Errorf("BuildExpandedQuery(%q, %q) = %q, want %q", tc.query, tc.expanded, result, tc.expected)
 			}
 		})
 	}

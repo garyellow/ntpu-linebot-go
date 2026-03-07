@@ -105,15 +105,16 @@ const IntentParserSystemPrompt = `你是 NTPU 小工具的意圖分類助手。
 // - Intent-aware expansion: understand what the user truly needs before generating terms
 // - High precision over breadth: limit drift-prone generic expansions
 // - Cross-disciplinary awareness: "CS student interested in finance" → finance courses
-// - Original query preserved: caller prepends original if missing in keywords
+// - Original query preserved lexically: caller keeps the original query intent as compact keyword terms
 // - Target topics first: BM25 is sensitive to term frequency and early lexical cues
-// - Compact expansions: prefer 8-16 high-value terms instead of long noisy lists
+// - Compact expansions: prefer 6-14 high-value terms instead of long noisy lists
 // - Bilingual coverage: Chinese synonyms + English technical terms when they improve recall
 // - Domain-specific vocabulary: terms matching syllabus fields
 //
 // BM25 Reweighting Note (Zhang et al., EMNLP 2024):
-// The caller ensures original query is preserved by prepending if not present.
-// This maintains query signal strength against expansion noise.
+// The caller ensures original query signal is preserved as lexical terms rather than
+// a full natural-language sentence. This maintains query signal strength while
+// avoiding conversational filler noise in BM25.
 func QueryExpansionPrompt(query string) string {
 	return `你是課程搜尋意圖分析與關鍵詞擴展器。
 
@@ -131,17 +132,20 @@ func QueryExpansionPrompt(query string) string {
 ## 第二步：關鍵詞產生規則
 基於分析結果產生 BM25 搜尋詞：
 1. **目標主題優先**：分析出的目標主題放最前面
-2. **中英對照**：核心概念同時輸出中英文
-3. **學術用語**：使用課程大綱常見的正式詞彙（教學目標/內容綱要/教學進度）
-4. **縮寫展開**：AI→人工智慧、ML→機器學習、NLP→自然語言處理
-5. **8-16 個高價值詞**，空格分隔，寧少勿濫
+2. **保留原始關鍵實體**：人名、領域名、方法名、縮寫、先修背景不可遺漏
+3. **允許受控推論**：可補充 1-3 個使用者沒明說，但對課程大綱檢索高度有幫助的相關詞
+4. **中英對照**：核心概念可同時輸出中英文
+5. **學術用語**：優先使用課程大綱常見的正式詞彙（教學目標/內容綱要/教學進度）
+6. **縮寫展開**：AI→人工智慧、ML→機器學習、NLP→自然語言處理
+7. **通常輸出 6-14 個高價值詞**；查詢很明確時可以更少，跨領域時可略多，但仍要寧少勿濫
 
 ## 精準度規則
 1. **保留原始實體**：人名、領域名、方法名、縮寫不可刪掉
 2. **避免語意漂移**：不要因為聯想過度，把查詢擴成太廣的相鄰領域
 3. **具體查詢少擴展**：若原查詢已很明確，只補正式名稱、英文名、常見別稱
-4. **條件式查詢重視 facet**：把先修背景、應用領域、技能目標拆成少量精準 facet
-5. **避免重複**：不要輸出同義重複、泛用贅詞、只是換句話說的低價值詞
+4. **抽象查詢可適度具象化**：若使用者只有目標或興趣，可轉成少量可檢索的課綱詞與方法詞
+5. **條件式查詢重視 facet**：把先修背景、應用領域、技能目標拆成少量精準 facet
+6. **避免重複**：不要輸出同義重複、泛用贅詞、只是換句話說的低價值詞
 
 ## 過濾規則（不可出現在關鍵詞中）
 意圖詞/動作詞/疑問詞/泛稱詞/修飾詞/連接詞
@@ -149,7 +153,13 @@ func QueryExpansionPrompt(query string) string {
 
 ## 輸出格式（嚴格遵守）
 分析：[一句話描述使用者真正的學習目標與搜尋方向]
-關鍵詞：[8-16個高價值搜尋詞 空格分隔]
+關鍵詞：[6-14個高價值搜尋詞 空格分隔]
+
+## 額外限制
+1. 關鍵詞行只能輸出搜尋詞，不可重複整句使用者原文；若原文有重要片段，請拆成詞保留
+2. 不可輸出完整自然語言句子、解釋、編號、項目符號、JSON
+3. 若原查詢本身很口語，請提煉成詞，不要照抄原句
+4. 可以有少量創造性補充，但每個新增詞都必須能為課程檢索提供明確價值
 
 ## 範例
 
@@ -206,8 +216,9 @@ func QueryExpansionPrompt(query string) string {
 //	關鍵詞：[space-separated keywords]
 //
 // Parsing strategy:
-//  1. Look for "關鍵詞：" / "關鍵詞:" marker (繁/簡 × 全/半形冒號) → extract first line after marker
-//  2. Fallback: If "分析：" exists, take everything after the analysis line
+//  1. Look for "關鍵詞：" / "關鍵詞:" marker (繁/簡 × 全/半形冒號; also English "Keywords:") → extract first line after marker
+//  2. Fallback: If "分析：" exists, take first keyword-looking line after the analysis line
+//  3. Last resort: Accept the first keyword-looking plain line for providers that skip the structured format
 //
 // Returns "" if no keywords can be extracted; callers should fall back to the original query.
 func ParseExpandedOutput(output string) string {
@@ -217,13 +228,14 @@ func ParseExpandedOutput(output string) string {
 	}
 
 	// Strategy 1: Look for "關鍵詞：" or "關鍵詞:" marker
-	for _, marker := range []string{"關鍵詞：", "關鍵詞:", "关键词：", "关键词:"} {
+	for _, marker := range []string{"關鍵詞：", "關鍵詞:", "关键词：", "关键词:", "Keywords:", "Keywords：", "keywords:", "keywords："} {
 		if idx := strings.Index(output, marker); idx != -1 {
 			keywords := strings.TrimSpace(output[idx+len(marker):])
 			// Take only the first line of keywords (in case model adds extra text)
 			if nlIdx := strings.IndexByte(keywords, '\n'); nlIdx != -1 {
 				keywords = strings.TrimSpace(keywords[:nlIdx])
 			}
+			keywords = normalizeKeywordLine(keywords)
 			if keywords != "" {
 				return keywords
 			}
@@ -237,12 +249,214 @@ func ParseExpandedOutput(output string) string {
 			rest := output[idx:]
 			if nlIdx := strings.IndexByte(rest, '\n'); nlIdx != -1 {
 				afterAnalysis := strings.TrimSpace(rest[nlIdx+1:])
-				if afterAnalysis != "" {
-					return afterAnalysis
+				for _, line := range strings.Split(afterAnalysis, "\n") {
+					line = normalizeKeywordLine(line)
+					if line != "" && looksLikeKeywordLine(line) {
+						return line
+					}
 				}
 			}
 		}
 	}
 
+	// Strategy 3: Accept plain keyword lines from providers that skip the structured wrapper.
+	for _, line := range strings.Split(output, "\n") {
+		line = normalizeKeywordLine(line)
+		if line != "" && looksLikeKeywordLine(line) {
+			return line
+		}
+	}
+
 	return ""
+}
+
+// BuildExpandedQuery assembles the final BM25 query from the original user query and
+// LLM-generated keywords. It preserves the original signal as compact lexical terms
+// instead of prepending the full natural-language sentence.
+func BuildExpandedQuery(query, expanded string) string {
+	if strings.TrimSpace(query) == "" {
+		return normalizeKeywordLine(expanded)
+	}
+
+	// Drop a leading exact raw query if the model echoed it before adding keywords.
+	cleanedExpanded := strings.TrimSpace(expanded)
+	trimmedQuery := strings.TrimSpace(query)
+	if trimmedQuery != "" {
+		switch {
+		case cleanedExpanded == trimmedQuery:
+			cleanedExpanded = ""
+		case strings.HasPrefix(cleanedExpanded, trimmedQuery+" "):
+			cleanedExpanded = strings.TrimSpace(cleanedExpanded[len(trimmedQuery):])
+		}
+	}
+	cleanedExpanded = normalizeKeywordLine(cleanedExpanded)
+	originalKeywords := extractOriginalQueryKeywords(query)
+	expandedKeywords := strings.Fields(cleanedExpanded)
+
+	terms := dedupeTerms(append(originalKeywords, expandedKeywords...))
+	return strings.Join(terms, " ")
+}
+
+func normalizeKeywordLine(line string) string {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return ""
+	}
+
+	line = strings.TrimLeft(line, "-*•●○◆◇▪︎▶> ")
+	for _, marker := range []string{"關鍵詞：", "關鍵詞:", "关键词：", "关键词:", "Keywords:", "Keywords：", "keywords:", "keywords："} {
+		if strings.HasPrefix(line, marker) {
+			line = strings.TrimSpace(line[len(marker):])
+			break
+		}
+	}
+
+	replacer := strings.NewReplacer(
+		"\t", " ",
+		"\n", " ",
+		"，", " ",
+		",", " ",
+		"、", " ",
+		"；", " ",
+		";", " ",
+		"/", " ",
+		"|", " ",
+		"（", " ",
+		"）", " ",
+		"(", " ",
+		")", " ",
+		"[", " ",
+		"]", " ",
+		"{", " ",
+		"}", " ",
+		"\"", " ",
+		"'", " ",
+		"`", " ",
+		"*", " ",
+	)
+	line = replacer.Replace(line)
+	return strings.Join(dedupeTerms(strings.Fields(line)), " ")
+}
+
+func looksLikeKeywordLine(line string) bool {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return false
+	}
+	// Match only label-followed-by-colon patterns to avoid rejecting legitimate
+	// keyword terms that share a prefix (e.g. "分析化學", "任務導向教學", "step-wise regression").
+	for _, prefix := range []string{"分析：", "分析:", "輸入：", "輸入:", "範例：", "範例:", "任務：", "任務:", "第一步：", "第一步:", "第二步：", "第二步:"} {
+		if strings.HasPrefix(line, prefix) {
+			return false
+		}
+	}
+	lowerLine := strings.ToLower(line)
+	for _, prefix := range []string{"analysis:", "input:", "example:", "task:", "step:", "reasoning:"} {
+		if strings.HasPrefix(lowerLine, prefix) {
+			return false
+		}
+	}
+	return true
+}
+
+func extractOriginalQueryKeywords(query string) []string {
+	cleaned := strings.TrimSpace(query)
+	if cleaned == "" {
+		return nil
+	}
+
+	for _, phrase := range []string{
+		"我是", "我對", "我想找", "我想學", "我想", "想學點", "想學一些", "想學", "想了解", "最近想", "最近", "但我對", "但是我對", "可以修什麼", "可以修哪些", "有什麼可以修", "有什麼課", "推薦修", "推薦我", "推薦", "修哪些課", "修什麼課", "修哪些", "修什麼", "哪些課", "什麼課", "有興趣", "請問", "幫我", "一下", "一些", "相關的", "相關", "方面", "知識", "課程",
+	} {
+		cleaned = strings.ReplaceAll(cleaned, phrase, " ")
+	}
+
+	replacer := strings.NewReplacer(
+		"\t", " ",
+		"\n", " ",
+		"，", " ",
+		",", " ",
+		"。", " ",
+		"、", " ",
+		"；", " ",
+		";", " ",
+		"？", " ",
+		"?", " ",
+		"！", " ",
+		"!", " ",
+		"（", " ",
+		"）", " ",
+		"(", " ",
+		")", " ",
+	)
+	cleaned = replacer.Replace(cleaned)
+
+	terms := make([]string, 0, len(strings.Fields(cleaned)))
+	for _, term := range strings.Fields(cleaned) {
+		term = strings.TrimSpace(term)
+		term = strings.TrimRight(term, "的嗎呢吧")
+		if term == "" {
+			continue
+		}
+
+		parts := []string{term}
+		if strings.Contains(term, "的") {
+			rawParts := strings.Split(term, "的")
+			splitParts := make([]string, 0, len(rawParts))
+			canSplit := true
+			for _, part := range rawParts {
+				part = strings.TrimSpace(part)
+				if part == "" {
+					canSplit = false
+					break
+				}
+				splitParts = append(splitParts, part)
+			}
+			if canSplit {
+				parts = splitParts
+			}
+		}
+
+		for _, part := range parts {
+			switch part {
+			case "課", "的", "嗎", "呢", "吧":
+				continue
+			}
+			terms = append(terms, part)
+		}
+	}
+
+	return dedupeTerms(terms)
+}
+
+func dedupeTerms(terms []string) []string {
+	if len(terms) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, len(terms))
+	result := make([]string, 0, len(terms))
+	for _, term := range terms {
+		term = strings.TrimSpace(term)
+		if term == "" {
+			continue
+		}
+		if _, ok := seen[term]; ok {
+			continue
+		}
+		seen[term] = struct{}{}
+		result = append(result, term)
+	}
+	return result
+}
+
+func truncateLogValue(s string, maxRunes int) string {
+	if maxRunes <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
+	}
+	return string(runes[:maxRunes]) + "..."
 }

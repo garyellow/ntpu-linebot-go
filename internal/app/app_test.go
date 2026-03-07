@@ -59,7 +59,7 @@ func TestLivenessCheckHealthy(t *testing.T) {
 	router := gin.New()
 	router.GET("/livez", app.livenessCheck)
 
-	req := httptest.NewRequest(http.MethodGet, "/livez", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/livez", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -89,7 +89,7 @@ func TestLivenessCheckAlwaysSucceeds(t *testing.T) {
 	router := gin.New()
 	router.GET("/livez", app.livenessCheck)
 
-	req := httptest.NewRequest(http.MethodGet, "/livez", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/livez", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -114,7 +114,7 @@ func TestReadinessCheckDatabaseFailure(t *testing.T) {
 	router := gin.New()
 	router.GET("/readyz", app.readinessCheck)
 
-	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/readyz", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -154,7 +154,7 @@ func TestReadinessCheckContextTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	req := httptest.NewRequest(http.MethodGet, "/readyz", nil).WithContext(ctx)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/readyz", nil)
 	w := httptest.NewRecorder()
 
 	// The handler should complete quickly (< 100ms) since SQLite operations are fast,
@@ -199,7 +199,7 @@ func TestReadinessCheckCacheStats(t *testing.T) {
 	router := gin.New()
 	router.GET("/readyz", app.readinessCheck)
 
-	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/readyz", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -415,7 +415,7 @@ func TestReadinessCheckDuringRefresh(t *testing.T) {
 	router.GET("/readyz", app.readinessCheck)
 
 	// App just started, refresh not complete
-	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/readyz", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -449,7 +449,7 @@ func TestReadinessCheckAfterRefreshComplete(t *testing.T) {
 	router := gin.New()
 	router.GET("/readyz", app.readinessCheck)
 
-	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/readyz", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -483,7 +483,7 @@ func TestReadinessCheckAfterTimeout(t *testing.T) {
 	// Wait for timeout
 	time.Sleep(60 * time.Millisecond)
 
-	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/readyz", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -505,7 +505,7 @@ func TestWebhookRejectsDuringRefresh(t *testing.T) {
 	})
 
 	// App just started, refresh not complete
-	req := httptest.NewRequest(http.MethodPost, "/webhook", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/webhook", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -529,7 +529,7 @@ func TestWebhookRejectsDuringRefresh(t *testing.T) {
 	// Now mark ready and verify it passes
 	app.readinessState.MarkReady()
 
-	req = httptest.NewRequest(http.MethodPost, "/webhook", nil)
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/webhook", nil)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -554,7 +554,7 @@ func TestReadinessCheck_WarmupWaitDisabledStillBlocks(t *testing.T) {
 		t.Fatal("Expected readinessState to be initially false")
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/readyz", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -575,7 +575,7 @@ func TestWebhookAllowsWhenWarmupWaitDisabled(t *testing.T) {
 		c.Status(http.StatusOK)
 	})
 
-	req := httptest.NewRequest(http.MethodPost, "/webhook", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/webhook", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 

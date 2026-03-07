@@ -1,43 +1,32 @@
-# NTPU LineBot
+# NTPU 小工具
 
-<p align="center">
-  <a href="https://ntpubot-status.garyellow.app/"><img src="https://img.shields.io/uptimerobot/status/m802132556-5a95fc71d4f9260bdcd036db?logo=line&logoColor=white" alt="Status"></a>
-  <a href="https://github.com/garyellow/ntpu-linebot-go/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/garyellow/ntpu-linebot-go/ci.yml?branch=main&label=CI&logo=github" alt="CI"></a>
-  <a href="https://goreportcard.com/report/github.com/garyellow/ntpu-linebot-go"><img src="https://goreportcard.com/badge/github.com/garyellow/ntpu-linebot-go" alt="Go Report Card"></a>
-  <a href="https://pkg.go.dev/github.com/garyellow/ntpu-linebot-go"><img src="https://pkg.go.dev/badge/github.com/garyellow/ntpu-linebot-go.svg" alt="Go Reference"></a>
-  <a href="https://go.dev/dl/"><img src="https://img.shields.io/github/go-mod/go-version/garyellow/ntpu-linebot-go?logo=go&logoColor=white" alt="Go Version"></a>
-  <a href="https://hub.docker.com/r/garyellow/ntpu-linebot-go"><img src="https://img.shields.io/docker/v/garyellow/ntpu-linebot-go?sort=semver&logo=docker&logoColor=white" alt="Docker Version"></a>
-  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/github/license/garyellow/ntpu-linebot-go" alt="License"></a>
-</p>
+<div align="center">
 
-<p align="center">
-  <a href="https://line.me/R/ti/p/@148wrcch"><img src="https://img.shields.io/badge/LINE-加入好友-00C300?style=for-the-badge&logo=line&logoColor=white" alt="加入好友"></a>
-</p>
+[![服務狀態](https://img.shields.io/uptimerobot/status/m802132556-5a95fc71d4f9260bdcd036db?logo=line&logoColor=white)](https://ntpubot-status.garyellow.app/)
+[![CI](https://img.shields.io/github/actions/workflow/status/garyellow/ntpu-linebot-go/ci.yml?branch=main&label=CI&logo=github)](https://github.com/garyellow/ntpu-linebot-go/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/garyellow/ntpu-linebot-go)](https://goreportcard.com/report/github.com/garyellow/ntpu-linebot-go)
+[![Go Reference](https://pkg.go.dev/badge/github.com/garyellow/ntpu-linebot-go.svg)](https://pkg.go.dev/github.com/garyellow/ntpu-linebot-go)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/garyellow/ntpu-linebot-go?logo=go&logoColor=white)](https://go.dev/dl/)
+[![Docker Version](https://img.shields.io/docker/v/garyellow/ntpu-linebot-go?sort=semver&logo=docker&logoColor=white)](https://hub.docker.com/r/garyellow/ntpu-linebot-go)
+[![License](https://img.shields.io/github/license/garyellow/ntpu-linebot-go)](https://opensource.org/licenses/MIT)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-%E8%AB%8B%20AI%20%E5%90%83%E9%BB%9E%20Token-72a4f2?logo=ko-fi&logoColor=white)](https://ko-fi.com/garyellow)
 
-國立臺北大學 LINE 聊天機器人「NTPU 小工具」，提供學號查詢、通訊錄查詢、課程查詢等功能。
+[![加入好友](https://img.shields.io/badge/LINE-加入好友-00C300?style=for-the-badge&logo=line&logoColor=white)](https://line.me/R/ti/p/@148wrcch)
 
-> **💡 一般使用者**：直接[加入好友](#-立即使用)即可使用，無需任何設定！
->
-> **🛠️ 開發者 / 自架需求**：請參閱[自架部署](#%EF%B8%8F-自架部署)章節。
+</div>
 
----
+國立臺北大學 LINE 聊天機器人「NTPU 小工具」，提供課程查詢、智慧找課、學號查詢、學程查詢、校內聯絡資訊、緊急電話與使用額度查詢。
 
-## 📋 目錄
+它的定位很單純：把 NTPU 常用的公開資訊整理成一個在 LINE 裡就能直接查的工具。對 LINE 使用者來說，加好友就能用；對開發者來說，後半段也保留了自架、維運與監控背景。
 
-- [立即使用](#-立即使用)
-- [功能介紹](#-功能介紹)
-- [使用教學](#-使用教學)
-- [隱私說明](#-隱私說明)
-- [自架部署](#%EF%B8%8F-自架部署)
-- [授權條款](#-授權條款)
+> [!IMPORTANT]
+> 本專案是社群維護的開源工具，並非學校官方資訊系統，也不是 LINE 官方服務。查詢結果主要來自 NTPU 公開網站與公開資料整理；若來源網站資料不完整、停止提供或改版，結果也可能受到影響。
 
 ---
 
-## 📱 立即使用
+## 立即使用
 
-**加入好友即可使用，完全免費！**
-
-**LINE ID**: [@148wrcch](https://line.me/R/ti/p/@148wrcch)
+LINE ID：[ @148wrcch ](https://line.me/R/ti/p/@148wrcch)
 
 <p align="center">
   <a href="https://line.me/R/ti/p/@148wrcch">
@@ -46,284 +35,327 @@
 </p>
 
 <p align="center">
-  <img src="add_friend/M_gainfriends_qr.png" alt="QR Code" width="200">
+  <img src="add_friend/M_gainfriends_qr.png" alt="加入好友 QR Code" width="200">
 </p>
+
+相關連結：
+
+- [服務狀態頁](https://ntpubot-status.garyellow.app/)
+- [問題回報 / 功能建議](https://github.com/garyellow/ntpu-linebot-go/issues/new/choose)
+- [Go 套件文件](https://pkg.go.dev/github.com/garyellow/ntpu-linebot-go)
 
 ---
 
-## ✨ 功能介紹
+## LINE 使用者看這裡
 
 | 功能 | 說明 |
 |------|------|
-| 🔍 **學號查詢** | 依姓名或學號查詢學生資訊、系代碼對照、按學年度查詢 |
-| 📞 **通訊錄查詢** | 校內人員聯絡方式（分機、Email、辦公室）、緊急電話 |
-| 📚 **課程查詢** | 課程資訊（課號、教師、時間、地點）、課程名稱或教師姓名搜尋 |
-| 🧭 **學程查詢** | 瀏覽所有學程、查詢學程課程、查看課程相關學程 |
-| 🤖 **自然語言** | 支援口語化查詢，例如「我想找微積分的課」 |
-| 🔮 **智慧搜尋** | 輸入「找課 + 描述」，根據課程大綱內容智慧匹配 |
+| 學號查詢 | 依姓名、學號、學年度、系所或系代碼查學生資訊 |
+| 課程查詢 | 查近期課程、指定學年課程與較早學期課程 |
+| 智慧找課 | 不知道課名時，可用描述依課綱內容找課 |
+| 學程查詢 | 查學程列表、學程內容與課程對應學程 |
+| 聯絡資訊 | 查校內單位、老師聯絡方式與緊急電話 |
+| 配額查詢 | 查看訊息額度與 AI 功能額度 |
+
+### 最常用的查法
+
+| 類別 | 直接傳給 Bot | 說明 |
+|------|--------------|------|
+| 學號 | `學號 王小明` | 依姓名查學號 |
+| 學號 | `412345678` | 直接輸入學號查學生 |
+| 學號 | `系 資工`、`系代碼 85` | 查系所或系代碼 |
+| 課程 | `課程 資料結構` | 查最近學期的課 |
+| 課程 | `課程 110 微積分` | 查指定學年課程 |
+| 課程 | `更多學期 微積分` | 往前擴展查歷史學期 |
+| 智慧找課 | `找課 我想學資料分析` | 依課綱內容找課 |
+| 學程 | `學程列表`、`學程 人工智慧` | 查學程與學程課程 |
+| 聯絡 | `聯絡 資工系`、`教授 王小明` | 查單位或老師聯絡資訊 |
+| 緊急 | `緊急` | 查緊急聯絡電話 |
+| 額度 | `配額`、`用量`、`額度` | 查看目前額度 |
+| 說明 | `使用說明` | 顯示完整操作說明 |
+
+> [!NOTE]
+> 關鍵字查詢通常最快也最穩定。若部署者有啟用 AI 功能，也可以直接用口語輸入，例如「我想找微積分的課」或「資工系電話」。
+
+### 使用前先知道
+
+- 這不是學校官方服務，而是整理公開資訊的社群工具。
+- 學號、課程、聯絡資訊都會受原始資料來源完整度影響。
+- `找課` 與自然語言理解屬於選用 AI 功能，並會消耗 AI 額度。
 
 ---
 
-## 💬 使用教學
-
-### 🔍 學號/姓名查詢
-
-| 查詢方式 | 輸入範例 | 說明 |
-|---------|---------|------|
-| 學號查詢 | `412345678` | 直接輸入 8-9 位數字 |
-| 姓名查詢 | `學號 王小明` | **關鍵字**：學號/學生/姓名/id |
-| 系所名稱 | `系名 資工` | **關鍵字**：系名/系/系所<br>查詢系代碼（含碩博士班）|
-| 系代碼 | `系代碼 85` | **關鍵字**：系代碼<br>查詢系名稱 |
-| 學年度 | `學年 112` | **關鍵字**：學年<br>按學年度搜尋學生 |
-| 系代碼對照 | `學士班系代碼`<br>`碩士班系代碼`<br>`博士班系代碼` | 顯示各學制系代碼對照表 |
-
-> **📌 資料範圍**
-> - 姓名查詢：日間部大學部 101-112 學年度（完整資料）
-> - 學號查詢：94-112 學年度（完整資料）
-> - ⚠️ 113 學年度資料不完整（僅少數學生）
-> - ⚠️ 114 學年度起因數位學苑 2.0 停用，無新資料
-
-> **💡 系代碼說明**
-> - 大學部與碩博士班使用**不同的代碼系統**
-> - 例如：資工系大學部 `85`，碩士班 `83`
-> - 輸入 `系 資工` 可查看所有學制的代碼
-
-### 📚 課程查詢
-
-| 查詢方式 | 輸入範例 | 說明 |
-|---------|---------|------|
-| 課程名稱 | `課程 資料結構` | **關鍵字**：課程/課/科目<br>搜尋近 2 學期課程 |
-| 課號查詢 | `U0001`<br>`1131U0001` | 直接輸入課號<br>搜尋近 2 學期課程 |
-| 智慧搜尋 | `找課 我想學程式語言` | **關鍵字**：找課/找課程/搜課<br>根據課程大綱內容匹配 |
-| 指定學年 | `課程 110 微積分` | 指定學年度（90 年至今）|
-| 更多學期 | `更多學期 微積分` | **關鍵字**：更多學期/更多課程/歷史課程<br>擴展搜尋第 3-4 學期 |
-
-> **📌 查詢範圍**
-> - 一般搜尋：近 2 學期（依資料庫實際資料判斷）
-> - 更多學期：第 3-4 學期
-> - 智慧搜尋：近 2 學期（根據課程大綱）
-
-### 🧭 學程查詢
-
-| 查詢方式 | 輸入範例 | 說明 |
-|---------|---------|------|
-| 學程列表 | `學程列表`<br>`所有學程` | **關鍵字**：學程列表/所有學程<br>顯示所有可選學程 |
-| 搜尋學程 | `學程 人工智慧` | **關鍵字**：學程/program<br>依名稱模糊搜尋 |
-
-> **💡 功能特色**
-> - 點擊學程可查看課程（必修在前、選修在後）
-> - 課程頁面有「相關學程」按鈕
-> - 支援模糊搜尋（如「智財」→「智慧財產學程」）
-> - 學程課程顯示近 2 學期（與精確搜尋範圍一致）
-> - 學程名稱以課程大綱為準，必/選修以課程列表為準（雙來源融合）
-
-### 📞 聯絡資訊
-
-| 查詢方式 | 輸入範例 | 說明 |
-|---------|---------|------|
-| 緊急電話 | `緊急` | 校安中心、派出所、醫院 |
-| 單位/人員 | `聯絡 資工系`<br>`教授 王小明` | **關鍵字**：聯絡/聯繫/連繫/電話/分機/信箱/找老師/老師/教授<br>支援組織單位與教師個人查詢 |
-
-> **💡 功能特色**
-> - 組織單位可點擊「成員列表」
-> - 電話/信箱可直接撥打或複製
-> - 教師聯絡可查看「授課課程」
-
-### 🤖 自然語言查詢
-
-不需記住指令格式，直接用口語描述：
-
-| 你可以這樣說 | NTPU 小工具會理解為 |
-|-------------|---------------|
-| 我想找微積分的課 | 課程搜尋 |
-| 人工智慧學程有什麼課 | 學程查詢 |
-| 王小明的學號 | 學生查詢 |
-| 資工系電話 | 聯絡資訊 |
-| 找王小明老師 | 教師聯絡資訊 |
-
-> **💡 提示**：關鍵字查詢速度較快，建議優先使用
-
----
-
-## 🔒 隱私說明
-
-- **不儲存對話紀錄**：NTPU 小工具不會保存您的聊天內容
-- **不蒐集個人資料**：僅處理您發送的查詢，不會追蹤或記錄用戶身份
-- **資料來源公開**：所有查詢結果皆來自 NTPU 公開網站（數位學苑 2.0、課程查詢系統、校園聯絡簿）
-- **快取機制**：為提升效能，會暫存公開網站的查詢結果並定期更新，不會儲存對話內容或追蹤用戶
-- **系所資訊說明**：學號查詢的系所資訊由學號推測，可能與實際不符
-
----
-
-## 🛠️ 自架部署
+## 常見問題
 
 <details>
-<summary><strong>點擊展開開發者專區</strong></summary>
+<summary><strong>一定要記住指令格式嗎？</strong></summary>
+<br />
 
-以下內容適用於想要自行架設的開發者。一般使用者直接加好友即可使用。
+不一定。最穩定的方式是直接輸入關鍵字，例如 `課程 微積分`、`學號 王小明`、`聯絡 資工系`。
 
-### 執行方式
+如果部署者有啟用 AI 功能，也可以直接用口語輸入，例如「王小明的學號」或「我想找資料分析相關的課」。
+</details>
 
-| 類別 | 模式 | 說明 |
-|------|------|------|
-| **僅 Bot** | Go 直接執行 | `go run ./cmd/server` |
-| | Docker Container | `docker run garyellow/ntpu-linebot-go` |
-| | Docker Compose | 使用 deployments/compose.yml |
+<details>
+<summary><strong>課程查詢、找課、更多學期有什麼差別？</strong></summary>
+<br />
 
-### 環境需求
+- `課程 關鍵字`：查最近 2 學期，適合你已經知道課名、老師或明確關鍵字
+- `更多學期 關鍵字`：把查詢範圍往前延伸 2 個歷史學期
+- `找課 描述`：依課綱內容與語意找課，適合你只知道想學什麼、不知道課名
 
-- Go 1.26（Go 直接執行）
-- Docker + Docker Compose（容器部署）
-- LLM API Key（可選，需 `NTPU_LLM_ENABLED=true` 才啟用 AI 功能）：
-  - [Gemini](https://aistudio.google.com/apikey)
-  - [Groq](https://console.groq.com/keys)
-  - [Cerebras](https://cloud.cerebras.ai/)
-- 所有環境變數統一使用 `NTPU_` 前綴；選用功能需明確設定 `NTPU_*_ENABLED=true`
+如果你已經知道課名或老師，通常直接用 `課程` 會更快。
+</details>
 
-### 日誌整合（Better Stack，可選）
+<details>
+<summary><strong>為什麼我查不到某位同學，或 114 學年度以後沒有資料？</strong></summary>
+<br />
 
-若要集中多點部署的日誌，請在 `.env` 設定 `NTPU_BETTERSTACK_ENABLED=true` 與 `NTPU_BETTERSTACK_TOKEN`，並可選擇設定 `NTPU_BETTERSTACK_ENDPOINT`。
-未啟用時保持 `NTPU_BETTERSTACK_ENABLED=false`。完整說明請見 [.env.example](.env.example)。
+多半不是 Bot 壞掉，而是原始資料來源本身已經沒有完整提供。
 
-多點部署識別（可選）：
+- 94 到 112 學年度資料相對完整
+- 113 學年度資料零散
+- 114 學年度起沒有新資料可供查詢
 
-- `NTPU_SERVER_NAME`：穩定節點名稱，用於 log 與 Sentry 分辨來源
-- `NTPU_INSTANCE_ID`：實例識別（容器/Pod），用於 log/metrics 分辨短生命週期實例
+如果你查的是姓名，也可能因為同名、簡稱或資料不完整而沒有結果，這時建議改用學號、學年度或更完整的姓名再試一次。
+</details>
 
-未設定時會自動嘗試取得（依序）：
+<details>
+<summary><strong>學號與系所資訊的範圍是什麼？</strong></summary>
+<br />
 
-- `server_name`：`NODE_NAME` / `K8S_NODE_NAME` / `KUBE_NODE_NAME` / `MY_NODE_NAME` → hostname →（最後）`instance_id`
-- `instance_id`：`POD_UID` / `MY_POD_UID` / `POD_NAME` / `MY_POD_NAME` / `HOSTNAME` → hostname →（最後）`server_name`
+- 姓名查詢的完整快取資料主要涵蓋 101 到 112 學年度
+- 直接查學號可查到 94 到 112 學年度的完整資料
+- 部分系所資訊是依學號規則推測，可能與實際資料不完全一致
 
-### 錯誤追蹤（Sentry SDK，可選）
+如果你需要更穩定的結果，直接輸入學號通常比姓名查詢更準。
+</details>
 
-本專案使用 Sentry SDK 進行錯誤追蹤。
-請在 `.env` 設定 `NTPU_SENTRY_ENABLED=true` 與 `NTPU_SENTRY_DSN`：
+<details>
+<summary><strong>課程與課綱資料的範圍是什麼？</strong></summary>
+<br />
 
-- DSN 格式：`https://$APPLICATION_TOKEN@$INGESTING_HOST/1`
-- 可選設定：`NTPU_SENTRY_ENVIRONMENT`、`NTPU_SENTRY_RELEASE`、`NTPU_SENTRY_SAMPLE_RATE`、`NTPU_SENTRY_TRACES_SAMPLE_RATE`
+- `課程` 會優先顯示最近 2 個學期
+- `更多學期` 會往前再查第 3 到第 4 個學期
+- 指定學年課程可查到 90 學年度以後
+- `找課` 主要依據近期已快取的課程大綱內容，不保證每門歷史課都有完整課綱可比對
 
-設定後服務啟動會自動上報錯誤與 panic。完整範例請見 [.env.example](.env.example)。
+如果你知道課名，直接用 `課程` 通常會比 `找課` 更快。
+</details>
 
-### R2 快照同步（可選，建議多節點）
+<details>
+<summary><strong>這個 Bot 會保存我的聊天內容嗎？</strong></summary>
+<br />
 
-R2 快照用於 **多節點部署** 的資料同步與快速啟動：
+不會以對話紀錄的形式長期保存你的聊天內容，也不會把你的 LINE 訊息當成資料庫累積。
 
-- 啟動時自動下載最新 SQLite 快照
-- 啟動時會先嘗試載入快照；**若成功載入快照則略過首次資料刷新**
-- 若快照不存在或下載失敗，啟動時會立即執行首次資料刷新（由 leader 負責）
-- 啟動也會進行 leader lock 判斷，非 leader 會等待快照更新
-- cache miss 抓取結果會以 append-only delta log 保存在 R2，leader 合併後再上傳快照
-- 週期性資料刷新/清理由單一 leader 執行，**以「最長允許未刷新/未清理時間」為門檻**（依 `NTPU_MAINTENANCE_REFRESH_INTERVAL` / `NTPU_MAINTENANCE_CLEANUP_INTERVAL`）
-- 若快照缺失，會優先執行一次初始刷新以確保資料一致性
-- 上次刷新/清理時間會儲存在 R2，所有節點共用
-- 清理任務會刪除 contacts/courses/historical_courses/programs/course_programs/syllabi 的過期資料並 VACUUM
-- SQLite 使用 WAL 模式時，`VACUUM` 後會執行 WAL checkpoint（TRUNCATE）與 optimize，確保磁碟空間回收
-- 其他節點透過輪詢偵測快照更新並熱切換（間隔由 `NTPU_R2_SNAPSHOT_POLL_INTERVAL` 設定）
-- 快照以 zstd 壓縮（.zst），下載後採用暫存檔原子替換
-- Hot-swap 使用連線切換 + 短暫關閉延遲，避免中途查詢失敗
-- 每個 R2 請求有固定 timeout，避免啟動或輪詢被卡住
-- **不建議** 多容器共用同一個 SQLite 檔案（請用 R2 快照同步）
+系統快取的是來自公開網站的資料，例如課程、聯絡簿、學程、課綱等，目的在於提升查詢速度與穩定性。
+</details>
 
-> 若未啟用 R2，刷新/清理仍會依 `NTPU_MAINTENANCE_REFRESH_INTERVAL` / `NTPU_MAINTENANCE_CLEANUP_INTERVAL` 於單一節點本地排程執行。
+<details>
+<summary><strong>我的 AI 額度是怎麼算的？</strong></summary>
+<br />
 
-啟用方式：在 `.env` 設定 `NTPU_R2_ENABLED=true`，並提供 `NTPU_R2_ACCOUNT_ID`、`NTPU_R2_ACCESS_KEY_ID`、`NTPU_R2_SECRET_ACCESS_KEY`、`NTPU_R2_BUCKET_NAME`。其餘參數可使用預設值。完整範例請見 [.env.example](.env.example)。
+每則訊息都會消耗訊息額度；自然語言理解與 `找課` 智慧搜尋會再消耗 AI 額度。
 
-可調參數（選用）：
+你可以輸入 `配額` 查看剩餘額度，輸入 `額度說明` 查看更細的扣點規則。
+</details>
 
-- `NTPU_R2_SNAPSHOT_KEY`：快照物件 key（預設: snapshots/cache.db.zst）
-- `NTPU_R2_LOCK_KEY`：分散式鎖 key（預設: locks/leader.json）
-- `NTPU_R2_SNAPSHOT_POLL_INTERVAL`：follower 輪詢快照更新的間隔（預設: 15m）
-- `NTPU_R2_LOCK_TTL`：分散式鎖 TTL，用於 leader election（預設: 1h）
-- `NTPU_R2_DELTA_PREFIX`：cache miss delta log 前綴（預設: deltas）
-- `NTPU_R2_SCHEDULE_KEY`：共享的刷新/清理排程狀態物件 key（預設: schedules/maintenance.json）
-- `NTPU_MAINTENANCE_REFRESH_INTERVAL`：資料刷新任務間隔（預設: 24h）
-- `NTPU_MAINTENANCE_CLEANUP_INTERVAL`：資料清理任務間隔（預設: 24h）
+<details>
+<summary><strong>這是 NTPU 官方服務嗎？</strong></summary>
+<br />
 
-### 取得 LINE Bot 憑證
+不是。這是社群維護的開源專案，目的是把公開資訊整理成較容易使用的查詢介面。
 
-1. 前往 [LINE Developers Console](https://developers.line.biz/console/)
-2. 建立 Messaging API Channel
-3. 取得 **Channel Secret**（Basic settings）
-4. 發行 **Channel Access Token**（Messaging API）
+如果學校網站改版、來源資料缺漏或停止維護，查詢結果也會同步受影響。
+</details>
+
+<details>
+<summary><strong>我想自己架一個版本，可以嗎？</strong></summary>
+<br />
+
+可以。這個專案支援直接用 Go 啟動、Docker 單容器執行，以及 Docker Compose 部署；如果你是開發者，可以直接往下看「自行部署」。
+</details>
+
+---
+
+## 隱私與資料來源
+
+| 項目 | 說明 |
+|------|------|
+| 對話紀錄 | 不以使用者聊天紀錄作為長期資料保存 |
+| 個人資料蒐集 | 不以 Bot 身分額外建立使用者個資檔案 |
+| 資料來源 | 課程查詢系統、數位學苑 2.0、校園聯絡簿與其他公開資料 |
+| 快取用途 | 只用來減少重複抓取、提升速度與穩定性 |
+| 開源透明 | 程式碼公開，可自行檢視功能與資料流向 |
+
+> [!NOTE]
+> 智慧搜尋使用的是已快取的課綱內容與查詢擴展，不會因為你問了一句話，就把你的聊天內容寫成永久知識庫。
+
+---
+
+## 自行部署
+
+如果你想自己架設一個版本，下面先給最短路徑；更完整的部署背景、維運選項與多節點同步細節也都保留在後面。
+
+### 需要準備什麼
+
+- Go 1.26.1，或 Docker / Docker Compose
+- LINE Messaging API 的 Channel Secret 與 Channel Access Token
+- 若要啟用 AI 功能，需設定 `NTPU_LLM_ENABLED=true` 並提供至少一組 LLM API Key
 
 ### 快速開始
 
-**Go 直接執行：**
+#### 方式 1：本機開發
 
 ```bash
 git clone https://github.com/garyellow/ntpu-linebot-go.git
 cd ntpu-linebot-go
-
 cp .env.example .env
-# 編輯 .env 填入 LINE 憑證
-
+# 編輯 .env，填入 LINE 憑證
 task dev
 ```
 
-**Docker Container：**
+#### 方式 2：Docker Compose
 
 ```bash
-# Distroless（推薦）
+cd deployments
+cp .env.example .env
+# 編輯 .env，填入 LINE 憑證
+docker compose up -d
+```
+
+#### 方式 3：Docker 單容器
+
+```bash
 docker run -d -p 10000:10000 \
   -e NTPU_LINE_CHANNEL_ACCESS_TOKEN=xxx \
   -e NTPU_LINE_CHANNEL_SECRET=xxx \
   -v ./data:/data \
   garyellow/ntpu-linebot-go:latest
-
-# Alpine（debug 用）- 進入容器 shell
-docker run -it --rm garyellow/ntpu-linebot-go:alpine sh
 ```
 
-**Docker Compose：**
+### 常用端點
 
-```bash
-cd deployments
-cp .env.example .env
-docker compose up -d
-```
-
-### 服務端點
-
-| 端點 | 說明 |
+| 端點 | 用途 |
 |------|------|
-| `/webhook` | LINE Webhook URL |
-| `/livez` | Liveness |
-| `/readyz` | Readiness |
+| `/webhook` | LINE Webhook 接收點 |
+| `/livez` | 存活檢查 |
+| `/readyz` | 就緒檢查 |
 | `/metrics` | Prometheus 指標 |
 
-> ⚠️ 本機測試需使用 [ngrok](https://ngrok.com/) 等工具將 localhost 轉發至公網。
+> [!TIP]
+> 在本機測試 LINE Webhook 時，通常還需要 ngrok 之類的工具把 localhost 暴露到公網。
 
-### Prometheus Metrics
-
-`/metrics` 提供 Prometheus 指標，可由外部 Prometheus 直接抓取。
-如需保護端點，設定 `NTPU_METRICS_AUTH_ENABLED=true`、`NTPU_METRICS_USERNAME` 與 `NTPU_METRICS_PASSWORD`。
-詳細指標與範例請見 [docs/API.md](docs/API.md)。
-
-### 開發指令
+### 開發常用指令
 
 ```bash
-task dev              # 啟動開發伺服器（預設 debug 日誌）
-task test             # 執行測試
-task lint             # 程式碼檢查
-task ci               # 完整 CI 流程
+task dev
+task test
+task lint
+task build
+task compose:up
 ```
 
-### 更多文件
+### 進階部署與維運背景
 
-- 📐 [架構設計](docs/architecture.md)
-- 🔧 [環境變數](.env.example)
+<details>
+<summary><strong>展開完整背景與選用功能</strong></summary>
+<br />
+
+#### LINE 憑證取得方式
+
+1. 前往 [LINE Developers Console](https://developers.line.biz/console/)
+2. 建立 Messaging API Channel
+3. 取得 Channel Secret
+4. 發行 Channel Access Token
+
+#### AI 功能
+
+設定 `NTPU_LLM_ENABLED=true`，再搭配至少一組 API Key：
+
+- `NTPU_GEMINI_API_KEY`
+- `NTPU_GROQ_API_KEY`
+- `NTPU_CEREBRAS_API_KEY`
+- 或自訂 OpenAI-compatible endpoint
+
+#### Metrics、Sentry、Better Stack
+
+- Metrics 保護：`NTPU_METRICS_AUTH_ENABLED=true`
+- Sentry：`NTPU_SENTRY_ENABLED=true`
+- Better Stack：`NTPU_BETTERSTACK_ENABLED=true`
+
+如果你是單機或簡單部署，這些都不是必填；如果你要長期營運、觀察錯誤或集中收 log，再啟用即可。
+
+#### 多節點與 R2 快照同步
+
+若你是多節點或多容器部署，建議啟用 R2 快照同步：
+
+- `NTPU_R2_ENABLED=true`
+- `NTPU_R2_ACCOUNT_ID`
+- `NTPU_R2_ACCESS_KEY_ID`
+- `NTPU_R2_SECRET_ACCESS_KEY`
+- `NTPU_R2_BUCKET_NAME`
+
+啟用後會有這些效果：
+
+- 啟動時可先下載 SQLite 快照，減少冷啟動刷新時間
+- 多節點可共享刷新進度與清理排程
+- follower 可輪詢新快照並熱切換資料
+- 不建議多容器直接共用同一個 SQLite 檔案，較建議透過 R2 同步
+
+#### 多點部署識別
+
+可選設定：
+
+- `NTPU_SERVER_NAME`
+- `NTPU_INSTANCE_ID`
+
+這些主要用在 log、metrics 與 Sentry 上，幫你分辨不同節點或不同容器實例。
+
+#### 更多環境變數與細節
+
+更完整的設定請看：
+
+- [環境變數範例](.env.example)
+- [Docker Compose 說明](deployments/README.md)
+- [API 文件](docs/API.md)
+- [架構說明](docs/architecture.md)
 
 </details>
 
+### 文件索引
+
+- [環境變數範例](.env.example)
+- [Docker Compose 說明](deployments/README.md)
+- [API 文件](docs/API.md)
+- [架構說明](docs/architecture.md)
+- [文件索引](docs/README.md)
+
 ---
 
-## 📄 授權條款
+## 貢獻
+
+歡迎用以下方式幫這個專案變得更好：
+
+- 開 [Issue](https://github.com/garyellow/ntpu-linebot-go/issues) 回報問題
+- 提出 [Pull Request](https://github.com/garyellow/ntpu-linebot-go/pulls)
+- 協助補充文件、修正文案、改善查詢體驗
+
+---
+
+## 贊助
+
+覺得好用的話，請我的 AI 吃一點 Token 吧。
+
+<a href="https://ko-fi.com/garyellow">
+  <img src="https://img.shields.io/badge/Ko--fi-請 AI 吃點 Token-72a4f2?style=for-the-badge&logo=ko-fi&logoColor=white" alt="在 Ko-fi 上贊助開發者" height="36" />
+</a>
+
+你的支持會直接拿來支付這個開源專案的開發、維護、部署與 AI Token 成本。
+
+---
+
+## 授權
 
 本專案採用 [MIT License](LICENSE) 授權。
-
----
-
-<p align="center">
-  Made with ❤️ by NTPU Students
-</p>

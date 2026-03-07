@@ -157,7 +157,7 @@ func TestHandleInvalidSignature(t *testing.T) {
 
 	// Create request with invalid signature
 	body := []byte(`{"events":[]}`)
-	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/webhook", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Line-Signature", "invalid_signature")
 
@@ -184,7 +184,7 @@ func TestHandleRequestTooLarge(t *testing.T) {
 	// Create request with large body (> 1MB)
 	// This will fail signature validation (no valid signature for random data)
 	largeBody := make([]byte, 1<<20+1) // 1MB + 1 byte
-	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewReader(largeBody))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/webhook", bytes.NewReader(largeBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Line-Signature", "invalid")
 	req.ContentLength = int64(len(largeBody))

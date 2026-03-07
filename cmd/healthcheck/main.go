@@ -23,7 +23,7 @@ func run() int {
 	defer cancel()
 
 	url := fmt.Sprintf("http://localhost:%s/livez", port)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody) //nolint:gosec // G704: healthcheck only targets localhost with a configured port
 	if err != nil {
 		return 1
 	}
