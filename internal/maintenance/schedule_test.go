@@ -25,16 +25,20 @@ type fakeR2Client struct {
 	downloadErr     error
 	downloadErrs    []error
 	downloadCalls   int
+	downloadCtxHook func(context.Context)
 	downloadHook    func()
 	putNotExistsErr error
 	putIfMatchErr   error
 }
 
-func (f *fakeR2Client) Download(_ context.Context, _ string) (io.ReadCloser, string, error) {
+func (f *fakeR2Client) Download(ctx context.Context, _ string) (io.ReadCloser, string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	f.downloadCalls++
+	if f.downloadCtxHook != nil {
+		f.downloadCtxHook(ctx)
+	}
 	if f.downloadHook != nil {
 		f.downloadHook()
 	}
@@ -217,24 +221,37 @@ func TestR2ScheduleStoreUpdateWithRetry(t *testing.T) {
 func TestR2ScheduleStoreWithTimeout(t *testing.T) {
 	t.Parallel()
 
-	store, err := NewR2ScheduleStore(&fakeR2Client{}, "schedule.json", time.Millisecond)
+	var sawDeadline bool
+	store, err := NewR2ScheduleStore(&fakeR2Client{
+		downloadCtxHook: func(ctx context.Context) {
+			_, sawDeadline = ctx.Deadline()
+		},
+	}, "schedule.json", time.Millisecond)
 	if err != nil {
 		t.Fatalf("NewR2ScheduleStore failed: %v", err)
 	}
 
-	ctx, cancel := store.withTimeout(context.Background())
-	defer cancel()
-	if _, ok := ctx.Deadline(); !ok {
+	if _, _, _, err := store.Load(context.Background()); err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if !sawDeadline {
 		t.Fatal("expected deadline for positive timeout")
 	}
 
+	sawDeadline = false
 	storeNoTimeout, err := NewR2ScheduleStore(&fakeR2Client{}, "schedule.json", 0)
 	if err != nil {
 		t.Fatalf("NewR2ScheduleStore failed: %v", err)
 	}
-	ctxNoTimeout, cancelNoTimeout := storeNoTimeout.withTimeout(context.Background())
-	defer cancelNoTimeout()
-	if _, ok := ctxNoTimeout.Deadline(); ok {
+	storeNoTimeout.client = &fakeR2Client{
+		downloadCtxHook: func(ctx context.Context) {
+			_, sawDeadline = ctx.Deadline()
+		},
+	}
+	if _, _, _, err := storeNoTimeout.Load(context.Background()); err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if sawDeadline {
 		t.Fatal("did not expect deadline for zero timeout")
 	}
 }

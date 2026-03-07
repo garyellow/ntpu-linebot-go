@@ -68,7 +68,11 @@ func (m *Manager) DownloadSnapshot(ctx context.Context, destDir string) (string,
 	}
 
 	// Download compressed snapshot
-	downloadCtx, cancel := m.withTimeout(ctx)
+	downloadCtx := ctx
+	cancel := func() {}
+	if m.config.RequestTimeout > 0 {
+		downloadCtx, cancel = context.WithTimeout(ctx, m.config.RequestTimeout)
+	}
 	body, etag, err := m.client.Download(downloadCtx, m.config.SnapshotKey)
 	if err != nil {
 		cancel()
@@ -174,7 +178,11 @@ func (m *Manager) UploadSnapshot(ctx context.Context, db *storage.DB) (string, e
 		_ = compressedFile.Close()
 	}()
 
-	uploadCtx, cancel := m.withTimeout(ctx)
+	uploadCtx := ctx
+	cancel := func() {}
+	if m.config.RequestTimeout > 0 {
+		uploadCtx, cancel = context.WithTimeout(ctx, m.config.RequestTimeout)
+	}
 	etag, err := m.client.Upload(uploadCtx, m.config.SnapshotKey, compressedFile, "application/zstd")
 	cancel()
 	if err != nil {
@@ -192,7 +200,11 @@ func (m *Manager) UploadSnapshot(ctx context.Context, db *storage.DB) (string, e
 // Returns true if this instance became the leader.
 func (m *Manager) AcquireLeaderLock(ctx context.Context) (bool, error) {
 	lock := r2client.NewDistributedLock(m.client, m.config.LockKey, m.config.LockTTL)
-	lockCtx, cancel := m.withTimeout(ctx)
+	lockCtx := ctx
+	cancel := func() {}
+	if m.config.RequestTimeout > 0 {
+		lockCtx, cancel = context.WithTimeout(ctx, m.config.RequestTimeout)
+	}
 	acquired, err := lock.Acquire(lockCtx)
 	cancel()
 	if err != nil || !acquired {
@@ -220,15 +232,15 @@ func (m *Manager) AcquireLeaderLock(ctx context.Context) (bool, error) {
 func (m *Manager) ReleaseLeaderLock(ctx context.Context) error {
 	m.leaderMu.Lock()
 	lock := m.leaderLock
-	cancel := m.renewCancel
+	renewCancel := m.renewCancel
 	done := m.renewDone
 	m.leaderLock = nil
 	m.renewCancel = nil
 	m.renewDone = nil
 	m.leaderMu.Unlock()
 
-	if cancel != nil {
-		cancel()
+	if renewCancel != nil {
+		renewCancel()
 		if done != nil {
 			<-done
 		}
@@ -237,7 +249,11 @@ func (m *Manager) ReleaseLeaderLock(ctx context.Context) error {
 	if lock == nil {
 		return nil
 	}
-	releaseCtx, cancel := m.withTimeout(ctx)
+	releaseCtx := ctx
+	cancel := func() {}
+	if m.config.RequestTimeout > 0 {
+		releaseCtx, cancel = context.WithTimeout(ctx, m.config.RequestTimeout)
+	}
 	defer cancel()
 	return lock.Release(releaseCtx)
 }
@@ -281,9 +297,13 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 	m.mu.RUnlock()
 
 	// Get remote ETag
-	headCtx, cancel := m.withTimeout(ctx)
+	headCtx := ctx
+	headCancel := func() {}
+	if m.config.RequestTimeout > 0 {
+		headCtx, headCancel = context.WithTimeout(ctx, m.config.RequestTimeout)
+	}
 	remoteETag, err := m.client.HeadObject(headCtx, m.config.SnapshotKey)
-	cancel()
+	headCancel()
 	if err != nil {
 		if !errors.Is(err, r2client.ErrNotFound) {
 			slog.Warn("Snapshot poll head object failed", "error", err)
@@ -315,10 +335,14 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 	}()
 
 	// Download and decompress with ETag consistency
-	downloadCtx, cancel := m.withTimeout(ctx)
+	downloadCtx := ctx
+	downloadCancel := func() {}
+	if m.config.RequestTimeout > 0 {
+		downloadCtx, downloadCancel = context.WithTimeout(ctx, m.config.RequestTimeout)
+	}
 	body, downloadedETag, err := m.client.DownloadIfMatch(downloadCtx, m.config.SnapshotKey, remoteETag)
 	if err != nil {
-		cancel()
+		downloadCancel()
 		if errors.Is(err, r2client.ErrPreconditionFailed) {
 			slog.Warn("Snapshot poll ETag changed during download, retrying later",
 				"expected_etag", remoteETag)
@@ -327,7 +351,7 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 		slog.Error("Snapshot poll download failed", "error", err)
 		return
 	}
-	defer cancel()
+	defer downloadCancel()
 	defer func() {
 		_ = body.Close()
 	}()
@@ -339,7 +363,11 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 	}
 
 	// Validate the downloaded snapshot before swapping (with timeout to prevent blocking)
-	validateCtx, validateCancel := m.withTimeout(ctx)
+	validateCtx := ctx
+	validateCancel := func() {}
+	if m.config.RequestTimeout > 0 {
+		validateCtx, validateCancel = context.WithTimeout(ctx, m.config.RequestTimeout)
+	}
 	validateDB, err := storage.New(validateCtx, newDBPath, hotSwapDB.DB().GetCacheTTL())
 	if err != nil {
 		validateCancel()
@@ -360,7 +388,11 @@ func (m *Manager) pollOnce(ctx context.Context, hotSwapDB *storage.HotSwapDB, de
 	validateCancel()
 
 	// Hot-swap the database (with timeout to prevent filesystem stalls)
-	swapCtx, swapCancel := m.withTimeout(ctx)
+	swapCtx := ctx
+	swapCancel := func() {}
+	if m.config.RequestTimeout > 0 {
+		swapCtx, swapCancel = context.WithTimeout(ctx, m.config.RequestTimeout)
+	}
 	if err := hotSwapDB.Swap(swapCtx, newDBPath); err != nil {
 		swapCancel()
 		slog.Error("Snapshot poll hot-swap failed", "error", err)
@@ -410,7 +442,11 @@ func (m *Manager) renewLoop(ctx context.Context, lock *r2client.DistributedLock,
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			renewCtx, cancel := m.withTimeout(ctx)
+			renewCtx := ctx
+			cancel := func() {}
+			if m.config.RequestTimeout > 0 {
+				renewCtx, cancel = context.WithTimeout(ctx, m.config.RequestTimeout)
+			}
 			renewed, err := lock.Renew(renewCtx)
 			cancel()
 			if err != nil {
@@ -434,13 +470,6 @@ func (m *Manager) CurrentETag() string {
 
 // ErrNotFound indicates no snapshot exists in R2.
 var ErrNotFound = errors.New("snapshot: not found")
-
-func (m *Manager) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) { //nolint:gosec // G118: caller receives and must invoke the returned cancel func
-	if m.config.RequestTimeout <= 0 {
-		return context.WithCancel(ctx)
-	}
-	return context.WithTimeout(ctx, m.config.RequestTimeout)
-}
 
 func replaceFile(src, dst string) error {
 	if err := os.Rename(src, dst); err == nil { //nolint:gosec // G703: paths are constructed internally
