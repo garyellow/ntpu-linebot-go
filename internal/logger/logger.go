@@ -15,7 +15,13 @@ import (
 	slogbetterstack "github.com/samber/slog-betterstack"
 )
 
-// Logger is the application logger
+// Logger is the application logger.
+//
+// Level conventions across the repository:
+//   - Debug: derived values, retries, fallback details, payload traces, and high-volume request completion logs
+//   - Info: important state transitions and user-visible workflow milestones
+//   - Warn: recoverable failures, rejected operations, degraded behavior, and retry-worthy errors
+//   - Error: request/task failures that could not be recovered within the current operation
 type Logger struct {
 	*slog.Logger
 	shutdown func(context.Context) error

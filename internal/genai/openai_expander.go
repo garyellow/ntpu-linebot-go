@@ -148,38 +148,44 @@ func (e *openaiQueryExpander) Expand(ctx context.Context, query string) (string,
 		return query, nil
 	}
 
-	result := strings.TrimSpace(resp.Choices[0].Message.Content)
-	if result == "" {
+	rawOutput := strings.TrimSpace(resp.Choices[0].Message.Content)
+	if rawOutput == "" {
 		return query, nil
 	}
 
 	// Parse structured output (extract keywords from "分析：... 關鍵詞：..." format)
 	// The Think-then-Expand pattern produces analysis + keywords;
 	// we only need the keywords for BM25 search.
-	result = ParseExpandedOutput(result)
-	if result == "" {
+	parsedKeywords := ParseExpandedOutput(rawOutput)
+	if parsedKeywords == "" {
 		return query, nil
 	}
 
-	// Ensure original query is preserved (prepend if not present)
-	if !strings.Contains(result, query) {
-		result = query + " " + result
+	finalQuery := BuildExpandedQuery(query, parsedKeywords)
+	if finalQuery == "" {
+		return query, nil
 	}
 
-	// Log success with token usage
+	args := []any{
+		"provider", e.provider,
+		"model", e.model,
+		"raw_output", truncateLogValue(rawOutput, 600),
+		"parsed_keywords", parsedKeywords,
+		"final_query", finalQuery,
+		"duration_ms", duration.Milliseconds(),
+		"original_length", len(query),
+		"expanded_length", len(finalQuery),
+	}
 	if resp.Usage.TotalTokens > 0 {
-		slog.DebugContext(ctx, "Query expansion completed",
-			"provider", e.provider,
-			"model", e.model,
+		args = append(args,
 			"input_tokens", resp.Usage.PromptTokens,
 			"output_tokens", resp.Usage.CompletionTokens,
 			"total_tokens", resp.Usage.TotalTokens,
-			"duration_ms", duration.Milliseconds(),
-			"original_length", len(query),
-			"expanded_length", len(result))
+		)
 	}
+	slog.DebugContext(ctx, "Query expansion completed", args...)
 
-	return result, nil
+	return finalQuery, nil
 }
 
 // Provider returns the provider type for this expander.

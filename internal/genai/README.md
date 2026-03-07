@@ -128,6 +128,7 @@ if err != nil {
 1. **英文縮寫的全稱**: AWS → Amazon Web Services
 2. **跨語言翻譯**: AI → 人工智慧, 程式設計 → programming
 3. **相關概念和同義詞**: 雲端 → cloud computing, 雲端服務
+4. **受控推論補充**: 在不偏離主題的前提下，補充少量對課綱檢索有幫助的高價值詞
 
 ### 使用範例
 
@@ -143,6 +144,7 @@ if err != nil {
 - 所有智慧搜尋查詢都會自動觸發 Query Expansion（若 `queryExpander` 已配置）
 - 提供 graceful degradation：擴展失敗時使用原始查詢，不影響搜尋功能
 - 受 LLM Rate Limiter 限制（預設：60 burst, 30/hr refill, 180/day cap）
+- Prompt 採用「有邊界的自由發揮」：固定結構化輸出，但允許少量高相關推論，而不是只做字面改寫
 
 ### 使用方式
 
@@ -165,7 +167,7 @@ defer expander.Close()
 
 // 擴展查詢
 expanded, err := expander.Expand(ctx, "我想學 AWS")
-// expanded = "我想學 AWS Amazon Web Services 雲端服務 雲端運算 cloud computing..."
+// expanded = "AWS Amazon Web Services 雲端服務 雲端運算 cloud computing"
 ```
 
 ## 錯誤處理與重試
