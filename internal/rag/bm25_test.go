@@ -53,7 +53,6 @@ func TestNewBM25Index(t *testing.T) {
 func TestBM25Index_Initialize(t *testing.T) {
 	log := logger.New("debug")
 	db := setupTestDB(t)
-	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	idx := NewBM25Index(log, newTestSegmenter())
@@ -103,7 +102,6 @@ func TestBM25Index_Initialize(t *testing.T) {
 func TestBM25Index_InitializeEmpty(t *testing.T) {
 	log := logger.New("debug")
 	db := setupTestDB(t) // Empty DB
-	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	idx := NewBM25Index(log, newTestSegmenter())
@@ -127,7 +125,6 @@ func TestBM25Index_PerSemesterIndexing(t *testing.T) {
 	log := logger.New("debug")
 
 	db := setupTestDB(t)
-	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	idx := NewBM25Index(log, newTestSegmenter())
@@ -157,7 +154,6 @@ func TestBM25Index_PerSemesterIndexing(t *testing.T) {
 func TestBM25Index_SearchCourses_PerSemesterTopK(t *testing.T) {
 	log := logger.New("debug")
 	db := setupTestDB(t)
-	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	idx := NewBM25Index(log, newTestSegmenter())
@@ -249,7 +245,6 @@ func TestBM25Index_SearchCourses_PerSemesterTopK(t *testing.T) {
 func TestBM25Index_SearchCourses_IndependentConfidence(t *testing.T) {
 	log := logger.New("debug")
 	db := setupTestDB(t)
-	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	idx := NewBM25Index(log, newTestSegmenter())
@@ -296,7 +291,6 @@ func TestBM25Index_SearchCourses_IndependentConfidence(t *testing.T) {
 func TestBM25Index_SearchCourses_NewestTwoSemesters(t *testing.T) {
 	log := logger.New("debug")
 	db := setupTestDB(t)
-	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	idx := NewBM25Index(log, newTestSegmenter())
@@ -340,7 +334,6 @@ func TestBM25Index_SearchCourses_NewestTwoSemesters(t *testing.T) {
 func TestBM25Index_SearchCourses_EmptyQuery(t *testing.T) {
 	log := logger.New("debug")
 	db := setupTestDB(t)
-	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	idx := NewBM25Index(log, newTestSegmenter())
@@ -379,7 +372,6 @@ func TestBM25Index_SearchCourses_EmptyQuery(t *testing.T) {
 func TestBM25Index_SearchCourses_NoMatch(t *testing.T) {
 	log := logger.New("debug")
 	db := setupTestDB(t)
-	defer func() { _ = db.Close(context.Background()) }()
 	ctx := context.Background()
 
 	idx := NewBM25Index(log, newTestSegmenter())
@@ -511,5 +503,159 @@ func TestMaxSearchResultsConstant(t *testing.T) {
 	// Verify the constant is sensible
 	if MaxSearchResults < 5 || MaxSearchResults > 100 {
 		t.Errorf("MaxSearchResults = %d, should be between 5 and 100", MaxSearchResults)
+	}
+}
+
+// ── Token cache integration tests ────────────────────────────────────────────
+
+// TestBM25Index_TokenCachePersistedAfterInitialize verifies that Initialize writes
+// pre-tokenized tokens to the DB so subsequent initializes can skip the gse call.
+func TestBM25Index_TokenCachePersistedAfterInitialize(t *testing.T) {
+	log := logger.New("error")
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	syllabi := []*storage.Syllabus{
+		{
+			UID: "1131U0001", Year: 113, Term: 1, Title: "雲端運算",
+			Teachers: []string{"王小明"}, Objectives: "本課程介紹雲端運算基礎", ContentHash: "hash1",
+		},
+		{
+			UID: "1131U0002", Year: 113, Term: 1, Title: "資料結構",
+			Teachers: []string{"李小華"}, Objectives: "本課程介紹資料結構概念", ContentHash: "hash2",
+		},
+	}
+	if err := db.SaveSyllabusBatch(ctx, syllabi); err != nil {
+		t.Fatalf("SaveSyllabusBatch: %v", err)
+	}
+
+	idx := NewBM25Index(log, newTestSegmenter())
+	if err := idx.Initialize(ctx, db); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+
+	// After Initialize, token entries must be present in the DB for each UID.
+	uids := []string{"1131U0001", "1131U0002"}
+	cached, err := db.GetSyllabusTokensBatch(ctx, uids)
+	if err != nil {
+		t.Fatalf("GetSyllabusTokensBatch: %v", err)
+	}
+	for _, uid := range uids {
+		if _, ok := cached[uid]; !ok {
+			t.Errorf("expected token cache entry for UID %s after Initialize", uid)
+		}
+	}
+}
+
+// TestBM25Index_TokenCacheHitOnReInitialize verifies that re-initializing with unchanged
+// syllabi uses cached tokens.  We overwrite the cache with sentinel tokens to prove
+// the second Initialize reads from the cache rather than calling gse again.
+func TestBM25Index_TokenCacheHitOnReInitialize(t *testing.T) {
+	log := logger.New("error")
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	if err := db.SaveSyllabusBatch(ctx, []*storage.Syllabus{
+		{
+			UID: "1131U0001", Year: 113, Term: 1, Title: "雲端運算",
+			Teachers: []string{"王小明"}, Objectives: "本課程介紹雲端運算基礎", ContentHash: "hash1",
+		},
+	}); err != nil {
+		t.Fatalf("SaveSyllabusBatch: %v", err)
+	}
+
+	// First Initialize populates the cache with real gse tokens.
+	seg := newTestSegmenter()
+	if err := NewBM25Index(log, seg).Initialize(ctx, db); err != nil {
+		t.Fatalf("first Initialize: %v", err)
+	}
+
+	// Overwrite the cache for this UID with a known sentinel token.
+	// Because the hash is unchanged (hash1), the second Initialize must hit this cache
+	// entry and use "sentinel" as the sole token for the document.
+	if err := db.SaveSyllabusTokensBatch(ctx, []storage.SyllabusTokenEntry{
+		{UID: "1131U0001", ContentHash: "hash1", Tokens: []string{"sentinel", "cacheword"}},
+	}); err != nil {
+		t.Fatalf("SaveSyllabusTokensBatch sentinel: %v", err)
+	}
+
+	idx2 := NewBM25Index(log, seg)
+	if err := idx2.Initialize(ctx, db); err != nil {
+		t.Fatalf("second Initialize: %v", err)
+	}
+
+	// If the cache was used, "sentinel" is in the BM25 index and the course is findable.
+	results, err := idx2.SearchCourses(ctx, "sentinel", MaxSearchResults)
+	if err != nil {
+		t.Fatalf("SearchCourses: %v", err)
+	}
+	if len(results) == 0 {
+		t.Error("expected course indexed with sentinel tokens (cache hit path was not used)")
+	}
+}
+
+// TestBM25Index_TokenCacheInvalidatedOnContentChange verifies that changing a syllabus
+// content_hash causes Initialize to re-tokenize and write new cache entries, while the
+// old orphan rows are removed by DeleteStaleSyllabusTokens.
+func TestBM25Index_TokenCacheInvalidatedOnContentChange(t *testing.T) {
+	log := logger.New("error")
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	// ── First version (hashA) ──────────────────────────────────────────────
+	if err := db.SaveSyllabusBatch(ctx, []*storage.Syllabus{
+		{
+			UID: "1131U0001", Year: 113, Term: 1, Title: "演算法",
+			Teachers: []string{"張小龍"}, Objectives: "演算法教學目標", ContentHash: "hashA",
+		},
+	}); err != nil {
+		t.Fatalf("SaveSyllabusBatch v1: %v", err)
+	}
+
+	seg := newTestSegmenter()
+	if err := NewBM25Index(log, seg).Initialize(ctx, db); err != nil {
+		t.Fatalf("first Initialize: %v", err)
+	}
+
+	// ── Content changes — hash upgrades to hashB ──────────────────────────
+	if err := db.SaveSyllabusBatch(ctx, []*storage.Syllabus{
+		{
+			UID: "1131U0001", Year: 113, Term: 1, Title: "演算法",
+			Teachers: []string{"張小龍"}, Objectives: "演算法教學目標（更新版）", ContentHash: "hashB",
+		},
+	}); err != nil {
+		t.Fatalf("SaveSyllabusBatch v2: %v", err)
+	}
+
+	// Second Initialize: cache miss (hashA ≠ hashB) → gse re-tokenizes and saves new entry.
+	if err := NewBM25Index(log, seg).Initialize(ctx, db); err != nil {
+		t.Fatalf("second Initialize: %v", err)
+	}
+
+	// New token entry (hashB) must be present.
+	cached, err := db.GetSyllabusTokensBatch(ctx, []string{"1131U0001"})
+	if err != nil {
+		t.Fatalf("GetSyllabusTokensBatch: %v", err)
+	}
+	if _, ok := cached["1131U0001"]; !ok {
+		t.Error("expected new token cache entry for hashB after re-init")
+	}
+
+	// Old orphan (hashA) is still in the table; cleanup must remove exactly 1 row.
+	deleted, err := db.DeleteStaleSyllabusTokens(ctx)
+	if err != nil {
+		t.Fatalf("DeleteStaleSyllabusTokens: %v", err)
+	}
+	if deleted != 1 {
+		t.Errorf("expected 1 stale token (hashA) deleted, got %d", deleted)
+	}
+
+	// Live entry (hashB) must survive cleanup.
+	cached, err = db.GetSyllabusTokensBatch(ctx, []string{"1131U0001"})
+	if err != nil {
+		t.Fatalf("GetSyllabusTokensBatch after cleanup: %v", err)
+	}
+	if _, ok := cached["1131U0001"]; !ok {
+		t.Error("live token entry (hashB) must survive stale-token cleanup")
 	}
 }

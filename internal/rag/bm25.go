@@ -4,6 +4,7 @@ package rag
 
 import (
 	"context"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -116,24 +117,22 @@ func NewBM25Index(log *logger.Logger, seg *stringutil.Segmenter) *BM25Index {
 
 // Initialize builds BM25 indexes from the database.
 //
-// Memory Optimization Strategy:
-// 1. Fetch distinct semesters first
-// 2. Iterate and load one semester at a time
-// 3. Build index for that semester
-// 4. Local syllabi slice goes out of scope, allowing Go's GC to reclaim memory naturally
+// Concurrency design:
+//   - All CPU-heavy work (tokenization, inverted-index build) happens WITHOUT holding
+//     any lock, so ongoing SearchCourses calls continue using the previous index.
+//   - Only the pointer swap at the end requires a brief write lock (microseconds).
 //
-// This ensures we never hold the entire database text in memory at once.
+// Memory strategy (one semester at a time):
+//   - Syllabi are loaded per-semester so the full corpus is never in memory at once.
+//   - Local syllabi slices go out of scope after each semester, letting GC reclaim them.
 func (idx *BM25Index) Initialize(ctx context.Context, db *storage.DB) error {
 	if idx == nil {
 		return nil
 	}
 
-	idx.mu.Lock()
-	defer idx.mu.Unlock()
-
-	// Reset index data
-	idx.semesterIndexes = make(map[SemesterKey]*semesterIndex)
-	idx.allSemesters = nil
+	// ── Build phase (no lock) ─────────────────────────────────────────────────
+	// All expensive tokenization and index construction happens here,
+	// while the existing index (if any) remains available to concurrent readers.
 
 	// Step 1: Get all semesters that have data
 	semesters, err := db.GetDistinctSemesters(ctx)
@@ -141,14 +140,12 @@ func (idx *BM25Index) Initialize(ctx context.Context, db *storage.DB) error {
 		return err
 	}
 
-	if len(semesters) == 0 {
-		idx.initialized = true
-		return nil
-	}
-
+	newIndexes := make(map[SemesterKey]*semesterIndex)
+	var newSemesters []SemesterKey
 	totalCourses := 0
 
 	// Step 2: Chunked loading - process one semester at a time
+	var pendingTokens []storage.SyllabusTokenEntry
 	for _, sem := range semesters {
 		key := SemesterKey{Year: sem.Year, Term: sem.Term}
 
@@ -163,44 +160,81 @@ func (idx *BM25Index) Initialize(ctx context.Context, db *storage.DB) error {
 			continue
 		}
 
-		// Initialize index for this semester
-		semIdx, count, err := idx.buildSemesterIndex(syllabi)
+		// Load pre-tokenized token cache for this semester's UIDs.
+		// Cache hits (content_hash matches current syllabi row) skip the gse call entirely.
+		uids := make([]string, len(syllabi))
+		for i, s := range syllabi {
+			uids[i] = s.UID
+		}
+		tokenCache, err := db.GetSyllabusTokensBatch(ctx, uids)
+		if err != nil {
+			idx.logger.WithError(err).WithField("year", sem.Year).WithField("term", sem.Term).Warn("Failed to load syllabus token cache")
+			tokenCache = nil // degrade gracefully: tokenize everything from scratch
+		}
+
+		// Build index for this semester
+		semIdx, count, newEntries, err := idx.buildSemesterIndex(syllabi, tokenCache)
 		if err != nil {
 			idx.logger.WithError(err).WithField("year", sem.Year).WithField("term", sem.Term).Warn("Failed to build index for semester")
 			continue
 		}
 
 		if count > 0 {
-			idx.semesterIndexes[key] = semIdx
-			idx.allSemesters = append(idx.allSemesters, key)
+			newIndexes[key] = semIdx
+			newSemesters = append(newSemesters, key)
 			totalCourses += count
 		}
+		pendingTokens = append(pendingTokens, newEntries...)
 	}
 
 	// Sort semesters (newest first)
-	slices.SortFunc(idx.allSemesters, func(a, b SemesterKey) int {
+	slices.SortFunc(newSemesters, func(a, b SemesterKey) int {
 		if a.Year != b.Year {
 			return b.Year - a.Year // Descending by year
 		}
 		return b.Term - a.Term // Descending by term
 	})
 
+	// ── Atomic swap phase (brief lock, O(1)) ──────────────────────────────────
+	// Replaces the live index in one pointer swap; readers see either the old
+	// or the new index atomically — never a partial rebuild state.
+	idx.mu.Lock()
+	idx.semesterIndexes = newIndexes
+	idx.allSemesters = newSemesters
 	idx.initialized = true
+	idx.mu.Unlock()
+
+	// Persist newly-tokenized entries so future restarts hit the cache.
+	// Done after the swap so a save failure does not block the live index.
+	if len(pendingTokens) > 0 {
+		if err := db.SaveSyllabusTokensBatch(ctx, pendingTokens); err != nil {
+			idx.logger.WithError(err).Warn("Failed to persist syllabus token cache")
+		}
+	}
+
 	idx.logger.WithField("courses", totalCourses).
-		WithField("semester_count", len(idx.semesterIndexes)).
+		WithField("semester_count", len(newIndexes)).
+		WithField("token_cache_misses", len(pendingTokens)).
 		Info("BM25 index initialized")
 
 	return nil
 }
 
 // buildSemesterIndex creates a semesterIndex from a slice of syllabi.
-// Returns the index, document count, and error.
+// tokenCache maps uid → pre-tokenized tokens (may be nil for first run).
+// Returns the index, document count, newly-tokenized entries to persist, and error.
 // The provided syllabi slice is NOT retained.
-func (idx *BM25Index) buildSemesterIndex(syllabi []*storage.Syllabus) (*semesterIndex, int, error) {
+func (idx *BM25Index) buildSemesterIndex(syllabi []*storage.Syllabus, tokenCache map[string]storage.SyllabusTokenEntry) (*semesterIndex, int, []storage.SyllabusTokenEntry, error) {
 	semIdx := &semesterIndex{
 		metadata: make(map[string]docMeta),
 	}
-	corpus := make([]string, 0, len(syllabi))
+
+	type corpusEntry struct {
+		uid         string
+		contentHash string
+		content     string
+	}
+	entries := make([]corpusEntry, 0, len(syllabi))
 
 	for _, syl := range syllabi {
 		// Store metadata
@@ -223,26 +257,57 @@ func (idx *BM25Index) buildSemesterIndex(syllabi []*storage.Syllabus) (*semester
 			continue
 		}
 
-		corpus = append(corpus, content)
+		entries = append(entries, corpusEntry{uid: syl.UID, contentHash: syl.ContentHash, content: content})
 		semIdx.uidList = append(semIdx.uidList, syl.UID)
 	}
 
-	if len(corpus) == 0 {
-		return nil, 0, nil
+	if len(entries) == 0 {
+		return nil, 0, nil, nil
 	}
 
-	// Pre-tokenize every document exactly once.
-	// newBM25Engine stores token frequencies in an inverted index so query time
-	// requires zero tokenizer calls (versus the bm25-go library which re-tokenizes
-	// every document for every query token — O(N_query × N_docs) gse HMM calls).
+	// Resolve tokens: use cache if available, otherwise tokenize in parallel.
+	// Parallel tokenization uses a GOMAXPROCS-bounded goroutine pool.
+	// gse Segmenter is read-only after NewSegmenter() and is safe for concurrent use.
 	//
 	// Note: use tokenizeDoc (no dedup) so repeated terms in a syllabus are counted
 	// correctly — both TF and document length must reflect actual occurrence counts.
 	// Query tokens still use idx.Tokenize (dedup) since a query term appearing twice
 	// carries no additional signal.
-	tokenizedCorpus := make([][]string, len(corpus))
-	for i, doc := range corpus {
-		tokenizedCorpus[i] = idx.tokenizeDoc(doc)
+	tokenizedCorpus := make([][]string, len(entries))
+	needTokenize := make([]int, 0, len(entries)) // indices that are cache misses
+
+	for i, e := range entries {
+		if cached, ok := tokenCache[e.uid]; ok {
+			tokenizedCorpus[i] = cached.Tokens
+		} else {
+			needTokenize = append(needTokenize, i)
+		}
+	}
+
+	if len(needTokenize) > 0 {
+		workers := runtime.GOMAXPROCS(0)
+		sem := make(chan struct{}, workers)
+		var wg sync.WaitGroup
+		for _, i := range needTokenize {
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(i int, doc string) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				tokenizedCorpus[i] = idx.tokenizeDoc(doc)
+			}(i, entries[i].content)
+		}
+		wg.Wait()
+	}
+
+	// Collect newly-tokenized entries to persist (cache misses only).
+	var pendingTokens []storage.SyllabusTokenEntry
+	for _, i := range needTokenize {
+		pendingTokens = append(pendingTokens, storage.SyllabusTokenEntry{
+			UID:         entries[i].uid,
+			ContentHash: entries[i].contentHash,
+			Tokens:      tokenizedCorpus[i],
+		})
 	}
 
 	// Build BM25 engine for this semester (independent IDF).
@@ -257,11 +322,11 @@ func (idx *BM25Index) buildSemesterIndex(syllabi []*storage.Syllabus) (*semester
 	// bilingual Chinese/English experiments (KDD05), Korean biomedical TREC system.
 	engine, err := newBM25Engine(tokenizedCorpus)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
 	semIdx.engine = engine
 
-	return semIdx, len(corpus), nil
+	return semIdx, len(entries), pendingTokens, nil
 }
 
 // getNewestTwoSemesters returns the newest 2 semesters from the index.

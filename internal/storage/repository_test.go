@@ -1834,3 +1834,254 @@ func TestSearchCoursesByTeacherFuzzy(t *testing.T) {
 		t.Errorf("Expected 1 course with truncated search, got %d", len(results))
 	}
 }
+
+// ==================== Syllabus Token Cache Repository Tests ====================
+
+func TestGetSyllabusTokensBatch_Empty(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	// nil input → nil map, no error
+	got, err := db.GetSyllabusTokensBatch(ctx, nil)
+	if err != nil {
+		t.Fatalf("GetSyllabusTokensBatch(nil) error: %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil map for nil input, got %v", got)
+	}
+
+	// empty slice → nil map, no error
+	got, err = db.GetSyllabusTokensBatch(ctx, []string{})
+	if err != nil {
+		t.Fatalf("GetSyllabusTokensBatch([]) error: %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil map for empty-slice input, got %v", got)
+	}
+}
+
+func TestGetSyllabusTokensBatch_CacheHit(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	// The JOIN in GetSyllabusTokensBatch requires matching syllabi rows.
+	if err := db.SaveSyllabusBatch(ctx, []*Syllabus{
+		{UID: "1131U0001", Year: 113, Term: 1, Title: "雲端運算", Teachers: []string{"王小明"}, Objectives: "目標", ContentHash: "h1"},
+		{UID: "1131U0002", Year: 113, Term: 1, Title: "資料結構", Teachers: []string{"李小華"}, Objectives: "目標", ContentHash: "h2"},
+	}); err != nil {
+		t.Fatalf("SaveSyllabusBatch: %v", err)
+	}
+
+	// Save token entries with matching hashes.
+	if err := db.SaveSyllabusTokensBatch(ctx, []SyllabusTokenEntry{
+		{UID: "1131U0001", ContentHash: "h1", Tokens: []string{"雲端", "運算", "cloud"}},
+		{UID: "1131U0002", ContentHash: "h2", Tokens: []string{"資料", "結構", "data"}},
+	}); err != nil {
+		t.Fatalf("SaveSyllabusTokensBatch: %v", err)
+	}
+
+	got, err := db.GetSyllabusTokensBatch(ctx, []string{"1131U0001", "1131U0002"})
+	if err != nil {
+		t.Fatalf("GetSyllabusTokensBatch: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(got))
+	}
+
+	e1 := got["1131U0001"]
+	if e1.UID != "1131U0001" {
+		t.Errorf("UID = %q, want 1131U0001", e1.UID)
+	}
+	if strings.Join(e1.Tokens, " ") != "雲端 運算 cloud" {
+		t.Errorf("Tokens[0] = %v, want [雲端 運算 cloud]", e1.Tokens)
+	}
+
+	e2 := got["1131U0002"]
+	if strings.Join(e2.Tokens, " ") != "資料 結構 data" {
+		t.Errorf("Tokens[1] = %v, want [資料 結構 data]", e2.Tokens)
+	}
+}
+
+func TestGetSyllabusTokensBatch_HashMismatch(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	// Syllabus has current hash "h2".
+	if err := db.SaveSyllabus(ctx, &Syllabus{
+		UID: "1131U0001", Year: 113, Term: 1, Title: "課程",
+		Teachers: []string{}, Objectives: "目標", ContentHash: "h2",
+	}); err != nil {
+		t.Fatalf("SaveSyllabus: %v", err)
+	}
+
+	// Token was tokenized against old hash "h1" → stale.
+	if err := db.SaveSyllabusTokensBatch(ctx, []SyllabusTokenEntry{
+		{UID: "1131U0001", ContentHash: "h1", Tokens: []string{"stale", "token"}},
+	}); err != nil {
+		t.Fatalf("SaveSyllabusTokensBatch: %v", err)
+	}
+
+	// The JOIN (s.content_hash = st.content_hash) must exclude the stale entry.
+	got, err := db.GetSyllabusTokensBatch(ctx, []string{"1131U0001"})
+	if err != nil {
+		t.Fatalf("GetSyllabusTokensBatch: %v", err)
+	}
+	if _, ok := got["1131U0001"]; ok {
+		t.Error("stale token (hash mismatch) must not be returned")
+	}
+}
+
+func TestSaveSyllabusTokensBatch_Empty(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	if err := db.SaveSyllabusTokensBatch(ctx, nil); err != nil {
+		t.Errorf("SaveSyllabusTokensBatch(nil): %v", err)
+	}
+	if err := db.SaveSyllabusTokensBatch(ctx, []SyllabusTokenEntry{}); err != nil {
+		t.Errorf("SaveSyllabusTokensBatch([]): %v", err)
+	}
+}
+
+func TestSaveSyllabusTokensBatch(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	// Matching syllabus row is required for the read-back JOIN to work.
+	if err := db.SaveSyllabusBatch(ctx, []*Syllabus{
+		{UID: "1131U0001", Year: 113, Term: 1, Title: "課程", Teachers: []string{}, Objectives: "目標", ContentHash: "h1"},
+	}); err != nil {
+		t.Fatalf("SaveSyllabusBatch: %v", err)
+	}
+
+	if err := db.SaveSyllabusTokensBatch(ctx, []SyllabusTokenEntry{
+		{UID: "1131U0001", ContentHash: "h1", Tokens: []string{"token1", "token2", "token3"}},
+	}); err != nil {
+		t.Fatalf("SaveSyllabusTokensBatch: %v", err)
+	}
+
+	got, err := db.GetSyllabusTokensBatch(ctx, []string{"1131U0001"})
+	if err != nil {
+		t.Fatalf("GetSyllabusTokensBatch: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(got))
+	}
+	e := got["1131U0001"]
+	if strings.Join(e.Tokens, " ") != "token1 token2 token3" {
+		t.Errorf("Tokens = %v, want [token1 token2 token3]", e.Tokens)
+	}
+}
+
+func TestSaveSyllabusTokensBatch_Upsert(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	if err := db.SaveSyllabus(ctx, &Syllabus{
+		UID: "1131U0001", Year: 113, Term: 1, Title: "課程",
+		Teachers: []string{}, Objectives: "目標", ContentHash: "h1",
+	}); err != nil {
+		t.Fatalf("SaveSyllabus: %v", err)
+	}
+
+	// First write.
+	if err := db.SaveSyllabusTokensBatch(ctx, []SyllabusTokenEntry{
+		{UID: "1131U0001", ContentHash: "h1", Tokens: []string{"old", "token"}},
+	}); err != nil {
+		t.Fatalf("first SaveSyllabusTokensBatch: %v", err)
+	}
+
+	// Second write on same PK — INSERT OR REPLACE should update the row.
+	if err := db.SaveSyllabusTokensBatch(ctx, []SyllabusTokenEntry{
+		{UID: "1131U0001", ContentHash: "h1", Tokens: []string{"new", "token", "updated"}},
+	}); err != nil {
+		t.Fatalf("second SaveSyllabusTokensBatch: %v", err)
+	}
+
+	got, err := db.GetSyllabusTokensBatch(ctx, []string{"1131U0001"})
+	if err != nil {
+		t.Fatalf("GetSyllabusTokensBatch: %v", err)
+	}
+	e := got["1131U0001"]
+	if strings.Join(e.Tokens, " ") != "new token updated" {
+		t.Errorf("expected updated tokens after upsert, got %v", e.Tokens)
+	}
+}
+
+func TestDeleteStaleSyllabusTokens_NoStaleEntries(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	// A perfectly matched syllabus + token pair → nothing to delete.
+	if err := db.SaveSyllabus(ctx, &Syllabus{
+		UID: "1131U0001", Year: 113, Term: 1, Title: "課程",
+		Teachers: []string{}, Objectives: "目標", ContentHash: "h1",
+	}); err != nil {
+		t.Fatalf("SaveSyllabus: %v", err)
+	}
+	if err := db.SaveSyllabusTokensBatch(ctx, []SyllabusTokenEntry{
+		{UID: "1131U0001", ContentHash: "h1", Tokens: []string{"t1"}},
+	}); err != nil {
+		t.Fatalf("SaveSyllabusTokensBatch: %v", err)
+	}
+
+	deleted, err := db.DeleteStaleSyllabusTokens(ctx)
+	if err != nil {
+		t.Fatalf("DeleteStaleSyllabusTokens: %v", err)
+	}
+	if deleted != 0 {
+		t.Errorf("expected 0 deleted, got %d", deleted)
+	}
+}
+
+func TestDeleteStaleSyllabusTokens(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	// Current syllabus content is at hash "h2".
+	if err := db.SaveSyllabus(ctx, &Syllabus{
+		UID: "1131U0001", Year: 113, Term: 1, Title: "課程",
+		Teachers: []string{}, Objectives: "目標", ContentHash: "h2",
+	}); err != nil {
+		t.Fatalf("SaveSyllabus: %v", err)
+	}
+
+	// Two token rows for the same UID:
+	//   (h1) is an orphan — its content was superseded.
+	//   (h2) is live     — matches the current syllabus hash.
+	if err := db.SaveSyllabusTokensBatch(ctx, []SyllabusTokenEntry{
+		{UID: "1131U0001", ContentHash: "h1", Tokens: []string{"orphan", "token"}},
+		{UID: "1131U0001", ContentHash: "h2", Tokens: []string{"live", "token"}},
+	}); err != nil {
+		t.Fatalf("SaveSyllabusTokensBatch: %v", err)
+	}
+
+	// Also a dangling row whose UID no longer exists in syllabi at all.
+	if err := db.SaveSyllabusTokensBatch(ctx, []SyllabusTokenEntry{
+		{UID: "DELETED_UID", ContentHash: "hX", Tokens: []string{"dangling"}},
+	}); err != nil {
+		t.Fatalf("SaveSyllabusTokensBatch dangling: %v", err)
+	}
+
+	deleted, err := db.DeleteStaleSyllabusTokens(ctx)
+	if err != nil {
+		t.Fatalf("DeleteStaleSyllabusTokens: %v", err)
+	}
+	// Expect 2 deletes: orphan (h1) + dangling (DELETED_UID/hX).
+	if deleted != 2 {
+		t.Errorf("expected 2 deleted, got %d", deleted)
+	}
+
+	// The live entry (h2) should still be retrievable via the JOIN.
+	got, err := db.GetSyllabusTokensBatch(ctx, []string{"1131U0001"})
+	if err != nil {
+		t.Fatalf("GetSyllabusTokensBatch after delete: %v", err)
+	}
+	e, ok := got["1131U0001"]
+	if !ok {
+		t.Fatal("live token entry missing after stale-cleanup")
+	}
+	if strings.Join(e.Tokens, " ") != "live token" {
+		t.Errorf("unexpected tokens after delete: %v", e.Tokens)
+	}
+}

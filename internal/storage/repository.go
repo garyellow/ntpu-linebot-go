@@ -1634,6 +1634,101 @@ func (db *DB) CountSyllabi(ctx context.Context) (int, error) {
 	return count, nil
 }
 
+// ==================== Syllabus Token Cache Repository Methods ====================
+
+// GetSyllabusTokensBatch returns cached pre-tokenized tokens for a set of syllabus UIDs.
+// Only returns entries whose content_hash still matches the current syllabi row
+// (verified via an inner JOIN), so stale tokens from previous content versions are
+// never returned even if they remain in the table.
+//
+// Returns a map of uid → SyllabusTokenEntry. UIDs with no valid cache entry are absent.
+func (db *DB) GetSyllabusTokensBatch(ctx context.Context, uids []string) (map[string]SyllabusTokenEntry, error) {
+	if len(uids) == 0 {
+		return nil, nil
+	}
+
+	placeholders := strings.Repeat("?,", len(uids))
+	placeholders = placeholders[:len(placeholders)-1]
+
+	// JOIN with syllabi ensures we only return tokens whose hash matches current content.
+	query := fmt.Sprintf(`
+		SELECT st.uid, st.tokens
+		FROM   syllabus_tokens st
+		JOIN   syllabi s ON s.uid = st.uid AND s.content_hash = st.content_hash
+		WHERE  st.uid IN (%s)
+	`, placeholders)
+
+	args := make([]any, len(uids))
+	for i, uid := range uids {
+		args[i] = uid
+	}
+
+	rows, err := db.Reader().QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get syllabus tokens batch: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make(map[string]SyllabusTokenEntry, len(uids))
+	for rows.Next() {
+		var uid, tokensStr string
+		if err := rows.Scan(&uid, &tokensStr); err != nil {
+			return nil, fmt.Errorf("scan syllabus tokens: %w", err)
+		}
+		result[uid] = SyllabusTokenEntry{
+			UID:    uid,
+			Tokens: strings.Fields(tokensStr),
+		}
+	}
+	return result, rows.Err()
+}
+
+// SaveSyllabusTokensBatch persists pre-tokenized tokens for multiple syllabi in a single
+// transaction. Uses INSERT OR REPLACE so a re-tokenized entry safely overwrites an old row
+// with the same (uid, content_hash).
+func (db *DB) SaveSyllabusTokensBatch(ctx context.Context, entries []SyllabusTokenEntry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	query := `
+		INSERT OR REPLACE INTO syllabus_tokens (uid, content_hash, tokens, created_at)
+		VALUES (?, ?, ?, ?)
+	`
+	now := time.Now().Unix()
+	return db.ExecBatchContext(ctx, query, func(stmt *sql.Stmt) error {
+		for _, e := range entries {
+			if _, err := stmt.ExecContext(ctx, e.UID, e.ContentHash, strings.Join(e.Tokens, " "), now); err != nil {
+				return fmt.Errorf("save syllabus tokens for %s: %w", e.UID, err)
+			}
+		}
+		return nil
+	})
+}
+
+// DeleteStaleSyllabusTokens removes token rows whose (uid, content_hash) pair no longer
+// exists in the syllabi table — i.e., the content changed and old tokens are orphaned.
+// This is safe to call at any time; live tokens are never affected.
+func (db *DB) DeleteStaleSyllabusTokens(ctx context.Context) (int64, error) {
+	query := `
+		DELETE FROM syllabus_tokens
+		WHERE NOT EXISTS (
+			SELECT 1 FROM syllabi
+			WHERE  syllabi.uid          = syllabus_tokens.uid
+			  AND  syllabi.content_hash = syllabus_tokens.content_hash
+		)
+	`
+	result, err := db.Writer().ExecContext(ctx, query)
+	if err != nil {
+		return 0, fmt.Errorf("delete stale syllabus tokens: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("stale syllabus tokens rows affected: %w", err)
+	}
+	return n, nil
+}
+
 // DeleteExpiredSyllabi removes syllabi older than the specified TTL
 func (db *DB) DeleteExpiredSyllabi(ctx context.Context, ttl time.Duration) (int64, error) {
 	query := `DELETE FROM syllabi WHERE cached_at < ?`
