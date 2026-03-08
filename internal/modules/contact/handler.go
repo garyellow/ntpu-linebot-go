@@ -40,6 +40,10 @@ type Handler struct {
 	// matchers contains all pattern-handler pairs sorted by priority.
 	// Shared by CanHandle and HandleMessage for consistent routing.
 	matchers []PatternMatcher
+
+	// Pre-built emergency phones content (computed once at handler construction).
+	prebuiltEmergencyBubble *messaging_api.FlexBubble
+	prebuiltEmergencyQR     *messaging_api.QuickReply
 }
 
 // Name returns the module name
@@ -137,6 +141,7 @@ func NewHandler(
 		seg:              seg,
 	}
 	h.initializeMatchers()
+	h.precomputeEmergency()
 	return h
 }
 
@@ -311,57 +316,49 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 	return []messaging_api.MessageInterface{}
 }
 
-// handleEmergencyPhones returns emergency phone numbers
-func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
-	// Helper to create a row with icon and optional color
+// emergencyImageURL is the static image URL shown at the end of emergency phone results.
+const emergencyImageURL = "https://raw.githubusercontent.com/garyellow/ntpu-linebot-go/main/assets/emergency.png"
+
+// precomputeEmergency builds the static emergency phones FlexBubble and QuickReply
+// once during handler construction, avoiding repeated allocations per request.
+func (h *Handler) precomputeEmergency() {
 	createRow := func(icon, label, value, color string) messaging_api.FlexComponentInterface {
 		valColor := lineutil.ColorSubtext
 		if color != "" {
 			valColor = color
 		}
 		labelWithIcon := icon + " " + label
-		// Use shrink-to-fit to prevent text truncation on long labels like "24H緊急行政電話"
-		// Flex ratio 5:3 gives label more space; adjustMode shrinks text if still too long
 		return lineutil.NewFlexBox("baseline",
 			lineutil.NewFlexText(labelWithIcon).WithColor(lineutil.ColorLabel).WithSize("sm").WithFlex(5).WithAdjustMode("shrink-to-fit").FlexText,
 			lineutil.NewFlexText(value).WithColor(valColor).WithSize("sm").WithWeight("bold").WithFlex(3).WithAlign("end").FlexText,
 		).FlexBox
 	}
 
-	// Header - using standardized ColoredHeader for consistency with other modules
 	header := lineutil.NewColoredHeader(lineutil.ColoredHeaderInfo{
 		Title: "🚨 緊急聯絡電話",
 		Color: lineutil.ColorHeaderEmergency,
 	})
-
-	// Body Label - consistent with other modules (course, contact, id)
 	bodyLabel := lineutil.NewBodyLabel(lineutil.BodyLabelInfo{
 		Emoji: "☎️",
 		Label: "校園緊急聯絡",
 		Color: lineutil.ColorHeaderEmergency,
 	})
-
-	// Sanxia Campus Box
 	sanxiaBox := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexText("📍 三峽校區").WithWeight("bold").WithSize("md").WithColor(lineutil.ColorText).WithMargin("lg").FlexText,
 		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 		createRow("📞", "總機", sanxiaNormalPhone, ""),
 		createRow("🏢", "24H緊急行政電話", sanxia24HPhone, ""),
-		createRow("🚨", "24H急難救助專線", sanxiaEmergencyPhone, lineutil.ColorDanger), // Highlight emergency
+		createRow("🚨", "24H急難救助專線", sanxiaEmergencyPhone, lineutil.ColorDanger),
 		createRow("🚪", "大門哨所", sanxiaGatePhone, ""),
 		createRow("🏠", "宿舍夜間緊急電話", sanxiaDormPhone, ""),
 		createRow("📱", "遺失物諮詢(分機66223)", sanxiaNormalPhone, ""),
 	).WithSpacing("sm").WithMargin("sm").FlexBox
-
-	// Taipei Campus Box
 	taipeiBox := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexText("📍 臺北校區").WithWeight("bold").WithSize("md").WithColor(lineutil.ColorText).WithMargin("lg").FlexText,
 		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
 		createRow("📞", "總機", taipeiNormalPhone, ""),
 		createRow("🚨", "24H急難救助專線", taipeiEmergencyPhone, lineutil.ColorDanger),
 	).WithSpacing("sm").WithMargin("sm").FlexBox
-
-	// External Emergency Box
 	externalBox := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexText("🚨 社會安全").WithWeight("bold").WithSize("md").WithColor(lineutil.ColorDanger).WithMargin("lg").FlexText,
 		lineutil.NewFlexSeparator().WithMargin("sm").FlexSeparator,
@@ -371,8 +368,6 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 		createRow("🚔", "北大派出所", policeStation, ""),
 		createRow("🏥", "恩主公醫院", homHospital, ""),
 	).WithSpacing("sm").WithMargin("sm").FlexBox
-
-	// Footer: Quick Action Buttons (one button per row for 6-char labels)
 	footer := lineutil.NewFlexBox("vertical",
 		lineutil.NewFlexButton(lineutil.NewURIAction("🚨 撥打三峽專線", "tel:"+sanxiaEmergencyPhone)).WithStyle("primary").WithColor(lineutil.ColorButtonDanger).WithHeight("sm").FlexButton,
 		lineutil.NewFlexButton(lineutil.NewClipboardAction("📋 複製三峽專線", sanxiaEmergencyPhone)).WithStyle("secondary").WithHeight("sm").FlexButton,
@@ -384,32 +379,31 @@ func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
 	bubble := lineutil.NewFlexBubble(
 		header,
 		nil,
-		lineutil.NewFlexBox("vertical",
-			bodyLabel.FlexBox,
-			sanxiaBox,
-			taipeiBox,
-			externalBox,
-		),
+		lineutil.NewFlexBox("vertical", bodyLabel.FlexBox, sanxiaBox, taipeiBox, externalBox),
 		footer,
 	)
-
-	sender := lineutil.GetSender(senderName, h.stickerManager)
-	msg := lineutil.NewFlexMessage("緊急聯絡電話", bubble.FlexBubble)
-	msg.Sender = sender
-
-	// Add emergency image at the end with Quick Reply (must be on last message)
-	imageURL := "https://raw.githubusercontent.com/garyellow/ntpu-linebot-go/main/assets/emergency.png"
-	imgMsg := &messaging_api.ImageMessage{
-		OriginalContentUrl: imageURL,
-		PreviewImageUrl:    imageURL,
-	}
-	imgMsg.Sender = sender
-	imgMsg.QuickReply = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
+	h.prebuiltEmergencyBubble = bubble.FlexBubble
+	h.prebuiltEmergencyQR = lineutil.NewQuickReply([]lineutil.QuickReplyItem{
 		lineutil.QuickReplyContactAction(),
 		lineutil.QuickReplyHelpAction(),
 	})
+}
 
-	return []messaging_api.MessageInterface{msg, imgMsg}
+// handleEmergencyPhones returns emergency phone numbers
+func (h *Handler) handleEmergencyPhones() []messaging_api.MessageInterface {
+	sender := lineutil.GetSender(senderName, h.stickerManager)
+
+	flexMsg := lineutil.NewFlexMessage("緊急聯絡電話", h.prebuiltEmergencyBubble)
+	flexMsg.Sender = sender
+
+	imgMsg := &messaging_api.ImageMessage{
+		OriginalContentUrl: emergencyImageURL,
+		PreviewImageUrl:    emergencyImageURL,
+	}
+	imgMsg.Sender = sender
+	imgMsg.QuickReply = h.prebuiltEmergencyQR
+
+	return []messaging_api.MessageInterface{flexMsg, imgMsg}
 }
 
 // handleContactSearch handles contact search queries with a multi-tier search strategy:

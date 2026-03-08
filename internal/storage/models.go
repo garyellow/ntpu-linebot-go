@@ -94,10 +94,17 @@ type Sticker struct {
 	CachedAt int64  `json:"cached_at"`
 }
 
-// Syllabus represents a course syllabus record for smart search
+// SyllabusTokenEntry holds pre-tokenized BM25 index tokens for a single syllabus document.
+// The ContentHash links the tokens to a specific version of the syllabus content, so
+// stale entries (content changed) become unreachable without explicit invalidation.
+type SyllabusTokenEntry struct {
+	UID         string   // Course UID (matches syllabi.uid)
+	ContentHash string   // SHA256 hash of content at tokenization time
+	Tokens      []string // Pre-tokenized search terms from CutSearchAll
+}
+
 // Syllabus represents a course syllabus record for BM25 smart search.
 // All content fields store unified CN+EN text extracted from NTPU course pages.
-// Used by internal/rag for building search index.
 type Syllabus struct {
 	UID         string   `json:"uid"`          // Course unique identifier (e.g., "1132U3009")
 	Year        int      `json:"year"`         // Academic year

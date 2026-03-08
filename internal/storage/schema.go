@@ -50,7 +50,12 @@ func InitSchema(ctx context.Context, db *sql.DB) error {
 	}
 
 	// Create syllabi table for course syllabus smart search (BM25 index)
-	return createSyllabiTable(ctx, db)
+	if err := createSyllabiTable(ctx, db); err != nil {
+		return err
+	}
+
+	// Create syllabus_tokens table to cache pre-tokenized BM25 index tokens
+	return createSyllabusTokensTable(ctx, db)
 }
 
 func createStudentsTable(ctx context.Context, db *sql.DB) error {
@@ -206,6 +211,28 @@ func createSyllabiTable(ctx context.Context, db *sql.DB) error {
 
 	if _, err := db.ExecContext(ctx, query); err != nil {
 		return fmt.Errorf("create syllabi table: %w", err)
+	}
+
+	return nil
+}
+
+// createSyllabusTokensTable stores pre-tokenized BM25 index tokens per syllabus.
+// The (uid, content_hash) primary key ties each token row to a specific content version:
+// when syllabus content changes its hash changes, automatically making the old tokens unreachable
+// via the JOIN in GetSyllabusTokensBatch — no explicit invalidation needed.
+func createSyllabusTokensTable(ctx context.Context, db *sql.DB) error {
+	query := `
+	CREATE TABLE IF NOT EXISTS syllabus_tokens (
+		uid          TEXT    NOT NULL,
+		content_hash TEXT    NOT NULL,
+		tokens       TEXT    NOT NULL,
+		created_at   INTEGER NOT NULL,
+		PRIMARY KEY (uid, content_hash)
+	) STRICT;
+	`
+
+	if _, err := db.ExecContext(ctx, query); err != nil {
+		return fmt.Errorf("create syllabus_tokens table: %w", err)
 	}
 
 	return nil

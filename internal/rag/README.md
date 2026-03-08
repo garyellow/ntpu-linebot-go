@@ -10,6 +10,7 @@ Retrieval-Augmented Generation (RAG) 模組，提供課程智慧搜尋功能。
 - **Query Expansion**: LLM 擴展查詢詞彙（同義詞、縮寫、翻譯）
 - **Per-Semester Indexing**: 每學期獨立索引，獨立計算 IDF 和信心度
 - **Newest 2 Semesters**: 搜尋僅返回最新 2 學期課程
+- **Token Cache**: SQLite 持久化分詞結果，跨重啟重用，避免重複呼叫 gse
 
 ## 架構
 
@@ -64,9 +65,32 @@ Search Flow:
 - **倒排索引**：建立階段一次分詞所有文件，查詢時零 tokenizer 呼叫
 - **預計算 IDF**：索引建立時計算，採用 Lucene 風格 `log(1 + (N-df+0.5)/(df+0.5))` 公式，永遠非負（無 min-IDF 參數）
 - **BM25Okapi 參數**：k1=1.2, b=0.75（業界標準預設值，Lucene/Elasticsearch/Azure 共識）
-- **中文分詞**：使用共享 `stringutil.Segmenter` (gse 搜尋優化分詞)，非 CJK 保持完整詞彙
+- **分詞策略**：文件索引用 `CutSearchAll`（保留重複 token，計入 TF 和文件長度），查詢用 `CutSearch`（去重，同一 term 出現兩次無額外信號）
+- **並行分詞**：Cache miss 時以 GOMAXPROCS 大小的 goroutine pool 並行分詞，gse Segmenter 初始化後為唯讀、並發安全
 - **大小寫不敏感**：所有 token 轉為小寫
-- **線程安全**：使用 `sync.RWMutex` 保護索引操作
+- **線程安全**：`Initialize` 在無鎖下完成所有 CPU 密集工作，最後以 O(1) 原子指標交換完成上線
+
+### Token Cache（分詞快取）
+
+每次 `Initialize` 將 gse 分詞結果持久化到 `storage.syllabus_tokens` 表，下次啟動可直接取用，省去重複分詞開銷。
+
+```
+Initialize(ctx, db)
+  ↓  GetDistinctSemesters                       (讀 syllabi)
+  ↓  GetSyllabiByYearTerm (per semester)       (讀 syllabi)
+  ↓  GetSyllabusTokensBatch (JOIN uid+hash)    ← 快取讀取
+      ┌── 命中 (content_hash 一致)  → 直接使用已存 tokens
+      └── 未命中 (hash 已變更或初次) → gse 重新分詞
+  ↓  buildSemesterIndex (CPU 並行)
+  ↓  原子指標交換 (O(1) 加鎖)
+  ↓  SaveSyllabusTokensBatch                   ← 寫入未命中的新 tokens
+```
+
+**快取一致性**：`GetSyllabusTokensBatch` 使用 `JOIN syllabi ON content_hash = content_hash`，確保只返回與當前 syllabi 版本一致的 tokens；更換後的舊 tokens 自動因 JOIN 不匹配而被過濾，無需主動失效。
+
+**孤兒清理**：`DeleteStaleSyllabusTokens` （`NOT EXISTS` 子查詢）移除 content_hash 已不存在於 syllabi 的過期 token 行，由 `runDataCleanup` 定期觸發。
+
+**序列化格式**：tokens 以空白分隔整行字串儲存（`strings.Join / strings.Fields`），避免 JSON 解析開銷；gse 產生的 token 本身不含空白，序列化是無損的。
 
 ## 為什麼不用 Embedding?
 

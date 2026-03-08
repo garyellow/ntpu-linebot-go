@@ -930,6 +930,18 @@ func (a *Application) runDataCleanup(ctx context.Context) (bool, error) {
 		totalDeleted += deleted
 	}
 
+	// Prune syllabus token cache rows whose content_hash no longer matches the
+	// current syllabi row (content changed since last tokenization).
+	if deleted, err := a.db.DeleteStaleSyllabusTokens(ctx); err != nil {
+		a.logger.WithError(err).Error("Failed to cleanup stale syllabus tokens")
+		cleanupErr = errors.Join(cleanupErr, err)
+	} else {
+		totalDeleted += deleted
+		if deleted > 0 {
+			a.logger.WithField("deleted", deleted).Debug("Cleaned up stale syllabus tokens")
+		}
+	}
+
 	if _, err := a.db.Writer().ExecContext(ctx, "VACUUM"); err != nil {
 		a.logger.WithError(err).Warn("Failed to VACUUM database")
 		cleanupErr = errors.Join(cleanupErr, err)

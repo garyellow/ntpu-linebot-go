@@ -31,6 +31,10 @@ type Handler struct {
 	llmLimiter     *ratelimit.KeyedLimiter
 	logger         *logger.Logger
 	stickerManager *sticker.Manager
+
+	// Pre-built quota explanation content (computed once at handler construction).
+	prebuiltQuotaExplainBubble *messaging_api.FlexBubble
+	prebuiltQuotaExplainQR     *messaging_api.QuickReply
 }
 
 // Keyword definitions for usage queries
@@ -57,12 +61,14 @@ func NewHandler(
 	logger *logger.Logger,
 	stickerManager *sticker.Manager,
 ) *Handler {
-	return &Handler{
+	h := &Handler{
 		userLimiter:    userLimiter,
 		llmLimiter:     llmLimiter,
 		logger:         logger,
 		stickerManager: stickerManager,
 	}
+	h.precomputeQuotaExplanation()
+	return h
 }
 
 // CanHandle returns true if the text matches usage or quota explanation keywords.
@@ -208,72 +214,47 @@ func (h *Handler) buildUsageFlexMessage(userStats, llmStats ratelimit.UsageStats
 	return msg
 }
 
-// buildQuotaExplanationFlexMessage creates a Flex Message explaining what operations consume quota.
-func (h *Handler) buildQuotaExplanationFlexMessage(sender *messaging_api.Sender) *messaging_api.FlexMessage {
-	// Header
+// precomputeQuotaExplanation builds the static quota explanation FlexBubble and QuickReply
+// once during handler construction, avoiding repeated allocations per request.
+func (h *Handler) precomputeQuotaExplanation() {
 	header := lineutil.NewColoredHeader(lineutil.ColoredHeaderInfo{
 		Title: "❓ 額度說明",
 		Color: lineutil.ColorHeaderTips,
 	})
 
-	// Body
 	body := lineutil.NewBodyContentBuilder()
-
-	// User quota section
 	body.AddComponent(lineutil.NewFlexText("⚡ 訊息額度").
-		WithWeight("bold").
-		WithColor(lineutil.ColorText).
-		WithSize("sm").FlexText)
+		WithWeight("bold").WithColor(lineutil.ColorText).WithSize("sm").FlexText)
 	body.AddComponent(lineutil.NewFlexText("每則訊息都會扣除 1 次，包括文字、互動等。").
-		WithSize("xs").
-		WithColor(lineutil.ColorSubtext).
-		WithWrap(true).
-		WithMargin("sm").FlexText)
-
-	// AI quota section
+		WithSize("xs").WithColor(lineutil.ColorSubtext).WithWrap(true).WithMargin("sm").FlexText)
 	body.AddComponent(lineutil.NewFlexText("🤖 AI 額度").
-		WithWeight("bold").
-		WithColor(lineutil.ColorText).
-		WithSize("sm").
-		WithMargin("lg").FlexText)
+		WithWeight("bold").WithColor(lineutil.ColorText).WithSize("sm").WithMargin("lg").FlexText)
 	body.AddComponent(lineutil.NewFlexText("以下操作會扣除 1 次 AI 額度：").
-		WithSize("xs").
-		WithColor(lineutil.ColorSubtext).
-		WithWrap(true).
-		WithMargin("sm").FlexText)
+		WithSize("xs").WithColor(lineutil.ColorSubtext).WithWrap(true).WithMargin("sm").FlexText)
 	body.AddComponent(lineutil.NewFlexText("• 自然語言對話（非關鍵字查詢）\n• 智慧搜尋（找課）").
-		WithSize("xs").
-		WithColor(lineutil.ColorSubtext).
-		WithWrap(true).
-		WithMargin("xs").FlexText)
-
-	// Tips section
+		WithSize("xs").WithColor(lineutil.ColorSubtext).WithWrap(true).WithMargin("xs").FlexText)
 	body.AddComponent(lineutil.NewFlexText("💡 省 AI 額度技巧").
-		WithWeight("bold").
-		WithColor(lineutil.ColorText).
-		WithSize("sm").
-		WithMargin("lg").FlexText)
+		WithWeight("bold").WithColor(lineutil.ColorText).WithSize("sm").WithMargin("lg").FlexText)
 	body.AddComponent(lineutil.NewFlexText("使用關鍵字查詢不會扣 AI 額度。").
-		WithSize("xs").
-		WithColor(lineutil.ColorSubtext).
-		WithWrap(true).
-		WithMargin("sm").FlexText)
+		WithSize("xs").WithColor(lineutil.ColorSubtext).WithWrap(true).WithMargin("sm").FlexText)
 
-	// Footer
 	checkQuotaBtn := lineutil.NewFlexButton(
 		lineutil.NewMessageAction("📊 查看額度", "額度"),
 	).WithStyle("primary").WithColor(lineutil.ColorButtonInternal).WithHeight("sm")
-
 	footer := lineutil.NewButtonFooter([]*lineutil.FlexButton{checkQuotaBtn})
 
 	bubble := lineutil.NewFlexBubble(header, nil, body.Build(), footer)
-	msg := lineutil.NewFlexMessage("額度說明", bubble.FlexBubble)
+	h.prebuiltQuotaExplainBubble = bubble.FlexBubble
+	h.prebuiltQuotaExplainQR = lineutil.NewQuickReply(lineutil.QuickReplyUsageNav())
+}
+
+// buildQuotaExplanationFlexMessage creates a Flex Message explaining what operations consume quota.
+func (h *Handler) buildQuotaExplanationFlexMessage(sender *messaging_api.Sender) *messaging_api.FlexMessage {
+	msg := lineutil.NewFlexMessage("額度說明", h.prebuiltQuotaExplainBubble)
 	if sender != nil {
 		msg.Sender = sender
 	}
-
-	msg.QuickReply = lineutil.NewQuickReply(lineutil.QuickReplyUsageNav())
-
+	msg.QuickReply = h.prebuiltQuotaExplainQR
 	return msg
 }
 

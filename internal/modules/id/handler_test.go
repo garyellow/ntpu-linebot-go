@@ -354,6 +354,29 @@ func TestHandleDepartmentCodesByDegree(t *testing.T) {
 	}
 }
 
+// TestDegreeIndex verifies the mapping from DegreeType to pre-built array index.
+func TestDegreeIndex(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		degree DegreeType
+		want   int
+	}{
+		{"Bachelor maps to 0", DegreeBachelor, 0},
+		{"Master maps to 1", DegreeMaster, 1},
+		{"PhD maps to 2", DegreePhD, 2},
+		{"Unknown defaults to 3", DegreeType("unknown"), 3},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := degreeIndex(tt.degree); got != tt.want {
+				t.Errorf("degreeIndex(%v) = %d, want %d", tt.degree, got, tt.want)
+			}
+		})
+	}
+}
+
 // ==================== Boundary and Edge Case Tests ====================
 
 // TestHandleYearQuery_Boundaries tests year boundary cases

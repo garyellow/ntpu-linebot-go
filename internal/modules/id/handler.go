@@ -43,6 +43,11 @@ type Handler struct {
 	// matchers contains all pattern-handler pairs sorted by priority.
 	// Shared by CanHandle and HandleMessage for consistent routing.
 	matchers []PatternMatcher
+
+	// Pre-built department code content (computed once at handler construction).
+	// Index by degreeIndex(DegreeType): 0=Bachelor, 1=Master, 2=PhD, 3=default.
+	prebuiltDeptCodeTexts [4]string
+	prebuiltDeptCodeQRs   [4]*messaging_api.QuickReply
 }
 
 // Name returns the module name
@@ -146,6 +151,9 @@ func NewHandler(
 
 	// Initialize Pattern-Action Table
 	h.initializeMatchers()
+
+	// Pre-compute static department code messages (text + QR)
+	h.precomputeDeptCodes()
 
 	return h
 }
@@ -579,179 +587,169 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 	return []messaging_api.MessageInterface{}
 }
 
+// degreeIndex maps a DegreeType to an array index for pre-built content lookups.
+// 0=Bachelor, 1=Master, 2=PhD, 3=default (error case).
+func degreeIndex(d DegreeType) int {
+	switch d {
+	case DegreeBachelor:
+		return 0
+	case DegreeMaster:
+		return 1
+	case DegreePhD:
+		return 2
+	default:
+		return 3
+	}
+}
+
+// precomputeDeptCodes builds the static department code texts and QuickReply objects
+// once during handler construction, avoiding repeated string construction per request.
+func (h *Handler) precomputeDeptCodes() {
+	type entry struct {
+		text string
+		qr   *messaging_api.QuickReply
+	}
+	build := func(degree DegreeType) entry {
+		var b strings.Builder
+		var items []lineutil.QuickReplyItem
+		switch degree {
+		case DegreeBachelor:
+			b.WriteString("📋 學士班系代碼一覽\n")
+			b.WriteString("\n📖 人文學院")
+			b.WriteString("\n  中文系 → 81")
+			b.WriteString("\n  應外系 → 82")
+			b.WriteString("\n  歷史系 → 83")
+			b.WriteString("\n\n⚖️ 法律學院")
+			b.WriteString("\n  法律系法學組 → 712")
+			b.WriteString("\n  法律系司法組 → 714")
+			b.WriteString("\n  法律系財法組 → 716")
+			b.WriteString("\n\n💼 商學院")
+			b.WriteString("\n  企管系 → 79")
+			b.WriteString("\n  金融系 → 80")
+			b.WriteString("\n  會計系 → 77")
+			b.WriteString("\n  統計系 → 78")
+			b.WriteString("\n  休運系 → 84")
+			b.WriteString("\n\n🏛️ 公共事務學院")
+			b.WriteString("\n  公行系 → 72")
+			b.WriteString("\n  財政系 → 75")
+			b.WriteString("\n  不動系 → 76")
+			b.WriteString("\n\n👥 社會科學學院")
+			b.WriteString("\n  經濟系 → 73")
+			b.WriteString("\n  社學系 → 742")
+			b.WriteString("\n  社工系 → 744")
+			b.WriteString("\n\n💻 電機資訊學院")
+			b.WriteString("\n  電機系 → 87")
+			b.WriteString("\n  資工系 → 85")
+			b.WriteString("\n  通訊系 → 86")
+			b.WriteString("\n\n🎓 碩士/博士班請按下方按鈕查詢")
+			items = []lineutil.QuickReplyItem{
+				lineutil.QuickReplyMasterDeptCodeAction(),
+				lineutil.QuickReplyPhDDeptCodeAction(),
+				lineutil.QuickReplyYearAction(),
+				lineutil.QuickReplyHelpAction(),
+			}
+		case DegreeMaster:
+			b.WriteString("📋 碩士班系代碼一覽\n")
+			b.WriteString("\n💼 商學院")
+			b.WriteString("\n  企管碩 → 31")
+			b.WriteString("\n  會計碩 → 32")
+			b.WriteString("\n  統計碩 → 33")
+			b.WriteString("\n  金融碩 → 34")
+			b.WriteString("\n  國企所 → 35")
+			b.WriteString("\n  資管所 → 36")
+			b.WriteString("\n  財金英碩 → 37")
+			b.WriteString("\n  會計在職 → 77")
+			b.WriteString("\n  統計在職 → 78")
+			b.WriteString("\n  企管在職 → 79")
+			b.WriteString("\n\n📖 人文學院")
+			b.WriteString("\n  民俗所 → 41")
+			b.WriteString("\n  古典所 → 42")
+			b.WriteString("\n  中文碩 → 43")
+			b.WriteString("\n  歷史碩 → 44")
+			b.WriteString("\n\n⚖️ 法律學院")
+			b.WriteString("\n  法律碩(一般) → 51")
+			b.WriteString("\n  法律碩(專業) → 52")
+			b.WriteString("\n\n👥 社會科學學院")
+			b.WriteString("\n  經濟碩 → 61")
+			b.WriteString("\n  社會碩 → 62")
+			b.WriteString("\n  社工碩 → 63")
+			b.WriteString("\n  犯罪所 → 64")
+			b.WriteString("\n\n🏛️ 公共事務學院")
+			b.WriteString("\n  公行碩 → 71")
+			b.WriteString("\n  財政碩 → 72")
+			b.WriteString("\n  不動碩 → 73")
+			b.WriteString("\n  都計所 → 74")
+			b.WriteString("\n  自環所 → 75")
+			b.WriteString("\n  城市治理英碩 → 76")
+			b.WriteString("\n\n💻 電機資訊學院")
+			b.WriteString("\n  通訊碩 → 81")
+			b.WriteString("\n  電機碩 → 82")
+			b.WriteString("\n  資工碩 → 83")
+			b.WriteString("\n\n🧩 其他")
+			b.WriteString("\n  智慧醫療英碩 → 91")
+			b.WriteString("\n\n🎓 學士/博士班請按下方按鈕查詢")
+			items = []lineutil.QuickReplyItem{
+				lineutil.QuickReplyBachelorDeptCodeAction(),
+				lineutil.QuickReplyPhDDeptCodeAction(),
+				lineutil.QuickReplyYearAction(),
+				lineutil.QuickReplyHelpAction(),
+			}
+		case DegreePhD:
+			b.WriteString("📋 博士班系代碼一覽\n")
+			b.WriteString("\n💼 商學院")
+			b.WriteString("\n  企管博 → 31")
+			b.WriteString("\n  會計博 → 32")
+			b.WriteString("\n\n⚖️ 法律學院")
+			b.WriteString("\n  法律博 → 51")
+			b.WriteString("\n\n👥 社會科學學院")
+			b.WriteString("\n  經濟博 → 61")
+			b.WriteString("\n\n🏛️ 公共事務學院")
+			b.WriteString("\n  公行博 → 71")
+			b.WriteString("\n  不動博 → 73")
+			b.WriteString("\n  都計博 → 74")
+			b.WriteString("\n  自環博 → 75")
+			b.WriteString("\n\n💻 電機資訊學院")
+			b.WriteString("\n  電資博 → 76")
+			b.WriteString("\n\n🎓 學士/碩士班請按下方按鈕查詢")
+			items = []lineutil.QuickReplyItem{
+				lineutil.QuickReplyBachelorDeptCodeAction(),
+				lineutil.QuickReplyMasterDeptCodeAction(),
+				lineutil.QuickReplyYearAction(),
+				lineutil.QuickReplyHelpAction(),
+			}
+		default:
+			b.WriteString("⚠️ 無法判別學制，請從下方按鈕重新選擇系代碼或查詢學年。\n\n")
+			b.WriteString("目前支援的學制：學士班、碩士班、博士班。")
+			items = []lineutil.QuickReplyItem{
+				lineutil.QuickReplyBachelorDeptCodeAction(),
+				lineutil.QuickReplyMasterDeptCodeAction(),
+				lineutil.QuickReplyPhDDeptCodeAction(),
+				lineutil.QuickReplyYearAction(),
+				lineutil.QuickReplyHelpAction(),
+			}
+		}
+		return entry{text: b.String(), qr: lineutil.NewQuickReply(items)}
+	}
+
+	for _, d := range []DegreeType{DegreeBachelor, DegreeMaster, DegreePhD} {
+		e := build(d)
+		idx := degreeIndex(d)
+		h.prebuiltDeptCodeTexts[idx] = e.text
+		h.prebuiltDeptCodeQRs[idx] = e.qr
+	}
+	// default error case (index 3)
+	e := build("")
+	h.prebuiltDeptCodeTexts[3] = e.text
+	h.prebuiltDeptCodeQRs[3] = e.qr
+}
+
 // handleDepartmentCodesByDegree returns department codes for a specific degree type.
 // Includes quick reply for switching between degree types.
 func (h *Handler) handleDepartmentCodesByDegree(degree DegreeType) []messaging_api.MessageInterface {
 	sender := lineutil.GetSender(senderName, h.stickerManager)
-	var builder strings.Builder
-	var quickReplyItems []lineutil.QuickReplyItem
-
-	switch degree {
-	case DegreeBachelor:
-		builder.WriteString("📋 學士班系代碼一覽\n")
-
-		// 人文學院
-		builder.WriteString("\n📖 人文學院")
-		builder.WriteString("\n  中文系 → 81")
-		builder.WriteString("\n  應外系 → 82")
-		builder.WriteString("\n  歷史系 → 83")
-
-		// 法律學院
-		builder.WriteString("\n\n⚖️ 法律學院")
-		builder.WriteString("\n  法律系法學組 → 712")
-		builder.WriteString("\n  法律系司法組 → 714")
-		builder.WriteString("\n  法律系財法組 → 716")
-
-		// 商學院
-		builder.WriteString("\n\n💼 商學院")
-		builder.WriteString("\n  企管系 → 79")
-		builder.WriteString("\n  金融系 → 80")
-		builder.WriteString("\n  會計系 → 77")
-		builder.WriteString("\n  統計系 → 78")
-		builder.WriteString("\n  休運系 → 84")
-
-		// 公共事務學院
-		builder.WriteString("\n\n🏛️ 公共事務學院")
-		builder.WriteString("\n  公行系 → 72")
-		builder.WriteString("\n  財政系 → 75")
-		builder.WriteString("\n  不動系 → 76")
-
-		// 社會科學學院
-		builder.WriteString("\n\n👥 社會科學學院")
-		builder.WriteString("\n  經濟系 → 73")
-		builder.WriteString("\n  社學系 → 742")
-		builder.WriteString("\n  社工系 → 744")
-
-		// 電機資訊學院
-		builder.WriteString("\n\n💻 電機資訊學院")
-		builder.WriteString("\n  電機系 → 87")
-		builder.WriteString("\n  資工系 → 85")
-		builder.WriteString("\n  通訊系 → 86")
-
-		builder.WriteString("\n\n🎓 碩士/博士班請按下方按鈕查詢")
-
-		quickReplyItems = []lineutil.QuickReplyItem{
-			lineutil.QuickReplyMasterDeptCodeAction(),
-			lineutil.QuickReplyPhDDeptCodeAction(),
-			lineutil.QuickReplyYearAction(),
-			lineutil.QuickReplyHelpAction(),
-		}
-
-	case DegreeMaster:
-		builder.WriteString("📋 碩士班系代碼一覽\n")
-
-		// 商學院系所
-		builder.WriteString("\n💼 商學院")
-		builder.WriteString("\n  企管碩 → 31")
-		builder.WriteString("\n  會計碩 → 32")
-		builder.WriteString("\n  統計碩 → 33")
-		builder.WriteString("\n  金融碩 → 34")
-		builder.WriteString("\n  國企所 → 35")
-		builder.WriteString("\n  資管所 → 36")
-		builder.WriteString("\n  財金英碩 → 37")
-		builder.WriteString("\n  會計在職 → 77")
-		builder.WriteString("\n  統計在職 → 78")
-		builder.WriteString("\n  企管在職 → 79")
-
-		// 人文學院系所
-		builder.WriteString("\n\n📖 人文學院")
-		builder.WriteString("\n  民俗所 → 41")
-		builder.WriteString("\n  古典所 → 42")
-		builder.WriteString("\n  中文碩 → 43")
-		builder.WriteString("\n  歷史碩 → 44")
-
-		// 法律學院系所
-		builder.WriteString("\n\n⚖️ 法律學院")
-		builder.WriteString("\n  法律碩(一般) → 51")
-		builder.WriteString("\n  法律碩(專業) → 52")
-
-		// 社會科學學院系所
-		builder.WriteString("\n\n👥 社會科學學院")
-		builder.WriteString("\n  經濟碩 → 61")
-		builder.WriteString("\n  社會碩 → 62")
-		builder.WriteString("\n  社工碩 → 63")
-		builder.WriteString("\n  犯罪所 → 64")
-
-		// 公共事務學院系所
-		builder.WriteString("\n\n🏛️ 公共事務學院")
-		builder.WriteString("\n  公行碩 → 71")
-		builder.WriteString("\n  財政碩 → 72")
-		builder.WriteString("\n  不動碩 → 73")
-		builder.WriteString("\n  都計所 → 74")
-		builder.WriteString("\n  自環所 → 75")
-		builder.WriteString("\n  城市治理英碩 → 76")
-
-		// 電機資訊學院系所
-		builder.WriteString("\n\n💻 電機資訊學院")
-		builder.WriteString("\n  通訊碩 → 81")
-		builder.WriteString("\n  電機碩 → 82")
-		builder.WriteString("\n  資工碩 → 83")
-
-		// 其他
-		builder.WriteString("\n\n🧩 其他")
-		builder.WriteString("\n  智慧醫療英碩 → 91")
-
-		builder.WriteString("\n\n🎓 學士/博士班請按下方按鈕查詢")
-
-		quickReplyItems = []lineutil.QuickReplyItem{
-			lineutil.QuickReplyBachelorDeptCodeAction(),
-			lineutil.QuickReplyPhDDeptCodeAction(),
-			lineutil.QuickReplyYearAction(),
-			lineutil.QuickReplyHelpAction(),
-		}
-
-	case DegreePhD:
-		builder.WriteString("📋 博士班系代碼一覽\n")
-
-		// 商學院
-		builder.WriteString("\n💼 商學院")
-		builder.WriteString("\n  企管博 → 31")
-		builder.WriteString("\n  會計博 → 32")
-
-		// 法律學院
-		builder.WriteString("\n\n⚖️ 法律學院")
-		builder.WriteString("\n  法律博 → 51")
-
-		// 社會科學學院
-		builder.WriteString("\n\n👥 社會科學學院")
-		builder.WriteString("\n  經濟博 → 61")
-
-		// 公共事務學院
-		builder.WriteString("\n\n🏛️ 公共事務學院")
-		builder.WriteString("\n  公行博 → 71")
-		builder.WriteString("\n  不動博 → 73")
-		builder.WriteString("\n  都計博 → 74")
-		builder.WriteString("\n  自環博 → 75")
-
-		// 電機資訊學院
-		builder.WriteString("\n\n💻 電機資訊學院")
-		builder.WriteString("\n  電資博 → 76")
-
-		builder.WriteString("\n\n🎓 學士/碩士班請按下方按鈕查詢")
-
-		quickReplyItems = []lineutil.QuickReplyItem{
-			lineutil.QuickReplyBachelorDeptCodeAction(),
-			lineutil.QuickReplyMasterDeptCodeAction(),
-			lineutil.QuickReplyYearAction(),
-			lineutil.QuickReplyHelpAction(),
-		}
-
-	default:
-		// Fallback for unexpected DegreeType values to avoid empty/malformed replies.
-		builder.WriteString("⚠️ 無法判別學制，請從下方按鈕重新選擇系代碼或查詢學年。\n\n")
-		builder.WriteString("目前支援的學制：學士班、碩士班、博士班。")
-
-		quickReplyItems = []lineutil.QuickReplyItem{
-			lineutil.QuickReplyBachelorDeptCodeAction(),
-			lineutil.QuickReplyMasterDeptCodeAction(),
-			lineutil.QuickReplyPhDDeptCodeAction(),
-			lineutil.QuickReplyYearAction(),
-			lineutil.QuickReplyHelpAction(),
-		}
-	}
-
-	msg := lineutil.NewTextMessageWithConsistentSender(builder.String(), sender)
-	msg.QuickReply = lineutil.NewQuickReply(quickReplyItems)
+	idx := degreeIndex(degree)
+	msg := lineutil.NewTextMessageWithConsistentSender(h.prebuiltDeptCodeTexts[idx], sender)
+	msg.QuickReply = h.prebuiltDeptCodeQRs[idx]
 	return []messaging_api.MessageInterface{msg}
 }
 
