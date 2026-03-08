@@ -69,7 +69,7 @@ func (p *geminiIntentParser) Parse(ctx context.Context, text string) (*ParseResu
 			},
 		},
 		Temperature:     genai.Ptr[float32](0.1), // Low temperature for consistent classification
-		MaxOutputTokens: 512,                     // Sufficient for direct_reply messages with clarification options
+		MaxOutputTokens: 16384,                   // High limit to prevent truncation of tool call responses
 	}
 
 	// Generate content with timing

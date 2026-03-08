@@ -126,11 +126,31 @@ func (e *openaiQueryExpander) Expand(ctx context.Context, query string) (string,
 			openai.UserMessage(prompt),
 		},
 		Temperature: openai.Float(0.2), // Lower temperature reduces lexical drift for BM25
-		MaxTokens:   openai.Int(200),
+		MaxTokens:   openai.Int(16384),
+	}
+
+	// Suppress reasoning tokens for Qwen3 thinking models on Groq and Cerebras.
+	// These models default to "raw" reasoning format which embeds <think>...</think>
+	// blocks in the content field, breaking ParseExpandedOutput. Disabling reasoning
+	// also reduces latency and cost for this simple keyword extraction task.
+	var extraOpts []option.RequestOption
+	switch e.provider {
+	case ProviderGroq:
+		if strings.Contains(strings.ToLower(e.model), "qwen3") {
+			// reasoning_effort:"none" disables thinking entirely on Groq Qwen3
+			// (no thinking tokens generated at all — cheaper and faster).
+			extraOpts = append(extraOpts, option.WithJSONSet("reasoning_effort", "none"))
+		}
+	case ProviderCerebras:
+		if strings.Contains(strings.ToLower(e.model), "qwen-3") {
+			// reasoning_format:"hidden" prevents <think> blocks from appearing in
+			// the content field for Cerebras Qwen3 (default is "raw").
+			extraOpts = append(extraOpts, option.WithJSONSet("reasoning_format", "hidden"))
+		}
 	}
 
 	start := time.Now()
-	resp, err := e.client.Chat.Completions.New(ctx, params)
+	resp, err := e.client.Chat.Completions.New(ctx, params, extraOpts...)
 	duration := time.Since(start)
 
 	if err != nil {
@@ -145,12 +165,12 @@ func (e *openaiQueryExpander) Expand(ctx context.Context, query string) (string,
 	}
 
 	if len(resp.Choices) == 0 || resp.Choices[0].Message.Content == "" {
-		return query, nil
+		return query, fmt.Errorf("empty response from %s model %s", e.provider, e.model)
 	}
 
 	rawOutput := strings.TrimSpace(resp.Choices[0].Message.Content)
 	if rawOutput == "" {
-		return query, nil
+		return query, fmt.Errorf("empty text in response from %s model %s", e.provider, e.model)
 	}
 
 	// Parse structured output (extract keywords from "分析：... 關鍵詞：..." format)
@@ -158,12 +178,20 @@ func (e *openaiQueryExpander) Expand(ctx context.Context, query string) (string,
 	// we only need the keywords for BM25 search.
 	parsedKeywords := ParseExpandedOutput(rawOutput)
 	if parsedKeywords == "" {
-		return query, nil
+		slog.WarnContext(ctx, "Query expansion output not parseable",
+			"provider", e.provider,
+			"model", e.model,
+			"raw_output_length", len([]rune(rawOutput)))
+		slog.DebugContext(ctx, "Query expansion unparseable raw output",
+			"provider", e.provider,
+			"model", e.model,
+			"raw_output", truncateLogValue(rawOutput, 200))
+		return query, fmt.Errorf("expansion output not parseable from %s model %s", e.provider, e.model)
 	}
 
 	finalQuery := BuildExpandedQuery(query, parsedKeywords)
 	if finalQuery == "" {
-		return query, nil
+		return query, fmt.Errorf("expanded query empty after building from %s model %s", e.provider, e.model)
 	}
 
 	args := []any{

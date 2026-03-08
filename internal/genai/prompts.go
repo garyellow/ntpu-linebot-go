@@ -208,6 +208,30 @@ func QueryExpansionPrompt(query string) string {
 `
 }
 
+// stripThinkingBlocks removes <think>...</think> reasoning blocks from LLM output.
+// Qwen3 models on both Groq and Cerebras default to a "raw" reasoning format that
+// embeds thinking tokens inside <think> tags directly in the content field.
+// These blocks must be stripped before searching for structured output markers.
+func stripThinkingBlocks(s string) string {
+	const openTag = "<think>"
+	const closeTag = "</think>"
+	for {
+		start := strings.Index(s, openTag)
+		if start == -1 {
+			break
+		}
+		closeIdx := strings.Index(s[start:], closeTag)
+		if closeIdx == -1 {
+			// Unclosed tag: remove everything from <think> onwards.
+			s = strings.TrimSpace(s[:start])
+			break
+		}
+		// Remove the entire <think>...</think> block and continue.
+		s = s[:start] + s[start+closeIdx+len(closeTag):]
+	}
+	return strings.TrimSpace(s)
+}
+
 // ParseExpandedOutput extracts keywords from the structured Think-then-Expand output.
 //
 // Expected format (from QueryExpansionPrompt):
@@ -220,9 +244,18 @@ func QueryExpansionPrompt(query string) string {
 //  2. Fallback: If "分析：" exists, take first keyword-looking line after the analysis line
 //  3. Last resort: Accept the first keyword-looking plain line for providers that skip the structured format
 //
-// Returns "" if no keywords can be extracted; callers should fall back to the original query.
+// Returns "" if no keywords can be extracted. Callers are responsible for deciding how to handle
+// that case: expanders treat it as an error and propagate it, allowing upstream fallback logic
+// (provider chain, smart-search abort) to take over.
 func ParseExpandedOutput(output string) string {
 	output = strings.TrimSpace(output)
+	if output == "" {
+		return ""
+	}
+
+	// Strip <think>...</think> reasoning blocks emitted by thinking models
+	// (e.g., Qwen3 on Groq/Cerebras) before searching for structured markers.
+	output = stripThinkingBlocks(output)
 	if output == "" {
 		return ""
 	}

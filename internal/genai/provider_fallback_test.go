@@ -134,7 +134,7 @@ func TestFallbackIntentParser_Parse_PermanentError(t *testing.T) {
 	t.Parallel()
 	primary := &mockIntentParser{
 		parseFunc: func(_ context.Context, _ string) (*ParseResult, error) {
-			return nil, errors.New("invalid api key") // permanent error
+			return nil, errors.New("bad request") // permanent: won't improve on any provider
 		},
 		provider: ProviderGemini,
 		enabled:  true,
@@ -158,6 +158,75 @@ func TestFallbackIntentParser_Parse_PermanentError(t *testing.T) {
 	}
 	if fallbackCalled {
 		t.Error("fallback should not be called for permanent errors")
+	}
+}
+
+func TestFallbackIntentParser_Parse_AuthErrorFallback(t *testing.T) {
+	t.Parallel()
+	primary := &mockIntentParser{
+		parseFunc: func(_ context.Context, _ string) (*ParseResult, error) {
+			return nil, errors.New("invalid api key") // auth failure: try next provider
+		},
+		provider: ProviderGemini,
+		enabled:  true,
+	}
+
+	fallbackCalled := false
+	fallback := &mockIntentParser{
+		parseFunc: func(_ context.Context, _ string) (*ParseResult, error) {
+			fallbackCalled = true
+			return &ParseResult{Module: "course", Intent: "search"}, nil
+		},
+		provider: ProviderGroq,
+		enabled:  true,
+	}
+
+	parser := NewFallbackIntentParser(DefaultRetryConfig(), primary, fallback)
+
+	result, err := parser.Parse(context.Background(), "test query")
+	if err != nil {
+		t.Errorf("Parse() should succeed via fallback, got error: %v", err)
+	}
+	if !fallbackCalled {
+		t.Error("fallback should be called when primary has auth error")
+	}
+	if result == nil || result.Module != "course" {
+		t.Errorf("unexpected result: %v", result)
+	}
+}
+
+func TestFallbackIntentParser_Parse_404Fallback(t *testing.T) {
+	t.Parallel()
+	// Simulate the real production bug: Cerebras returns 404 for a deprecated model.
+	primary := &mockIntentParser{
+		parseFunc: func(_ context.Context, _ string) (*ParseResult, error) {
+			return nil, errors.New(`chat completion failed: POST "https://api.cerebras.ai/v1/chat/completions": 404 Not Found `)
+		},
+		provider: ProviderCerebras,
+		enabled:  true,
+	}
+
+	fallbackCalled := false
+	fallback := &mockIntentParser{
+		parseFunc: func(_ context.Context, _ string) (*ParseResult, error) {
+			fallbackCalled = true
+			return &ParseResult{Module: "course", Intent: "smart"}, nil
+		},
+		provider: ProviderGroq,
+		enabled:  true,
+	}
+
+	parser := NewFallbackIntentParser(DefaultRetryConfig(), primary, fallback)
+
+	result, err := parser.Parse(context.Background(), "我是資工系的想學點金融知識，推薦修哪些課")
+	if err != nil {
+		t.Errorf("Parse() should succeed via fallback, got error: %v", err)
+	}
+	if !fallbackCalled {
+		t.Error("fallback should be called when primary returns 404 (model not found)")
+	}
+	if result == nil || result.Module != "course" {
+		t.Errorf("unexpected result: %v", result)
 	}
 }
 
@@ -271,7 +340,7 @@ func TestFallbackQueryExpander_Expand_PrimarySuccess(t *testing.T) {
 	}
 }
 
-func TestFallbackQueryExpander_Expand_GracefulDegradation(t *testing.T) {
+func TestFallbackQueryExpander_Expand_AllProvidersFailed(t *testing.T) {
 	t.Parallel()
 	primary := &mockQueryExpander{
 		expandFunc: func(_ context.Context, _ string) (string, error) {
@@ -295,13 +364,13 @@ func TestFallbackQueryExpander_Expand_GracefulDegradation(t *testing.T) {
 
 	expander := NewFallbackQueryExpander(cfg, primary, fallback)
 
-	// Should return original query on complete failure (graceful degradation)
+	// Should return original query AND an error when all providers fail
 	result, err := expander.Expand(context.Background(), "original")
-	if err != nil {
-		t.Errorf("Expand() error = %v, want nil (graceful degradation)", err)
+	if err == nil {
+		t.Error("Expand() should return error when all expanders fail")
 	}
 	if result != "original" {
-		t.Errorf("Expand() = %q, want %q (original query)", result, "original")
+		t.Errorf("Expand() = %q, want %q (original query preserved on failure)", result, "original")
 	}
 }
 
@@ -310,7 +379,7 @@ func TestFallbackQueryExpander_Expand_NilExpander(t *testing.T) {
 	var expander *FallbackQueryExpander
 	result, err := expander.Expand(context.Background(), "test")
 	if err != nil {
-		t.Errorf("Expand() error = %v, want nil", err)
+		t.Errorf("Expand() on nil expander (feature disabled) should return no error, got: %v", err)
 	}
 	if result != "test" {
 		t.Errorf("Expand() = %q, want %q (original)", result, "test")
@@ -333,6 +402,46 @@ func TestFallbackQueryExpander_Close(t *testing.T) {
 	}
 	if !fallback.closeCalled {
 		t.Error("fallback.Close() was not called")
+	}
+}
+
+func TestClassifyErrorType(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"nil error", nil, "success"},
+		{"deadline exceeded", context.DeadlineExceeded, "timeout"},
+		{"context canceled", context.Canceled, "canceled"},
+		// Auth errors must be labeled "auth_error", not "quota_exhausted"
+		{"401 in string", errors.New(`POST "https://api.example.com": 401 Unauthorized`), "auth_error"},
+		{"unauthorized", errors.New("unauthorized access denied"), "auth_error"},
+		{"invalid api key", errors.New("invalid api key provided"), "auth_error"},
+		{"invalid_api_key code", errors.New("code: invalid_api_key"), "auth_error"},
+		{"403 forbidden", errors.New("403 forbidden"), "auth_error"},
+		{"permission denied", errors.New("permission denied"), "auth_error"},
+		// 404 means model/endpoint not found on this provider → fallback, labeled "model_not_found"
+		{"404 not found", errors.New(`POST "https://api.cerebras.ai/v1/chat/completions": 404 Not Found`), "model_not_found"},
+		{"model not found", errors.New("the model 'zai-glm-4.7' was not found"), "model_not_found"},
+		// Quota exhaustion must NOT be mistaken for auth or model_not_found
+		{"quota exceeded", errors.New("quota exceeded for today"), "quota_exhausted"},
+		// Rate limit is transient (retry), not quota
+		{"rate limit 429", errors.New("429 too many requests"), "transient_error"},
+		// Transient / permanent
+		{"server error 503", errors.New("503 service unavailable"), "transient_error"},
+		{"bad request 400", errors.New("400 bad request"), "error"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := classifyErrorType(tc.err)
+			if got != tc.want {
+				t.Errorf("classifyErrorType(%v) = %q, want %q", tc.err, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -362,12 +471,12 @@ func TestFallbackQueryExpander_ContextCancellation(t *testing.T) {
 	cancel() // Cancel immediately
 
 	result, err := expander.Expand(ctx, "test")
-	// Should return original query due to graceful degradation
+	// Should return original query on cancellation
 	if result != "test" {
 		t.Errorf("Expand() = %q, want %q on cancellation", result, "test")
 	}
-	// Error should be nil due to graceful degradation
-	if err != nil {
-		t.Logf("Note: Expand() returned error = %v (acceptable for canceled context)", err)
+	// Error should be returned (context cancellation is not graceful degradation)
+	if err == nil {
+		t.Error("Expand() should return error on context cancellation")
 	}
 }

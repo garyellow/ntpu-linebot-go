@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
@@ -214,10 +215,10 @@ func NewFallbackQueryExpander(cfg RetryConfig, expanders ...QueryExpander) *Fall
 }
 
 // Expand tries the expanders in order with retry, then falls back if needed.
-// On complete failure, returns the original query (graceful degradation).
+// On complete failure, returns an error so the caller can handle it explicitly.
 func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (string, error) {
 	if f == nil || len(f.expanders) == 0 {
-		return query, nil // Graceful degradation
+		return query, nil // feature disabled, not a failure
 	}
 
 	totalStart := time.Now()
@@ -249,11 +250,10 @@ func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (strin
 			"action", action,
 			"duration_ms", time.Since(start).Milliseconds())
 
-		// If error is not recoverable or no more fallbacks, degrade gracefully
+		// If error is not recoverable or no more fallbacks, propagate error to caller
 		if action == ActionFail || i == len(f.expanders)-1 {
 			recordExpanderError(provider, err)
-			// Graceful degradation: return original query
-			return query, nil
+			return query, err
 		}
 
 		// Falling back to next expander
@@ -264,7 +264,8 @@ func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (strin
 			"to_provider", f.expanders[i+1].Provider())
 	}
 
-	return query, nil // Always return original query on failure
+	// unreachable: loop always returns via ActionFail or last-expander check above
+	return query, fmt.Errorf("all %d query expanders failed", len(f.expanders))
 }
 
 // expandWithRetry attempts expansion with retry logic.
@@ -428,6 +429,15 @@ func classifyErrorType(err error) string {
 	action := ClassifyError(err)
 	switch action {
 	case ActionFallback:
+		// Distinguish the three reasons that all produce ActionFallback.
+		errStr := strings.ToLower(err.Error())
+		if containsAny(errStr, "401", "unauthorized", "unauthenticated", "invalid api key", "invalid_api_key",
+			"403", "forbidden", "permission denied") {
+			return "auth_error"
+		}
+		if containsAny(errStr, "404", "not found") {
+			return "model_not_found"
+		}
 		return "quota_exhausted"
 	case ActionRetry:
 		return "transient_error"

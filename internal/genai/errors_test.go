@@ -65,7 +65,7 @@ func TestClassifyError(t *testing.T) {
 				Err:        errors.New("unauthorized"),
 				StatusCode: http.StatusUnauthorized,
 			},
-			expected: ActionFail,
+			expected: ActionFallback,
 		},
 
 		// Error message patterns - Quota
@@ -138,22 +138,44 @@ func TestClassifyError(t *testing.T) {
 		{
 			name:     "unauthorized",
 			err:      errors.New("unauthorized access"),
-			expected: ActionFail,
+			expected: ActionFallback,
 		},
 		{
 			name:     "invalid api key",
 			err:      errors.New("invalid api key"),
-			expected: ActionFail,
+			expected: ActionFallback,
 		},
 		{
 			name:     "forbidden",
 			err:      errors.New("forbidden"),
-			expected: ActionFail,
+			expected: ActionFallback,
 		},
 		{
 			name:     "not found",
 			err:      errors.New("resource not found"),
-			expected: ActionFail,
+			expected: ActionFallback,
+		},
+
+		// Model output structural errors (non-transient, fallback to next provider)
+		{
+			name:     "empty response from model",
+			err:      errors.New("empty response from groq model my-model"),
+			expected: ActionFallback,
+		},
+		{
+			name:     "empty text in response from model",
+			err:      errors.New("empty text in response from gemini model my-model"),
+			expected: ActionFallback,
+		},
+		{
+			name:     "expansion output not parseable",
+			err:      errors.New("expansion output not parseable from cerebras model my-model"),
+			expected: ActionFallback,
+		},
+		{
+			name:     "expanded query empty after building",
+			err:      errors.New("expanded query empty after building from groq model my-model"),
+			expected: ActionFallback,
 		},
 
 		// Unknown errors default to retry
@@ -190,11 +212,13 @@ func TestClassifyStatusCode(t *testing.T) {
 		{http.StatusServiceUnavailable, ActionRetry},
 		{http.StatusGatewayTimeout, ActionRetry},
 
+		// Fallback (auth + model-not-found errors are provider-specific; try next provider)
+		{http.StatusUnauthorized, ActionFallback},
+		{http.StatusForbidden, ActionFallback},
+		{http.StatusNotFound, ActionFallback},
+
 		// Fail
 		{http.StatusBadRequest, ActionFail},
-		{http.StatusUnauthorized, ActionFail},
-		{http.StatusForbidden, ActionFail},
-		{http.StatusNotFound, ActionFail},
 		{http.StatusUnprocessableEntity, ActionFail},
 
 		// Unknown defaults to retry
@@ -337,14 +361,14 @@ func TestHelperFunctions(t *testing.T) {
 		if !IsRetryable(errors.New("service unavailable")) {
 			t.Error("should be retryable")
 		}
-		if IsRetryable(errors.New("invalid api key")) {
+		if IsRetryable(errors.New("bad request")) {
 			t.Error("should not be retryable")
 		}
 	})
 
 	t.Run("IsPermanent", func(t *testing.T) {
 		t.Parallel()
-		if !IsPermanent(errors.New("invalid api key")) {
+		if !IsPermanent(errors.New("bad request")) {
 			t.Error("should be permanent")
 		}
 		if IsPermanent(errors.New("service unavailable")) {
@@ -359,28 +383,6 @@ func TestHelperFunctions(t *testing.T) {
 		}
 		if ShouldFallback(errors.New("service unavailable")) {
 			t.Error("should not fallback (should retry instead)")
-		}
-	})
-
-	t.Run("WrapError", func(t *testing.T) {
-		t.Parallel()
-		wrapped := WrapError(errors.New("test"), ProviderGemini, http.StatusTooManyRequests)
-		var llmErr *LLMError
-		if !errors.As(wrapped, &llmErr) {
-			t.Error("should be LLMError")
-		}
-		if llmErr.Provider != ProviderGemini {
-			t.Error("wrong provider")
-		}
-		if llmErr.StatusCode != http.StatusTooManyRequests {
-			t.Error("wrong status code")
-		}
-	})
-
-	t.Run("WrapError nil", func(t *testing.T) {
-		t.Parallel()
-		if WrapError(nil, ProviderGemini, http.StatusTooManyRequests) != nil {
-			t.Error("should return nil for nil error")
 		}
 	})
 }

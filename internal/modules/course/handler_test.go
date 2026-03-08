@@ -2,6 +2,7 @@ package course
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"reflect"
@@ -10,8 +11,12 @@ import (
 	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/bot"
+	"github.com/garyellow/ntpu-linebot-go/internal/ctxutil"
+	"github.com/garyellow/ntpu-linebot-go/internal/genai"
 	"github.com/garyellow/ntpu-linebot-go/internal/logger"
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
+	"github.com/garyellow/ntpu-linebot-go/internal/rag"
+	"github.com/garyellow/ntpu-linebot-go/internal/ratelimit"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	"github.com/garyellow/ntpu-linebot-go/internal/sticker"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
@@ -19,6 +24,10 @@ import (
 	"github.com/line/line-bot-sdk-go/v8/linebot/messaging_api"
 	"github.com/prometheus/client_golang/prometheus"
 )
+
+// sharedTestSegmenter is initialized once at package init to avoid concurrent
+// gse global-state writes when parallel tests all call NewSegmenter.
+var sharedTestSegmenter = stringutil.NewSegmenter()
 
 func setupTestHandler(t *testing.T) *Handler {
 	t.Helper()
@@ -715,6 +724,155 @@ func TestHandleSmartSearch_NoBM25Index(t *testing.T) {
 	// Should return a helpful message when BM25Index is not available
 	if len(messages) == 0 {
 		t.Error("Expected at least one message when BM25 search is disabled")
+	}
+}
+
+// mockQueryExpander is a test double for genai.QueryExpander.
+type mockQueryExpander struct {
+	err      error
+	expanded string
+}
+
+func (m *mockQueryExpander) Expand(_ context.Context, query string) (string, error) {
+	if m.err != nil {
+		return query, m.err
+	}
+	if m.expanded != "" {
+		return m.expanded, nil
+	}
+	return query, nil
+}
+
+func (m *mockQueryExpander) Close() error             { return nil }
+func (m *mockQueryExpander) Provider() genai.Provider { return "mock" }
+
+// setupTestHandlerWithSmartSearch creates a handler with an initialized BM25 index
+// and an optional query expander / rate limiter for smart-search path tests.
+// The BM25 index is seeded with one test syllabus so IsEnabled() returns true.
+func setupTestHandlerWithSmartSearch(t *testing.T, expander *mockQueryExpander, limiter *ratelimit.KeyedLimiter) *Handler {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	db, err := storage.New(context.Background(), dbPath, 168*time.Hour)
+	if err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close(context.Background()) })
+
+	// Seed a single syllabus so BM25 IsEnabled() = true after Initialize.
+	// IsEnabled() requires len(semesterIndexes) > 0, which needs at least one document.
+	seedSyllabus := &storage.Syllabus{
+		UID:         "1132U9999",
+		Year:        113,
+		Term:        2,
+		Title:       "智慧型系統",
+		Teachers:    []string{"測試教授"},
+		Objectives:  "測試課程目標",
+		Outline:     "機器學習 深度學習 人工智慧",
+		ContentHash: "test_hash_abc123",
+	}
+	if saveErr := db.SaveSyllabus(context.Background(), seedSyllabus); saveErr != nil {
+		t.Fatalf("Failed to seed test syllabus: %v", saveErr)
+	}
+
+	baseURLs := map[string][]string{
+		"lms": {"https://lms.ntpu.edu.tw"},
+		"sea": {"https://sea.cc.ntpu.edu.tw"},
+	}
+	scraperClient := scraper.NewClient(30*time.Second, 3, baseURLs)
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	log := logger.New("info")
+	stickerMgr := sticker.NewManager(db, scraperClient, log)
+
+	bm25 := rag.NewBM25Index(log, sharedTestSegmenter)
+	if initErr := bm25.Initialize(context.Background(), db); initErr != nil {
+		t.Fatalf("Failed to initialize BM25 index: %v", initErr)
+	}
+	if !bm25.IsEnabled() {
+		t.Fatal("BM25 index not enabled after Initialize with seeded data")
+	}
+
+	return NewHandler(db, scraperClient, m, log, stickerMgr, nil, bm25, expander, limiter, nil, sharedTestSegmenter)
+}
+
+func TestHandleSmartSearch_RateLimited(t *testing.T) {
+	t.Parallel()
+
+	expander := &mockQueryExpander{} // success expander - should not be called
+	limiter := ratelimit.NewKeyedLimiter(ratelimit.KeyedConfig{
+		Burst:         0, // No tokens → always denied
+		RefillRate:    0,
+		CleanupPeriod: time.Hour,
+	})
+	t.Cleanup(limiter.Stop)
+
+	h := setupTestHandlerWithSmartSearch(t, expander, limiter)
+	ctx := ctxutil.WithChatID(context.Background(), "test-chat-id")
+
+	messages := h.HandleMessage(ctx, "找課 機器學習")
+
+	if len(messages) == 0 {
+		t.Fatal("Expected rate-limit error message, got none")
+	}
+
+	// Verify the quick replies include a retry action (課程 機器學習)
+	msg, ok := messages[0].(*messaging_api.TextMessageV2)
+	if !ok {
+		t.Fatalf("Expected TextMessageV2, got %T", messages[0])
+	}
+	if msg.QuickReply == nil || len(msg.QuickReply.Items) == 0 {
+		t.Fatal("Expected quick reply items on rate-limit message")
+	}
+
+	hasRetry := false
+	for _, item := range msg.QuickReply.Items {
+		if action, ok := item.Action.(*messaging_api.MessageAction); ok {
+			if strings.Contains(action.Text, "課程 機器學習") {
+				hasRetry = true
+				break
+			}
+		}
+	}
+	if !hasRetry {
+		t.Error("Expected a retry quick-reply action containing '課程 機器學習'")
+	}
+}
+
+func TestHandleSmartSearch_ExpansionFailed(t *testing.T) {
+	t.Parallel()
+
+	expander := &mockQueryExpander{err: errors.New("expansion output not parseable from groq model my-model")}
+	h := setupTestHandlerWithSmartSearch(t, expander, nil)
+	ctx := context.Background()
+
+	messages := h.HandleMessage(ctx, "找課 微積分")
+
+	if len(messages) == 0 {
+		t.Fatal("Expected expansion-failed error message, got none")
+	}
+
+	// Verify the quick replies include a retry action (課程 微積分)
+	msg, ok := messages[0].(*messaging_api.TextMessageV2)
+	if !ok {
+		t.Fatalf("Expected TextMessageV2, got %T", messages[0])
+	}
+	if msg.QuickReply == nil || len(msg.QuickReply.Items) == 0 {
+		t.Fatal("Expected quick reply items on expansion-failed message")
+	}
+
+	hasRetry := false
+	for _, item := range msg.QuickReply.Items {
+		if action, ok := item.Action.(*messaging_api.MessageAction); ok {
+			if strings.Contains(action.Text, "課程 微積分") {
+				hasRetry = true
+				break
+			}
+		}
+	}
+	if !hasRetry {
+		t.Error("Expected a retry quick-reply action containing '課程 微積分'")
 	}
 }
 
@@ -1425,9 +1583,8 @@ func TestSuggestSimilarCourses(t *testing.T) {
 	m := metrics.New(registry)
 	log := logger.New("info")
 	stickerMgr := sticker.NewManager(db, scraperClient, log)
-	seg := stringutil.NewSegmenter()
 
-	h := NewHandler(db, scraperClient, m, log, stickerMgr, nil, nil, nil, nil, nil, seg)
+	h := NewHandler(db, scraperClient, m, log, stickerMgr, nil, nil, nil, nil, nil, sharedTestSegmenter)
 
 	// Seed DB with courses
 	courses := []*storage.Course{
