@@ -109,6 +109,66 @@ func TestCutSearch(t *testing.T) {
 	}
 }
 
+func TestCutSearchAll(t *testing.T) {
+	t.Parallel()
+	seg := sharedSeg
+
+	tests := []struct {
+		name      string
+		input     string
+		wantCount int    // exact number of times the token must appear
+		token     string // the token to count
+	}{
+		{
+			name:      "Duplicate Chinese word is preserved twice",
+			input:     "雲端 雲端",
+			wantCount: 2,
+			token:     "雲端",
+		},
+		{
+			name:      "Triple repetition preserved",
+			input:     "資料 資料 資料",
+			wantCount: 3,
+			token:     "資料",
+		},
+		{
+			name:      "Duplicate English word preserved",
+			input:     "cloud cloud",
+			wantCount: 2,
+			token:     "cloud",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := seg.CutSearchAll(tt.input)
+			count := 0
+			for _, tok := range result {
+				if tok == tt.token {
+					count++
+				}
+			}
+			if count != tt.wantCount {
+				t.Errorf("CutSearchAll(%q): token %q appears %d times, want %d (result: %v)",
+					tt.input, tt.token, count, tt.wantCount, result)
+			}
+		})
+	}
+
+	// Sanity check: CutSearchAll returns strictly more tokens than CutSearch
+	// when the input contains repeated terms.
+	t.Run("Returns more tokens than CutSearch on repeated input", func(t *testing.T) {
+		t.Parallel()
+		input := "雲端 雲端"
+		all := seg.CutSearchAll(input)
+		dedup := seg.CutSearch(input)
+		if len(all) <= len(dedup) {
+			t.Errorf("CutSearchAll(%q) len=%d should be > CutSearch len=%d", input, len(all), len(dedup))
+		}
+	})
+}
+
 func TestCutSearchCJKRanges(t *testing.T) {
 	t.Parallel()
 	seg := sharedSeg
