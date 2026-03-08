@@ -9,12 +9,12 @@ import (
 func TestNewBM25Engine_EmptyCorpus(t *testing.T) {
 	t.Parallel()
 
-	_, err := newBM25Engine(nil, defaultK1, defaultB)
+	_, err := newBM25Engine(nil)
 	if err == nil {
 		t.Error("expected error for nil corpus, got nil")
 	}
 
-	_, err = newBM25Engine([][]string{}, defaultK1, defaultB)
+	_, err = newBM25Engine([][]string{})
 	if err == nil {
 		t.Error("expected error for empty corpus slice, got nil")
 	}
@@ -25,7 +25,7 @@ func TestNewBM25Engine_SingleDocument(t *testing.T) {
 	t.Parallel()
 
 	corpus := [][]string{{"雲端", "運算"}}
-	e, err := newBM25Engine(corpus, defaultK1, defaultB)
+	e, err := newBM25Engine(corpus)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestNewBM25Engine_IDFFormula(t *testing.T) {
 		{"a", "c"},
 		{"b", "d"},
 	}
-	e, err := newBM25Engine(corpus, defaultK1, defaultB)
+	e, err := newBM25Engine(corpus)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestNewBM25Engine_IDFAlwaysPositive(t *testing.T) {
 		{"a", "c"},
 		{"a", "d"}, // "a" is in every document
 	}
-	e, err := newBM25Engine(corpus, defaultK1, defaultB)
+	e, err := newBM25Engine(corpus)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestGetScores_EmptyQuery(t *testing.T) {
 	t.Parallel()
 
 	corpus := [][]string{{"a", "b"}, {"c", "d"}}
-	e, _ := newBM25Engine(corpus, defaultK1, defaultB)
+	e, _ := newBM25Engine(corpus)
 
 	if _, err := e.GetScores(nil); err == nil {
 		t.Error("expected error for nil query tokens")
@@ -121,7 +121,7 @@ func TestGetScores_AlwaysNonNegative(t *testing.T) {
 		{"機器", "學習", "演算法"},
 		{"資料", "庫", "設計"},
 	}
-	e, err := newBM25Engine(corpus, defaultK1, defaultB)
+	e, err := newBM25Engine(corpus)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestGetScores_ScoreLength(t *testing.T) {
 	t.Parallel()
 
 	corpus := [][]string{{"a"}, {"b"}, {"c"}, {"d"}}
-	e, _ := newBM25Engine(corpus, defaultK1, defaultB)
+	e, _ := newBM25Engine(corpus)
 	scores, err := e.GetScores([]string{"a"})
 	if err != nil {
 		t.Fatalf("GetScores error: %v", err)
@@ -159,7 +159,7 @@ func TestGetScores_UnknownTermZeroScore(t *testing.T) {
 	t.Parallel()
 
 	corpus := [][]string{{"a", "b"}, {"c", "d"}}
-	e, _ := newBM25Engine(corpus, defaultK1, defaultB)
+	e, _ := newBM25Engine(corpus)
 
 	scores, err := e.GetScores([]string{"xyz_not_in_corpus"})
 	if err != nil {
@@ -183,7 +183,7 @@ func TestGetScores_TFOrdering(t *testing.T) {
 		{"雲端"},       // TF = 1
 		{"資料", "結構"}, // no "雲端"
 	}
-	e, err := newBM25Engine(corpus, defaultK1, defaultB)
+	e, err := newBM25Engine(corpus)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestGetScores_MultiTermOrdering(t *testing.T) {
 		{"a"},           // matches one
 		{"z"},           // matches none
 	}
-	e, err := newBM25Engine(corpus, defaultK1, defaultB)
+	e, err := newBM25Engine(corpus)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

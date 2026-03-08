@@ -235,9 +235,14 @@ func (idx *BM25Index) buildSemesterIndex(syllabi []*storage.Syllabus) (*semester
 	// newBM25Engine stores token frequencies in an inverted index so query time
 	// requires zero tokenizer calls (versus the bm25-go library which re-tokenizes
 	// every document for every query token — O(N_query × N_docs) gse HMM calls).
+	//
+	// Note: use tokenizeDoc (no dedup) so repeated terms in a syllabus are counted
+	// correctly — both TF and document length must reflect actual occurrence counts.
+	// Query tokens still use idx.Tokenize (dedup) since a query term appearing twice
+	// carries no additional signal.
 	tokenizedCorpus := make([][]string, len(corpus))
 	for i, doc := range corpus {
-		tokenizedCorpus[i] = idx.Tokenize(doc)
+		tokenizedCorpus[i] = idx.tokenizeDoc(doc)
 	}
 
 	// Build BM25 engine for this semester (independent IDF).
@@ -250,7 +255,7 @@ func (idx *BM25Index) buildSemesterIndex(syllabi []*storage.Syllabus) (*semester
 	//
 	// References: Stanford IR textbook, Elasticsearch docs, Azure AI Search defaults,
 	// bilingual Chinese/English experiments (KDD05), Korean biomedical TREC system.
-	engine, err := newBM25Engine(tokenizedCorpus, defaultK1, defaultB)
+	engine, err := newBM25Engine(tokenizedCorpus)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -467,10 +472,17 @@ func (idx *BM25Index) Count() int {
 	return total
 }
 
-// Tokenize performs tokenization using the shared Chinese segmenter.
-// This method is used both for indexing and querying.
-// Delegates to Segmenter.CutSearch which handles lowercasing, CJK segmentation,
-// non-CJK word splitting, and deduplication.
+// Tokenize performs tokenization for search queries using the shared Chinese segmenter.
+// Duplicates are removed because the same query term appearing twice carries no
+// additional signal for BM25 scoring.
 func (idx *BM25Index) Tokenize(text string) []string {
 	return idx.seg.CutSearch(text)
+}
+
+// tokenizeDoc performs tokenization for document indexing without deduplication.
+// Preserving duplicate tokens is essential for correct BM25 TF and document-length
+// normalization: a syllabus mentioning "雲端" five times should rank higher than
+// one that mentions it once.
+func (idx *BM25Index) tokenizeDoc(text string) []string {
+	return idx.seg.CutSearchAll(text)
 }

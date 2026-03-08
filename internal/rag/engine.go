@@ -66,7 +66,7 @@ type docPosting struct {
 // newBM25Engine builds a BM25 Okapi engine from a pre-tokenized corpus.
 // Each element of tokenizedCorpus is the token list for one document.
 // Documents in tokenizedCorpus must correspond 1-to-1 with uidList in semesterIndex.
-func newBM25Engine(tokenizedCorpus [][]string, k1, b float64) (*bm25Engine, error) {
+func newBM25Engine(tokenizedCorpus [][]string) (*bm25Engine, error) {
 	if len(tokenizedCorpus) == 0 {
 		return nil, errors.New("bm25: corpus cannot be empty")
 	}
@@ -75,8 +75,8 @@ func newBM25Engine(tokenizedCorpus [][]string, k1, b float64) (*bm25Engine, erro
 		invertedIndex: make(map[string][]docPosting, 1024),
 		docLengths:    make([]int, len(tokenizedCorpus)),
 		corpusSize:    len(tokenizedCorpus),
-		k1:            k1,
-		b:             b,
+		k1:            defaultK1,
+		b:             defaultB,
 	}
 
 	// termDocFreq[term] = number of documents containing term (used for IDF).
@@ -111,8 +111,8 @@ func newBM25Engine(tokenizedCorpus [][]string, k1, b float64) (*bm25Engine, erro
 	n := float64(e.corpusSize)
 	for term, df := range termDocFreq {
 		// Lucene IDF variant: log(1 + (N-df+0.5)/(df+0.5))
-		// Because df ≤ N, the log argument is always ≥ log(1+0.5/(N+0.5)) > 1,
-		// so IDF is always positive. The guard is retained for defense-in-depth.
+		// Because df ≤ N, the quantity inside the log is always ≥ 1+0.5/(N+0.5) > 1,
+		// so the log value (IDF) is always positive. The guard is retained for defense-in-depth.
 		idf := math.Log((n-float64(df)+0.5)/(float64(df)+0.5) + 1.0)
 		if idf > 0 {
 			e.idfValues[term] = idf
