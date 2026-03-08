@@ -199,9 +199,10 @@ func (p *geminiIntentParser) Close() error {
 
 // geminiThinkingConfig returns the appropriate ThinkingConfig for the given Gemini model
 // to minimize latency for simple classification and extraction tasks.
+// Returns nil for unrecognized or legacy models (1.x, 2.0) that do not support ThinkingConfig.
 //
 //   - Gemini 2.5 models: ThinkingLevel is not applicable; use ThinkingBudget.
-//   - All other models (Gemini 3.x+): ThinkingBudget is unsupported and returns an error; use ThinkingLevel.
+//   - Gemini 3.x+ models: ThinkingBudget is unsupported and returns an error; use ThinkingLevel.
 func geminiThinkingConfig(model string) *genai.ThinkingConfig {
 	lower := strings.ToLower(model)
 	if strings.Contains(lower, "2.5") {
@@ -213,7 +214,12 @@ func geminiThinkingConfig(model string) *genai.ThinkingConfig {
 		}
 		return &genai.ThinkingConfig{ThinkingBudget: &budget}
 	}
-	// Gemini 3.x and later: level-based control.
-	// LOW minimizes latency while retaining enough reasoning for straightforward tasks.
-	return &genai.ThinkingConfig{ThinkingLevel: genai.ThinkingLevelLow}
+	if strings.Contains(lower, "gemini-3") {
+		// Gemini 3.x and later: level-based control.
+		// LOW minimizes latency while retaining enough reasoning for straightforward tasks.
+		return &genai.ThinkingConfig{ThinkingLevel: genai.ThinkingLevelLow}
+	}
+	// Unrecognized or legacy model (e.g., 1.5, 2.0): skip ThinkingConfig to avoid
+	// runtime errors from unsupported API fields.
+	return nil
 }

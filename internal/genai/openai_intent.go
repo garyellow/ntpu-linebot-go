@@ -309,8 +309,9 @@ func openaiReasoningOpts(provider Provider, model string) []option.RequestOption
 		case strings.Contains(lower, "gpt-oss"):
 			// gpt-oss-120b/20b on Groq: default "medium" effort; "low" is sufficient.
 			opts = append(opts, option.WithJSONSet("reasoning_effort", "low"))
-		case strings.Contains(lower, "qwen3"):
-			// Qwen3 thinking models: disable reasoning entirely (cheaper and faster).
+		case strings.Contains(lower, "qwen3") || strings.Contains(lower, "qwen-3"):
+			// Qwen3 thinking models (e.g., "qwen/qwen3-32b", "qwen-3-32b"):
+			// disable reasoning entirely (cheaper and faster).
 			opts = append(opts, option.WithJSONSet("reasoning_effort", "none"))
 		}
 	case ProviderCerebras:

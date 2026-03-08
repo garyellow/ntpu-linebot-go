@@ -173,20 +173,30 @@ func TestGeminiThinkingConfig(t *testing.T) {
 	budget512 := int32(512)
 	tests := []struct {
 		model      string
+		wantNil    bool
 		wantBudget *int32              // non-nil for 2.5 series
 		wantLevel  genai.ThinkingLevel // non-zero for 3.x and later
 	}{
-		{"gemini-2.5-flash", &budget0, ""},
-		{"gemini-2.5-flash-latest", &budget0, ""},
-		{"gemini-2.5-pro", &budget512, ""},
-		{"gemini-2.5-pro-preview", &budget512, ""},
-		{"gemini-3.1-pro-preview", nil, genai.ThinkingLevelLow},
-		{"GEMINI-2.5-FLASH", &budget0, ""}, // case-insensitive
+		{"gemini-2.5-flash", false, &budget0, ""},
+		{"gemini-2.5-flash-latest", false, &budget0, ""},
+		{"gemini-2.5-pro", false, &budget512, ""},
+		{"gemini-2.5-pro-preview", false, &budget512, ""},
+		{"gemini-3.1-pro-preview", false, nil, genai.ThinkingLevelLow},
+		{"GEMINI-2.5-FLASH", false, &budget0, ""}, // case-insensitive
+		// Legacy/unrecognized models must return nil to avoid unsupported API fields.
+		{"gemini-1.5-pro", true, nil, ""},
+		{"gemini-2.0-flash", true, nil, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.model, func(t *testing.T) {
 			t.Parallel()
 			cfg := geminiThinkingConfig(tt.model)
+			if tt.wantNil {
+				if cfg != nil {
+					t.Errorf("expected nil ThinkingConfig for legacy model %q, got %+v", tt.model, cfg)
+				}
+				return
+			}
 			if cfg == nil {
 				t.Fatal("expected non-nil ThinkingConfig")
 			}

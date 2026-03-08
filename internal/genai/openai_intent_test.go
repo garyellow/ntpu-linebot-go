@@ -265,6 +265,7 @@ func TestOpenAIReasoningOpts(t *testing.T) {
 		{"groq/gpt-oss-120b", ProviderGroq, "openai/gpt-oss-120b", 1},
 		{"groq/gpt-oss-20b", ProviderGroq, "openai/gpt-oss-20b", 1},
 		{"groq/qwen3-32b", ProviderGroq, "qwen/qwen3-32b", 1},
+		{"groq/qwen-3-32b (dash form)", ProviderGroq, "qwen-3-32b", 1},
 		{"groq/kimi-k2", ProviderGroq, "moonshotai/kimi-k2-instruct", 0},
 		{"groq/llama-4-maverick", ProviderGroq, "meta-llama/llama-4-maverick-17b-128e-instruct", 0},
 		{"groq/llama-3.3", ProviderGroq, "llama-3.3-70b-versatile", 0},
