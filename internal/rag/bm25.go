@@ -418,7 +418,7 @@ func (semIdx *semesterIndex) search(query string, topN int, tokenizer func(strin
 //   - Confidence is calculated within each semester (best match = 1.0)
 //   - Results from both semesters are combined and returned
 func (idx *BM25Index) SearchCourses(_ context.Context, query string, topN int) ([]SearchResult, error) {
-	if idx == nil || !idx.initialized || len(idx.semesterIndexes) == 0 {
+	if idx == nil {
 		return nil, nil
 	}
 
@@ -428,6 +428,10 @@ func (idx *BM25Index) SearchCourses(_ context.Context, query string, topN int) (
 
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
+
+	if !idx.initialized || len(idx.semesterIndexes) == 0 {
+		return nil, nil
+	}
 
 	// Get newest 2 semesters
 	newestTwo := idx.getNewestTwoSemesters()

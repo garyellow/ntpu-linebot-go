@@ -935,8 +935,11 @@ func (a *Application) runDataCleanup(ctx context.Context) (bool, error) {
 	if deleted, err := a.db.DeleteStaleSyllabusTokens(ctx); err != nil {
 		a.logger.WithError(err).Error("Failed to cleanup stale syllabus tokens")
 		cleanupErr = errors.Join(cleanupErr, err)
-	} else if deleted > 0 {
-		a.logger.WithField("deleted", deleted).Debug("Cleaned up stale syllabus tokens")
+	} else {
+		totalDeleted += deleted
+		if deleted > 0 {
+			a.logger.WithField("deleted", deleted).Debug("Cleaned up stale syllabus tokens")
+		}
 	}
 
 	if _, err := a.db.Writer().ExecContext(ctx, "VACUUM"); err != nil {
