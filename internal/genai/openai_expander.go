@@ -131,26 +131,7 @@ func (e *openaiQueryExpander) Expand(ctx context.Context, query string) (string,
 
 	// Suppress reasoning tokens on thinking-capable models to reduce latency.
 	// Simple keyword extraction does not benefit from deep reasoning chains.
-	var extraOpts []option.RequestOption
-	switch e.provider {
-	case ProviderGroq:
-		lower := strings.ToLower(e.model)
-		switch {
-		case strings.Contains(lower, "gpt-oss"):
-			// gpt-oss-120b/20b on Groq: default "medium" reasoning; "low" suffices
-			// for keyword extraction and saves latency.
-			extraOpts = append(extraOpts, option.WithJSONSet("reasoning_effort", "low"))
-		case strings.Contains(lower, "qwen3"):
-			// Qwen3 thinking models on Groq: disable reasoning entirely.
-			// (no thinking tokens generated at all — cheaper and faster)
-			extraOpts = append(extraOpts, option.WithJSONSet("reasoning_effort", "none"))
-		}
-	case ProviderCerebras:
-		// gpt-oss-120b on Cerebras: default "medium" reasoning; "low" suffices.
-		if strings.Contains(strings.ToLower(e.model), "gpt-oss") {
-			extraOpts = append(extraOpts, option.WithJSONSet("reasoning_effort", "low"))
-		}
-	}
+	extraOpts := openaiReasoningOpts(e.provider, e.model)
 
 	start := time.Now()
 	resp, err := e.client.Chat.Completions.New(ctx, params, extraOpts...)

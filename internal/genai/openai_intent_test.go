@@ -253,3 +253,33 @@ func TestProvider_IsOpenAICompatible(t *testing.T) {
 		})
 	}
 }
+
+func TestOpenAIReasoningOpts(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		provider Provider
+		model    string
+		wantLen  int
+	}{
+		{"groq/gpt-oss-120b", ProviderGroq, "openai/gpt-oss-120b", 1},
+		{"groq/gpt-oss-20b", ProviderGroq, "openai/gpt-oss-20b", 1},
+		{"groq/qwen3-32b", ProviderGroq, "qwen/qwen3-32b", 1},
+		{"groq/kimi-k2", ProviderGroq, "moonshotai/kimi-k2-instruct", 0},
+		{"groq/llama-4-maverick", ProviderGroq, "meta-llama/llama-4-maverick-17b-128e-instruct", 0},
+		{"groq/llama-3.3", ProviderGroq, "llama-3.3-70b-versatile", 0},
+		{"cerebras/gpt-oss-120b", ProviderCerebras, "gpt-oss-120b", 1},
+		{"cerebras/unknown", ProviderCerebras, "some-other-model", 0},
+		{"gemini/not-applicable", ProviderGemini, "gemini-3.1-pro-preview", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := openaiReasoningOpts(tt.provider, tt.model)
+			if len(got) != tt.wantLen {
+				t.Errorf("openaiReasoningOpts(%v, %q) returned %d opts, want %d",
+					tt.provider, tt.model, len(got), tt.wantLen)
+			}
+		})
+	}
+}

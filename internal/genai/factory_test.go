@@ -11,7 +11,7 @@ func TestDefaultLLMConfig(t *testing.T) {
 
 	// Check default provider order (slice-based)
 	if len(cfg.Providers) != len(DefaultProviders) {
-		t.Errorf("Providers length = %v, want %v", len(cfg.Providers), len(DefaultProviders))
+		t.Fatalf("Providers length = %v, want %v", len(cfg.Providers), len(DefaultProviders))
 	}
 	for i, p := range cfg.Providers {
 		if p != DefaultProviders[i] {
@@ -21,7 +21,7 @@ func TestDefaultLLMConfig(t *testing.T) {
 
 	// Check Gemini defaults (now using slice-based model chains)
 	if len(cfg.Gemini.IntentModels) != len(DefaultGeminiIntentModels) {
-		t.Errorf("Gemini.IntentModels length = %v, want %v", len(cfg.Gemini.IntentModels), len(DefaultGeminiIntentModels))
+		t.Fatalf("Gemini.IntentModels length = %v, want %v", len(cfg.Gemini.IntentModels), len(DefaultGeminiIntentModels))
 	}
 	for i, model := range cfg.Gemini.IntentModels {
 		if model != DefaultGeminiIntentModels[i] {
@@ -29,7 +29,7 @@ func TestDefaultLLMConfig(t *testing.T) {
 		}
 	}
 	if len(cfg.Gemini.ExpanderModels) != len(DefaultGeminiExpanderModels) {
-		t.Errorf("Gemini.ExpanderModels length = %v, want %v", len(cfg.Gemini.ExpanderModels), len(DefaultGeminiExpanderModels))
+		t.Fatalf("Gemini.ExpanderModels length = %v, want %v", len(cfg.Gemini.ExpanderModels), len(DefaultGeminiExpanderModels))
 	}
 	for i, model := range cfg.Gemini.ExpanderModels {
 		if model != DefaultGeminiExpanderModels[i] {
@@ -39,7 +39,7 @@ func TestDefaultLLMConfig(t *testing.T) {
 
 	// Check Groq defaults
 	if len(cfg.Groq.IntentModels) != len(DefaultGroqIntentModels) {
-		t.Errorf("Groq.IntentModels length = %v, want %v", len(cfg.Groq.IntentModels), len(DefaultGroqIntentModels))
+		t.Fatalf("Groq.IntentModels length = %v, want %v", len(cfg.Groq.IntentModels), len(DefaultGroqIntentModels))
 	}
 	for i, model := range cfg.Groq.IntentModels {
 		if model != DefaultGroqIntentModels[i] {
@@ -47,7 +47,7 @@ func TestDefaultLLMConfig(t *testing.T) {
 		}
 	}
 	if len(cfg.Groq.ExpanderModels) != len(DefaultGroqExpanderModels) {
-		t.Errorf("Groq.ExpanderModels length = %v, want %v", len(cfg.Groq.ExpanderModels), len(DefaultGroqExpanderModels))
+		t.Fatalf("Groq.ExpanderModels length = %v, want %v", len(cfg.Groq.ExpanderModels), len(DefaultGroqExpanderModels))
 	}
 	for i, model := range cfg.Groq.ExpanderModels {
 		if model != DefaultGroqExpanderModels[i] {
@@ -57,7 +57,7 @@ func TestDefaultLLMConfig(t *testing.T) {
 
 	// Check Cerebras defaults
 	if len(cfg.Cerebras.IntentModels) != len(DefaultCerebrasIntentModels) {
-		t.Errorf("Cerebras.IntentModels length = %v, want %v", len(cfg.Cerebras.IntentModels), len(DefaultCerebrasIntentModels))
+		t.Fatalf("Cerebras.IntentModels length = %v, want %v", len(cfg.Cerebras.IntentModels), len(DefaultCerebrasIntentModels))
 	}
 	for i, model := range cfg.Cerebras.IntentModels {
 		if model != DefaultCerebrasIntentModels[i] {
@@ -65,7 +65,7 @@ func TestDefaultLLMConfig(t *testing.T) {
 		}
 	}
 	if len(cfg.Cerebras.ExpanderModels) != len(DefaultCerebrasExpanderModels) {
-		t.Errorf("Cerebras.ExpanderModels length = %v, want %v", len(cfg.Cerebras.ExpanderModels), len(DefaultCerebrasExpanderModels))
+		t.Fatalf("Cerebras.ExpanderModels length = %v, want %v", len(cfg.Cerebras.ExpanderModels), len(DefaultCerebrasExpanderModels))
 	}
 	for i, model := range cfg.Cerebras.ExpanderModels {
 		if model != DefaultCerebrasExpanderModels[i] {
