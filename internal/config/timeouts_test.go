@@ -167,6 +167,27 @@ func TestGracefulShutdownTimeout(t *testing.T) {
 	}
 }
 
+// TestSessionAndCacheTimeouts verifies session and semester cache timeout constants
+func TestSessionAndCacheTimeouts(t *testing.T) {
+	tests := []struct {
+		name     string
+		got      time.Duration
+		expected time.Duration
+	}{
+		{"SessionContextTTL", SessionContextTTL, 5 * time.Minute},
+		{"StickerLoadTimeout", StickerLoadTimeout, 5 * time.Minute},
+		{"SemesterCacheRefreshTimeout", SemesterCacheRefreshTimeout, 5 * time.Second},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.got != tt.expected {
+				t.Errorf("%s = %v, want %v", tt.name, tt.got, tt.expected)
+			}
+		})
+	}
+}
+
 // TestTimeoutRelationships verifies that timeouts have proper relationships
 func TestTimeoutRelationships(t *testing.T) {
 	// WebhookHTTPWrite should be greater than WebhookProcessing

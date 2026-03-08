@@ -15,7 +15,6 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-ego/gse v1.0.1
 	github.com/google/uuid v1.6.0
-	github.com/iwilltry42/bm25-go v0.0.0-20240909111832-a928590cc9da
 	github.com/joho/godotenv v1.5.1
 	github.com/klauspost/compress v1.18.4
 	github.com/line/line-bot-sdk-go/v8 v8.19.0
@@ -23,7 +22,7 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	github.com/samber/slog-betterstack v1.4.3
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/sync v0.19.0
+	golang.org/x/sync v0.20.0
 	golang.org/x/text v0.34.0
 	google.golang.org/genai v1.49.0
 	modernc.org/sqlite v1.46.1
@@ -103,10 +102,10 @@ require (
 	go.opentelemetry.io/otel/metric v1.42.0 // indirect
 	go.opentelemetry.io/otel/trace v1.42.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
-	golang.org/x/arch v0.24.0 // indirect
+	golang.org/x/arch v0.25.0 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/net v0.51.0 // indirect
-	golang.org/x/sys v0.41.0 // indirect
+	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/tools v0.42.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260226221140-a57be14db171 // indirect
 	google.golang.org/grpc v1.79.2 // indirect

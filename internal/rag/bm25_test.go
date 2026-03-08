@@ -475,6 +475,8 @@ func TestTokenize(t *testing.T) {
 
 func TestComputeRelativeConfidence(t *testing.T) {
 	t.Parallel()
+	// BM25 Okapi with Lucene IDF always produces non-negative scores,
+	// so only non-negative inputs are tested.
 	tests := []struct {
 		name     string
 		score    float64
@@ -484,8 +486,8 @@ func TestComputeRelativeConfidence(t *testing.T) {
 		{"Max score gets 1.0", 10.0, 10.0, 1.0},
 		{"Half score gets 0.5", 5.0, 10.0, 0.5},
 		{"Zero max returns 0", 5.0, 0.0, 0.0},
-		{"Negative scores - best is 1.0", -7.68, -7.68, 1.0},
-		{"Negative scores - worse gets less", -8.21, -7.68, 0.935}, // 7.68/8.21 ≈ 0.935
+		{"Negative maxScore returns 0", 1.0, -1.0, 0.0},
+		{"Score exceeding max clamped to 1.0", 12.0, 10.0, 1.0},
 	}
 
 	for _, tt := range tests {
