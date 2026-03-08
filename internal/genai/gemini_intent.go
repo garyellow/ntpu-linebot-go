@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"google.golang.org/genai"
@@ -70,6 +71,7 @@ func (p *geminiIntentParser) Parse(ctx context.Context, text string) (*ParseResu
 		},
 		Temperature:     genai.Ptr[float32](0.1), // Low temperature for consistent classification
 		MaxOutputTokens: 16384,                   // High limit to prevent truncation of tool call responses
+		ThinkingConfig:  geminiThinkingConfig(p.model),
 	}
 
 	// Generate content with timing
@@ -192,5 +194,32 @@ func (p *geminiIntentParser) Close() error {
 		return nil
 	}
 	// Note: genai.Client does not require explicit cleanup in current SDK version
+	return nil
+}
+
+// geminiThinkingConfig returns the appropriate ThinkingConfig for the given Gemini model
+// to minimize latency for simple classification and extraction tasks.
+// Returns nil for unrecognized or legacy models (1.x, 2.0) that do not support ThinkingConfig.
+//
+//   - Gemini 2.5 models: ThinkingLevel is not applicable; use ThinkingBudget.
+//   - Gemini 3.x+ models: ThinkingBudget is unsupported and returns an error; use ThinkingLevel.
+func geminiThinkingConfig(model string) *genai.ThinkingConfig {
+	lower := strings.ToLower(model)
+	if strings.Contains(lower, "2.5") {
+		// Gemini 2.5 series: budget-based control.
+		// Flash is already fast; disable thinking entirely. Pro gets a small budget.
+		budget := int32(512)
+		if strings.Contains(lower, "flash") {
+			budget = 0
+		}
+		return &genai.ThinkingConfig{ThinkingBudget: &budget}
+	}
+	if strings.Contains(lower, "gemini-3") {
+		// Gemini 3.x and later: level-based control.
+		// LOW minimizes latency while retaining enough reasoning for straightforward tasks.
+		return &genai.ThinkingConfig{ThinkingLevel: genai.ThinkingLevelLow}
+	}
+	// Unrecognized or legacy model (e.g., 1.5, 2.0): skip ThinkingConfig to avoid
+	// runtime errors from unsupported API fields.
 	return nil
 }

@@ -37,7 +37,7 @@ func TestNewOpenAIQueryExpander_ValidKey(t *testing.T) {
 
 func TestNewOpenAIQueryExpander_Cerebras(t *testing.T) {
 	t.Parallel()
-	expander, err := newOpenAIQueryExpander(context.Background(), ProviderCerebras, "test-key", "llama-3.3-70b", "")
+	expander, err := newOpenAIQueryExpander(context.Background(), ProviderCerebras, "test-key", "gpt-oss-120b", "")
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
@@ -47,6 +47,9 @@ func TestNewOpenAIQueryExpander_Cerebras(t *testing.T) {
 	}
 	if expander.provider != ProviderCerebras {
 		t.Errorf("Expected provider %v, got %v", ProviderCerebras, expander.provider)
+	}
+	if expander.model != "gpt-oss-120b" {
+		t.Errorf("Expected model gpt-oss-120b, got %v", expander.model)
 	}
 }
 

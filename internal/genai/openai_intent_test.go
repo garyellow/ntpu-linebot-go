@@ -37,7 +37,7 @@ func TestNewOpenAIIntentParser_ValidKey(t *testing.T) {
 
 func TestNewOpenAIIntentParser_Cerebras(t *testing.T) {
 	t.Parallel()
-	parser, err := newOpenAIIntentParser(context.Background(), ProviderCerebras, "test-key", "llama-3.3-70b", "")
+	parser, err := newOpenAIIntentParser(context.Background(), ProviderCerebras, "test-key", "gpt-oss-120b", "")
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
@@ -48,8 +48,8 @@ func TestNewOpenAIIntentParser_Cerebras(t *testing.T) {
 	if parser.provider != ProviderCerebras {
 		t.Errorf("Expected provider %v, got %v", ProviderCerebras, parser.provider)
 	}
-	if parser.model != "llama-3.3-70b" {
-		t.Errorf("Expected model llama-3.3-70b, got %v", parser.model)
+	if parser.model != "gpt-oss-120b" {
+		t.Errorf("Expected model gpt-oss-120b, got %v", parser.model)
 	}
 }
 
@@ -249,6 +249,37 @@ func TestProvider_IsOpenAICompatible(t *testing.T) {
 			got := tt.provider.IsOpenAICompatible()
 			if got != tt.want {
 				t.Errorf("Provider.IsOpenAICompatible() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestOpenAIReasoningOpts(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		provider Provider
+		model    string
+		wantLen  int
+	}{
+		{"groq/gpt-oss-120b", ProviderGroq, "openai/gpt-oss-120b", 1},
+		{"groq/gpt-oss-20b", ProviderGroq, "openai/gpt-oss-20b", 1},
+		{"groq/qwen3-32b", ProviderGroq, "qwen/qwen3-32b", 1},
+		{"groq/qwen-3-32b (dash form)", ProviderGroq, "qwen-3-32b", 1},
+		{"groq/kimi-k2", ProviderGroq, "moonshotai/kimi-k2-instruct", 0},
+		{"groq/llama-4-maverick", ProviderGroq, "meta-llama/llama-4-maverick-17b-128e-instruct", 0},
+		{"groq/llama-3.3", ProviderGroq, "llama-3.3-70b-versatile", 0},
+		{"cerebras/gpt-oss-120b", ProviderCerebras, "gpt-oss-120b", 1},
+		{"cerebras/unknown", ProviderCerebras, "some-other-model", 0},
+		{"gemini/not-applicable", ProviderGemini, "gemini-3.1-pro-preview", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := openaiReasoningOpts(tt.provider, tt.model)
+			if len(got) != tt.wantLen {
+				t.Errorf("openaiReasoningOpts(%v, %q) returned %d opts, want %d",
+					tt.provider, tt.model, len(got), tt.wantLen)
 			}
 		})
 	}

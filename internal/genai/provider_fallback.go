@@ -96,6 +96,7 @@ func (f *FallbackIntentParser) Parse(ctx context.Context, text string) (*ParseRe
 			"to_provider", f.parsers[i+1].Provider())
 	}
 
+	// Defensive fallback: loop above is expected to return on all paths
 	return nil, fmt.Errorf("all intent parsers failed: %w", lastErr)
 }
 

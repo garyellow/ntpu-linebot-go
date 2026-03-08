@@ -129,25 +129,9 @@ func (e *openaiQueryExpander) Expand(ctx context.Context, query string) (string,
 		MaxTokens:   openai.Int(16384),
 	}
 
-	// Suppress reasoning tokens for Qwen3 thinking models on Groq and Cerebras.
-	// These models default to "raw" reasoning format which embeds <think>...</think>
-	// blocks in the content field, breaking ParseExpandedOutput. Disabling reasoning
-	// also reduces latency and cost for this simple keyword extraction task.
-	var extraOpts []option.RequestOption
-	switch e.provider {
-	case ProviderGroq:
-		if strings.Contains(strings.ToLower(e.model), "qwen3") {
-			// reasoning_effort:"none" disables thinking entirely on Groq Qwen3
-			// (no thinking tokens generated at all — cheaper and faster).
-			extraOpts = append(extraOpts, option.WithJSONSet("reasoning_effort", "none"))
-		}
-	case ProviderCerebras:
-		if strings.Contains(strings.ToLower(e.model), "qwen-3") {
-			// reasoning_format:"hidden" prevents <think> blocks from appearing in
-			// the content field for Cerebras Qwen3 (default is "raw").
-			extraOpts = append(extraOpts, option.WithJSONSet("reasoning_format", "hidden"))
-		}
-	}
+	// Suppress reasoning tokens on thinking-capable models to reduce latency.
+	// Simple keyword extraction does not benefit from deep reasoning chains.
+	extraOpts := openaiReasoningOpts(e.provider, e.model)
 
 	start := time.Now()
 	resp, err := e.client.Chat.Completions.New(ctx, params, extraOpts...)

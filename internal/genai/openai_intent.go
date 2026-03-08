@@ -161,9 +161,13 @@ func (p *openaiIntentParser) Parse(ctx context.Context, text string) (*ParseResu
 		MaxTokens:   openai.Int(16384), // High limit to prevent truncation of tool call responses
 	}
 
+	// Suppress reasoning tokens on thinking-capable models to reduce latency.
+	// Simple intent classification does not benefit from deep reasoning chains.
+	extraOpts := openaiReasoningOpts(p.provider, p.model)
+
 	// Execute request with timing
 	start := time.Now()
-	resp, err := p.client.Chat.Completions.New(ctx, params)
+	resp, err := p.client.Chat.Completions.New(ctx, params, extraOpts...)
 	duration := time.Since(start)
 
 	if err != nil {
@@ -287,4 +291,34 @@ func (p *openaiIntentParser) Close() error {
 	}
 	// openai-go client doesn't require cleanup
 	return nil
+}
+
+// openaiReasoningOpts returns provider/model-specific request options that suppress
+// unnecessary reasoning tokens, reducing latency for simple single-turn tasks
+// (intent classification, keyword extraction) that do not benefit from deep reasoning.
+//
+//   - Groq gpt-oss-120b/20b:  reasoning_effort "low"  (default is "medium")
+//   - Groq qwen/qwen3-32b:   reasoning_effort "none" (disable thinking entirely)
+//   - Cerebras gpt-oss-120b: reasoning_effort "low"  (default is "medium")
+func openaiReasoningOpts(provider Provider, model string) []option.RequestOption {
+	var opts []option.RequestOption
+	switch provider {
+	case ProviderGroq:
+		lower := strings.ToLower(model)
+		switch {
+		case strings.Contains(lower, "gpt-oss"):
+			// gpt-oss-120b/20b on Groq: default "medium" effort; "low" is sufficient.
+			opts = append(opts, option.WithJSONSet("reasoning_effort", "low"))
+		case strings.Contains(lower, "qwen3") || strings.Contains(lower, "qwen-3"):
+			// Qwen3 thinking models (e.g., "qwen/qwen3-32b", "qwen-3-32b"):
+			// disable reasoning entirely (cheaper and faster).
+			opts = append(opts, option.WithJSONSet("reasoning_effort", "none"))
+		}
+	case ProviderCerebras:
+		// gpt-oss-120b on Cerebras: default "medium" effort; "low" is sufficient.
+		if strings.Contains(strings.ToLower(model), "gpt-oss") {
+			opts = append(opts, option.WithJSONSet("reasoning_effort", "low"))
+		}
+	}
+	return opts
 }
