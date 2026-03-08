@@ -244,7 +244,9 @@ func stripThinkingBlocks(s string) string {
 //  2. Fallback: If "分析：" exists, take first keyword-looking line after the analysis line
 //  3. Last resort: Accept the first keyword-looking plain line for providers that skip the structured format
 //
-// Returns "" if no keywords can be extracted; callers should fall back to the original query.
+// Returns "" if no keywords can be extracted. Callers are responsible for deciding how to handle
+// that case: expanders treat it as an error and propagate it, allowing upstream fallback logic
+// (provider chain, smart-search abort) to take over.
 func ParseExpandedOutput(output string) string {
 	output = strings.TrimSpace(output)
 	if output == "" {

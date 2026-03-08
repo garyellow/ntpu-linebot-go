@@ -1937,7 +1937,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 				lineutil.ErrorMessageWithQuickReply(
 					"智慧搜尋需要 AI 輔助，今日 AI 配額已用完\n\n建議改用精確搜尋\n• 課程 微積分\n• 課程 王小明",
 					sender,
-					"課程 "+query,
+					"",
 					retryQRs...,
 				),
 			}
@@ -1952,7 +1952,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 				lineutil.ErrorMessageWithQuickReply(
 					"智慧搜尋暫時無法使用\n\n建議改用精確搜尋\n• 課程 微積分\n• 課程 王小明",
 					sender,
-					"課程 "+query,
+					"",
 					retryQRs...,
 				),
 			}

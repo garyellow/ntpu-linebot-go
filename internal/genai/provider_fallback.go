@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
@@ -428,6 +429,15 @@ func classifyErrorType(err error) string {
 	action := ClassifyError(err)
 	switch action {
 	case ActionFallback:
+		// Distinguish the three reasons that all produce ActionFallback.
+		errStr := strings.ToLower(err.Error())
+		if containsAny(errStr, "401", "unauthorized", "unauthenticated", "invalid api key", "invalid_api_key",
+			"403", "forbidden", "permission denied") {
+			return "auth_error"
+		}
+		if containsAny(errStr, "404", "not found") {
+			return "model_not_found"
+		}
 		return "quota_exhausted"
 	case ActionRetry:
 		return "transient_error"

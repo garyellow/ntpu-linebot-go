@@ -42,7 +42,6 @@ type LLMError struct {
 	Err        error
 	StatusCode int
 	Provider   Provider
-	Retryable  bool
 }
 
 // Error implements the error interface.
@@ -59,10 +58,10 @@ func (e *LLMError) Unwrap() error {
 }
 
 // ClassifyError determines the appropriate action based on the error.
-// This follows industry for LLM API error handling:
+// This follows industry norms for LLM API error handling:
 //   - Transient errors (429, 5xx, network) → Retry
-//   - Quota exhaustion → Fallback to other provider
-//   - Permanent errors (400, 401, 403, 404) → Fail immediately
+//   - Quota exhaustion, auth failure (401, 403), model not found (404) → Fallback to other provider
+//   - Permanent client errors (400, 422) → Fail immediately
 func ClassifyError(err error) ErrorAction {
 	if err == nil {
 		return ActionFail
@@ -113,17 +112,23 @@ func ClassifyError(err error) ErrorAction {
 		return ActionRetry
 	}
 
-	// Check for permanent errors (fail immediately)
-	if containsAny(errStr, "400", "invalid", "bad request", "malformed") {
-		return ActionFail
-	}
-	if containsAny(errStr, "401", "unauthorized", "unauthenticated", "invalid api key") {
-		return ActionFail
+	// Auth/permission errors are provider-specific: the key may be wrong for THIS provider
+	// but other providers may still work, so fall back rather than failing entirely.
+	// IMPORTANT: check auth patterns BEFORE the broad "invalid" permanent-error catch below.
+	if containsAny(errStr, "401", "unauthorized", "unauthenticated", "invalid api key", "invalid_api_key") {
+		return ActionFallback
 	}
 	if containsAny(errStr, "403", "forbidden", "permission denied") {
-		return ActionFail
+		return ActionFallback
 	}
+
+	// 404: model/endpoint not found on THIS provider — another provider may still work.
 	if containsAny(errStr, "404", "not found") {
+		return ActionFallback
+	}
+
+	// Check for permanent errors (fail immediately)
+	if containsAny(errStr, "400", "invalid request", "bad request", "malformed") {
 		return ActionFail
 	}
 	if containsAny(errStr, "422", "unprocessable") {
@@ -158,11 +163,11 @@ func classifyStatusCode(statusCode int) ErrorAction {
 	case statusCode == http.StatusBadRequest: // 400
 		return ActionFail
 	case statusCode == http.StatusUnauthorized: // 401
-		return ActionFail
+		return ActionFallback // key is wrong for this provider; try next
 	case statusCode == http.StatusForbidden: // 403
-		return ActionFail
-	case statusCode == http.StatusNotFound: // 404
-		return ActionFail
+		return ActionFallback // key has no permission at this provider; try next
+	case statusCode == http.StatusNotFound: // 404 – model/endpoint missing on this provider; try next
+		return ActionFallback
 	case statusCode == http.StatusUnprocessableEntity: // 422
 		return ActionFail
 	case statusCode >= 400 && statusCode < 500: // other 4xx
@@ -229,17 +234,4 @@ func containsAny(s string, substrings ...string) bool {
 		}
 	}
 	return false
-}
-
-// WrapError wraps an error with provider and status code information.
-func WrapError(err error, provider Provider, statusCode int) error {
-	if err == nil {
-		return nil
-	}
-	return &LLMError{
-		Err:        err,
-		StatusCode: statusCode,
-		Provider:   provider,
-		Retryable:  ClassifyError(err) == ActionRetry,
-	}
 }

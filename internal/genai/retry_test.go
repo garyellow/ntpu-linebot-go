@@ -203,7 +203,7 @@ func TestWithRetry(t *testing.T) {
 		attempts := 0
 		err := WithRetry(context.Background(), cfg, func() error {
 			attempts++
-			return errors.New("invalid api key") // permanent
+			return errors.New("bad request") // permanent (400)
 		})
 
 		if err == nil {

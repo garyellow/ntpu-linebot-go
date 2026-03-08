@@ -478,8 +478,8 @@ Fallback → getHelpMessage() + Warning Log
 
 **Default Models**:
 - Gemini: `gemini-3.1-pro-preview` (intent), `gemini-3.1-pro-preview` (expander), with `gemini-2.5-pro` / `gemini-2.5-flash` fallbacks
-- Groq: `openai/gpt-oss-120b` (primary), intent chain: `llama-3.3-70b-versatile` → `qwen/qwen3-32b` → `gpt-oss-20b` → `llama-3.1-8b-instant`; expander chain: `qwen/qwen3-32b` → `gpt-oss-20b` → `llama-3.3-70b-versatile` → `llama-3.1-8b-instant`
-- Cerebras: intent `zai-glm-4.7` → `gpt-oss-120b` → `qwen-3-235b-a22b-instruct-2507` → `llama3.1-8b`; expander `qwen-3-235b-a22b-instruct-2507` → `zai-glm-4.7` → `gpt-oss-120b` → `llama3.1-8b`
+- Groq: `moonshotai/kimi-k2-instruct` (primary), intent chain: `openai/gpt-oss-120b` → `meta-llama/llama-4-maverick-17b-128e-instruct` → `llama-3.3-70b-versatile` → `qwen/qwen3-32b` → `meta-llama/llama-4-scout-17b-16e-instruct` → `openai/gpt-oss-20b`; expander chain: `moonshotai/kimi-k2-instruct` → `qwen/qwen3-32b` → `meta-llama/llama-4-scout-17b-16e-instruct` → `openai/gpt-oss-120b` → `llama-3.3-70b-versatile` → `meta-llama/llama-4-maverick-17b-128e-instruct` → `openai/gpt-oss-20b`
+- Cerebras: intent `gpt-oss-120b`; expander `gpt-oss-120b`
 
 ## Syllabus Module
 

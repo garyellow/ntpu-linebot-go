@@ -1583,9 +1583,8 @@ func TestSuggestSimilarCourses(t *testing.T) {
 	m := metrics.New(registry)
 	log := logger.New("info")
 	stickerMgr := sticker.NewManager(db, scraperClient, log)
-	seg := stringutil.NewSegmenter()
 
-	h := NewHandler(db, scraperClient, m, log, stickerMgr, nil, nil, nil, nil, nil, seg)
+	h := NewHandler(db, scraperClient, m, log, stickerMgr, nil, nil, nil, nil, nil, sharedTestSegmenter)
 
 	// Seed DB with courses
 	courses := []*storage.Course{

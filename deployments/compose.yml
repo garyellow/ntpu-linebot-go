@@ -49,16 +49,16 @@ services:
       - NTPU_LLM_PROVIDERS=${NTPU_LLM_PROVIDERS:-gemini,groq,cerebras,openai}
       # Gemini
       - NTPU_GEMINI_API_KEY=${NTPU_GEMINI_API_KEY:-}
-      - NTPU_GEMINI_INTENT_MODELS=${NTPU_GEMINI_INTENT_MODELS:-}
-      - NTPU_GEMINI_EXPANDER_MODELS=${NTPU_GEMINI_EXPANDER_MODELS:-}
+      - NTPU_GEMINI_INTENT_MODELS=${NTPU_GEMINI_INTENT_MODELS:-gemini-3.1-pro-preview,gemini-2.5-pro,gemini-2.5-flash}
+      - NTPU_GEMINI_EXPANDER_MODELS=${NTPU_GEMINI_EXPANDER_MODELS:-gemini-3.1-pro-preview,gemini-2.5-pro,gemini-2.5-flash}
       # Groq
       - NTPU_GROQ_API_KEY=${NTPU_GROQ_API_KEY:-}
-      - NTPU_GROQ_INTENT_MODELS=${NTPU_GROQ_INTENT_MODELS:-}
-      - NTPU_GROQ_EXPANDER_MODELS=${NTPU_GROQ_EXPANDER_MODELS:-}
+      - NTPU_GROQ_INTENT_MODELS=${NTPU_GROQ_INTENT_MODELS:-moonshotai/kimi-k2-instruct,openai/gpt-oss-120b,meta-llama/llama-4-maverick-17b-128e-instruct,llama-3.3-70b-versatile,qwen/qwen3-32b,meta-llama/llama-4-scout-17b-16e-instruct,openai/gpt-oss-20b}
+      - NTPU_GROQ_EXPANDER_MODELS=${NTPU_GROQ_EXPANDER_MODELS:-moonshotai/kimi-k2-instruct,qwen/qwen3-32b,meta-llama/llama-4-scout-17b-16e-instruct,openai/gpt-oss-120b,llama-3.3-70b-versatile,meta-llama/llama-4-maverick-17b-128e-instruct,openai/gpt-oss-20b}
       # Cerebras
       - NTPU_CEREBRAS_API_KEY=${NTPU_CEREBRAS_API_KEY:-}
-      - NTPU_CEREBRAS_INTENT_MODELS=${NTPU_CEREBRAS_INTENT_MODELS:-}
-      - NTPU_CEREBRAS_EXPANDER_MODELS=${NTPU_CEREBRAS_EXPANDER_MODELS:-}
+      - NTPU_CEREBRAS_INTENT_MODELS=${NTPU_CEREBRAS_INTENT_MODELS:-gpt-oss-120b}
+      - NTPU_CEREBRAS_EXPANDER_MODELS=${NTPU_CEREBRAS_EXPANDER_MODELS:-gpt-oss-120b}
       # OpenAI-Compatible
       - NTPU_OPENAI_API_KEY=${NTPU_OPENAI_API_KEY:-}
       - NTPU_OPENAI_ENDPOINT=${NTPU_OPENAI_ENDPOINT:-}

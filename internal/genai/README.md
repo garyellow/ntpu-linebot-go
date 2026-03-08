@@ -13,8 +13,8 @@
 | 提供者 | IntentParser 預設模型鏈 | QueryExpander 預設模型鏈 | 備註 |
 |--------|------------------------|----------------------------|------|
 | **Gemini** | gemini-3.1-pro-preview, gemini-2.5-pro, gemini-2.5-flash | gemini-3.1-pro-preview, gemini-2.5-pro, gemini-2.5-flash | Google AI Studio |
-| **Groq** | openai/gpt-oss-120b, llama-3.3-70b-versatile, qwen/qwen3-32b, openai/gpt-oss-20b, llama-3.1-8b-instant | openai/gpt-oss-120b, qwen/qwen3-32b, openai/gpt-oss-20b, llama-3.3-70b-versatile, llama-3.1-8b-instant | OpenAI-compatible |
-| **Cerebras** | zai-glm-4.7, gpt-oss-120b, qwen-3-235b-a22b-instruct-2507, llama3.1-8b | qwen-3-235b-a22b-instruct-2507, zai-glm-4.7, gpt-oss-120b, llama3.1-8b | OpenAI-compatible |
+| **Groq** | moonshotai/kimi-k2-instruct, openai/gpt-oss-120b, meta-llama/llama-4-maverick-17b-128e-instruct, llama-3.3-70b-versatile, qwen/qwen3-32b, meta-llama/llama-4-scout-17b-16e-instruct, openai/gpt-oss-20b | moonshotai/kimi-k2-instruct, qwen/qwen3-32b, meta-llama/llama-4-scout-17b-16e-instruct, openai/gpt-oss-120b, llama-3.3-70b-versatile, meta-llama/llama-4-maverick-17b-128e-instruct, openai/gpt-oss-20b | OpenAI-compatible |
+| **Cerebras** | gpt-oss-120b | gpt-oss-120b | OpenAI-compatible |
 | **OpenAI-Compatible** | (自訂) | (自訂) | 支援 Ollama, LM Studio, vLLM 等 |
 
 ## 檔案結構

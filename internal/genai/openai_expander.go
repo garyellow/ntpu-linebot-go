@@ -126,7 +126,7 @@ func (e *openaiQueryExpander) Expand(ctx context.Context, query string) (string,
 			openai.UserMessage(prompt),
 		},
 		Temperature: openai.Float(0.2), // Lower temperature reduces lexical drift for BM25
-		MaxTokens:   openai.Int(200),
+		MaxTokens:   openai.Int(16384),
 	}
 
 	// Suppress reasoning tokens for Qwen3 thinking models on Groq and Cerebras.
