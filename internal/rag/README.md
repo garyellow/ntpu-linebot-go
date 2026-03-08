@@ -65,7 +65,8 @@ Search Flow:
 - **倒排索引**：建立階段一次分詞所有文件，查詢時零 tokenizer 呼叫
 - **預計算 IDF**：索引建立時計算，採用 Lucene 風格 `log(1 + (N-df+0.5)/(df+0.5))` 公式，永遠非負（無 min-IDF 參數）
 - **BM25Okapi 參數**：k1=1.2, b=0.75（業界標準預設值，Lucene/Elasticsearch/Azure 共識）
-- **中文分詞**：使用共享 `stringutil.Segmenter` (gse 搜尋優化分詞)，非 CJK 保持完整詞彙
+- **分詞策略**：文件索引用 `CutSearchAll`（保留重複 token，計入 TF 和文件長度），查詢用 `CutSearch`（去重，同一 term 出現兩次無額外信號）
+- **並行分詞**：Cache miss 時以 GOMAXPROCS 大小的 goroutine pool 並行分詞，gse Segmenter 初始化後為唯讀、並發安全
 - **大小寫不敏感**：所有 token 轉為小寫
 - **線程安全**：`Initialize` 在無鎖下完成所有 CPU 密集工作，最後以 O(1) 原子指標交換完成上線
 

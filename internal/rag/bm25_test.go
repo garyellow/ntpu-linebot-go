@@ -465,6 +465,34 @@ func TestTokenize(t *testing.T) {
 	}
 }
 
+// TestTokenizeDoc verifies that tokenizeDoc does NOT deduplicate tokens.
+// This is essential for correct BM25 TF and document-length normalization:
+// a syllabus mentioning "雲端" five times must yield TF=5, not TF=1.
+func TestTokenizeDoc(t *testing.T) {
+	t.Parallel()
+
+	log := logger.New("error")
+	idx := NewBM25Index(log, newTestSegmenter())
+
+	// Input with three occurrences of "雲端" — all three must survive.
+	result := idx.tokenizeDoc("雲端 雲端 雲端")
+	count := 0
+	for _, tok := range result {
+		if tok == "雲端" {
+			count++
+		}
+	}
+	if count < 3 {
+		t.Errorf("tokenizeDoc preserved %d occurrence(s) of \"雲端\", want >= 3 (dedup must be disabled)", count)
+	}
+
+	// tokenizeDoc must return strictly more tokens than Tokenize for repeated input.
+	query := idx.Tokenize("雲端 雲端 雲端")
+	if len(result) <= len(query) {
+		t.Errorf("tokenizeDoc len=%d should exceed Tokenize len=%d for repeated input (Tokenize deduplicates)", len(result), len(query))
+	}
+}
+
 func TestComputeRelativeConfidence(t *testing.T) {
 	t.Parallel()
 	// BM25 Okapi with Lucene IDF always produces non-negative scores,
