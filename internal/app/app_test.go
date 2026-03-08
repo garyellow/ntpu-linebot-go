@@ -46,7 +46,7 @@ func setupTestApp(t *testing.T) *Application {
 		db:             db,
 		metrics:        m,
 		logger:         log,
-		readinessState: warmup.NewReadinessState(10 * time.Minute),
+		readinessState: warmup.NewReadinessState(config.ReadinessWarmupTimeout),
 	}
 }
 

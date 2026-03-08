@@ -32,7 +32,19 @@ func NewSegmenter() *Segmenter {
 //
 // Non-CJK text (English words, numbers) is kept as-is.
 // Result is deduplicated to avoid redundant search terms.
+// Use CutSearchAll when duplicate tokens must be preserved (e.g., BM25 document indexing).
 func (s *Segmenter) CutSearch(text string) []string {
+	return s.cutSearch(text, true)
+}
+
+// CutSearchAll is identical to CutSearch but preserves duplicate tokens.
+// Use this for BM25 document indexing so term frequencies and document lengths
+// reflect actual occurrence counts rather than unique-term counts.
+func (s *Segmenter) CutSearchAll(text string) []string {
+	return s.cutSearch(text, false)
+}
+
+func (s *Segmenter) cutSearch(text string, deduplicate bool) []string {
 	text = strings.ToLower(strings.TrimSpace(text))
 	if text == "" {
 		return nil
@@ -78,6 +90,10 @@ func (s *Segmenter) CutSearch(text string) []string {
 	}
 	flushWord()
 	flushCJK()
+
+	if !deduplicate {
+		return tokens
+	}
 
 	// Deduplicate
 	if len(tokens) <= 1 {

@@ -12,7 +12,6 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 	"github.com/garyellow/ntpu-linebot-go/internal/stringutil"
 	"github.com/garyellow/ntpu-linebot-go/internal/syllabus"
-	"github.com/iwilltry42/bm25-go/bm25"
 )
 
 // MaxSearchResults is the maximum number of results to return per semester.
@@ -52,7 +51,7 @@ type SemesterKey struct {
 // semesterIndex holds BM25 index for a single semester.
 // Each semester has its own IDF calculation, ensuring independent relevance scoring.
 type semesterIndex struct {
-	engine   *bm25.BM25Okapi    // BM25 engine for this semester only
+	engine   *bm25Engine        // BM25 engine for this semester only
 	uidList  []string           // UID at each index (Corresponds to engine internal doc IDs)
 	metadata map[string]docMeta // UID -> metadata
 }
@@ -70,7 +69,9 @@ type semesterIndex struct {
 //   - Does NOT store raw text corpus in memory (significant savings)
 //   - Loads syllabi semester-by-semester during initialization to minimize peak memory
 //
-// Uses github.com/iwilltry42/bm25-go library (maintained by k3d-io/k3d maintainer)
+// Uses an in-house BM25 Okapi engine (internal/rag/engine.go) with inverted index;
+// documents are tokenized exactly once at index build time, so queries involve
+// zero tokenizer calls.
 type BM25Index struct {
 	semesterIndexes map[SemesterKey]*semesterIndex // Per-semester BM25 indexes
 	allSemesters    []SemesterKey                  // All semesters sorted (newest first)
@@ -230,9 +231,21 @@ func (idx *BM25Index) buildSemesterIndex(syllabi []*storage.Syllabus) (*semester
 		return nil, 0, nil
 	}
 
+	// Pre-tokenize every document exactly once.
+	// newBM25Engine stores token frequencies in an inverted index so query time
+	// requires zero tokenizer calls (versus the bm25-go library which re-tokenizes
+	// every document for every query token — O(N_query × N_docs) gse HMM calls).
+	//
+	// Note: use tokenizeDoc (no dedup) so repeated terms in a syllabus are counted
+	// correctly — both TF and document length must reflect actual occurrence counts.
+	// Query tokens still use idx.Tokenize (dedup) since a query term appearing twice
+	// carries no additional signal.
+	tokenizedCorpus := make([][]string, len(corpus))
+	for i, doc := range corpus {
+		tokenizedCorpus[i] = idx.tokenizeDoc(doc)
+	}
+
 	// Build BM25 engine for this semester (independent IDF).
-	// NewBM25Okapi consumes the corpus to build its internal index; after this point we only
-	// access document content through the engine, not via the original corpus slice.
 	//
 	// BM25 Parameters (industry standard defaults - Lucene/Elasticsearch/Azure):
 	//   k1 = 1.2: Term frequency saturation. Lower values mean faster saturation,
@@ -242,7 +255,7 @@ func (idx *BM25Index) buildSemesterIndex(syllabi []*storage.Syllabus) (*semester
 	//
 	// References: Stanford IR textbook, Elasticsearch docs, Azure AI Search defaults,
 	// bilingual Chinese/English experiments (KDD05), Korean biomedical TREC system.
-	engine, err := bm25.NewBM25Okapi(corpus, idx.Tokenize, 1.2, 0.75, nil)
+	engine, err := newBM25Engine(tokenizedCorpus)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -419,34 +432,20 @@ func (idx *BM25Index) SearchCourses(_ context.Context, query string, topN int) (
 //   - Confidence >= 0.6: "高度相關" (Highly Relevant) - Top 40% relative score range
 //   - Confidence < 0.6: "部分相關" (Partially Relevant) - Remaining results
 func computeRelativeConfidence(score, maxScore float64) float32 {
-	// Handle zero or invalid maxScore
-	if maxScore == 0 {
+	// BM25 Okapi with Lucene IDF (log(1 + x)) guarantees non-negative scores.
+	// This function is only called when maxScore > 0 and score ≥ 0.
+	// The clamps below are retained as defense-in-depth.
+	if maxScore <= 0 {
 		return 0
 	}
-
-	// Both positive: normal case (higher score = higher confidence)
-	if maxScore > 0 && score > 0 {
-		confidence := score / maxScore
-		if confidence > 1.0 {
-			confidence = 1.0
-		}
-		return float32(confidence)
+	confidence := score / maxScore
+	if confidence > 1.0 {
+		confidence = 1.0
 	}
-
-	// Both negative: inverse case (less negative = higher confidence)
-	if maxScore < 0 && score < 0 {
-		confidence := maxScore / score // Note: inverted division for negative scores
-		if confidence > 1.0 {
-			confidence = 1.0
-		}
-		if confidence < 0 {
-			confidence = 0
-		}
-		return float32(confidence)
+	if confidence < 0 {
+		confidence = 0
 	}
-
-	// Mixed signs (unusual): treat as 0 confidence
-	return 0
+	return float32(confidence)
 }
 
 // IsEnabled returns true if the index is initialized
@@ -473,10 +472,17 @@ func (idx *BM25Index) Count() int {
 	return total
 }
 
-// Tokenize performs tokenization using the shared Chinese segmenter.
-// This method is used both for indexing and querying.
-// Delegates to Segmenter.CutSearch which handles lowercasing, CJK segmentation,
-// non-CJK word splitting, and deduplication.
+// Tokenize performs tokenization for search queries using the shared Chinese segmenter.
+// Duplicates are removed because the same query term appearing twice carries no
+// additional signal for BM25 scoring.
 func (idx *BM25Index) Tokenize(text string) []string {
 	return idx.seg.CutSearch(text)
+}
+
+// tokenizeDoc performs tokenization for document indexing without deduplication.
+// Preserving duplicate tokens is essential for correct BM25 TF and document-length
+// normalization: a syllabus mentioning "雲端" five times should rank higher than
+// one that mentions it once.
+func (idx *BM25Index) tokenizeDoc(text string) []string {
+	return idx.seg.CutSearchAll(text)
 }

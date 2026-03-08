@@ -327,7 +327,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	botRegistry.Register(usageHandler)
 
 	// Create session store for lightweight per-user conversation context (3 intents, 5 min TTL)
-	sessionStore := session.NewStore(3, 5*time.Minute)
+	sessionStore := session.NewStore(3, config.SessionContextTTL)
 
 	processor := bot.NewProcessor(bot.ProcessorConfig{
 		Registry:       botRegistry,
@@ -590,7 +590,7 @@ func refreshSemesterCacheFromDB(ctx context.Context, db *storage.DB, cache *cour
 		return
 	}
 
-	refreshCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	refreshCtx, cancel := context.WithTimeout(ctx, config.SemesterCacheRefreshTimeout)
 	defer cancel()
 
 	semesters, err := cache.UpdateFromDB(refreshCtx, db, 4)
@@ -987,7 +987,7 @@ func (a *Application) refreshStickers(ctx context.Context) {
 	a.logger.Debug("Sticker load job started")
 	defer a.logger.Debug("Sticker load job stopped")
 
-	initialCtx, initialCancel := context.WithTimeout(ctx, 5*time.Minute)
+	initialCtx, initialCancel := context.WithTimeout(ctx, config.StickerLoadTimeout)
 	defer initialCancel()
 	a.performStickerRefresh(initialCtx)
 
@@ -999,7 +999,7 @@ func (a *Application) performStickerRefresh(ctx context.Context) {
 	a.logger.Info("Starting sticker load")
 	startTime := time.Now()
 
-	refreshCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	refreshCtx, cancel := context.WithTimeout(ctx, config.StickerLoadTimeout)
 	defer cancel()
 
 	if err := a.stickerManager.LoadStickers(refreshCtx); err != nil {

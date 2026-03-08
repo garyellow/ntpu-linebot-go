@@ -59,10 +59,10 @@ Search Flow:
 
 ### BM25 實作
 
-使用 [iwilltry42/bm25-go](https://github.com/iwilltry42/bm25-go) 外部函式庫：
+使用 **自行實作的 BM25 Okapi 引擎**（`internal/rag/engine.go`）：
 
-- **可靠維護者**：由 [k3d-io/k3d](https://github.com/k3d-io/k3d) (⭐6.1k) 維護者維護
-- **已修復 IDF 問題**：解決了常見 Go BM25 庫的負 IDF 值問題
+- **倒排索引**：建立階段一次分詞所有文件，查詢時零 tokenizer 呼叫
+- **預計算 IDF**：索引建立時計算，採用 Lucene 風格 `log(1 + (N-df+0.5)/(df+0.5))` 公式，永遠非負（無 min-IDF 參數）
 - **BM25Okapi 參數**：k1=1.2, b=0.75（業界標準預設值，Lucene/Elasticsearch/Azure 共識）
 - **中文分詞**：使用共享 `stringutil.Segmenter` (gse 搜尋優化分詞)，非 CJK 保持完整詞彙
 - **大小寫不敏感**：所有 token 轉為小寫

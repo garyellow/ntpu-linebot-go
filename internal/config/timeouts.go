@@ -129,6 +129,26 @@ const (
 	ReadinessWarmupTimeout = 10 * time.Minute
 )
 
+// Session timeouts
+const (
+	// SessionContextTTL is how long a user's recent intents remain valid in the session store.
+	// After this duration, intents are considered stale and filtered out.
+	// The session store holds at most 3 intents per user.
+	SessionContextTTL = 5 * time.Minute
+)
+
+// Sticker & semester cache timeouts
+const (
+	// StickerLoadTimeout is the timeout for a full sticker load (DB first, scrape fallback).
+	// Distinct from WarmupStickerFetch (5s) which covers the outbound HTTP request only;
+	// this bounds the entire operation including DB interaction.
+	StickerLoadTimeout = 5 * time.Minute
+
+	// SemesterCacheRefreshTimeout is the timeout for refreshing the in-memory semester
+	// cache from SQLite. This is a fast DB-only operation with no network calls.
+	SemesterCacheRefreshTimeout = 5 * time.Second
+)
+
 // Graceful shutdown
 const (
 	// GracefulShutdown is the timeout for graceful server shutdown.

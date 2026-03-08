@@ -9,6 +9,10 @@ import (
 	"time"
 )
 
+// healthCheckTimeout is the timeout for the HTTP liveness request.
+// Must be short enough to allow container orchestration fast fail detection.
+const healthCheckTimeout = 5 * time.Second
+
 func main() {
 	os.Exit(run())
 }
@@ -19,7 +23,7 @@ func run() int {
 		port = "10000"
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), healthCheckTimeout)
 	defer cancel()
 
 	url := fmt.Sprintf("http://localhost:%s/livez", port)

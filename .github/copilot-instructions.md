@@ -170,8 +170,8 @@ LINE Webhook → Gin Handler
 - **course_programs table**: Junction table for course-program relationships (course_uid, program_name, course_type, cached_at)
 
 **BM25 Index** (`internal/rag/`):
-- [iwilltry42/bm25-go](https://github.com/iwilltry42/bm25-go) (k1=1.2, b=0.75)
-- In-memory index rebuilt on startup from SQLite
+- In-house BM25 Okapi engine (`internal/rag/engine.go`) — inverted index, k1=1.2, b=0.75
+- Documents tokenized once at build time; zero tokenizer calls during query
 - Chinese tokenization via shared `stringutil.Segmenter` (gse search-optimized word segmentation), 1 course = 1 document
 - Min confidence filter (0.25) removes low-relevance noise
 - Combined with LLM Query Expansion (auto-enabled when LLM API key configured)
