@@ -78,6 +78,7 @@ func (e *geminiQueryExpander) Expand(ctx context.Context, query string) (string,
 	config := &genai.GenerateContentConfig{
 		Temperature:     genai.Ptr[float32](0.2), // Lower temperature reduces lexical drift for BM25
 		MaxOutputTokens: 16384,
+		ThinkingConfig:  geminiThinkingConfig(e.model),
 	}
 
 	start := time.Now()

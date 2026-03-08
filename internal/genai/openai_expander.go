@@ -129,23 +129,26 @@ func (e *openaiQueryExpander) Expand(ctx context.Context, query string) (string,
 		MaxTokens:   openai.Int(16384),
 	}
 
-	// Suppress reasoning tokens for Qwen3 thinking models on Groq and Cerebras.
-	// These models default to "raw" reasoning format which embeds <think>...</think>
-	// blocks in the content field, breaking ParseExpandedOutput. Disabling reasoning
-	// also reduces latency and cost for this simple keyword extraction task.
+	// Suppress reasoning tokens on thinking-capable models to reduce latency.
+	// Simple keyword extraction does not benefit from deep reasoning chains.
 	var extraOpts []option.RequestOption
 	switch e.provider {
 	case ProviderGroq:
-		if strings.Contains(strings.ToLower(e.model), "qwen3") {
-			// reasoning_effort:"none" disables thinking entirely on Groq Qwen3
-			// (no thinking tokens generated at all — cheaper and faster).
+		lower := strings.ToLower(e.model)
+		switch {
+		case strings.Contains(lower, "gpt-oss"):
+			// gpt-oss-120b/20b on Groq: default "medium" reasoning; "low" suffices
+			// for keyword extraction and saves latency.
+			extraOpts = append(extraOpts, option.WithJSONSet("reasoning_effort", "low"))
+		case strings.Contains(lower, "qwen3"):
+			// Qwen3 thinking models on Groq: disable reasoning entirely.
+			// (no thinking tokens generated at all — cheaper and faster)
 			extraOpts = append(extraOpts, option.WithJSONSet("reasoning_effort", "none"))
 		}
 	case ProviderCerebras:
-		if strings.Contains(strings.ToLower(e.model), "qwen-3") {
-			// reasoning_format:"hidden" prevents <think> blocks from appearing in
-			// the content field for Cerebras Qwen3 (default is "raw").
-			extraOpts = append(extraOpts, option.WithJSONSet("reasoning_format", "hidden"))
+		// gpt-oss-120b on Cerebras: default "medium" reasoning; "low" suffices.
+		if strings.Contains(strings.ToLower(e.model), "gpt-oss") {
+			extraOpts = append(extraOpts, option.WithJSONSet("reasoning_effort", "low"))
 		}
 	}
 

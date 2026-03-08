@@ -31,21 +31,46 @@ func TestDefaultLLMConfig(t *testing.T) {
 	if len(cfg.Gemini.ExpanderModels) != len(DefaultGeminiExpanderModels) {
 		t.Errorf("Gemini.ExpanderModels length = %v, want %v", len(cfg.Gemini.ExpanderModels), len(DefaultGeminiExpanderModels))
 	}
+	for i, model := range cfg.Gemini.ExpanderModels {
+		if model != DefaultGeminiExpanderModels[i] {
+			t.Errorf("Gemini.ExpanderModels[%d] = %v, want %v", i, model, DefaultGeminiExpanderModels[i])
+		}
+	}
 
 	// Check Groq defaults
 	if len(cfg.Groq.IntentModels) != len(DefaultGroqIntentModels) {
 		t.Errorf("Groq.IntentModels length = %v, want %v", len(cfg.Groq.IntentModels), len(DefaultGroqIntentModels))
 	}
+	for i, model := range cfg.Groq.IntentModels {
+		if model != DefaultGroqIntentModels[i] {
+			t.Errorf("Groq.IntentModels[%d] = %v, want %v", i, model, DefaultGroqIntentModels[i])
+		}
+	}
 	if len(cfg.Groq.ExpanderModels) != len(DefaultGroqExpanderModels) {
 		t.Errorf("Groq.ExpanderModels length = %v, want %v", len(cfg.Groq.ExpanderModels), len(DefaultGroqExpanderModels))
+	}
+	for i, model := range cfg.Groq.ExpanderModels {
+		if model != DefaultGroqExpanderModels[i] {
+			t.Errorf("Groq.ExpanderModels[%d] = %v, want %v", i, model, DefaultGroqExpanderModels[i])
+		}
 	}
 
 	// Check Cerebras defaults
 	if len(cfg.Cerebras.IntentModels) != len(DefaultCerebrasIntentModels) {
 		t.Errorf("Cerebras.IntentModels length = %v, want %v", len(cfg.Cerebras.IntentModels), len(DefaultCerebrasIntentModels))
 	}
+	for i, model := range cfg.Cerebras.IntentModels {
+		if model != DefaultCerebrasIntentModels[i] {
+			t.Errorf("Cerebras.IntentModels[%d] = %v, want %v", i, model, DefaultCerebrasIntentModels[i])
+		}
+	}
 	if len(cfg.Cerebras.ExpanderModels) != len(DefaultCerebrasExpanderModels) {
 		t.Errorf("Cerebras.ExpanderModels length = %v, want %v", len(cfg.Cerebras.ExpanderModels), len(DefaultCerebrasExpanderModels))
+	}
+	for i, model := range cfg.Cerebras.ExpanderModels {
+		if model != DefaultCerebrasExpanderModels[i] {
+			t.Errorf("Cerebras.ExpanderModels[%d] = %v, want %v", i, model, DefaultCerebrasExpanderModels[i])
+		}
 	}
 
 	// Check retry config defaults

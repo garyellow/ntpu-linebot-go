@@ -37,7 +37,7 @@ func TestNewOpenAIIntentParser_ValidKey(t *testing.T) {
 
 func TestNewOpenAIIntentParser_Cerebras(t *testing.T) {
 	t.Parallel()
-	parser, err := newOpenAIIntentParser(context.Background(), ProviderCerebras, "test-key", "llama-3.3-70b", "")
+	parser, err := newOpenAIIntentParser(context.Background(), ProviderCerebras, "test-key", "gpt-oss-120b", "")
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
@@ -48,8 +48,8 @@ func TestNewOpenAIIntentParser_Cerebras(t *testing.T) {
 	if parser.provider != ProviderCerebras {
 		t.Errorf("Expected provider %v, got %v", ProviderCerebras, parser.provider)
 	}
-	if parser.model != "llama-3.3-70b" {
-		t.Errorf("Expected model llama-3.3-70b, got %v", parser.model)
+	if parser.model != "gpt-oss-120b" {
+		t.Errorf("Expected model gpt-oss-120b, got %v", parser.model)
 	}
 }
 

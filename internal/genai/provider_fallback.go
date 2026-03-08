@@ -96,6 +96,7 @@ func (f *FallbackIntentParser) Parse(ctx context.Context, text string) (*ParseRe
 			"to_provider", f.parsers[i+1].Provider())
 	}
 
+	// unreachable: loop always returns via ActionFail or last-parser check above
 	return nil, fmt.Errorf("all intent parsers failed: %w", lastErr)
 }
 
