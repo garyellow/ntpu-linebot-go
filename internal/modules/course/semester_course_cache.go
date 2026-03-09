@@ -52,9 +52,11 @@ func (c *SemesterCourseCache) Get(ctx context.Context, db *storage.DB, year, ter
 		if time.Since(entry.fetchedAt) < c.ttl {
 			return cloneCourses(entry.courses), nil
 		}
-		// Lazy eviction: remove stale entry.
+		// Lazy eviction: re-check under write lock to avoid deleting a freshly refreshed entry.
 		c.mu.Lock()
-		delete(c.entries, key)
+		if e, still := c.entries[key]; still && time.Since(e.fetchedAt) >= c.ttl {
+			delete(c.entries, key)
+		}
 		c.mu.Unlock()
 	}
 

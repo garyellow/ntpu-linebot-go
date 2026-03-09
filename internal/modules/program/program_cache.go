@@ -55,9 +55,11 @@ func (c *ListCache) Get(ctx context.Context, db *storage.DB, years, terms []int)
 		if time.Since(entry.fetchedAt) < c.ttl {
 			return clonePrograms(entry.programs), nil
 		}
-		// Lazy eviction: remove stale entry.
+		// Lazy eviction: re-check under write lock to avoid deleting a freshly refreshed entry.
 		c.mu.Lock()
-		delete(c.entries, key)
+		if e, still := c.entries[key]; still && time.Since(e.fetchedAt) >= c.ttl {
+			delete(c.entries, key)
+		}
 		c.mu.Unlock()
 	}
 
@@ -68,7 +70,7 @@ func (c *ListCache) Get(ctx context.Context, db *storage.DB, years, terms []int)
 
 	c.mu.Lock()
 	c.entries[key] = programListCacheEntry{
-		programs:  programs, // store original; GetCached always returns a defensive copy
+		programs:  programs, // store original; Get always returns a defensive copy
 		fetchedAt: time.Now(),
 	}
 	c.mu.Unlock()

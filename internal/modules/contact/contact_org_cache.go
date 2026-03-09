@@ -52,9 +52,11 @@ func (c *OrgCache) GetCached(orgName string) ([]storage.Contact, bool) {
 		return cloneContacts(entry.contacts), true
 	}
 
-	// Lazy eviction: remove stale entry so the map stays bounded.
+	// Lazy eviction: re-check under write lock to avoid deleting a freshly refreshed entry.
 	c.mu.Lock()
-	delete(c.entries, orgName)
+	if e, still := c.entries[orgName]; still && time.Since(e.fetchedAt) >= c.ttl {
+		delete(c.entries, orgName)
+	}
 	c.mu.Unlock()
 	return nil, false
 }
