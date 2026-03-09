@@ -10,7 +10,7 @@ import (
 func TestContactOrgCacheEmptyOnStart(t *testing.T) {
 	t.Parallel()
 
-	cache := NewContactOrgCache(time.Minute)
+	cache := NewOrgCache(time.Minute)
 	contacts, ok := cache.GetCached("教務處")
 	if ok {
 		t.Fatalf("expected cache miss on empty cache, got %d contacts", len(contacts))
@@ -20,7 +20,7 @@ func TestContactOrgCacheEmptyOnStart(t *testing.T) {
 func TestContactOrgCacheStoresAndReturnsBeforeTTL(t *testing.T) {
 	t.Parallel()
 
-	cache := NewContactOrgCache(time.Minute)
+	cache := NewOrgCache(time.Minute)
 	orgName := "教務處"
 	members := []storage.Contact{
 		{Name: "王小明", Type: "individual", Organization: orgName},
@@ -44,7 +44,7 @@ func TestContactOrgCacheStoresAndReturnsBeforeTTL(t *testing.T) {
 func TestContactOrgCacheSkipsEmptySlice(t *testing.T) {
 	t.Parallel()
 
-	cache := NewContactOrgCache(time.Minute)
+	cache := NewOrgCache(time.Minute)
 	cache.SetCached("教務處", []storage.Contact{})
 	cache.SetCached("學務處", nil)
 
@@ -59,7 +59,7 @@ func TestContactOrgCacheSkipsEmptySlice(t *testing.T) {
 func TestContactOrgCacheExpiredAfterTTL(t *testing.T) {
 	t.Parallel()
 
-	cache := NewContactOrgCache(20 * time.Millisecond)
+	cache := NewOrgCache(20 * time.Millisecond)
 	orgName := "教務處"
 	cache.SetCached(orgName, []storage.Contact{
 		{Name: "王小明", Type: "individual", Organization: orgName},
@@ -80,7 +80,7 @@ func TestContactOrgCacheExpiredAfterTTL(t *testing.T) {
 func TestContactOrgCacheReturnsCopy(t *testing.T) {
 	t.Parallel()
 
-	cache := NewContactOrgCache(time.Minute)
+	cache := NewOrgCache(time.Minute)
 	orgName := "教務處"
 	original := []storage.Contact{
 		{Name: "王小明", Type: "individual", Organization: orgName},

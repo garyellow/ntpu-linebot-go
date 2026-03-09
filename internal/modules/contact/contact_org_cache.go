@@ -14,25 +14,25 @@ type contactOrgCacheEntry struct {
 	fetchedAt time.Time
 }
 
-// ContactOrgCache holds the member list for organization names in memory for a short time.
+// OrgCache holds the member list for organization names in memory for a short time.
 // It reduces repeated SQLite reads when multiple users browse the same organization's
 // member list in a short burst (e.g., via the "查看成員列表" postback button).
 //
 // Only non-empty results are cached: when the DB has no data (triggering a scrape),
 // we skip caching so the next request can re-query the DB after the scrape completes.
-type ContactOrgCache struct {
+type OrgCache struct {
 	mu      sync.RWMutex
 	ttl     time.Duration
 	entries map[string]contactOrgCacheEntry
 }
 
-// NewContactOrgCache creates a short-lived in-memory cache for organization member lists.
-func NewContactOrgCache(ttl time.Duration) *ContactOrgCache {
+// NewOrgCache creates a short-lived in-memory cache for organization member lists.
+func NewOrgCache(ttl time.Duration) *OrgCache {
 	if ttl <= 0 {
 		ttl = defaultContactOrgCacheTTL
 	}
 
-	return &ContactOrgCache{
+	return &OrgCache{
 		ttl:     ttl,
 		entries: make(map[string]contactOrgCacheEntry),
 	}
@@ -41,7 +41,7 @@ func NewContactOrgCache(ttl time.Duration) *ContactOrgCache {
 // GetCached returns cached individual contacts for an organization when the entry is
 // still fresh. Returns (nil, false) when the cache is cold or expired.
 // Expired entries are lazily deleted on read to keep the map bounded.
-func (c *ContactOrgCache) GetCached(orgName string) ([]storage.Contact, bool) {
+func (c *OrgCache) GetCached(orgName string) ([]storage.Contact, bool) {
 	c.mu.RLock()
 	entry, ok := c.entries[orgName]
 	c.mu.RUnlock()
@@ -61,7 +61,7 @@ func (c *ContactOrgCache) GetCached(orgName string) ([]storage.Contact, bool) {
 
 // SetCached stores the individual contacts for an organization.
 // Empty slices are silently skipped to avoid caching "not yet scraped" states.
-func (c *ContactOrgCache) SetCached(orgName string, contacts []storage.Contact) {
+func (c *OrgCache) SetCached(orgName string, contacts []storage.Contact) {
 	if len(contacts) == 0 {
 		return
 	}

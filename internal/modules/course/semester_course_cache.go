@@ -2,7 +2,7 @@ package course
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"sync"
 	"time"
 
@@ -40,7 +40,7 @@ func NewSemesterCourseCache(ttl time.Duration) *SemesterCourseCache {
 // Expired entries are lazily deleted on read to keep the map bounded.
 func (c *SemesterCourseCache) Get(ctx context.Context, db *storage.DB, year, term int) ([]storage.Course, error) {
 	if db == nil {
-		return nil, fmt.Errorf("semester course cache: db is nil")
+		return nil, errors.New("semester course cache: db is nil")
 	}
 
 	key := Semester{Year: year, Term: term}

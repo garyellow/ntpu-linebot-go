@@ -2,6 +2,7 @@ package program
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -16,22 +17,22 @@ type programListCacheEntry struct {
 	fetchedAt time.Time
 }
 
-// ProgramListCache holds the full program list in memory for a short time.
+// ListCache holds the full program list in memory for a short time.
 // It reduces repeated complex JOIN queries when multiple users browse or search
 // programs concurrently within the same burst window.
-type ProgramListCache struct {
+type ListCache struct {
 	mu      sync.RWMutex
 	ttl     time.Duration
 	entries map[string]programListCacheEntry
 }
 
-// NewProgramListCache creates a short-lived in-memory cache for program lists.
-func NewProgramListCache(ttl time.Duration) *ProgramListCache {
+// NewListCache creates a short-lived in-memory cache for program lists.
+func NewListCache(ttl time.Duration) *ListCache {
 	if ttl <= 0 {
 		ttl = defaultProgramListCacheTTL
 	}
 
-	return &ProgramListCache{
+	return &ListCache{
 		ttl:     ttl,
 		entries: make(map[string]programListCacheEntry),
 	}
@@ -40,9 +41,9 @@ func NewProgramListCache(ttl time.Duration) *ProgramListCache {
 // Get returns all programs for the given semester filter from memory when fresh,
 // otherwise reloads from SQLite.
 // Expired entries are lazily deleted on read to keep the map bounded.
-func (c *ProgramListCache) Get(ctx context.Context, db *storage.DB, years, terms []int) ([]storage.Program, error) {
+func (c *ListCache) Get(ctx context.Context, db *storage.DB, years, terms []int) ([]storage.Program, error) {
 	if db == nil {
-		return nil, fmt.Errorf("program list cache: db is nil")
+		return nil, errors.New("program list cache: db is nil")
 	}
 
 	key := programCacheKey(years, terms)

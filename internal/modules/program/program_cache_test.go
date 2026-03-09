@@ -26,7 +26,7 @@ func TestProgramListCacheLoadsFromDB(t *testing.T) {
 
 	db := setupProgramCacheTestDB(t)
 	ctx := context.Background()
-	cache := NewProgramListCache(time.Minute)
+	cache := NewListCache(time.Minute)
 
 	// Seed one program
 	if err := db.SyncPrograms(ctx, []struct{ Name, Category, URL string }{
@@ -52,7 +52,7 @@ func TestProgramListCacheReturnsCachedValueBeforeTTL(t *testing.T) {
 
 	db := setupProgramCacheTestDB(t)
 	ctx := context.Background()
-	cache := NewProgramListCache(time.Minute)
+	cache := NewListCache(time.Minute)
 
 	if err := db.SyncPrograms(ctx, []struct{ Name, Category, URL string }{
 		{Name: "資訊管理學程", Category: "學程", URL: ""},
@@ -89,7 +89,7 @@ func TestProgramListCacheRefreshesAfterTTL(t *testing.T) {
 
 	db := setupProgramCacheTestDB(t)
 	ctx := context.Background()
-	cache := NewProgramListCache(20 * time.Millisecond)
+	cache := NewListCache(20 * time.Millisecond)
 
 	if err := db.SyncPrograms(ctx, []struct{ Name, Category, URL string }{
 		{Name: "資訊管理學程", Category: "學程", URL: ""},
@@ -121,7 +121,7 @@ func TestProgramListCacheRefreshesAfterTTL(t *testing.T) {
 func TestProgramListCacheNilDB(t *testing.T) {
 	t.Parallel()
 
-	cache := NewProgramListCache(time.Minute)
+	cache := NewListCache(time.Minute)
 	_, err := cache.Get(context.Background(), nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected error when db is nil")

@@ -65,7 +65,7 @@ type Handler struct {
     logger         *logger.Logger
     stickerManager *sticker.Manager
     semesterCache  *course.SemesterCache  // 共享學期快取
-    programCache   *ProgramListCache      // 短 TTL 快取：GetAllPrograms 結果
+    programCache   *ListCache      // 短 TTL 快取：GetAllPrograms 結果
     matchers       []PatternMatcher
 }
 ```
@@ -181,7 +181,7 @@ Course Detail (返回)
 
 ### 共享組件
 - **SemesterCache**：course 模組提供，refresh 更新，program 使用
-- **ProgramListCache**：program 模組內部，短 TTL（30s），降低 `GetAllPrograms` 重複 JOIN 查詢
+- **ListCache**：program 模組內部，短 TTL（30s），降低 `GetAllPrograms` 重複 JOIN 查詢
 - **Flex Message Builders**：共用 lineutil 工具
 
 ### Postback 路由
@@ -257,7 +257,7 @@ semesterCache.Update() (shared)
 ### Memory 使用
 - 學程列表：輕量級查詢（< 100 筆）
 - 課程列表：可能較大（限制 40 筆）
-- **`ProgramListCache`**：短 TTL（30s）記憶體快取，避免相同學期條件的重複 JOIN 查詢
+- **`ListCache`**：短 TTL（30s）記憶體快取，避免相同學期條件的重複 JOIN 查詢
 
 ## 限制與注意事項
 
@@ -282,7 +282,7 @@ semesterCache.Update() (shared)
 ## 依賴關係
 - `storage.DB` - 學程/課程資料查詢
 - `course.SemesterCache` - 學期快取（共享）
-- `ProgramListCache` - 短 TTL 快取（模組內部）
+- `ListCache` - 短 TTL 快取（模組內部）
 - `metrics.Metrics` - 監控指標
 - `logger.Logger` - 日誌記錄
 - `sticker.Manager` - Sender 頭像

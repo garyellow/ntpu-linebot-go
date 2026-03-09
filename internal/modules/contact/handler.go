@@ -36,7 +36,7 @@ type Handler struct {
 	maxContactsLimit int // Maximum contacts per search (from config)
 	deltaRecorder    delta.Recorder
 	seg              *stringutil.Segmenter
-	orgCache         *ContactOrgCache // Short-TTL cache for org member lists
+	orgCache         *OrgCache // Short-TTL cache for org member lists
 
 	// matchers contains all pattern-handler pairs sorted by priority.
 	// Shared by CanHandle and HandleMessage for consistent routing.
@@ -140,7 +140,7 @@ func NewHandler(
 		maxContactsLimit: maxContactsLimit,
 		deltaRecorder:    deltaRecorder,
 		seg:              seg,
-		orgCache:         NewContactOrgCache(0),
+		orgCache:         NewOrgCache(0),
 	}
 	h.initializeMatchers()
 	h.precomputeEmergency()

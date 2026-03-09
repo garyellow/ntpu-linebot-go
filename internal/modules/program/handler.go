@@ -33,7 +33,7 @@ type Handler struct {
 	logger         *logger.Logger
 	stickerManager *sticker.Manager
 	semesterCache  *course.SemesterCache // Shared cache (from course module)
-	programCache   *ProgramListCache     // Short-TTL cache for GetAllPrograms results
+	programCache   *ListCache            // Short-TTL cache for GetAllPrograms results
 
 	// matchers contains all pattern-handler pairs sorted by priority.
 	// Shared by CanHandle and HandleMessage for consistent routing.
@@ -114,7 +114,7 @@ func NewHandler(
 		logger:         logger,
 		stickerManager: stickerManager,
 		semesterCache:  semesterCache,
-		programCache:   NewProgramListCache(0),
+		programCache:   NewListCache(0),
 	}
 
 	// Initialize Pattern-Action Table

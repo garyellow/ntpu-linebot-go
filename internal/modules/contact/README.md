@@ -43,7 +43,7 @@ type Handler struct {
     logger           *logger.Logger
     stickerManager   *sticker.Manager
     maxContactsLimit int              // 最大結果數限制（預設 100）
-    orgCache         *ContactOrgCache // 短 TTL 快取：單位成員列表
+    orgCache         *OrgCache // 短 TTL 快取：單位成員列表
 }
 ```
 
@@ -220,7 +220,7 @@ emergencyKeywords = []string{
 ### Memory 使用
 - **No full-table load**：僅載入匹配結果
 - **String matching at SQL level**：減少記憶體消耗
-- **`ContactOrgCache`**：短 TTL（30s）記憶體快取，降低相同單位成員列表重複 DB 讀取
+- **`OrgCache`**：短 TTL（30s）記憶體快取，降低相同單位成員列表重複 DB 讀取
 
 ## 限制與注意事項
 
@@ -248,7 +248,7 @@ emergencyKeywords = []string{
 ## 依賴關係
 - `storage.DB` - 聯絡資料查詢
 - `scraper.Client` - 即時抓取（fallback）
-- `ContactOrgCache` - 短 TTL 快取（模組內部）
+- `OrgCache` - 短 TTL 快取（模組內部）
 - `metrics.Metrics` - 監控指標
 - `logger.Logger` - 日誌記錄
 - `sticker.Manager` - Sender 頭像
