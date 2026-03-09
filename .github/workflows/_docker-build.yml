@@ -68,7 +68,7 @@ jobs:
             --certificate-identity keyless@distroless.iam.gserviceaccount.com
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
         with:
           platforms: ${{ inputs.platforms }}
 
