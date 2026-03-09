@@ -197,6 +197,7 @@ Carousel (max 40)       Carousel + Score        Single Bubble
 ### 搜尋優化
 - **SQL 索引**：year, term, title, teachers
 - **BM25 in-memory**：避免每次重建索引
+- **Semester course cache**：短 TTL 記憶體快取近期學期課程，降低重複 SQLite 讀取
 - **Rate limiting**：LLM API 調用限制
 - **結果截斷**：最多 40 筆避免訊息過載
 
@@ -208,6 +209,7 @@ Carousel (max 40)       Carousel + Score        Single Bubble
 ## 相關文件
 - Handler: `internal/modules/course/handler.go`
 - Semester: `internal/modules/course/semester.go`
+- Semester course cache: `internal/modules/course/semester_course_cache.go`
 - Tests: `internal/modules/course/handler_test.go`
 - BM25: `internal/rag/bm25.go`
 - Syllabus: `internal/syllabus/scraper.go`

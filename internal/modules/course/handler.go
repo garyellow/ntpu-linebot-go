@@ -47,7 +47,8 @@ type Handler struct {
 	bm25Index      *rag.BM25Index
 	queryExpander  genai.QueryExpander // Interface for multi-provider support
 	llmRateLimiter *ratelimit.KeyedLimiter
-	semesterCache  *SemesterCache // Shared cache updated by warmup
+	semesterCache  *SemesterCache       // Shared cache updated by warmup
+	courseCache    *SemesterCourseCache // Short-lived in-memory cache for hot semester course lists
 	seg            *stringutil.Segmenter
 
 	// matchers contains all pattern-handler pairs sorted by priority.
@@ -161,6 +162,7 @@ func NewHandler(
 		queryExpander:  queryExpander,
 		llmRateLimiter: llmRateLimiter,
 		semesterCache:  semesterCache,
+		courseCache:    NewSemesterCourseCache(defaultSemesterCourseCacheTTL),
 		seg:            seg,
 	}
 
@@ -799,7 +801,7 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 // Multi-word search: "微積分 王" will find courses where title contains "微積分王"
 // OR where all characters exist in title+teachers combined.
 func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm string) []messaging_api.MessageInterface {
-	return h.searchCoursesWithOptions(ctx, searchTerm, false)
+	return h.searchCoursesByKeyword(ctx, searchTerm, false)
 }
 
 // handleExtendedCourseSearch handles extended course search (3rd and 4th semesters).
@@ -807,7 +809,7 @@ func (h *Handler) handleUnifiedCourseSearch(ctx context.Context, searchTerm stri
 // Search range: 2 additional historical semesters (excludes the 2 most recent).
 // Search flow: SQL LIKE → Fuzzy match (2 historical semesters) → Scraping (2 historical semesters)
 func (h *Handler) handleExtendedCourseSearch(ctx context.Context, searchTerm string) []messaging_api.MessageInterface {
-	return h.searchCoursesWithOptions(ctx, searchTerm, true)
+	return h.searchCoursesByKeyword(ctx, searchTerm, true)
 }
 
 // handleTeacherCourseSearch handles teacher-specific course search.
@@ -846,7 +848,7 @@ func (h *Handler) handleTeacherCourseSearch(ctx context.Context, teacherName str
 }
 
 // searchCoursesForTeacher searches courses by teacher name using cache.
-// This is a simplified version of searchCoursesWithOptions focused on teacher search.
+// This is a simplified version of searchCoursesByKeyword focused on teacher search.
 // Uses SQL-level fuzzy matching for efficiency (no Go-level iteration needed).
 // Returns deduplicated courses from recent semesters.
 func (h *Handler) searchCoursesForTeacher(ctx context.Context, teacherName string) []storage.Course {
@@ -880,7 +882,15 @@ func (h *Handler) searchCoursesForTeacher(ctx context.Context, teacherName strin
 	return sliceutil.Deduplicate(courses, func(c storage.Course) string { return c.UID })
 }
 
-// searchCoursesWithOptions is the core search implementation used by both unified and extended search.
+func (h *Handler) getSemesterCourses(ctx context.Context, year, term int) ([]storage.Course, error) {
+	if h.courseCache == nil {
+		return h.db.GetCoursesByYearTerm(ctx, year, term)
+	}
+
+	return h.courseCache.Get(ctx, h.db, year, term)
+}
+
+// searchCoursesByKeyword is the core keyword search implementation used by both unified and extended search.
 // It consolidates the common search logic to avoid code duplication.
 //
 // Parameters:
@@ -892,7 +902,7 @@ func (h *Handler) searchCoursesForTeacher(ctx context.Context, teacherName strin
 //  3. Web scraping from NTPU website (if cache miss)
 //
 // Note: Smart search (BM25) is completely separate and triggered by "找課" keyword only.
-func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm string, extended bool) []messaging_api.MessageInterface {
+func (h *Handler) searchCoursesByKeyword(ctx context.Context, searchTerm string, extended bool) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(ModuleName)
 	startTime := time.Now()
 	sender := lineutil.GetSender(senderName, h.stickerManager)
@@ -955,7 +965,7 @@ func (h *Handler) searchCoursesWithOptions(ctx context.Context, searchTerm strin
 	for i := range searchYears {
 		year := searchYears[i]
 		term := searchTerms[i]
-		semesterCourses, err := h.db.GetCoursesByYearTerm(ctx, year, term)
+		semesterCourses, err := h.getSemesterCourses(ctx, year, term)
 		if err != nil {
 			log.WithError(err).
 				WithField("year", year).
@@ -1213,7 +1223,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 		// Reuse the logic from handleRegularPattern but filtered by year
 		var courses []storage.Course
 		for _, term := range []int{1, 2} {
-			termCourses, err := h.db.GetCoursesByYearTerm(ctx, year, term)
+			termCourses, err := h.getSemesterCourses(ctx, year, term)
 			if err != nil {
 				log.WithError(err).
 					WithField("year", year).

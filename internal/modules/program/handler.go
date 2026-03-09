@@ -33,6 +33,7 @@ type Handler struct {
 	logger         *logger.Logger
 	stickerManager *sticker.Manager
 	semesterCache  *course.SemesterCache // Shared cache (from course module)
+	programCache   *ProgramListCache     // Short-TTL cache for GetAllPrograms results
 
 	// matchers contains all pattern-handler pairs sorted by priority.
 	// Shared by CanHandle and HandleMessage for consistent routing.
@@ -113,6 +114,7 @@ func NewHandler(
 		logger:         logger,
 		stickerManager: stickerManager,
 		semesterCache:  semesterCache,
+		programCache:   NewProgramListCache(0),
 	}
 
 	// Initialize Pattern-Action Table
@@ -353,8 +355,8 @@ func (h *Handler) handleProgramList(ctx context.Context) []messaging_api.Message
 			DebugContext(ctx, "Using semester filter for program statistics")
 	}
 
-	// Get all programs from database with semester filter
-	programs, err := h.db.GetAllPrograms(ctx, years, terms)
+	// Get all programs from cache (short-TTL) with semester filter
+	programs, err := h.programCache.Get(ctx, h.db, years, terms)
 	if err != nil {
 		log.WithError(err).ErrorContext(ctx, "Failed to get program list")
 		msg := lineutil.NewTextMessageWithConsistentSender(
@@ -421,8 +423,8 @@ func (h *Handler) handleProgramSearch(ctx context.Context, searchTerm string) []
 	}
 
 	// Tier 2: Fuzzy character-set matching
-	// Get all programs and filter by character containment
-	allPrograms, err := h.db.GetAllPrograms(ctx, years, terms)
+	// Get all programs from cache (short-TTL) and filter by character containment
+	allPrograms, err := h.programCache.Get(ctx, h.db, years, terms)
 	if err != nil {
 		log.WithError(err).WarnContext(ctx, "Failed to get all programs for fuzzy matching")
 	} else {

@@ -36,6 +36,7 @@ type Handler struct {
 	maxContactsLimit int // Maximum contacts per search (from config)
 	deltaRecorder    delta.Recorder
 	seg              *stringutil.Segmenter
+	orgCache         *ContactOrgCache // Short-TTL cache for org member lists
 
 	// matchers contains all pattern-handler pairs sorted by priority.
 	// Shared by CanHandle and HandleMessage for consistent routing.
@@ -139,6 +140,7 @@ func NewHandler(
 		maxContactsLimit: maxContactsLimit,
 		deltaRecorder:    deltaRecorder,
 		seg:              seg,
+		orgCache:         NewContactOrgCache(0),
 	}
 	h.initializeMatchers()
 	h.precomputeEmergency()
@@ -585,7 +587,16 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 	log.WithField("organization", orgName).
 		InfoContext(ctx, "Handling organization members query")
 
-	// Step 1: Search cache for members of this organization
+	// Step 1: Check short-TTL application cache
+	if cached, ok := h.orgCache.GetCached(orgName); ok {
+		h.metrics.RecordCacheHit(ModuleName)
+		log.WithField("organization", orgName).
+			WithField("count", len(cached)).
+			DebugContext(ctx, "Organization members application cache hit")
+		return h.formatContactResults(ctx, cached)
+	}
+
+	// Step 2: Search SQLite cache for members of this organization
 	// Use GetContactsByOrganization for organization-specific queries
 	members, err := h.db.GetContactsByOrganization(ctx, orgName)
 	if err != nil {
@@ -611,10 +622,11 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 		log.WithField("organization", orgName).
 			WithField("count", len(individuals)).
 			DebugContext(ctx, "Organization members cache hit")
+		h.orgCache.SetCached(orgName, individuals) // Populate application cache for next burst
 		return h.formatContactResults(ctx, individuals)
 	}
 
-	// Step 2: Cache miss - try scraping
+	// Step 3: Cache miss - try scraping
 	h.metrics.RecordCacheMiss(ModuleName)
 	log.WithField("organization", orgName).
 		InfoContext(ctx, "Organization members cache miss, scraping")
@@ -667,6 +679,7 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 	}
 
 	h.metrics.RecordScraperRequest(ModuleName, "success", time.Since(startTime).Seconds())
+	h.orgCache.SetCached(orgName, individuals) // Populate application cache after successful scrape
 	return h.formatContactResults(ctx, individuals)
 }
 
