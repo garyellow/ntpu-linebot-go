@@ -37,6 +37,7 @@ func NewSemesterCourseCache(ttl time.Duration) *SemesterCourseCache {
 }
 
 // Get returns courses for a semester from memory when fresh, otherwise reloads from SQLite.
+// Expired entries are lazily deleted on read to keep the map bounded.
 func (c *SemesterCourseCache) Get(ctx context.Context, db *storage.DB, year, term int) ([]storage.Course, error) {
 	if db == nil {
 		return nil, fmt.Errorf("semester course cache: db is nil")
@@ -47,8 +48,14 @@ func (c *SemesterCourseCache) Get(ctx context.Context, db *storage.DB, year, ter
 	c.mu.RLock()
 	entry, ok := c.entries[key]
 	c.mu.RUnlock()
-	if ok && time.Since(entry.fetchedAt) < c.ttl {
-		return cloneCourses(entry.courses), nil
+	if ok {
+		if time.Since(entry.fetchedAt) < c.ttl {
+			return cloneCourses(entry.courses), nil
+		}
+		// Lazy eviction: remove stale entry.
+		c.mu.Lock()
+		delete(c.entries, key)
+		c.mu.Unlock()
 	}
 
 	courses, err := db.GetCoursesByYearTerm(ctx, year, term)
@@ -58,7 +65,7 @@ func (c *SemesterCourseCache) Get(ctx context.Context, db *storage.DB, year, ter
 
 	c.mu.Lock()
 	c.entries[key] = semesterCourseCacheEntry{
-		courses:   cloneCourses(courses),
+		courses:   courses, // store original; Get always returns a defensive copy
 		fetchedAt: time.Now(),
 	}
 	c.mu.Unlock()

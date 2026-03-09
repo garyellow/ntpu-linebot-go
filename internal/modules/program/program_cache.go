@@ -39,6 +39,7 @@ func NewProgramListCache(ttl time.Duration) *ProgramListCache {
 
 // Get returns all programs for the given semester filter from memory when fresh,
 // otherwise reloads from SQLite.
+// Expired entries are lazily deleted on read to keep the map bounded.
 func (c *ProgramListCache) Get(ctx context.Context, db *storage.DB, years, terms []int) ([]storage.Program, error) {
 	if db == nil {
 		return nil, fmt.Errorf("program list cache: db is nil")
@@ -49,8 +50,14 @@ func (c *ProgramListCache) Get(ctx context.Context, db *storage.DB, years, terms
 	c.mu.RLock()
 	entry, ok := c.entries[key]
 	c.mu.RUnlock()
-	if ok && time.Since(entry.fetchedAt) < c.ttl {
-		return clonePrograms(entry.programs), nil
+	if ok {
+		if time.Since(entry.fetchedAt) < c.ttl {
+			return clonePrograms(entry.programs), nil
+		}
+		// Lazy eviction: remove stale entry.
+		c.mu.Lock()
+		delete(c.entries, key)
+		c.mu.Unlock()
 	}
 
 	programs, err := db.GetAllPrograms(ctx, years, terms)
@@ -60,7 +67,7 @@ func (c *ProgramListCache) Get(ctx context.Context, db *storage.DB, years, terms
 
 	c.mu.Lock()
 	c.entries[key] = programListCacheEntry{
-		programs:  clonePrograms(programs),
+		programs:  programs, // store original; GetCached always returns a defensive copy
 		fetchedAt: time.Now(),
 	}
 	c.mu.Unlock()

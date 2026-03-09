@@ -42,7 +42,9 @@ type Handler struct {
     metrics          *metrics.Metrics
     logger           *logger.Logger
     stickerManager   *sticker.Manager
-    maxContactsLimit int  // 最大結果數限制（預設 100）    orgCache         *ContactOrgCache  // 短 TTL 快取：單位成員列表}
+    maxContactsLimit int              // 最大結果數限制（預設 100）
+    orgCache         *ContactOrgCache // 短 TTL 快取：單位成員列表
+}
 ```
 
 ### 搜尋策略

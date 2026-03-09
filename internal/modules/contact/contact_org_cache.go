@@ -40,14 +40,22 @@ func NewContactOrgCache(ttl time.Duration) *ContactOrgCache {
 
 // GetCached returns cached individual contacts for an organization when the entry is
 // still fresh. Returns (nil, false) when the cache is cold or expired.
+// Expired entries are lazily deleted on read to keep the map bounded.
 func (c *ContactOrgCache) GetCached(orgName string) ([]storage.Contact, bool) {
 	c.mu.RLock()
 	entry, ok := c.entries[orgName]
 	c.mu.RUnlock()
-	if ok && time.Since(entry.fetchedAt) < c.ttl {
+	if !ok {
+		return nil, false
+	}
+	if time.Since(entry.fetchedAt) < c.ttl {
 		return cloneContacts(entry.contacts), true
 	}
 
+	// Lazy eviction: remove stale entry so the map stays bounded.
+	c.mu.Lock()
+	delete(c.entries, orgName)
+	c.mu.Unlock()
 	return nil, false
 }
 
