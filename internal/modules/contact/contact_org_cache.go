@@ -1,0 +1,87 @@
+package contact
+
+import (
+	"sync"
+	"time"
+
+	"github.com/garyellow/ntpu-linebot-go/internal/storage"
+)
+
+const defaultContactOrgCacheTTL = 30 * time.Second
+
+type contactOrgCacheEntry struct {
+	contacts  []storage.Contact
+	fetchedAt time.Time
+}
+
+// OrgCache holds the member list for organization names in memory for a short time.
+// It reduces repeated SQLite reads when multiple users browse the same organization's
+// member list in a short burst (e.g., via the "查看成員列表" postback button).
+//
+// Only non-empty results are cached: when the DB has no data (triggering a scrape),
+// we skip caching so the next request can re-query the DB after the scrape completes.
+type OrgCache struct {
+	mu      sync.RWMutex
+	ttl     time.Duration
+	entries map[string]contactOrgCacheEntry
+}
+
+// NewOrgCache creates a short-lived in-memory cache for organization member lists.
+func NewOrgCache(ttl time.Duration) *OrgCache {
+	if ttl <= 0 {
+		ttl = defaultContactOrgCacheTTL
+	}
+
+	return &OrgCache{
+		ttl:     ttl,
+		entries: make(map[string]contactOrgCacheEntry),
+	}
+}
+
+// GetCached returns cached individual contacts for an organization when the entry is
+// still fresh. Returns (nil, false) when the cache is cold or expired.
+// Expired entries are lazily deleted on read to keep the map bounded.
+func (c *OrgCache) GetCached(orgName string) ([]storage.Contact, bool) {
+	c.mu.RLock()
+	entry, ok := c.entries[orgName]
+	c.mu.RUnlock()
+	if !ok {
+		return nil, false
+	}
+	if time.Since(entry.fetchedAt) < c.ttl {
+		return cloneContacts(entry.contacts), true
+	}
+
+	// Lazy eviction: re-check under write lock to avoid deleting a freshly refreshed entry.
+	c.mu.Lock()
+	if e, still := c.entries[orgName]; still && time.Since(e.fetchedAt) >= c.ttl {
+		delete(c.entries, orgName)
+	}
+	c.mu.Unlock()
+	return nil, false
+}
+
+// SetCached stores the individual contacts for an organization.
+// Empty slices are silently skipped to avoid caching "not yet scraped" states.
+func (c *OrgCache) SetCached(orgName string, contacts []storage.Contact) {
+	if len(contacts) == 0 {
+		return
+	}
+
+	c.mu.Lock()
+	c.entries[orgName] = contactOrgCacheEntry{
+		contacts:  cloneContacts(contacts),
+		fetchedAt: time.Now(),
+	}
+	c.mu.Unlock()
+}
+
+func cloneContacts(contacts []storage.Contact) []storage.Contact {
+	if len(contacts) == 0 {
+		return nil
+	}
+
+	cloned := make([]storage.Contact, len(contacts))
+	copy(cloned, contacts)
+	return cloned
+}

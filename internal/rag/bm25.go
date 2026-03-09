@@ -99,7 +99,6 @@ type BM25Result struct {
 	Year     int
 	Term     int
 	Score    float64 // BM25 score (higher is better)
-	Rank     int     // Rank position (1-indexed)
 }
 
 // NewBM25Index creates a new BM25 index with shared Chinese segmenter.
@@ -387,7 +386,7 @@ func (semIdx *semesterIndex) search(query string, topN int, tokenizer func(strin
 
 	// Convert to results
 	results := make([]BM25Result, 0, len(scoredDocs))
-	for rank, sd := range scoredDocs {
+	for _, sd := range scoredDocs {
 		if sd.docID >= len(semIdx.uidList) {
 			continue
 		}
@@ -400,7 +399,6 @@ func (semIdx *semesterIndex) search(query string, topN int, tokenizer func(strin
 			Year:     meta.Year,
 			Term:     meta.Term,
 			Score:    sd.score,
-			Rank:     rank + 1,
 		})
 	}
 
