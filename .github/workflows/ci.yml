@@ -159,7 +159,7 @@ jobs:
           $HOME/go/bin/govulncheck ./...
 
       - name: Run Security Scanner
-        uses: securego/gosec@v2.23.0
+        uses: securego/gosec@v2.24.6
         with:
           args: '-no-fail -exclude-generated -fmt sarif -out gosec-results.sarif ./...'
 
@@ -197,7 +197,7 @@ jobs:
 
       - name: Generate Metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
@@ -207,7 +207,7 @@ jobs:
             org.opencontainers.image.description=LINE chatbot for NTPU student services
 
       - name: Build and Push Image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
@@ -222,7 +222,7 @@ jobs:
             VCS_REF=${{ github.sha }}
 
       - name: Scan Image
-        uses: aquasecurity/trivy-action@0.34.2
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}
           format: 'sarif'
