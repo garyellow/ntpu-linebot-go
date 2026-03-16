@@ -23,7 +23,7 @@ require (
 	github.com/samber/slog-betterstack v1.4.3
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.20.0
-	golang.org/x/text v0.34.0
+	golang.org/x/text v0.35.0
 	google.golang.org/genai v1.49.0
 	modernc.org/sqlite v1.46.1
 )
