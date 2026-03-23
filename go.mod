@@ -25,7 +25,7 @@ require (
 	golang.org/x/sync v0.20.0
 	golang.org/x/text v0.35.0
 	google.golang.org/genai v1.50.0
-	modernc.org/sqlite v1.46.2
+	modernc.org/sqlite v1.47.0
 )
 
 require (
