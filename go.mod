@@ -17,7 +17,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/klauspost/compress v1.18.4
-	github.com/line/line-bot-sdk-go/v8 v8.19.0
+	github.com/line/line-bot-sdk-go/v8 v8.19.1
 	github.com/openai/openai-go/v3 v3.28.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/samber/slog-betterstack v1.4.3
