@@ -90,7 +90,7 @@ validate (快速驗證)
 - Branch-specific cache scope（`ci-pr` / `release`）避免衝突
 - Docker metadata action 自動產生語義化標籤
 - 單平台構建在 CI（快速），多平台在 release（完整）
-- 使用最新的 actions：checkout@v5, setup-go@v6
+- 使用最新的 actions：checkout@v6, setup-go@v6
 
 ### ✅ Workflow 設計
 - 使用 `concurrency` 避免重複執行浪費資源
