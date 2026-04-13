@@ -10,8 +10,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.99.0
 	github.com/aws/smithy-go v1.24.3
 	github.com/corpix/uarand v0.2.0
-	github.com/getsentry/sentry-go v0.44.1
-	github.com/getsentry/sentry-go/gin v0.44.1
+	github.com/getsentry/sentry-go v0.45.0
+	github.com/getsentry/sentry-go/gin v0.45.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-ego/gse v1.0.2
 	github.com/google/uuid v1.6.0
