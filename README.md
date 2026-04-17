@@ -252,8 +252,11 @@ docker run -d -p 10000:10000 \
 ```bash
 task dev
 task test
+task test:race
 task lint
+task vuln
 task build
+task ci
 task compose:up
 ```
 

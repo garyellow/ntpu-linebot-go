@@ -131,15 +131,24 @@ GITHUB_TOKEN=<auto>
 ## 本地測試
 
 ```powershell
-# 運行測試（模擬 CI，跳過網路測試）
+# 一鍵跑完整本地檢查（mod + fmt + lint + test + vuln + build）
+task ci
+
+# 額外驗證 race detector（對齊 CI 的 test job）
+task test:race
+
+# 運行測試（跳過網路測試，速度較快）
 task test
 
 # 運行完整測試（包含網路測試，較慢）
 task test:full
 
-# 構建 Docker（不需要 QEMU）
-docker build -t test:local .
+# 漏洞掃描
+task vuln
 
 # 查看覆蓋率
 task test:coverage
+
+# 構建 Docker（不需要 QEMU）
+docker build -t test:local .
 ```
