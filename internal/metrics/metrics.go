@@ -412,7 +412,7 @@ func (m *Metrics) RecordLLM(provider, operation, status string, duration float64
 
 // RecordSearch records a search operation.
 // searchType: bm25, disabled
-// status: success, error, no_results, skipped
+// status: success, error, no_results, skipped, rate_limited, expansion_failed
 func (m *Metrics) RecordSearch(searchType, status string, duration float64) {
 	m.SearchTotal.WithLabelValues(searchType, status).Inc()
 	m.SearchDuration.WithLabelValues(searchType).Observe(duration)
