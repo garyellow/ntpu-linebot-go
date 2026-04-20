@@ -12,6 +12,7 @@ import (
 // RateLimitKind distinguishes transient burst throttling from longer-lived quota exhaustion.
 type RateLimitKind string
 
+// Rate limit kinds for cooldown classification.
 const (
 	RateLimitNone      RateLimitKind = ""
 	RateLimitBurst     RateLimitKind = "burst"
