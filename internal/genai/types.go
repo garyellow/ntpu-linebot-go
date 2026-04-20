@@ -157,31 +157,31 @@ type LLMConfig struct {
 // First element is primary model, subsequent elements are fallbacks.
 var (
 	// DefaultGeminiIntentModels is the default model chain for Gemini intent parsing.
-	// gemini-3.1-pro-preview is the latest Gemini 3 Pro model (confirmed on ai.google.dev/gemini-api/docs/gemini-3).
-	// Fallbacks prefer stronger reasoning quality before lower-latency models.
-	DefaultGeminiIntentModels = []string{"gemini-3.1-pro-preview", "gemini-2.5-pro", "gemini-2.5-flash"}
+	// Using Gemma 4 models (gemma-4-31b-it, gemma-4-26b-a4b-it) which have 32768 output tokens and confirmed
+	// function calling support. These have significantly higher free-tier quota than Gemini Pro/Flash series.
+	DefaultGeminiIntentModels = []string{"gemma-4-31b-it", "gemma-4-26b-a4b-it"}
 
 	// DefaultGeminiExpanderModels is the default model chain for Gemini query expansion.
-	// Query expansion quality benefits more from stronger reasoning than from lower latency.
-	DefaultGeminiExpanderModels = []string{"gemini-3.1-pro-preview", "gemini-2.5-pro", "gemini-2.5-flash"}
+	DefaultGeminiExpanderModels = []string{"gemma-4-31b-it", "gemma-4-26b-a4b-it"}
 
 	// DefaultGroqIntentModels is the default model chain for Groq intent parsing.
-	// kimi-k2 leads for superior Chinese tool-call accuracy; gpt-oss-120b/llama-4-maverick as strong fallbacks;
-	// qwen3-32b for Chinese coverage; llama-4-scout/gpt-oss-20b as lightweight fallbacks.
-	DefaultGroqIntentModels = []string{"moonshotai/kimi-k2-instruct", "openai/gpt-oss-120b", "meta-llama/llama-4-maverick-17b-128e-instruct", "llama-3.3-70b-versatile", "qwen/qwen3-32b", "meta-llama/llama-4-scout-17b-16e-instruct", "openai/gpt-oss-20b"}
+	// Ordered by reasoning quality; all selected models support max_completion_tokens >= 32768.
+	// Removed: llama-4-scout (max 8192), compound/compound-mini (no tool calling support),
+	//          kimi-k2-instruct and llama-4-maverick (404 model_not_found).
+	DefaultGroqIntentModels = []string{"openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.3-70b-versatile", "qwen/qwen3-32b", "llama-3.1-8b-instant"}
 
 	// DefaultGroqExpanderModels is the default model chain for Groq query expansion.
-	// kimi-k2 leads; qwen3-32b/llama-4-scout for Chinese semantic expansion; heavier models as fallback.
-	DefaultGroqExpanderModels = []string{"moonshotai/kimi-k2-instruct", "qwen/qwen3-32b", "meta-llama/llama-4-scout-17b-16e-instruct", "openai/gpt-oss-120b", "llama-3.3-70b-versatile", "meta-llama/llama-4-maverick-17b-128e-instruct", "openai/gpt-oss-20b"}
+	// Same model selection rationale as intent models.
+	DefaultGroqExpanderModels = []string{"openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.3-70b-versatile", "qwen/qwen3-32b", "llama-3.1-8b-instant"}
 
 	// DefaultCerebrasIntentModels is the default model chain for Cerebras intent parsing.
-	// gpt-oss-120b is the only production model for function/tool calling on Cerebras.
+	// gpt-oss-120b is the primary production model; llama3.1-8b as fallback if key lacks gpt-oss-120b access.
 	// NOTE: zai-glm-4.7 and qwen-3-235b-a22b-instruct-2507 appear in /v1/models but
 	//       return 404 on actual inference calls (tool-call endpoint unavailable).
-	DefaultCerebrasIntentModels = []string{"gpt-oss-120b"}
+	DefaultCerebrasIntentModels = []string{"gpt-oss-120b", "llama3.1-8b"}
 
 	// DefaultCerebrasExpanderModels is the default model chain for Cerebras query expansion.
-	DefaultCerebrasExpanderModels = []string{"gpt-oss-120b"}
+	DefaultCerebrasExpanderModels = []string{"gpt-oss-120b", "llama3.1-8b"}
 
 	// DefaultProviders is the default provider order for fallback.
 	DefaultProviders = []Provider{ProviderGemini, ProviderGroq, ProviderCerebras, ProviderOpenAI}

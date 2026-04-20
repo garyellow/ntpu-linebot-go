@@ -158,7 +158,7 @@ func (p *openaiIntentParser) Parse(ctx context.Context, text string) (*ParseResu
 			OfAuto: openai.String(string(openai.ChatCompletionToolChoiceOptionAutoRequired)),
 		},
 		Temperature: openai.Float(0.1), // Low temperature for consistent classification
-		MaxTokens:   openai.Int(16384), // High limit to prevent truncation of tool call responses
+		MaxTokens:   openai.Int(32768), // Models in chain all support >= 32768 max_completion_tokens
 	}
 
 	// Suppress reasoning tokens on thinking-capable models to reduce latency.

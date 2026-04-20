@@ -126,7 +126,7 @@ func (e *openaiQueryExpander) Expand(ctx context.Context, query string) (string,
 			openai.UserMessage(prompt),
 		},
 		Temperature: openai.Float(0.2), // Lower temperature reduces lexical drift for BM25
-		MaxTokens:   openai.Int(16384),
+		MaxTokens:   openai.Int(32768), // Models in chain all support >= 32768 max_completion_tokens
 	}
 
 	// Suppress reasoning tokens on thinking-capable models to reduce latency.
