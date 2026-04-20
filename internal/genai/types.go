@@ -161,9 +161,8 @@ type LLMConfig struct {
 // First element is primary model, subsequent elements are fallbacks.
 var (
 	// DefaultGeminiIntentModels is the default model chain for Gemini intent parsing.
-	// Using Gemma 4 models (gemma-4-31b-it, gemma-4-26b-a4b-it) which support up to 32768 output tokens
-	// and confirmed function calling. The Gemini implementation raises MaxOutputTokens to that ceiling for
-	// these Gemma 4 defaults while keeping a conservative limit for other Gemini-family models.
+	// Using Gemma 4 models (gemma-4-31b-it, gemma-4-26b-a4b-it) which support
+	// confirmed function calling and are suitable defaults for intent parsing.
 	DefaultGeminiIntentModels = []string{"gemma-4-31b-it", "gemma-4-26b-a4b-it"}
 
 	// DefaultGeminiExpanderModels is the default model chain for Gemini query expansion.

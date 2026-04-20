@@ -37,6 +37,8 @@ func TestNew(t *testing.T) {
 		// LLM metrics
 		{"LLMTotal", func() bool { return m.LLMTotal != nil }},
 		{"LLMDuration", func() bool { return m.LLMDuration != nil }},
+		{"LLMFallbackTotal", func() bool { return m.LLMFallbackTotal != nil }},
+		{"LLMCooldownTotal", func() bool { return m.LLMCooldownTotal != nil }},
 
 		// Search metrics
 		{"SearchTotal", func() bool { return m.SearchTotal != nil }},

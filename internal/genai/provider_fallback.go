@@ -53,6 +53,7 @@ func (f *FallbackIntentParser) Parse(ctx context.Context, text string) (*ParseRe
 	}
 
 	var lastErr error
+	var lastAttemptedProvider Provider
 
 	for i, parser := range f.parsers {
 		start := time.Now()
@@ -73,14 +74,10 @@ func (f *FallbackIntentParser) Parse(ctx context.Context, text string) (*ParseRe
 		result, err := f.parseWithRetry(ctx, parser, text)
 		if err == nil {
 			recordIntentSuccess(provider, start)
-			// Only record provider-level fallback when the provider actually changes.
-			// This avoids misleading metrics like Gemini→Gemini when falling back between
-			// multiple models of the same provider.
-			if i > 0 {
-				prevProvider := f.parsers[i-1].Provider()
-				if prevProvider != provider {
-					recordFallback(prevProvider, provider, "nlu")
-				}
+			// Record provider-level fallback only when the provider actually changes
+			// from the last attempted (not skipped) provider.
+			if lastAttemptedProvider != "" && lastAttemptedProvider != provider {
+				recordFallback(lastAttemptedProvider, provider, "nlu")
 			}
 			return result, nil
 		}
@@ -94,6 +91,7 @@ func (f *FallbackIntentParser) Parse(ctx context.Context, text string) (*ParseRe
 				"cooldown_remaining_ms", cooldown.Remaining(time.Now()).Milliseconds())
 			recordCooldownEvent(provider, cooldown.Kind, "applied")
 		}
+		lastAttemptedProvider = provider
 		action := ClassifyError(err)
 
 		slog.WarnContext(ctx, "Intent parser failed",
@@ -276,6 +274,8 @@ func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (strin
 		return query, nil // feature disabled, not a failure
 	}
 
+	var lastAttemptedProvider Provider
+
 	for i, expander := range f.expanders {
 		start := time.Now()
 		provider := expander.Provider()
@@ -295,12 +295,10 @@ func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (strin
 		result, err := f.expandWithRetry(ctx, expander, query)
 		if err == nil {
 			recordExpanderSuccess(provider, start)
-			// Only record provider-level fallback when the provider actually changes
-			if i > 0 {
-				prevProvider := f.expanders[i-1].Provider()
-				if prevProvider != provider {
-					recordFallback(prevProvider, provider, "expander")
-				}
+			// Record provider-level fallback only when the provider actually changes
+			// from the last attempted (not skipped) provider.
+			if lastAttemptedProvider != "" && lastAttemptedProvider != provider {
+				recordFallback(lastAttemptedProvider, provider, "expander")
 			}
 			return result, nil
 		}
@@ -314,6 +312,7 @@ func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (strin
 				"cooldown_remaining_ms", cooldown.Remaining(time.Now()).Milliseconds())
 			recordCooldownEvent(provider, cooldown.Kind, "applied")
 		}
+		lastAttemptedProvider = provider
 		action := ClassifyError(err)
 		slog.WarnContext(ctx, "Query expander failed",
 			"provider", provider,
