@@ -1903,7 +1903,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 
 	if !bm25Enabled {
 		log.InfoContext(ctx, "Smart search not enabled")
-		h.metrics.RecordSearch("disabled", "skipped", time.Since(startTime).Seconds(), 0)
+		h.metrics.RecordSearch("disabled", "skipped", time.Since(startTime).Seconds())
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		return []messaging_api.MessageInterface{
 			lineutil.ErrorMessageWithQuickReply(
@@ -1941,7 +1941,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 
 		if h.llmRateLimiter != nil && chatID != "" && !h.llmRateLimiter.Allow(chatID) {
 			log.WarnContext(searchCtx, "LLM rate limit exceeded for query expansion")
-			h.metrics.RecordSearch(searchType, "rate_limited", time.Since(startTime).Seconds(), 0)
+			h.metrics.RecordSearch(searchType, "rate_limited", time.Since(startTime).Seconds())
 			retryQRs := append([]lineutil.QuickReplyItem{lineutil.QuickReplyRetryAction("課程 " + query)}, lineutil.QuickReplyCourseNav(false)...)
 			return []messaging_api.MessageInterface{
 				lineutil.ErrorMessageWithQuickReply(
@@ -1956,7 +1956,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 		expanded, err := h.queryExpander.Expand(searchCtx, query)
 		if err != nil {
 			log.WithError(err).WarnContext(searchCtx, "Query expansion failed, smart search aborted")
-			h.metrics.RecordSearch(searchType, "expansion_failed", time.Since(startTime).Seconds(), 0)
+			h.metrics.RecordSearch(searchType, "expansion_failed", time.Since(startTime).Seconds())
 			retryQRs := append([]lineutil.QuickReplyItem{lineutil.QuickReplyRetryAction("課程 " + query)}, lineutil.QuickReplyCourseNav(false)...)
 			return []messaging_api.MessageInterface{
 				lineutil.ErrorMessageWithQuickReply(
@@ -1995,7 +1995,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 
 	if err != nil {
 		log.WithError(err).WarnContext(searchCtx, "Smart search failed")
-		h.metrics.RecordSearch(searchType, "error", time.Since(startTime).Seconds(), 0)
+		h.metrics.RecordSearch(searchType, "error", time.Since(startTime).Seconds())
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		return []messaging_api.MessageInterface{
 			lineutil.ErrorMessageWithQuickReply(
@@ -2009,7 +2009,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 
 	if len(results) == 0 {
 		log.InfoContext(searchCtx, "No smart search results found")
-		h.metrics.RecordSearch(searchType, "no_results", time.Since(startTime).Seconds(), 0)
+		h.metrics.RecordSearch(searchType, "no_results", time.Since(startTime).Seconds())
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 
 		helpText := "🔍 未找到相關課程\n\n💡 建議嘗試\n• 換個描述方式或關鍵字\n• 使用精確搜尋：「課程 課名」\n\n👨‍🏫 查詢教師資訊？\n請使用：「聯絡 教師名」或「教授 教師名」"
@@ -2062,7 +2062,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 	}
 
 	// Record successful smart search metrics
-	h.metrics.RecordSearch(searchType, "success", time.Since(startTime).Seconds(), len(results))
+	h.metrics.RecordSearch(searchType, "success", time.Since(startTime).Seconds())
 
 	// Format response with confidence labels
 	return h.formatSmartSearchResponse(courses, results)

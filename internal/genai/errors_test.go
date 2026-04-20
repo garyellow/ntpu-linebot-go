@@ -44,6 +44,14 @@ func TestClassifyError(t *testing.T) {
 			expected: ActionRetry,
 		},
 		{
+			name: "LLMError 429 quota exhausted",
+			err: &LLMError{
+				Err:        errors.New("429 quota exceeded for the day"),
+				StatusCode: http.StatusTooManyRequests,
+			},
+			expected: ActionFallback,
+		},
+		{
 			name: "LLMError 500",
 			err: &LLMError{
 				Err:        errors.New("server error"),
@@ -194,6 +202,67 @@ func TestClassifyError(t *testing.T) {
 				t.Errorf("ClassifyError(%v) = %v, want %v", tt.err, result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestClassifyRateLimitKind(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		err      error
+		expected RateLimitKind
+	}{
+		{
+			name: "burst 429",
+			err: &LLMError{
+				Err:        errors.New("too many requests"),
+				StatusCode: http.StatusTooManyRequests,
+				Headers:    http.Header{"Retry-After": []string{"5"}},
+			},
+			expected: RateLimitBurst,
+		},
+		{
+			name: "quota exhausted 429",
+			err: &LLMError{
+				Err:        errors.New("429 daily quota exceeded"),
+				StatusCode: http.StatusTooManyRequests,
+			},
+			expected: RateLimitExhausted,
+		},
+		{
+			name:     "not a rate limit",
+			err:      errors.New("bad request"),
+			expected: RateLimitNone,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := classifyRateLimitKind(tt.err); got != tt.expected {
+				t.Errorf("classifyRateLimitKind(%v) = %v, want %v", tt.err, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestInferStatusCodeFromError(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		err      error
+		expected int
+	}{
+		{errors.New("429 RESOURCE_EXHAUSTED"), http.StatusTooManyRequests},
+		{errors.New("401 unauthorized"), http.StatusUnauthorized},
+		{errors.New("403 forbidden"), http.StatusForbidden},
+		{errors.New("404 not found"), http.StatusNotFound},
+		{errors.New("service unavailable"), http.StatusServiceUnavailable},
+		{errors.New("weird unknown error"), 0},
+	}
+	for _, tt := range tests {
+		if got := inferStatusCodeFromError(tt.err); got != tt.expected {
+			t.Errorf("inferStatusCodeFromError(%v) = %d, want %d", tt.err, got, tt.expected)
+		}
 	}
 }
 

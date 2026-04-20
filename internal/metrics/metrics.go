@@ -27,8 +27,8 @@ var (
 	// LLMFallbackTotal is the global LLM fallback counter.
 	LLMFallbackTotal *prometheus.CounterVec
 
-	// LLMFallbackLatency is the global LLM fallback latency histogram.
-	LLMFallbackLatency *prometheus.HistogramVec
+	// LLMCooldownTotal is the global LLM cooldown event counter.
+	LLMCooldownTotal *prometheus.CounterVec
 )
 
 // InitGlobal initializes the package-level metric variables.
@@ -37,7 +37,7 @@ func InitGlobal(m *Metrics) {
 	LLMTotal = m.LLMTotal
 	LLMDuration = m.LLMDuration
 	LLMFallbackTotal = m.LLMFallbackTotal
-	LLMFallbackLatency = m.LLMFallbackLatency
+	LLMCooldownTotal = m.LLMCooldownTotal
 }
 
 // Metrics holds all Prometheus metrics for the NTPU LineBot.
@@ -75,10 +75,10 @@ type Metrics struct {
 	// LLM (Gemini/Groq/Cerebras API - RED Method)
 	// NLU intent parsing, Query Expansion
 	// ============================================
-	LLMTotal           *prometheus.CounterVec   // requests by provider, operation, and status
-	LLMDuration        *prometheus.HistogramVec // latency by provider and operation
-	LLMFallbackTotal   *prometheus.CounterVec   // fallback events by provider pair and operation
-	LLMFallbackLatency *prometheus.HistogramVec // additional latency from fallback by provider pair and operation
+	LLMTotal         *prometheus.CounterVec   // requests by provider, operation, and status
+	LLMDuration      *prometheus.HistogramVec // latency by provider and operation
+	LLMFallbackTotal *prometheus.CounterVec   // fallback events by provider pair and operation
+	LLMCooldownTotal *prometheus.CounterVec   // cooldown events by provider, kind, and action
 
 	// ============================================
 	// Smart Search (BM25 - RED Method)
@@ -86,7 +86,6 @@ type Metrics struct {
 	// ============================================
 	SearchTotal    *prometheus.CounterVec
 	SearchDuration *prometheus.HistogramVec
-	SearchResults  *prometheus.HistogramVec // result count distribution
 
 	// Index sizes (Gauges - point-in-time values)
 	IndexSize *prometheus.GaugeVec // documents in BM25 index
@@ -240,20 +239,15 @@ func New(registry *prometheus.Registry) *Metrics {
 			[]string{"from_provider", "to_provider", "operation"},
 		),
 
-		LLMFallbackLatency: promauto.With(registry).NewHistogramVec(
-			prometheus.HistogramOpts{
-				Name: "ntpu_llm_fallback_latency_seconds",
-				Help: "Additional latency introduced by provider fallback",
-				// Buckets for fallback overhead:
-				// Fast: < 0.5s (immediate fallback)
-				// Normal: 0.5-2s (with retry)
-				// Slow: > 2s (multiple retries)
-				Buckets: []float64{0.1, 0.5, 1, 2, 5, 10},
+		LLMCooldownTotal: promauto.With(registry).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "ntpu_llm_cooldown_total",
+				Help: "Total LLM model cooldown events",
 			},
-			// from_provider: gemini, groq, cerebras (primary that failed)
-			// to_provider: gemini, groq, cerebras (fallback used)
-			// operation: nlu, expander
-			[]string{"from_provider", "to_provider", "operation"},
+			// provider: gemini, groq, cerebras
+			// kind: burst, exhausted
+			// action: applied, skipped
+			[]string{"provider", "kind", "action"},
 		),
 
 		// ============================================
@@ -279,15 +273,6 @@ func New(registry *prometheus.Registry) *Metrics {
 				Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5},
 			},
 			// type: bm25, disabled
-			[]string{"type"},
-		),
-
-		SearchResults: promauto.With(registry).NewHistogramVec(
-			prometheus.HistogramOpts{
-				Name:    "ntpu_search_results",
-				Help:    "Number of results returned by search",
-				Buckets: []float64{0, 1, 5, 10, 20, 40},
-			},
 			[]string{"type"},
 		),
 
@@ -427,11 +412,10 @@ func (m *Metrics) RecordLLM(provider, operation, status string, duration float64
 
 // RecordSearch records a search operation.
 // searchType: bm25, disabled
-// status: success, error, no_results, skipped
-func (m *Metrics) RecordSearch(searchType, status string, duration float64, resultCount int) {
+// status: success, error, no_results, skipped, rate_limited, expansion_failed
+func (m *Metrics) RecordSearch(searchType, status string, duration float64) {
 	m.SearchTotal.WithLabelValues(searchType, status).Inc()
 	m.SearchDuration.WithLabelValues(searchType).Observe(duration)
-	m.SearchResults.WithLabelValues(searchType).Observe(float64(resultCount))
 }
 
 // SetIndexSize sets the current index size.

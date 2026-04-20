@@ -37,11 +37,12 @@ func TestNew(t *testing.T) {
 		// LLM metrics
 		{"LLMTotal", func() bool { return m.LLMTotal != nil }},
 		{"LLMDuration", func() bool { return m.LLMDuration != nil }},
+		{"LLMFallbackTotal", func() bool { return m.LLMFallbackTotal != nil }},
+		{"LLMCooldownTotal", func() bool { return m.LLMCooldownTotal != nil }},
 
 		// Search metrics
 		{"SearchTotal", func() bool { return m.SearchTotal != nil }},
 		{"SearchDuration", func() bool { return m.SearchDuration != nil }},
-		{"SearchResults", func() bool { return m.SearchResults != nil }},
 		{"IndexSize", func() bool { return m.IndexSize != nil }},
 
 		// Intent Distribution metrics
@@ -221,19 +222,18 @@ func TestRecordSearch(t *testing.T) {
 	m := New(registry)
 
 	testCases := []struct {
-		searchType  string
-		status      string
-		duration    float64
-		resultCount int
+		searchType string
+		status     string
+		duration   float64
 	}{
-		{"bm25", "success", 0.05, 10},
-		{"bm25", "success", 0.03, 20},
-		{"bm25", "error", 1.0, 0},
-		{"disabled", "skipped", 0.001, 0},
+		{"bm25", "success", 0.05},
+		{"bm25", "success", 0.03},
+		{"bm25", "error", 1.0},
+		{"disabled", "skipped", 0.001},
 	}
 
 	for _, tc := range testCases {
-		m.RecordSearch(tc.searchType, tc.status, tc.duration, tc.resultCount)
+		m.RecordSearch(tc.searchType, tc.status, tc.duration)
 	}
 }
 

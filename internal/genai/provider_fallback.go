@@ -22,11 +22,16 @@ import (
 type FallbackIntentParser struct {
 	parsers     []IntentParser
 	retryConfig RetryConfig
+	cooldowns   *modelCooldownStore
 }
 
 // NewFallbackIntentParser creates a new fallback-enabled intent parser.
 // It tries parsers in the order they are provided.
 func NewFallbackIntentParser(cfg RetryConfig, parsers ...IntentParser) *FallbackIntentParser {
+	return newFallbackIntentParserWithCooldowns(cfg, globalModelCooldownStore, parsers...)
+}
+
+func newFallbackIntentParserWithCooldowns(cfg RetryConfig, cooldowns *modelCooldownStore, parsers ...IntentParser) *FallbackIntentParser {
 	// Filter out nil parsers
 	activeParsers := make([]IntentParser, 0, len(parsers))
 	for _, p := range parsers {
@@ -37,6 +42,7 @@ func NewFallbackIntentParser(cfg RetryConfig, parsers ...IntentParser) *Fallback
 	return &FallbackIntentParser{
 		parsers:     activeParsers,
 		retryConfig: cfg,
+		cooldowns:   cooldowns,
 	}
 }
 
@@ -46,34 +52,51 @@ func (f *FallbackIntentParser) Parse(ctx context.Context, text string) (*ParseRe
 		return nil, errors.New("intent parser not configured")
 	}
 
-	totalStart := time.Now()
 	var lastErr error
+	var lastAttemptedProvider Provider
 
 	for i, parser := range f.parsers {
 		start := time.Now()
 		provider := parser.Provider()
+		model := parser.Model()
+
+		if cooldown, cooling := f.cooldowns.Get(provider, model); cooling && f.hasAvailableIntentParser(i+1) {
+			slog.DebugContext(ctx, "Skipping cooled-down intent parser",
+				"provider", provider,
+				"model", model,
+				"cooldown_kind", cooldown.Kind,
+				"cooldown_remaining_ms", cooldown.Remaining(time.Now()).Milliseconds())
+			recordCooldownEvent(provider, cooldown.Kind, "skipped")
+			continue
+		}
 
 		// Try current parser with retry
 		result, err := f.parseWithRetry(ctx, parser, text)
 		if err == nil {
 			recordIntentSuccess(provider, start)
-			// Only record provider-level fallback when the provider actually changes.
-			// This avoids misleading metrics like Gemini→Gemini when falling back between
-			// multiple models of the same provider.
-			if i > 0 {
-				prevProvider := f.parsers[i-1].Provider()
-				if prevProvider != provider {
-					recordFallback(prevProvider, provider, "nlu", time.Since(totalStart))
-				}
+			// Record provider-level fallback only when the provider actually changes
+			// from the last attempted (not skipped) provider.
+			if lastAttemptedProvider != "" && lastAttemptedProvider != provider {
+				recordFallback(lastAttemptedProvider, provider, "nlu")
 			}
 			return result, nil
 		}
 
 		lastErr = err
+		if cooldown, applied := applyCooldown(f.cooldowns, provider, model, err); applied {
+			slog.InfoContext(ctx, "Applied model cooldown after intent parser rate limit",
+				"provider", provider,
+				"model", model,
+				"cooldown_kind", cooldown.Kind,
+				"cooldown_remaining_ms", cooldown.Remaining(time.Now()).Milliseconds())
+			recordCooldownEvent(provider, cooldown.Kind, "applied")
+		}
+		lastAttemptedProvider = provider
 		action := ClassifyError(err)
 
 		slog.WarnContext(ctx, "Intent parser failed",
 			"provider", provider,
+			"model", model,
 			"index", i,
 			"error", err,
 			"action", action,
@@ -98,6 +121,21 @@ func (f *FallbackIntentParser) Parse(ctx context.Context, text string) (*ParseRe
 
 	// Defensive fallback: loop above is expected to return on all paths
 	return nil, fmt.Errorf("all intent parsers failed: %w", lastErr)
+}
+
+func (f *FallbackIntentParser) hasAvailableIntentParser(start int) bool {
+	if f == nil {
+		return false
+	}
+	for _, parser := range f.parsers[start:] {
+		if parser == nil {
+			continue
+		}
+		if _, cooling := f.cooldowns.Get(parser.Provider(), parser.Model()); !cooling {
+			return true
+		}
+	}
+	return false
 }
 
 // parseWithRetry attempts parsing with retry logic.
@@ -174,6 +212,14 @@ func (f *FallbackIntentParser) Provider() Provider {
 	return f.parsers[0].Provider()
 }
 
+// Model returns the model name of the current/first parser.
+func (f *FallbackIntentParser) Model() string {
+	if f == nil || len(f.parsers) == 0 {
+		return ""
+	}
+	return f.parsers[0].Model()
+}
+
 // Close closes all parsers.
 func (f *FallbackIntentParser) Close() error {
 	if f == nil {
@@ -199,10 +245,15 @@ func (f *FallbackIntentParser) Close() error {
 type FallbackQueryExpander struct {
 	expanders   []QueryExpander
 	retryConfig RetryConfig
+	cooldowns   *modelCooldownStore
 }
 
 // NewFallbackQueryExpander creates a new fallback-enabled query expander.
 func NewFallbackQueryExpander(cfg RetryConfig, expanders ...QueryExpander) *FallbackQueryExpander {
+	return newFallbackQueryExpanderWithCooldowns(cfg, globalModelCooldownStore, expanders...)
+}
+
+func newFallbackQueryExpanderWithCooldowns(cfg RetryConfig, cooldowns *modelCooldownStore, expanders ...QueryExpander) *FallbackQueryExpander {
 	activeExpanders := make([]QueryExpander, 0, len(expanders))
 	for _, e := range expanders {
 		if e != nil {
@@ -212,6 +263,7 @@ func NewFallbackQueryExpander(cfg RetryConfig, expanders ...QueryExpander) *Fall
 	return &FallbackQueryExpander{
 		expanders:   activeExpanders,
 		retryConfig: cfg,
+		cooldowns:   cooldowns,
 	}
 }
 
@@ -222,30 +274,49 @@ func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (strin
 		return query, nil // feature disabled, not a failure
 	}
 
-	totalStart := time.Now()
+	var lastAttemptedProvider Provider
 
 	for i, expander := range f.expanders {
 		start := time.Now()
 		provider := expander.Provider()
+		model := expander.Model()
+
+		if cooldown, cooling := f.cooldowns.Get(provider, model); cooling && f.hasAvailableQueryExpander(i+1) {
+			slog.DebugContext(ctx, "Skipping cooled-down query expander",
+				"provider", provider,
+				"model", model,
+				"cooldown_kind", cooldown.Kind,
+				"cooldown_remaining_ms", cooldown.Remaining(time.Now()).Milliseconds())
+			recordCooldownEvent(provider, cooldown.Kind, "skipped")
+			continue
+		}
 
 		// Try current expander with retry
 		result, err := f.expandWithRetry(ctx, expander, query)
 		if err == nil {
 			recordExpanderSuccess(provider, start)
-			// Only record provider-level fallback when the provider actually changes
-			if i > 0 {
-				prevProvider := f.expanders[i-1].Provider()
-				if prevProvider != provider {
-					recordFallback(prevProvider, provider, "expander", time.Since(totalStart))
-				}
+			// Record provider-level fallback only when the provider actually changes
+			// from the last attempted (not skipped) provider.
+			if lastAttemptedProvider != "" && lastAttemptedProvider != provider {
+				recordFallback(lastAttemptedProvider, provider, "expander")
 			}
 			return result, nil
 		}
 
 		// Check if we should fallback
+		if cooldown, applied := applyCooldown(f.cooldowns, provider, model, err); applied {
+			slog.InfoContext(ctx, "Applied model cooldown after query expander rate limit",
+				"provider", provider,
+				"model", model,
+				"cooldown_kind", cooldown.Kind,
+				"cooldown_remaining_ms", cooldown.Remaining(time.Now()).Milliseconds())
+			recordCooldownEvent(provider, cooldown.Kind, "applied")
+		}
+		lastAttemptedProvider = provider
 		action := ClassifyError(err)
 		slog.WarnContext(ctx, "Query expander failed",
 			"provider", provider,
+			"model", model,
 			"index", i,
 			"error", err,
 			"action", action,
@@ -267,6 +338,21 @@ func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (strin
 
 	// unreachable: loop always returns via ActionFail or last-expander check above
 	return query, fmt.Errorf("all %d query expanders failed", len(f.expanders))
+}
+
+func (f *FallbackQueryExpander) hasAvailableQueryExpander(start int) bool {
+	if f == nil {
+		return false
+	}
+	for _, expander := range f.expanders[start:] {
+		if expander == nil {
+			continue
+		}
+		if _, cooling := f.cooldowns.Get(expander.Provider(), expander.Model()); !cooling {
+			return true
+		}
+	}
+	return false
 }
 
 // expandWithRetry attempts expansion with retry logic.
@@ -325,6 +411,14 @@ func (f *FallbackQueryExpander) Provider() Provider {
 	return f.expanders[0].Provider()
 }
 
+// Model returns the model name of the current/first expander.
+func (f *FallbackQueryExpander) Model() string {
+	if f == nil || len(f.expanders) == 0 {
+		return ""
+	}
+	return f.expanders[0].Model()
+}
+
 // Close closes all expanders.
 func (f *FallbackQueryExpander) Close() error {
 	if f == nil {
@@ -347,7 +441,13 @@ func (f *FallbackQueryExpander) Close() error {
 }
 
 // Helper functions for metrics recording
-// (keeping these as they were)
+
+func recordCooldownEvent(provider Provider, kind RateLimitKind, action string) {
+	if metrics.LLMCooldownTotal == nil {
+		return
+	}
+	metrics.LLMCooldownTotal.WithLabelValues(string(provider), string(kind), action).Inc()
+}
 
 func recordIntentSuccess(provider Provider, start time.Time) {
 	if metrics.LLMTotal == nil || metrics.LLMDuration == nil {
@@ -381,7 +481,7 @@ func recordExpanderError(provider Provider, err error) {
 	metrics.LLMTotal.WithLabelValues(string(provider), "expander", errType).Inc()
 }
 
-func recordFallback(fromProvider, toProvider Provider, operation string, totalDuration time.Duration) {
+func recordFallback(fromProvider, toProvider Provider, operation string) {
 	if metrics.LLMFallbackTotal == nil {
 		return
 	}
@@ -390,15 +490,6 @@ func recordFallback(fromProvider, toProvider Provider, operation string, totalDu
 		string(toProvider),
 		operation,
 	).Inc()
-
-	// Record additional latency introduced by fallback
-	if metrics.LLMFallbackLatency != nil {
-		metrics.LLMFallbackLatency.WithLabelValues(
-			string(fromProvider),
-			string(toProvider),
-			operation,
-		).Observe(totalDuration.Seconds())
-	}
 }
 
 func classifyErrorType(err error) string {
@@ -417,6 +508,9 @@ func classifyErrorType(err error) string {
 	if errors.As(err, &llmErr) {
 		switch {
 		case llmErr.StatusCode == http.StatusTooManyRequests:
+			if classifyRateLimitKind(err) == RateLimitExhausted {
+				return "quota_exhausted"
+			}
 			return "rate_limit"
 		case llmErr.StatusCode >= 500:
 			return "server_error"
