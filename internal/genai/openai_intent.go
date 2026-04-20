@@ -27,6 +27,13 @@ type openaiIntentParser struct {
 	provider   Provider
 }
 
+func (p *openaiIntentParser) Model() string {
+	if p == nil {
+		return ""
+	}
+	return p.model
+}
+
 // newOpenAIIntentParser creates a new OpenAI-compatible intent parser.
 // Returns nil if apiKey is empty (NLU disabled).
 //
@@ -158,7 +165,6 @@ func (p *openaiIntentParser) Parse(ctx context.Context, text string) (*ParseResu
 			OfAuto: openai.String(string(openai.ChatCompletionToolChoiceOptionAutoRequired)),
 		},
 		Temperature: openai.Float(0.1), // Low temperature for consistent classification
-		MaxTokens:   openai.Int(32768), // Models in chain all support >= 32768 max_completion_tokens
 	}
 
 	// Suppress reasoning tokens on thinking-capable models to reduce latency.
@@ -171,13 +177,14 @@ func (p *openaiIntentParser) Parse(ctx context.Context, text string) (*ParseResu
 	duration := time.Since(start)
 
 	if err != nil {
+		normErr := normalizeProviderError(err, p.provider)
 		slog.WarnContext(ctx, "Intent parsing API call failed",
 			"provider", p.provider,
 			"model", p.model,
 			"input_length", len(text),
 			"duration_ms", duration.Milliseconds(),
-			"error", err)
-		return nil, fmt.Errorf("chat completion failed: %w", err)
+			"error", normErr)
+		return nil, fmt.Errorf("chat completion failed: %w", normErr)
 	}
 
 	// Parse the result

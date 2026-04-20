@@ -58,6 +58,8 @@ func (p Provider) String() string {
 type IntentParser interface {
 	// Parse analyzes user input and returns a parsed intent (always a function call).
 	Parse(ctx context.Context, text string) (*ParseResult, error)
+	// Model returns the configured model name for cooldown/routing decisions.
+	Model() string
 	// IsEnabled returns true if the parser is properly initialized.
 	IsEnabled() bool
 	// Close releases any resources held by the parser.
@@ -71,6 +73,8 @@ type IntentParser interface {
 type QueryExpander interface {
 	// Expand expands a query with synonyms and related terms.
 	Expand(ctx context.Context, query string) (string, error)
+	// Model returns the configured model name for cooldown/routing decisions.
+	Model() string
 	// Close releases any resources held by the expander.
 	Close() error
 	// Provider returns the provider type for metrics.
@@ -157,8 +161,9 @@ type LLMConfig struct {
 // First element is primary model, subsequent elements are fallbacks.
 var (
 	// DefaultGeminiIntentModels is the default model chain for Gemini intent parsing.
-	// Using Gemma 4 models (gemma-4-31b-it, gemma-4-26b-a4b-it) which have 32768 output tokens and confirmed
-	// function calling support. These have significantly higher free-tier quota than Gemini Pro/Flash series.
+	// Using Gemma 4 models (gemma-4-31b-it, gemma-4-26b-a4b-it) which support up to 32768 output tokens
+	// and confirmed function calling. The Gemini implementation raises MaxOutputTokens to that ceiling for
+	// these Gemma 4 defaults while keeping a conservative limit for other Gemini-family models.
 	DefaultGeminiIntentModels = []string{"gemma-4-31b-it", "gemma-4-26b-a4b-it"}
 
 	// DefaultGeminiExpanderModels is the default model chain for Gemini query expansion.

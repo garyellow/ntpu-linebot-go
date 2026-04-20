@@ -22,6 +22,13 @@ type geminiIntentParser struct {
 	systemInst string
 }
 
+func (p *geminiIntentParser) Model() string {
+	if p == nil {
+		return ""
+	}
+	return p.model
+}
+
 // newGeminiIntentParser creates a new Gemini-based intent parser.
 // Returns nil if apiKey is empty (NLU disabled).
 func newGeminiIntentParser(ctx context.Context, apiKey, model string) (*geminiIntentParser, error) {
@@ -69,9 +76,8 @@ func (p *geminiIntentParser) Parse(ctx context.Context, text string) (*ParseResu
 				Mode: genai.FunctionCallingConfigModeAny, // Force function calling
 			},
 		},
-		Temperature:     genai.Ptr[float32](0.1), // Low temperature for consistent classification
-		MaxOutputTokens: 16384,                   // High limit to prevent truncation of tool call responses
-		ThinkingConfig:  geminiThinkingConfig(p.model),
+		Temperature:    genai.Ptr[float32](0.1), // Low temperature for consistent classification
+		ThinkingConfig: geminiThinkingConfig(p.model),
 	}
 
 	// Generate content with timing
@@ -85,13 +91,14 @@ func (p *geminiIntentParser) Parse(ctx context.Context, text string) (*ParseResu
 	duration := time.Since(start)
 
 	if err != nil {
+		normErr := normalizeProviderError(err, ProviderGemini)
 		slog.WarnContext(ctx, "Intent parsing API call failed",
 			"provider", "gemini",
 			"model", p.model,
 			"input_length", len(text),
 			"duration_ms", duration.Milliseconds(),
-			"error", err)
-		return nil, fmt.Errorf("generate content failed: %w", err)
+			"error", normErr)
+		return nil, fmt.Errorf("generate content failed: %w", normErr)
 	}
 
 	// Parse the result

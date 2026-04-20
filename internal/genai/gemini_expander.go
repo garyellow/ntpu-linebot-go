@@ -20,6 +20,13 @@ type geminiQueryExpander struct {
 	model  string
 }
 
+func (e *geminiQueryExpander) Model() string {
+	if e == nil {
+		return ""
+	}
+	return e.model
+}
+
 // newGeminiQueryExpander creates a new Gemini-based query expander.
 // Returns nil if apiKey is empty (expansion disabled).
 func newGeminiQueryExpander(ctx context.Context, apiKey, model string) (*geminiQueryExpander, error) {
@@ -76,9 +83,8 @@ func (e *geminiQueryExpander) Expand(ctx context.Context, query string) (string,
 	prompt := QueryExpansionPrompt(query)
 
 	config := &genai.GenerateContentConfig{
-		Temperature:     genai.Ptr[float32](0.2), // Lower temperature reduces lexical drift for BM25
-		MaxOutputTokens: 16384,
-		ThinkingConfig:  geminiThinkingConfig(e.model),
+		Temperature:    genai.Ptr[float32](0.2), // Lower temperature reduces lexical drift for BM25
+		ThinkingConfig: geminiThinkingConfig(e.model),
 	}
 
 	start := time.Now()
@@ -86,14 +92,15 @@ func (e *geminiQueryExpander) Expand(ctx context.Context, query string) (string,
 	duration := time.Since(start)
 
 	if err != nil {
+		normErr := normalizeProviderError(err, ProviderGemini)
 		slog.WarnContext(ctx, "Query expansion API call failed",
 			"provider", "gemini",
 			"model", e.model,
 			"query_length", len(query),
 			"duration_ms", duration.Milliseconds(),
-			"error", err)
+			"error", normErr)
 		// Return error for retry/fallback decision
-		return query, fmt.Errorf("generate content failed: %w", err)
+		return query, fmt.Errorf("generate content failed: %w", normErr)
 	}
 
 	if resp == nil || len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil {

@@ -3,6 +3,7 @@ package genai
 import (
 	"context"
 	"errors"
+	"net/http"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ func init() {
 type mockIntentParser struct {
 	parseFunc   func(ctx context.Context, text string) (*ParseResult, error)
 	provider    Provider
+	model       string
 	enabled     bool
 	closeCalled bool
 }
@@ -36,6 +38,10 @@ func (m *mockIntentParser) IsEnabled() bool {
 	return m.enabled
 }
 
+func (m *mockIntentParser) Model() string {
+	return m.model
+}
+
 func (m *mockIntentParser) Provider() Provider {
 	return m.provider
 }
@@ -49,6 +55,7 @@ func (m *mockIntentParser) Close() error {
 type mockQueryExpander struct {
 	expandFunc  func(ctx context.Context, query string) (string, error)
 	provider    Provider
+	model       string
 	closeCalled bool
 }
 
@@ -63,9 +70,122 @@ func (m *mockQueryExpander) Provider() Provider {
 	return m.provider
 }
 
+func (m *mockQueryExpander) Model() string {
+	return m.model
+}
+
 func (m *mockQueryExpander) Close() error {
 	m.closeCalled = true
 	return nil
+}
+
+func TestFallbackIntentParser_Parse_SkipsCooledModelWhenAlternativeExists(t *testing.T) {
+	t.Parallel()
+	store := newModelCooldownStore()
+	store.Set(ProviderGemini, "gemma-4-31b-it", RateLimitBurst, time.Minute, "test cooldown")
+
+	primaryCalls := 0
+	primary := &mockIntentParser{
+		parseFunc: func(_ context.Context, _ string) (*ParseResult, error) {
+			primaryCalls++
+			return &ParseResult{Module: "primary"}, nil
+		},
+		provider: ProviderGemini,
+		model:    "gemma-4-31b-it",
+		enabled:  true,
+	}
+	fallback := &mockIntentParser{
+		parseFunc: func(_ context.Context, _ string) (*ParseResult, error) {
+			return &ParseResult{Module: "fallback"}, nil
+		},
+		provider: ProviderGroq,
+		model:    "openai/gpt-oss-120b",
+		enabled:  true,
+	}
+
+	parser := newFallbackIntentParserWithCooldowns(DefaultRetryConfig(), store, primary, fallback)
+	result, err := parser.Parse(context.Background(), "test")
+	if err != nil {
+		t.Fatalf("Parse() error = %v, want nil", err)
+	}
+	if primaryCalls != 0 {
+		t.Fatalf("cooled primary should be skipped, got %d calls", primaryCalls)
+	}
+	if result == nil || result.Module != "fallback" {
+		t.Fatalf("Parse() = %v, want fallback result", result)
+	}
+}
+
+func TestFallbackIntentParser_Parse_CooledModelIsStillTriedAsLastResort(t *testing.T) {
+	t.Parallel()
+	store := newModelCooldownStore()
+	store.Set(ProviderGemini, "gemma-4-31b-it", RateLimitBurst, time.Minute, "test cooldown")
+
+	primaryCalls := 0
+	primary := &mockIntentParser{
+		parseFunc: func(_ context.Context, _ string) (*ParseResult, error) {
+			primaryCalls++
+			return &ParseResult{Module: "primary"}, nil
+		},
+		provider: ProviderGemini,
+		model:    "gemma-4-31b-it",
+		enabled:  true,
+	}
+
+	parser := newFallbackIntentParserWithCooldowns(DefaultRetryConfig(), store, primary)
+	result, err := parser.Parse(context.Background(), "test")
+	if err != nil {
+		t.Fatalf("Parse() error = %v, want nil", err)
+	}
+	if primaryCalls != 1 {
+		t.Fatalf("last-resort cooled parser should still be tried, got %d calls", primaryCalls)
+	}
+	if result == nil || result.Module != "primary" {
+		t.Fatalf("Parse() = %v, want primary result", result)
+	}
+}
+
+func TestFallbackIntentParser_Parse_AppliesCooldownOn429(t *testing.T) {
+	t.Parallel()
+	store := newModelCooldownStore()
+	primary := &mockIntentParser{
+		parseFunc: func(_ context.Context, _ string) (*ParseResult, error) {
+			return nil, &LLMError{
+				Err:        errors.New("rate limit exceeded"),
+				StatusCode: 429,
+				Provider:   ProviderGroq,
+				Headers:    http.Header{"Retry-After": []string{"3"}},
+			}
+		},
+		provider: ProviderGroq,
+		model:    "openai/gpt-oss-120b",
+		enabled:  true,
+	}
+	fallback := &mockIntentParser{
+		parseFunc: func(_ context.Context, _ string) (*ParseResult, error) {
+			return &ParseResult{Module: "fallback"}, nil
+		},
+		provider: ProviderGemini,
+		model:    "gemma-4-31b-it",
+		enabled:  true,
+	}
+
+	cfg := RetryConfig{MaxAttempts: 1, InitialDelay: time.Millisecond, MaxDelay: 2 * time.Millisecond}
+	parser := newFallbackIntentParserWithCooldowns(cfg, store, primary, fallback)
+	_, err := parser.Parse(context.Background(), "test")
+	if err != nil {
+		t.Fatalf("Parse() error = %v, want nil via fallback", err)
+	}
+	entry, ok := store.Get(ProviderGroq, "openai/gpt-oss-120b")
+	if !ok {
+		t.Fatal("expected cooldown to be stored for rate-limited model")
+	}
+	if entry.Kind != RateLimitBurst {
+		t.Fatalf("cooldown kind = %v, want %v", entry.Kind, RateLimitBurst)
+	}
+	if remaining := entry.Remaining(time.Now()); remaining < 2*time.Second {
+		t.Fatalf("cooldown remaining = %v, want >= 2s", remaining)
+	}
 }
 
 func TestFallbackIntentParser_Parse_PrimarySuccess(t *testing.T) {
@@ -383,6 +503,41 @@ func TestFallbackQueryExpander_Expand_NilExpander(t *testing.T) {
 	}
 	if result != "test" {
 		t.Errorf("Expand() = %q, want %q (original)", result, "test")
+	}
+}
+
+func TestFallbackQueryExpander_Expand_SkipsCooledModelWhenAlternativeExists(t *testing.T) {
+	t.Parallel()
+	store := newModelCooldownStore()
+	store.Set(ProviderGemini, "gemma-4-31b-it", RateLimitBurst, time.Minute, "test cooldown")
+
+	primaryCalls := 0
+	primary := &mockQueryExpander{
+		expandFunc: func(_ context.Context, query string) (string, error) {
+			primaryCalls++
+			return query + " primary", nil
+		},
+		provider: ProviderGemini,
+		model:    "gemma-4-31b-it",
+	}
+	fallback := &mockQueryExpander{
+		expandFunc: func(_ context.Context, query string) (string, error) {
+			return query + " fallback", nil
+		},
+		provider: ProviderGroq,
+		model:    "openai/gpt-oss-120b",
+	}
+
+	expander := newFallbackQueryExpanderWithCooldowns(DefaultRetryConfig(), store, primary, fallback)
+	result, err := expander.Expand(context.Background(), "test")
+	if err != nil {
+		t.Fatalf("Expand() error = %v, want nil", err)
+	}
+	if primaryCalls != 0 {
+		t.Fatalf("cooled primary should be skipped, got %d calls", primaryCalls)
+	}
+	if result != "test fallback" {
+		t.Fatalf("Expand() = %q, want fallback result", result)
 	}
 }
 

@@ -745,6 +745,7 @@ func (m *mockQueryExpander) Expand(_ context.Context, query string) (string, err
 
 func (m *mockQueryExpander) Close() error             { return nil }
 func (m *mockQueryExpander) Provider() genai.Provider { return "mock" }
+func (m *mockQueryExpander) Model() string            { return "mock-model" }
 
 // setupTestHandlerWithSmartSearch creates a handler with an initialized BM25 index
 // and an optional query expander / rate limiter for smart-search path tests.

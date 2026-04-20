@@ -24,6 +24,13 @@ type openaiQueryExpander struct {
 	provider Provider
 }
 
+func (e *openaiQueryExpander) Model() string {
+	if e == nil {
+		return ""
+	}
+	return e.model
+}
+
 // newOpenAIQueryExpander creates a new OpenAI-compatible query expander.
 // Returns nil if apiKey is empty (expansion disabled).
 //
@@ -126,7 +133,6 @@ func (e *openaiQueryExpander) Expand(ctx context.Context, query string) (string,
 			openai.UserMessage(prompt),
 		},
 		Temperature: openai.Float(0.2), // Lower temperature reduces lexical drift for BM25
-		MaxTokens:   openai.Int(32768), // Models in chain all support >= 32768 max_completion_tokens
 	}
 
 	// Suppress reasoning tokens on thinking-capable models to reduce latency.
@@ -138,14 +144,15 @@ func (e *openaiQueryExpander) Expand(ctx context.Context, query string) (string,
 	duration := time.Since(start)
 
 	if err != nil {
+		normErr := normalizeProviderError(err, e.provider)
 		slog.WarnContext(ctx, "Query expansion API call failed",
 			"provider", e.provider,
 			"model", e.model,
 			"query_length", len(query),
 			"duration_ms", duration.Milliseconds(),
-			"error", err)
+			"error", normErr)
 		// Return error for retry/fallback decision
-		return query, fmt.Errorf("chat completion failed: %w", err)
+		return query, fmt.Errorf("chat completion failed: %w", normErr)
 	}
 
 	if len(resp.Choices) == 0 || resp.Choices[0].Message.Content == "" {

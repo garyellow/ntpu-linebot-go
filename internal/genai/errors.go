@@ -42,6 +42,7 @@ type LLMError struct {
 	Err        error
 	StatusCode int
 	Provider   Provider
+	Headers    http.Header
 }
 
 // Error implements the error interface.
@@ -59,7 +60,8 @@ func (e *LLMError) Unwrap() error {
 
 // ClassifyError determines the appropriate action based on the error.
 // This follows industry norms for LLM API error handling:
-//   - Transient errors (429, 5xx, network) → Retry
+//   - Transient errors (5xx, network) → Retry
+//   - Rate limiting (429) → Burst: Retry / Exhausted: Fallback (via classifyRateLimitKind)
 //   - Quota exhaustion, auth failure (401, 403), model not found (404) → Fallback to other provider
 //   - Permanent client errors (400, 422) → Fail immediately
 func ClassifyError(err error) ErrorAction {
@@ -79,6 +81,14 @@ func ClassifyError(err error) ErrorAction {
 	// Check for wrapped LLMError
 	var llmErr *LLMError
 	if errors.As(err, &llmErr) {
+		if llmErr.StatusCode == http.StatusTooManyRequests {
+			switch classifyRateLimitKind(err) {
+			case RateLimitExhausted:
+				return ActionFallback
+			case RateLimitBurst:
+				return ActionRetry
+			}
+		}
 		return classifyStatusCode(llmErr.StatusCode)
 	}
 
@@ -150,6 +160,8 @@ func ClassifyError(err error) ErrorAction {
 func classifyStatusCode(statusCode int) ErrorAction {
 	switch {
 	// Retry: rate limit, timeout, server errors
+	// NOTE: For LLMError, 429 is pre-handled in ClassifyError with burst/exhausted split.
+	// This branch handles non-LLMError 429s (plain HTTP status code).
 	case statusCode == http.StatusTooManyRequests: // 429
 		return ActionRetry
 	case statusCode == http.StatusRequestTimeout: // 408
