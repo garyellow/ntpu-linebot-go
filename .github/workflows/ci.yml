@@ -10,6 +10,7 @@ on:
       - 'go.mod'
       - 'go.sum'
       - 'Dockerfile'
+      - 'Dockerfile.alpine'
       - '.github/workflows/*.yml'
   pull_request:
     branches:
@@ -159,7 +160,7 @@ jobs:
           $HOME/go/bin/govulncheck ./...
 
       - name: Run Security Scanner
-        uses: securego/gosec@v2.25.0
+        uses: securego/gosec@v2.26.1
         with:
           args: '-no-fail -exclude-generated -fmt sarif -out gosec-results.sarif ./...'
 
@@ -222,7 +223,7 @@ jobs:
             VCS_REF=${{ github.sha }}
 
       - name: Scan Image
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}
           format: 'sarif'
