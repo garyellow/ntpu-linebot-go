@@ -158,35 +158,38 @@ func (f *FallbackQueryExpander) Close() error {
 	return f.chain.close()
 }
 
-func recordCooldownEvent(provider Provider, kind RateLimitKind, action string) {
+func recordCooldownEvent(provider Provider, model string, kind RateLimitKind, action string) {
 	if metrics.LLMCooldownTotal == nil {
 		return
 	}
-	metrics.LLMCooldownTotal.WithLabelValues(string(provider), string(kind), action).Inc()
+	metrics.LLMCooldownTotal.WithLabelValues(string(provider), model, string(kind), action).Inc()
 }
 
-func recordLLMSuccess(provider Provider, operation string, start time.Time) {
+func recordLLMSuccess(provider Provider, model, operation string, start time.Time) {
 	if metrics.LLMTotal == nil || metrics.LLMDuration == nil {
 		return
 	}
-	metrics.LLMTotal.WithLabelValues(string(provider), operation, "success").Inc()
-	metrics.LLMDuration.WithLabelValues(string(provider), operation).Observe(time.Since(start).Seconds())
+	metrics.LLMTotal.WithLabelValues(string(provider), model, operation, "success").Inc()
+	metrics.LLMDuration.WithLabelValues(string(provider), model, operation).Observe(time.Since(start).Seconds())
 }
 
-func recordLLMError(provider Provider, operation string, err error) {
-	if metrics.LLMTotal == nil {
+func recordLLMError(provider Provider, model, operation string, err error, start time.Time) {
+	if metrics.LLMTotal == nil || metrics.LLMDuration == nil {
 		return
 	}
-	metrics.LLMTotal.WithLabelValues(string(provider), operation, classifyErrorType(err)).Inc()
+	metrics.LLMTotal.WithLabelValues(string(provider), model, operation, classifyErrorType(err)).Inc()
+	metrics.LLMDuration.WithLabelValues(string(provider), model, operation).Observe(time.Since(start).Seconds())
 }
 
-func recordFallback(fromProvider, toProvider Provider, operation string) {
+func recordFallback(fromProvider Provider, fromModel string, toProvider Provider, toModel, operation string) {
 	if metrics.LLMFallbackTotal == nil {
 		return
 	}
 	metrics.LLMFallbackTotal.WithLabelValues(
 		string(fromProvider),
+		fromModel,
 		string(toProvider),
+		toModel,
 		operation,
 	).Inc()
 }

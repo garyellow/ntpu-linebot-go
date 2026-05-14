@@ -407,10 +407,11 @@ Per-domain rate limiting (burst=3, 5 rps) prevents overwhelming individual serve
 **Logging**: `task dev` (debug level enabled by default in dev mode)
 
 **Prometheus** (`http://localhost:10000/metrics`):
-- Webhook: requests, latency
+- HTTP/Webhook: route requests, webhook events, LINE reply outcomes, latency
 - Cache: hits, misses
 - Scraper: requests (success/error/timeout), latency
-- Rate limiter: wait time, dropped requests
+- LLM: provider/model attempts, fallback transitions, cooldowns, latency
+- Rate limiter: tracked users, dropped requests
 
 **Common queries**:
 ```promql
@@ -418,7 +419,7 @@ Per-domain rate limiting (burst=3, 5 rps) prevents overwhelming individual serve
 sum(rate(ntpu_cache_operations_total{result="hit"}[5m])) / sum(rate(ntpu_cache_operations_total[5m]))
 
 # P95 latency
-histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le))
+histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le, event_type))
 ```
 
 ## Docker
@@ -466,7 +467,7 @@ Fallback → getHelpMessage() + Warning Log
 - Function Calling (AUTO mode): Model chooses function call or text response
 - 9 intent functions: `course_search`, `course_smart`, `course_uid`, `id_search`, `id_student_id`, `id_department`, `contact_search`, `contact_emergency`, `help`
 - Group @Bot detection: Uses `mention.Index` and `mention.Length` for precise removal
-- Metrics: `ntpu_llm_total{provider,operation}`, `ntpu_llm_duration_seconds{provider}`, `ntpu_llm_fallback_total`, `ntpu_intent_total{module,intent,source}`
+- Metrics: `ntpu_llm_total{provider,model,operation,status}`, `ntpu_llm_duration_seconds{provider,model,operation}`, `ntpu_llm_fallback_total{from_provider,from_model,to_provider,to_model,operation}`, `ntpu_intent_total{module,intent,source}`
 
 **Implementation Pattern**:
 - `genai.IntentParser`: Interface for NLU parsing (implemented by Gemini and OpenAI-compatible)

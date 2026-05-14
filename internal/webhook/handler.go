@@ -181,6 +181,7 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 	eventDurationMs := time.Since(eventStart).Milliseconds()
 	durationSeconds := float64(eventDurationMs) / 1000.0
 	status := "success"
+	replyStatus := "not_applicable"
 	if err != nil {
 		status = "error"
 		log.WithError(err).WithField("event_type", eventType).ErrorContext(ctx, "Failed to handle event")
@@ -188,6 +189,7 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 	h.metrics.RecordWebhook(eventType, status, durationSeconds)
 
 	if len(messages) > 0 && err == nil {
+		replyStatus = "pending"
 		// LINE API restriction: max messages per reply
 		if len(messages) > h.maxMessagesPerReply {
 			log.WithField("message_count", len(messages)).
@@ -205,38 +207,43 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 
 		replyToken := h.getReplyToken(event)
 		if replyToken == "" {
+			replyStatus = "skipped_empty_token"
+			h.metrics.RecordLineReply(replyStatus, 0)
 			log.DebugContext(ctx, "Empty reply token, skipping reply")
-			return
-		}
-
-		// Validate reply token format
-		if len(replyToken) < h.minReplyTokenLength {
+		} else if len(replyToken) < h.minReplyTokenLength {
+			replyStatus = "skipped_invalid_token"
+			h.metrics.RecordLineReply(replyStatus, 0)
 			log.DebugContext(ctx, "Invalid reply token format")
-			return
-		}
-
-		// Check global rate limit
-		if !h.rateLimiter.Allow() {
-			log.WarnContext(ctx, "Global rate limit exceeded, waiting")
-			h.metrics.RecordRateLimiterDrop("global")
-			h.rateLimiter.WaitSimple()
-		}
-
-		if _, err := h.client.ReplyMessage(
-			&messaging_api.ReplyMessageRequest{
-				ReplyToken: replyToken,
-				Messages:   messages,
-			},
-		); err != nil {
-			errMsg := err.Error()
-			if strings.Contains(errMsg, "Invalid reply token") {
-				log.WithError(err).DebugContext(ctx, "Reply token already used or invalid")
-			} else if strings.Contains(errMsg, "rate limit") {
-				log.WithError(err).ErrorContext(ctx, "Rate limit exceeded")
-			} else {
-				log.WithError(err).ErrorContext(ctx, "Failed to send reply")
+		} else {
+			// Check global rate limit
+			if !h.rateLimiter.Allow() {
+				log.WarnContext(ctx, "Global rate limit exceeded, waiting")
+				h.metrics.RecordRateLimiterDrop("global")
+				h.rateLimiter.WaitSimple()
 			}
-			h.metrics.RecordWebhook(eventType, "reply_error", time.Since(eventStart).Seconds())
+
+			replyStart := time.Now()
+			if _, err := h.client.ReplyMessage(
+				&messaging_api.ReplyMessageRequest{
+					ReplyToken: replyToken,
+					Messages:   messages,
+				},
+			); err != nil {
+				errMsg := err.Error()
+				if strings.Contains(errMsg, "Invalid reply token") {
+					replyStatus = "invalid_token"
+					log.WithError(err).DebugContext(ctx, "Reply token already used or invalid")
+				} else if strings.Contains(errMsg, "rate limit") {
+					replyStatus = "rate_limited"
+					log.WithError(err).ErrorContext(ctx, "Rate limit exceeded")
+				} else {
+					replyStatus = "error"
+					log.WithError(err).ErrorContext(ctx, "Failed to send reply")
+				}
+			} else {
+				replyStatus = "success"
+			}
+			h.metrics.RecordLineReply(replyStatus, time.Since(replyStart).Seconds())
 		}
 	}
 
@@ -244,9 +251,10 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 	batchDurationMs := time.Since(webhookStart).Milliseconds()
 	log.WithField("event_type", eventType).
 		WithField("status", status).
+		WithField("reply_status", replyStatus).
 		WithField("event_duration_ms", eventDurationMs).
 		WithField("batch_duration_ms", batchDurationMs).
-		InfoContext(ctx, "Event processed")
+		DebugContext(ctx, "Event processed")
 }
 
 func extractEventMeta(event webhook.EventInterface) (string, int64, *bool) {

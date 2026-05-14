@@ -263,21 +263,22 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 
 | 指標名稱 | 類型 | 標籤 | 說明 |
 |---------|------|------|------|
-| `ntpu_llm_total` | Counter | provider, operation, status | LLM 請求總數 |
-| `ntpu_llm_duration_seconds` | Histogram | provider, operation | LLM 請求延遲 |
-| `ntpu_llm_fallback_total` | Counter | from_provider, to_provider, operation | 故障轉移次數 |
+| `ntpu_llm_total` | Counter | provider, model, operation, status | LLM 嘗試總數 |
+| `ntpu_llm_duration_seconds` | Histogram | provider, model, operation | LLM 嘗試延遲 |
+| `ntpu_llm_fallback_total` | Counter | from_provider, from_model, to_provider, to_model, operation | 故障轉移 transition 次數 |
+| `ntpu_llm_cooldown_total` | Counter | provider, model, kind, action | 模型 cooldown 事件 |
 | `ntpu_rate_limiter_dropped_total` | Counter | limiter="llm" | 限流丟棄請求數 |
 
 ### 常用查詢
 
 ```promql
 # Provider 成功率比較 (Gemini, Groq, Cerebras)
-sum(rate(ntpu_llm_total{status="success"}[5m])) by (provider)
-/ sum(rate(ntpu_llm_total[5m])) by (provider)
+sum(rate(ntpu_llm_total{status="success"}[5m])) by (provider, model)
+/ sum(rate(ntpu_llm_total[5m])) by (provider, model)
 
 # 故障轉移頻率
-sum(rate(ntpu_llm_fallback_total[1h])) by (from_provider, to_provider)
+sum(rate(ntpu_llm_fallback_total[1h])) by (from_provider, from_model, to_provider, to_model)
 
-# P95 延遲 (by provider)
-histogram_quantile(0.95, sum(rate(ntpu_llm_duration_seconds_bucket[5m])) by (le, provider))
+# P95 延遲 (by provider/model)
+histogram_quantile(0.95, sum(rate(ntpu_llm_duration_seconds_bucket[5m])) by (le, provider, model))
 ```

@@ -42,7 +42,7 @@ func RetryWithBackoff(ctx context.Context, maxRetries int, initialDelay time.Dur
 		if err == nil {
 			// Log success if retries were needed
 			if attempt > 0 {
-				slog.InfoContext(ctx, "Request succeeded after retries",
+				slog.DebugContext(ctx, "Request succeeded after retries",
 					"total_attempts", attempt+1,
 					"total_duration_ms", time.Since(startTime).Milliseconds())
 			}
@@ -99,8 +99,8 @@ func RetryWithBackoff(ctx context.Context, maxRetries int, initialDelay time.Dur
 		}
 	}
 
-	// Log final failure
-	slog.ErrorContext(ctx, "All retries exhausted",
+	// Caller logs the returned error at the operation boundary.
+	slog.DebugContext(ctx, "All retries exhausted",
 		"total_attempts", maxRetries+1,
 		"total_duration_ms", time.Since(startTime).Milliseconds(),
 		"last_error", lastErr)

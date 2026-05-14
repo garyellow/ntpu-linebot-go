@@ -81,7 +81,6 @@ func (c *fallbackChain[T]) run(ctx context.Context, input string) (T, error) {
 	}
 
 	var lastErr error
-	var lastAttemptedProvider Provider
 
 	for i, step := range c.steps {
 		provider := step.endpoint.Provider()
@@ -93,21 +92,19 @@ func (c *fallbackChain[T]) run(ctx context.Context, input string) (T, error) {
 				"model", model,
 				"cooldown_kind", cooldown.Kind,
 				"cooldown_remaining_ms", cooldown.Remaining(time.Now()).Milliseconds())
-			recordCooldownEvent(provider, cooldown.Kind, "skipped")
+			recordCooldownEvent(provider, model, cooldown.Kind, "skipped")
 			continue
 		}
 
 		start := time.Now()
 		result, err := c.runStep(ctx, i, step, input)
 		if err == nil {
-			recordLLMSuccess(provider, c.operation(), start)
-			if lastAttemptedProvider != "" && lastAttemptedProvider != provider {
-				recordFallback(lastAttemptedProvider, provider, c.operation())
-			}
+			recordLLMSuccess(provider, model, c.operation(), start)
 			return result, nil
 		}
 
 		lastErr = err
+		recordLLMError(provider, model, c.operation(), err, start)
 		if cooldown, applied := applyCooldown(c.cooldowns, provider, model, err); applied {
 			slog.InfoContext(ctx, "Applied model cooldown after LLM failure",
 				"operation", c.operation(),
@@ -115,10 +112,9 @@ func (c *fallbackChain[T]) run(ctx context.Context, input string) (T, error) {
 				"model", model,
 				"cooldown_kind", cooldown.Kind,
 				"cooldown_remaining_ms", cooldown.Remaining(time.Now()).Milliseconds())
-			recordCooldownEvent(provider, cooldown.Kind, "applied")
+			recordCooldownEvent(provider, model, cooldown.Kind, "applied")
 		}
 
-		lastAttemptedProvider = provider
 		action := ClassifyError(err)
 		slog.WarnContext(ctx, "LLM model failed",
 			"operation", c.operation(),
@@ -130,7 +126,6 @@ func (c *fallbackChain[T]) run(ctx context.Context, input string) (T, error) {
 			"duration_ms", time.Since(start).Milliseconds())
 
 		if action == ActionFail || i == len(c.steps)-1 || ctx.Err() != nil {
-			recordLLMError(provider, c.operation(), err)
 			if i == len(c.steps)-1 && len(c.steps) > 1 {
 				return zero, fmt.Errorf("all %d %s models failed, last error: %w", len(c.steps), c.operation(), lastErr)
 			}
@@ -138,6 +133,7 @@ func (c *fallbackChain[T]) run(ctx context.Context, input string) (T, error) {
 		}
 
 		next := c.steps[i+1].endpoint
+		recordFallback(provider, model, next.Provider(), next.Model(), c.operation())
 		slog.DebugContext(ctx, "Falling back to next LLM model",
 			"operation", c.operation(),
 			"from_index", i,

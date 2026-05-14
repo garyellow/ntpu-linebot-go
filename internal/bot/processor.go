@@ -460,7 +460,7 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 	// Handle sticker messages - only in personal chats
 	if event.Message.GetType() == "sticker" {
 		if IsPersonalChat(event.Source) {
-			p.logger.WithField("message_type", "sticker").InfoContext(ctx, "Received direct message")
+			p.logger.WithField("message_type", "sticker").DebugContext(ctx, "Received direct message")
 			msgs := p.handleStickerMessage(ctx, event)
 			lineutil.SetQuoteTokenToFirst(msgs, ctxutil.GetQuoteToken(ctx))
 			return msgs, nil
@@ -482,7 +482,7 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 	text := textMsg.Text
 	p.logger.WithField("message_type", "text").
 		WithField("text", text).
-		InfoContext(ctx, "Received text message")
+		DebugContext(ctx, "Received text message")
 
 	// Validate text length (LINE API allows up to config.LINEMaxTextMessageLength characters)
 	if len(text) == 0 {
@@ -512,7 +512,7 @@ func (p *Processor) ProcessMessage(ctx context.Context, event webhook.MessageEve
 	if slices.ContainsFunc(helpKeywords, func(k string) bool {
 		return strings.EqualFold(text, k)
 	}) {
-		p.logger.InfoContext(ctx, "User requested help/instruction")
+		p.logger.DebugContext(ctx, "User requested help/instruction")
 		msgs := p.getDetailedInstructionMessages()
 		lineutil.SetQuoteTokenToFirst(msgs, ctxutil.GetQuoteToken(ctx))
 		return msgs, nil
@@ -579,13 +579,13 @@ func (p *Processor) ProcessPostback(ctx context.Context, event webhook.PostbackE
 		return nil, nil
 	}
 
-	p.logger.WithField("data", data).InfoContext(ctx, "Received postback")
+	p.logger.WithField("data", data).DebugContext(ctx, "Received postback")
 
 	// Check for help keywords FIRST (before dispatching to bot modules)
 	if slices.ContainsFunc(helpKeywords, func(k string) bool {
 		return strings.EqualFold(data, k)
 	}) {
-		p.logger.InfoContext(ctx, "User requested help/instruction via postback")
+		p.logger.DebugContext(ctx, "User requested help/instruction via postback")
 		return p.getDetailedInstructionMessages(), nil
 	}
 
@@ -710,7 +710,7 @@ func (p *Processor) handleWithNLU(ctx context.Context, text string, source webho
 	p.logger.WithField("module", result.Module).
 		WithField("intent", result.Intent).
 		WithField("params", result.Params).
-		InfoContext(ctx, "NLU intent parsed")
+		DebugContext(ctx, "NLU intent parsed")
 	// Metrics are recorded by the genai fallback chain.
 
 	return p.dispatchIntent(ctx, result)
@@ -821,7 +821,7 @@ func (p *Processor) checkLLMRateLimit(ctx context.Context, source webhook.Source
 
 // handleStickerMessage processes sticker messages
 func (p *Processor) handleStickerMessage(ctx context.Context, _ webhook.MessageEvent) []messaging_api.MessageInterface {
-	p.logger.InfoContext(ctx, "Sticker message received, replying with random sticker")
+	p.logger.DebugContext(ctx, "Sticker message received, replying with random sticker")
 
 	stickerURL := p.stickerManager.GetRandomSticker()
 	sender := lineutil.GetSender("貼圖小幫手", p.stickerManager)

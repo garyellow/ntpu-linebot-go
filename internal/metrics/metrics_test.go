@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -21,10 +22,16 @@ func TestNew(t *testing.T) {
 		name  string
 		check func() bool
 	}{
+		// HTTP metrics
+		{"HTTPServerRequestsTotal", func() bool { return m.HTTPServerRequestsTotal != nil }},
+		{"HTTPServerRequestDuration", func() bool { return m.HTTPServerRequestDuration != nil }},
+
 		// Webhook metrics
 		{"WebhookBatchTotal", func() bool { return m.WebhookBatchTotal != nil }},
 		{"WebhookTotal", func() bool { return m.WebhookTotal != nil }},
 		{"WebhookDuration", func() bool { return m.WebhookDuration != nil }},
+		{"LineReplyTotal", func() bool { return m.LineReplyTotal != nil }},
+		{"LineReplyDuration", func() bool { return m.LineReplyDuration != nil }},
 
 		// Scraper metrics
 		{"ScraperTotal", func() bool { return m.ScraperTotal != nil }},
@@ -43,6 +50,7 @@ func TestNew(t *testing.T) {
 		// Search metrics
 		{"SearchTotal", func() bool { return m.SearchTotal != nil }},
 		{"SearchDuration", func() bool { return m.SearchDuration != nil }},
+		{"SearchResults", func() bool { return m.SearchResults != nil }},
 		{"IndexSize", func() bool { return m.IndexSize != nil }},
 
 		// Intent Distribution metrics
@@ -54,6 +62,7 @@ func TestNew(t *testing.T) {
 		{"LLMRateLimiterUsers", func() bool { return m.LLMRateLimiterUsers != nil }},
 
 		// Job metrics
+		{"JobTotal", func() bool { return m.JobTotal != nil }},
 		{"JobDuration", func() bool { return m.JobDuration != nil }},
 	}
 
@@ -76,6 +85,15 @@ func TestRegistry(t *testing.T) {
 	if m.Registry() != registry {
 		t.Error("Registry() should return the same registry")
 	}
+}
+
+func TestRecordHTTPServerRequest(t *testing.T) {
+	t.Parallel()
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	m.RecordHTTPServerRequest("GET", "/health", 200, 0.01)
+	m.RecordHTTPServerRequest("POST", "/webhook", 503, 0.25)
 }
 
 // ============================================
@@ -101,6 +119,16 @@ func TestRecordWebhook(t *testing.T) {
 	for _, tc := range testCases {
 		m.RecordWebhook(tc.eventType, tc.status, tc.duration)
 	}
+}
+
+func TestRecordLineReply(t *testing.T) {
+	t.Parallel()
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	m.RecordLineReply("success", 0.2)
+	m.RecordLineReply("invalid_token", 0.0)
+	m.RecordLineReply("rate_limited", 1.0)
 }
 
 func TestRecordWebhookBatch(t *testing.T) {
@@ -197,18 +225,19 @@ func TestRecordLLM(t *testing.T) {
 
 	testCases := []struct {
 		provider  string
+		model     string
 		operation string
 		status    string
 		duration  float64
 	}{
-		{"gemini", "nlu", "success", 0.5},
-		{"gemini", "nlu", "error", 1.0},
-		{"groq", "nlu", "rate_limit", 2.0},
-		{"gemini", "expander", "success", 0.8},
+		{"gemini", "gemma-4-31b-it", "nlu", "success", 0.5},
+		{"gemini", "gemma-4-31b-it", "nlu", "error", 1.0},
+		{"groq", "openai/gpt-oss-120b", "nlu", "rate_limit", 2.0},
+		{"gemini", "gemma-4-31b-it", "expander", "success", 0.8},
 	}
 
 	for _, tc := range testCases {
-		m.RecordLLM(tc.provider, tc.operation, tc.status, tc.duration)
+		m.RecordLLM(tc.provider, tc.model, tc.operation, tc.status, tc.duration)
 	}
 }
 
@@ -235,6 +264,15 @@ func TestRecordSearch(t *testing.T) {
 	for _, tc := range testCases {
 		m.RecordSearch(tc.searchType, tc.status, tc.duration)
 	}
+}
+
+func TestRecordSearchResults(t *testing.T) {
+	t.Parallel()
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	m.RecordSearchResults("bm25", 0)
+	m.RecordSearchResults("bm25", 7)
 }
 
 func TestSetIndexSize(t *testing.T) {
@@ -321,6 +359,16 @@ func TestRecordJob(t *testing.T) {
 	}
 }
 
+func TestRecordJobRun(t *testing.T) {
+	t.Parallel()
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	m.RecordJobRun("refresh", "total", "success", 300.0)
+	m.RecordJobRun("refresh", "total", "error", 12.0)
+	m.RecordJobRun("refresh", "total", "skipped", 0.1)
+}
+
 // ============================================
 // Alias methods tests
 // ============================================
@@ -341,8 +389,8 @@ func TestRecordLLMRequest(t *testing.T) {
 	m := New(registry)
 
 	// RecordLLMRequest is an alias for RecordLLM with provider
-	m.RecordLLMRequest("gemini", "nlu", "success", 0.5)
-	m.RecordLLMRequest("groq", "nlu", "error", 1.0)
+	m.RecordLLMRequest("gemini", "gemma-4-31b-it", "nlu", "success", 0.5)
+	m.RecordLLMRequest("groq", "openai/gpt-oss-120b", "nlu", "error", 1.0)
 }
 
 func TestRecordLLMFallback(t *testing.T) {
@@ -351,6 +399,75 @@ func TestRecordLLMFallback(t *testing.T) {
 	m := New(registry)
 
 	// RecordLLMFallback records provider fallback events
-	m.RecordLLMFallback("gemini", "groq", "nlu")
-	m.RecordLLMFallback("groq", "gemini", "expander")
+	m.RecordLLMFallback("gemini", "gemma-4-31b-it", "groq", "openai/gpt-oss-120b", "nlu")
+	m.RecordLLMFallback("groq", "openai/gpt-oss-120b", "gemini", "gemma-4-26b-a4b-it", "expander")
+}
+
+func TestMetricNamesRegisteredAfterUse(t *testing.T) {
+	t.Parallel()
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+
+	m.RecordHTTPServerRequest("GET", "/health", 200, 0.01)
+	m.RecordWebhookBatch("accepted")
+	m.RecordWebhook("message", "success", 0.5)
+	m.RecordLineReply("success", 0.2)
+	m.RecordScraper("course", "success", 1.5)
+	m.RecordCacheHit("course")
+	m.SetCacheSize("courses", 100)
+	m.RecordLLM("gemini", "gemma-4-31b-it", "nlu", "success", 0.5)
+	m.RecordLLMFallback("gemini", "gemma-4-31b-it", "groq", "openai/gpt-oss-120b", "nlu")
+	m.LLMCooldownTotal.WithLabelValues("gemini", "gemma-4-31b-it", "burst", "applied").Inc()
+	m.RecordSearch("bm25", "success", 0.05)
+	m.RecordSearchResults("bm25", 3)
+	m.SetIndexSize("bm25", 1000)
+	m.RecordIntent("course", "smart", "nlu")
+	m.RecordRateLimiterDrop("user")
+	m.SetRateLimiterUsers(10)
+	m.SetLLMRateLimiterUsers(2)
+	m.RecordJobRun("refresh", "total", "success", 120)
+
+	families, err := registry.Gather()
+	if err != nil {
+		t.Fatalf("Gather() error = %v", err)
+	}
+
+	got := make([]string, 0, len(families))
+	for _, family := range families {
+		got = append(got, family.GetName())
+	}
+
+	want := []string{
+		"ntpu_http_server_requests_total",
+		"ntpu_http_server_request_duration_seconds",
+		"ntpu_webhook_batch_total",
+		"ntpu_webhook_total",
+		"ntpu_webhook_duration_seconds",
+		"ntpu_line_reply_total",
+		"ntpu_line_reply_duration_seconds",
+		"ntpu_scraper_total",
+		"ntpu_scraper_duration_seconds",
+		"ntpu_cache_operations_total",
+		"ntpu_cache_size",
+		"ntpu_llm_total",
+		"ntpu_llm_duration_seconds",
+		"ntpu_llm_fallback_total",
+		"ntpu_llm_cooldown_total",
+		"ntpu_search_total",
+		"ntpu_search_duration_seconds",
+		"ntpu_search_results",
+		"ntpu_index_size",
+		"ntpu_intent_total",
+		"ntpu_rate_limiter_dropped_total",
+		"ntpu_rate_limiter_users",
+		"ntpu_llm_rate_limiter_users",
+		"ntpu_job_total",
+		"ntpu_job_duration_seconds",
+	}
+
+	for _, name := range want {
+		if !slices.Contains(got, name) {
+			t.Errorf("metric %q not gathered; got %v", name, got)
+		}
+	}
 }

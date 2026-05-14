@@ -274,7 +274,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			h.logger.WithModule(ModuleName).
 				WithField("intent", intent).
 				WithField("name", name).
-				InfoContext(ctx, "Dispatching ID intent")
+				DebugContext(ctx, "Dispatching ID intent")
 		}
 		return h.handleStudentNameQuery(ctx, name), nil
 
@@ -287,7 +287,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			h.logger.WithModule(ModuleName).
 				WithField("intent", intent).
 				WithField("student_id", studentID).
-				InfoContext(ctx, "Dispatching ID intent")
+				DebugContext(ctx, "Dispatching ID intent")
 		}
 		return h.handleStudentIDQuery(ctx, studentID), nil
 
@@ -300,7 +300,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			h.logger.WithModule(ModuleName).
 				WithField("intent", intent).
 				WithField("department", department).
-				InfoContext(ctx, "Dispatching ID intent")
+				DebugContext(ctx, "Dispatching ID intent")
 		}
 
 		return h.handleUnifiedDepartmentQuery(department), nil
@@ -314,7 +314,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			h.logger.WithModule(ModuleName).
 				WithField("intent", intent).
 				WithField("year", year).
-				InfoContext(ctx, "Dispatching ID intent")
+				DebugContext(ctx, "Dispatching ID intent")
 		}
 		return h.handleYearQuery(year), nil
 
@@ -333,7 +333,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			h.logger.WithModule(ModuleName).
 				WithField("intent", intent).
 				WithField("degree", degree).
-				InfoContext(ctx, "Dispatching ID intent")
+				DebugContext(ctx, "Dispatching ID intent")
 		}
 		return h.handleDepartmentCodesByDegree(degree), nil
 
@@ -371,7 +371,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
-	log.InfoContext(ctx, "Handling ID message")
+	log.DebugContext(ctx, "Handling ID message")
 
 	// Find matching pattern
 	matcher := h.findMatcher(text)
@@ -525,7 +525,7 @@ func (h *Handler) handleStudentPattern(ctx context.Context, text string, matches
 // HandlePostback handles postback events for the ID module
 func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(ModuleName)
-	log.InfoContext(ctx, "Handling ID postback")
+	log.DebugContext(ctx, "Handling ID postback")
 
 	// Strip module prefix if present (registry passes original data)
 	data = strings.TrimPrefix(data, "id:")
@@ -1079,7 +1079,7 @@ func (h *Handler) handleStudentIDQuery(ctx context.Context, studentID string) []
 	// Cache miss - scrape from website
 	h.metrics.RecordCacheMiss(ModuleName)
 	log.WithField("student_id", studentID).
-		InfoContext(ctx, "Student cache miss, scraping")
+		DebugContext(ctx, "Student cache miss, scraping")
 
 	student, err = ntpu.ScrapeStudentByID(ctx, h.scraper, studentID)
 	if err != nil {
@@ -1563,7 +1563,7 @@ func (h *Handler) handleDepartmentSelection(ctx context.Context, deptCode, yearS
 	if len(students) == 0 {
 		log.WithField("year", year).
 			WithField("dept_code", deptCode).
-			InfoContext(ctx, "Department selection cache miss, scraping")
+			DebugContext(ctx, "Department selection cache miss, scraping")
 		h.metrics.RecordCacheMiss(ModuleName)
 		startTime := time.Now()
 
