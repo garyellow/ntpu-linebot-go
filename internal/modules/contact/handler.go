@@ -193,7 +193,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			h.logger.WithModule(ModuleName).
 				WithField("intent", intent).
 				WithField("query", query).
-				InfoContext(ctx, "Dispatching contact intent")
+				DebugContext(ctx, "Dispatching contact intent")
 		}
 		return h.handleContactSearch(ctx, query), nil
 
@@ -202,7 +202,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 		if h.logger != nil {
 			h.logger.WithModule(ModuleName).
 				WithField("intent", IntentEmergency).
-				InfoContext(ctx, "Dispatching contact intent")
+				DebugContext(ctx, "Dispatching contact intent")
 		}
 		return h.handleEmergencyPhones(), nil
 
@@ -242,7 +242,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
-	log.InfoContext(ctx, "Handling contact message")
+	log.DebugContext(ctx, "Handling contact message")
 
 	matcher := h.findMatcher(text)
 	if matcher == nil {
@@ -251,7 +251,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 
 	log.WithField("pattern", matcher.name).
 		WithField("priority", matcher.priority).
-		InfoContext(ctx, "Route matched")
+		DebugContext(ctx, "Route matched")
 
 	var matches []string
 	if matcher.pattern != nil {
@@ -288,7 +288,7 @@ func (h *Handler) handleEmptySearchTerm() []messaging_api.MessageInterface {
 // HandlePostback handles postback events for the contact module
 func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(ModuleName)
-	log.InfoContext(ctx, "Handling contact postback")
+	log.DebugContext(ctx, "Handling contact postback")
 
 	// Strip module prefix if present (registry passes original data)
 	data = strings.TrimPrefix(data, "contact:")
@@ -310,7 +310,7 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 		if len(parts) >= 2 {
 			teacherName := parts[1]
 			log.WithField("teacher_name", teacherName).
-				InfoContext(ctx, "Handling teacher contact postback")
+				DebugContext(ctx, "Handling teacher contact postback")
 			return h.handleContactSearch(ctx, teacherName)
 		}
 	}
@@ -477,7 +477,7 @@ func (h *Handler) handleContactSearch(ctx context.Context, searchTerm string) []
 	// Try multiple search variants to increase hit rate
 	h.metrics.RecordCacheMiss(ModuleName)
 	log.WithField("search_term", searchTerm).
-		InfoContext(ctx, "Contact search cache miss, scraping")
+		DebugContext(ctx, "Contact search cache miss, scraping")
 
 	// Build search variants (e.g., "資工系" -> also try "資訊工程")
 	searchVariants := h.buildSearchVariants(searchTerm)
@@ -585,7 +585,7 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	log.WithField("organization", orgName).
-		InfoContext(ctx, "Handling organization members query")
+		DebugContext(ctx, "Handling organization members query")
 
 	// Step 1: Check short-TTL application cache
 	if cached, ok := h.orgCache.GetCached(orgName); ok {
@@ -629,7 +629,7 @@ func (h *Handler) handleMembersQuery(ctx context.Context, orgName string) []mess
 	// Step 3: Cache miss - try scraping
 	h.metrics.RecordCacheMiss(ModuleName)
 	log.WithField("organization", orgName).
-		InfoContext(ctx, "Organization members cache miss, scraping")
+		DebugContext(ctx, "Organization members cache miss, scraping")
 
 	scrapedContacts, err := ntpu.ScrapeContacts(ctx, h.scraper, orgName)
 	if err != nil {

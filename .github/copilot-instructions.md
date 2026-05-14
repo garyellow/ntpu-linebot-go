@@ -407,10 +407,11 @@ Per-domain rate limiting (burst=3, 5 rps) prevents overwhelming individual serve
 **Logging**: `task dev` (debug level enabled by default in dev mode)
 
 **Prometheus** (`http://localhost:10000/metrics`):
-- Webhook: requests, latency
+- HTTP/Webhook: route requests, webhook events, LINE reply outcomes, latency
 - Cache: hits, misses
 - Scraper: requests (success/error/timeout), latency
-- Rate limiter: wait time, dropped requests
+- LLM: provider/model attempts, fallback transitions, cooldowns, latency
+- Rate limiter: tracked users, dropped requests
 
 **Common queries**:
 ```promql
@@ -418,7 +419,7 @@ Per-domain rate limiting (burst=3, 5 rps) prevents overwhelming individual serve
 sum(rate(ntpu_cache_operations_total{result="hit"}[5m])) / sum(rate(ntpu_cache_operations_total[5m]))
 
 # P95 latency
-histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le))
+histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le, event_type))
 ```
 
 ## Docker
@@ -426,7 +427,7 @@ histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by 
 Multi-stage build (alpine builder + distroless runtime), healthcheck binary (no shell), volume permissions handled by application.
 
 **Build stages**:
-1. Builder: `golang:1.26.2-alpine` with CGO_ENABLED=0 for static binary
+1. Builder: `golang:1.26.3-alpine` with CGO_ENABLED=0 for static binary
 2. Runtime: `gcr.io/distroless/static-debian13:nonroot` (no shell, minimal attack surface)
 3. Healthcheck: Custom binary (no `curl` dependency)
 4. Volumes: `/data` (SQLite + cache), owned by nonroot:nonroot
@@ -446,13 +447,13 @@ handleUnmatchedMessage()
 │ Has @Bot → remove│                   │
 │ mention & process│                   │
 └─────────────────┴───────────────────┘
-     ↓
-FallbackIntentParser.Parse()
-     ↓
-┌─ Primary Provider ─┐  ┌─ Fallback Provider ─┐
-│ Gemini/Groq/       │→│ Groq/Cerebras/       │
-│ Cerebras (retry)   │  │ Gemini (on failure)  │
-└────────────────────┴──────────────────────────┘
+    ↓
+  genai fallback chain
+    ↓
+  ┌─ Model rank 1 ─────┐  ┌─ Model rank 2 ─────┐
+  │ Gemini/Groq/       │→│ Gemini/Groq/       │
+  │ Cerebras first     │  │ Cerebras fallback  │
+  └────────────────────┴──────────────────────────┘
      ↓
 dispatchIntent() → Route to Handler
      ↓ (failure)
@@ -461,25 +462,24 @@ Fallback → getHelpMessage() + Warning Log
 
 **Key Features**:
 - **Multi-Provider Support**: Gemini, Groq, and Cerebras with automatic failover
-- **Three-layer Fallback**: Model retry → Model chain fallback → Provider fallback → Graceful degradation
+- **Unified Fallback Chain**: IntentParser and QueryExpander share provider/model switching; try each provider's first-ranked model before second-ranked models, retry same model only when no alternative remains
 - **OpenAI v3 SDK**: Unified OpenAI-compatible implementation for Groq/Cerebras via custom BaseURL
 - Function Calling (AUTO mode): Model chooses function call or text response
 - 9 intent functions: `course_search`, `course_smart`, `course_uid`, `id_search`, `id_student_id`, `id_department`, `contact_search`, `contact_emergency`, `help`
 - Group @Bot detection: Uses `mention.Index` and `mention.Length` for precise removal
-- Metrics: `ntpu_llm_total{provider,operation}`, `ntpu_llm_duration_seconds{provider}`, `ntpu_llm_fallback_total`, `ntpu_intent_total{module,intent,source}`
+- Metrics: `ntpu_llm_total{provider,model,operation,status}`, `ntpu_llm_duration_seconds{provider,model,operation}`, `ntpu_llm_fallback_total{from_provider,from_model,to_provider,to_model,operation}`, `ntpu_intent_total{module,intent,source}`
 
 **Implementation Pattern**:
 - `genai.IntentParser`: Interface for NLU parsing (implemented by Gemini and OpenAI-compatible)
 - `genai.QueryExpander`: Interface for query expansion (implemented by Gemini and OpenAI-compatible)
-- `genai.FallbackIntentParser`: Cross-provider failover wrapper
-- `genai.FallbackQueryExpander`: Cross-provider failover wrapper
+- `genai.FallbackIntentParser` / `genai.FallbackQueryExpander`: Thin wrappers over the shared LLM fallback chain
 - `genai.CreateIntentParser()`: Factory function with provider selection (default: `["gemini", "groq", "cerebras"]`)
 - `genai.ParseResult`: Module, Intent, Params, ClarificationText, FunctionName
 
 **Default Models**:
-- Gemini: `gemini-3.1-pro-preview` (intent), `gemini-3.1-pro-preview` (expander), with `gemini-2.5-pro` / `gemini-2.5-flash` fallbacks
-- Groq: `moonshotai/kimi-k2-instruct` (primary), intent chain: `openai/gpt-oss-120b` → `meta-llama/llama-4-maverick-17b-128e-instruct` → `llama-3.3-70b-versatile` → `qwen/qwen3-32b` → `meta-llama/llama-4-scout-17b-16e-instruct` → `openai/gpt-oss-20b`; expander chain: `moonshotai/kimi-k2-instruct` → `qwen/qwen3-32b` → `meta-llama/llama-4-scout-17b-16e-instruct` → `openai/gpt-oss-120b` → `llama-3.3-70b-versatile` → `meta-llama/llama-4-maverick-17b-128e-instruct` → `openai/gpt-oss-20b`
-- Cerebras: intent `gpt-oss-120b`; expander `gpt-oss-120b`
+- Gemini: `gemma-4-31b-it` → `gemma-4-26b-a4b-it`
+- Groq: `openai/gpt-oss-120b` → `openai/gpt-oss-20b` → `llama-3.3-70b-versatile` → `qwen/qwen3-32b` → `llama-3.1-8b-instant`
+- Cerebras: `gpt-oss-120b` → `llama3.1-8b`
 
 ## Syllabus Module
 

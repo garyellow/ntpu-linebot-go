@@ -253,10 +253,15 @@ ntpu_webhook_duration_seconds_count{event_type="message"} 1000
 
 | 指標名稱 | 類型 | 說明 | Labels |
 |---------|------|------|--------|
+| **HTTP Server (RED)** | | | |
+| `ntpu_http_server_requests_total` | Counter | HTTP route 請求總數 | `method`, `route`, `status_code` |
+| `ntpu_http_server_request_duration_seconds` | Histogram | HTTP route 請求耗時 | `method`, `route`, `status_code` |
 | **Webhook (RED)** | | | |
 | `ntpu_webhook_batch_total` | Counter | Webhook 批次請求總數 | `status` |
 | `ntpu_webhook_total` | Counter | Webhook 事件總數 | `event_type`, `status` |
 | `ntpu_webhook_duration_seconds` | Histogram | Webhook 處理耗時 | `event_type` |
+| `ntpu_line_reply_total` | Counter | LINE Reply API 結果總數 | `status` |
+| `ntpu_line_reply_duration_seconds` | Histogram | LINE Reply API 耗時 | `status` |
 | **Scraper (RED)** | | | |
 | `ntpu_scraper_total` | Counter | 爬蟲請求總數 | `module`, `status` |
 | `ntpu_scraper_duration_seconds` | Histogram | 爬蟲請求耗時 | `module` |
@@ -264,10 +269,10 @@ ntpu_webhook_duration_seconds_count{event_type="message"} 1000
 | `ntpu_cache_operations_total` | Counter | 快取操作總數 | `module`, `result` |
 | `ntpu_cache_size` | Gauge | 快取項目數量 | `module` |
 | **LLM (RED)** | | | |
-| `ntpu_llm_total` | Counter | LLM API 請求總數 | `provider`, `operation`, `status` |
-| `ntpu_llm_duration_seconds` | Histogram | LLM API 請求耗時 | `provider`, `operation` |
-| `ntpu_llm_fallback_total` | Counter | LLM 供應商 fallback 次數 | `from_provider`, `to_provider`, `operation` |
-| `ntpu_llm_fallback_latency_seconds` | Histogram | LLM fallback 追加延遲 | `from_provider`, `to_provider`, `operation` |
+| `ntpu_llm_total` | Counter | LLM API 嘗試總數 | `provider`, `model`, `operation`, `status` |
+| `ntpu_llm_duration_seconds` | Histogram | LLM API 嘗試耗時 | `provider`, `model`, `operation` |
+| `ntpu_llm_fallback_total` | Counter | LLM 模型 fallback transition 次數 | `from_provider`, `from_model`, `to_provider`, `to_model`, `operation` |
+| `ntpu_llm_cooldown_total` | Counter | LLM 模型 cooldown 事件 | `provider`, `model`, `kind`, `action` |
 | **Search (RED)** | | | |
 | `ntpu_search_total` | Counter | 智慧搜尋請求總數 | `type`, `status` |
 | `ntpu_search_duration_seconds` | Histogram | 搜尋耗時 | `type` |
@@ -277,23 +282,32 @@ ntpu_webhook_duration_seconds_count{event_type="message"} 1000
 | `ntpu_rate_limiter_dropped_total` | Counter | 被丟棄的請求數 | `limiter` |
 | `ntpu_rate_limiter_users` | Gauge | 活動用戶限流器數量 | - |
 | `ntpu_llm_rate_limiter_users` | Gauge | 活動 LLM 限流器數量 | - |
+| **Intent** | | | |
+| `ntpu_intent_total` | Counter | Intent 觸發次數 | `module`, `intent`, `source` |
 | **Background Jobs** | | | |
+| `ntpu_job_total` | Counter | 背景任務執行次數 | `job`, `module`, `status` |
 | `ntpu_job_duration_seconds` | Histogram | 背景任務耗時 | `job`, `module` |
 
 **PromQL 查詢範例**:
 
 ```promql
-# Webhook 成功率 (使用 recording rule)
-ntpu:webhook_success_rate:5m
+# Webhook event 成功率
+sum(rate(ntpu_webhook_total{status="success"}[5m]))
+/ sum(rate(ntpu_webhook_total[5m]))
 
-# P95 延遲 (使用 recording rule)
-ntpu:webhook_latency_p95:5m
+# HTTP route P95 延遲
+histogram_quantile(0.95, sum(rate(ntpu_http_server_request_duration_seconds_bucket[5m])) by (le, route))
 
-# 快取命中率 (使用 recording rule)
-ntpu:cache_hit_rate:5m
+# LINE Reply API 錯誤率
+sum(rate(ntpu_line_reply_total{status!="success"}[5m])) / sum(rate(ntpu_line_reply_total[5m]))
 
-# 每秒請求數 (RPS)
-sum(rate(ntpu_webhook_total[5m]))
+# 快取命中率
+sum(rate(ntpu_cache_operations_total{result="hit"}[5m]))
+/ sum(rate(ntpu_cache_operations_total[5m]))
+
+# LLM provider/model 成功率
+sum(rate(ntpu_llm_total{status="success"}[5m])) by (provider, model)
+/ sum(rate(ntpu_llm_total[5m])) by (provider, model)
 ```
 
 ---

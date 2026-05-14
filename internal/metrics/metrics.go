@@ -11,6 +11,8 @@
 package metrics
 
 import (
+	"strconv"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -46,16 +48,25 @@ type Metrics struct {
 	registry *prometheus.Registry
 
 	// ============================================
+	// HTTP Server (Gin - RED Method)
+	// Low-cardinality route-level request metrics
+	// ============================================
+	HTTPServerRequestsTotal   *prometheus.CounterVec
+	HTTPServerRequestDuration *prometheus.HistogramVec
+
+	// ============================================
 	// Webhook (LINE Bot Core - RED Method)
 	// Primary service entry point
 	// ============================================
 	// Batch: incoming webhook requests (HTTP)
 	WebhookBatchTotal *prometheus.CounterVec
 	// Rate: requests per second by event type
-	// Errors: tracked via status label (success/error/reply_error)
-	// Duration: processing time from receive to reply
-	WebhookTotal    *prometheus.CounterVec
-	WebhookDuration *prometheus.HistogramVec
+	// Errors: tracked via status label (success/error)
+	// Duration: handler processing time before LINE reply API call
+	WebhookTotal      *prometheus.CounterVec
+	WebhookDuration   *prometheus.HistogramVec
+	LineReplyTotal    *prometheus.CounterVec
+	LineReplyDuration *prometheus.HistogramVec
 
 	// ============================================
 	// Scraper (External HTTP Calls - RED Method)
@@ -75,10 +86,10 @@ type Metrics struct {
 	// LLM (Gemini/Groq/Cerebras API - RED Method)
 	// NLU intent parsing, Query Expansion
 	// ============================================
-	LLMTotal         *prometheus.CounterVec   // requests by provider, operation, and status
-	LLMDuration      *prometheus.HistogramVec // latency by provider and operation
-	LLMFallbackTotal *prometheus.CounterVec   // fallback events by provider pair and operation
-	LLMCooldownTotal *prometheus.CounterVec   // cooldown events by provider, kind, and action
+	LLMTotal         *prometheus.CounterVec   // requests by provider, model, operation, and status
+	LLMDuration      *prometheus.HistogramVec // latency by provider, model, and operation
+	LLMFallbackTotal *prometheus.CounterVec   // fallback transitions by provider/model and operation
+	LLMCooldownTotal *prometheus.CounterVec   // cooldown events by provider, model, kind, and action
 
 	// ============================================
 	// Smart Search (BM25 - RED Method)
@@ -86,6 +97,7 @@ type Metrics struct {
 	// ============================================
 	SearchTotal    *prometheus.CounterVec
 	SearchDuration *prometheus.HistogramVec
+	SearchResults  *prometheus.HistogramVec
 
 	// Index sizes (Gauges - point-in-time values)
 	IndexSize *prometheus.GaugeVec // documents in BM25 index
@@ -108,6 +120,7 @@ type Metrics struct {
 	// Background Jobs (Duration only)
 	// Refresh, Cleanup operations
 	// ============================================
+	JobTotal    *prometheus.CounterVec
 	JobDuration *prometheus.HistogramVec
 }
 
@@ -117,6 +130,29 @@ type Metrics struct {
 func New(registry *prometheus.Registry) *Metrics {
 	m := &Metrics{
 		registry: registry,
+
+		// ============================================
+		// HTTP server metrics
+		// ============================================
+		HTTPServerRequestsTotal: promauto.With(registry).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "ntpu_http_server_requests_total",
+				Help: "Total HTTP server requests",
+			},
+			// method: GET, POST, etc.
+			// route: static Gin route pattern, or unmatched
+			// status_code: HTTP response status code
+			[]string{"method", "route", "status_code"},
+		),
+
+		HTTPServerRequestDuration: promauto.With(registry).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "ntpu_http_server_request_duration_seconds",
+				Help:    "HTTP server request duration in seconds",
+				Buckets: []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10},
+			},
+			[]string{"method", "route", "status_code"},
+		),
 
 		// ============================================
 		// Webhook metrics
@@ -136,7 +172,7 @@ func New(registry *prometheus.Registry) *Metrics {
 				Help: "Total webhook events processed",
 			},
 			// event_type: message, postback, follow, join
-			// status: success, error, reply_error
+			// status: success, error
 			[]string{"event_type", "status"},
 		),
 
@@ -151,6 +187,24 @@ func New(registry *prometheus.Registry) *Metrics {
 				Buckets: []float64{0.1, 0.25, 0.5, 1, 2, 5, 10, 30},
 			},
 			[]string{"event_type"},
+		),
+
+		LineReplyTotal: promauto.With(registry).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "ntpu_line_reply_total",
+				Help: "Total LINE reply outcomes",
+			},
+			// status: success, error, rate_limited, invalid_token, skipped_empty_token, skipped_invalid_token
+			[]string{"status"},
+		),
+
+		LineReplyDuration: promauto.With(registry).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "ntpu_line_reply_duration_seconds",
+				Help:    "LINE reply API duration in seconds",
+				Buckets: []float64{0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10},
+			},
+			[]string{"status"},
 		),
 
 		// ============================================
@@ -207,10 +261,11 @@ func New(registry *prometheus.Registry) *Metrics {
 				Name: "ntpu_llm_total",
 				Help: "Total LLM API requests",
 			},
-			// provider: gemini, groq, cerebras
+			// provider: gemini, groq, cerebras, openai
+			// model: configured provider model name
 			// operation: nlu (intent parsing), expander (query expansion)
-			// status: success, error, rate_limit, quota_exhausted
-			[]string{"provider", "operation", "status"},
+			// status: success, timeout, canceled, rate_limit, quota_exhausted, server_error, transient_error, auth_error, model_not_found, invalid_request, error
+			[]string{"provider", "model", "operation", "status"},
 		),
 
 		LLMDuration: promauto.With(registry).NewHistogramVec(
@@ -223,20 +278,21 @@ func New(registry *prometheus.Registry) *Metrics {
 				// Slow: > 2s (complex or retry)
 				Buckets: []float64{0.1, 0.25, 0.5, 1, 2, 5, 10},
 			},
-			// provider: gemini, groq, cerebras
+			// provider: gemini, groq, cerebras, openai
+			// model: configured provider model name
 			// operation: nlu, expander
-			[]string{"provider", "operation"},
+			[]string{"provider", "model", "operation"},
 		),
 
 		LLMFallbackTotal: promauto.With(registry).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "ntpu_llm_fallback_total",
-				Help: "Total LLM provider fallback events",
+				Help: "Total LLM fallback transitions between configured models",
 			},
-			// from_provider: gemini, groq, cerebras (primary that failed)
-			// to_provider: gemini, groq, cerebras (fallback used)
+			// from_provider/from_model: failed step
+			// to_provider/to_model: next step selected
 			// operation: nlu, expander
-			[]string{"from_provider", "to_provider", "operation"},
+			[]string{"from_provider", "from_model", "to_provider", "to_model", "operation"},
 		),
 
 		LLMCooldownTotal: promauto.With(registry).NewCounterVec(
@@ -244,10 +300,11 @@ func New(registry *prometheus.Registry) *Metrics {
 				Name: "ntpu_llm_cooldown_total",
 				Help: "Total LLM model cooldown events",
 			},
-			// provider: gemini, groq, cerebras
+			// provider: gemini, groq, cerebras, openai
+			// model: configured provider model name
 			// kind: burst, exhausted
 			// action: applied, skipped
-			[]string{"provider", "kind", "action"},
+			[]string{"provider", "model", "kind", "action"},
 		),
 
 		// ============================================
@@ -273,6 +330,16 @@ func New(registry *prometheus.Registry) *Metrics {
 				Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5},
 			},
 			// type: bm25, disabled
+			[]string{"type"},
+		),
+
+		SearchResults: promauto.With(registry).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "ntpu_search_results",
+				Help:    "Number of results returned by search operations",
+				Buckets: []float64{0, 1, 2, 5, 10, 20, 50},
+			},
+			// type: bm25
 			[]string{"type"},
 		),
 
@@ -328,6 +395,17 @@ func New(registry *prometheus.Registry) *Metrics {
 		// ============================================
 		// Background Job metrics
 		// ============================================
+		JobTotal: promauto.With(registry).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "ntpu_job_total",
+				Help: "Total background job executions",
+			},
+			// job: refresh, data_cleanup, sticker_refresh
+			// module: id, contact, course, syllabus, total, all
+			// status: success, error, skipped
+			[]string{"job", "module", "status"},
+		),
+
 		JobDuration: promauto.With(registry).NewHistogramVec(
 			prometheus.HistogramOpts{
 				Name: "ntpu_job_duration_seconds",
@@ -345,6 +423,17 @@ func New(registry *prometheus.Registry) *Metrics {
 }
 
 // ============================================
+// HTTP helpers
+// ============================================
+
+// RecordHTTPServerRequest records an inbound HTTP request.
+// route must be a static route pattern such as /webhook or /metrics.
+func (m *Metrics) RecordHTTPServerRequest(method, route string, statusCode int, duration float64) {
+	m.HTTPServerRequestsTotal.WithLabelValues(method, route, fmtStatusCode(statusCode)).Inc()
+	m.HTTPServerRequestDuration.WithLabelValues(method, route, fmtStatusCode(statusCode)).Observe(duration)
+}
+
+// ============================================
 // Webhook helpers
 // ============================================
 
@@ -356,10 +445,16 @@ func (m *Metrics) RecordWebhookBatch(status string) {
 
 // RecordWebhook records a webhook event.
 // eventType: message, postback, follow, join
-// status: success, error, reply_error
+// status: success, error
 func (m *Metrics) RecordWebhook(eventType, status string, duration float64) {
 	m.WebhookTotal.WithLabelValues(eventType, status).Inc()
 	m.WebhookDuration.WithLabelValues(eventType).Observe(duration)
+}
+
+// RecordLineReply records a LINE reply API outcome.
+func (m *Metrics) RecordLineReply(status string, duration float64) {
+	m.LineReplyTotal.WithLabelValues(status).Inc()
+	m.LineReplyDuration.WithLabelValues(status).Observe(duration)
 }
 
 // ============================================
@@ -399,11 +494,12 @@ func (m *Metrics) SetCacheSize(module string, size int) {
 
 // RecordLLM records an LLM API request.
 // provider: gemini, groq, cerebras
+// model: configured provider model name
 // operation: nlu (intent parsing), expander (query expansion)
-// status: success, error, rate_limit, quota_exhausted
-func (m *Metrics) RecordLLM(provider, operation, status string, duration float64) {
-	m.LLMTotal.WithLabelValues(provider, operation, status).Inc()
-	m.LLMDuration.WithLabelValues(provider, operation).Observe(duration)
+// status: success, timeout, canceled, rate_limit, quota_exhausted, server_error, transient_error, auth_error, model_not_found, invalid_request, error
+func (m *Metrics) RecordLLM(provider, model, operation, status string, duration float64) {
+	m.LLMTotal.WithLabelValues(provider, model, operation, status).Inc()
+	m.LLMDuration.WithLabelValues(provider, model, operation).Observe(duration)
 }
 
 // ============================================
@@ -412,10 +508,15 @@ func (m *Metrics) RecordLLM(provider, operation, status string, duration float64
 
 // RecordSearch records a search operation.
 // searchType: bm25, disabled
-// status: success, error, no_results, skipped, rate_limited, expansion_failed
+// status: success, error, no_results, skipped, rate_limited
 func (m *Metrics) RecordSearch(searchType, status string, duration float64) {
 	m.SearchTotal.WithLabelValues(searchType, status).Inc()
 	m.SearchDuration.WithLabelValues(searchType).Observe(duration)
+}
+
+// RecordSearchResults records the number of results returned by a search operation.
+func (m *Metrics) RecordSearchResults(searchType string, count int) {
+	m.SearchResults.WithLabelValues(searchType).Observe(float64(count))
 }
 
 // SetIndexSize sets the current index size.
@@ -456,10 +557,25 @@ func (m *Metrics) SetLLMRateLimiterUsers(count int) {
 // Job helpers
 // ============================================
 
-// RecordJob records a background job execution.
-// job: warmup, cleanup
-// module: id, contact, course, syllabus, total
+// RecordJob records a successful background job execution.
+//
+// Deprecated: prefer RecordJobRun with an explicit status.
 func (m *Metrics) RecordJob(job, module string, duration float64) {
+	m.RecordJobRun(job, module, "success", duration)
+}
+
+// RecordLineReplySkipped records a skipped LINE reply outcome (no API call made).
+// Use this for skipped_empty_token and skipped_invalid_token statuses.
+func (m *Metrics) RecordLineReplySkipped(status string) {
+	m.LineReplyTotal.WithLabelValues(status).Inc()
+}
+
+// RecordJobRun records a background job execution.
+// job: refresh, data_cleanup, sticker_refresh
+// module: id, contact, course, syllabus, total, all
+// status: success, error, skipped
+func (m *Metrics) RecordJobRun(job, module, status string, duration float64) {
+	m.JobTotal.WithLabelValues(job, module, status).Inc()
 	m.JobDuration.WithLabelValues(job, module).Observe(duration)
 }
 
@@ -483,14 +599,18 @@ func (m *Metrics) RecordScraperRequest(module, status string, duration float64) 
 }
 
 // RecordLLMRequest is an alias for RecordLLM.
-func (m *Metrics) RecordLLMRequest(provider, operation, status string, duration float64) {
-	m.RecordLLM(provider, operation, status, duration)
+func (m *Metrics) RecordLLMRequest(provider, model, operation, status string, duration float64) {
+	m.RecordLLM(provider, model, operation, status, duration)
 }
 
-// RecordLLMFallback records an LLM provider fallback event.
-// fromProvider: the primary provider that failed
-// toProvider: the fallback provider used
+// RecordLLMFallback records an LLM fallback transition.
+// fromProvider/fromModel: the model that failed
+// toProvider/toModel: the next model selected
 // operation: nlu, expander
-func (m *Metrics) RecordLLMFallback(fromProvider, toProvider, operation string) {
-	m.LLMFallbackTotal.WithLabelValues(fromProvider, toProvider, operation).Inc()
+func (m *Metrics) RecordLLMFallback(fromProvider, fromModel, toProvider, toModel, operation string) {
+	m.LLMFallbackTotal.WithLabelValues(fromProvider, fromModel, toProvider, toModel, operation).Inc()
+}
+
+func fmtStatusCode(statusCode int) string {
+	return strconv.Itoa(statusCode)
 }

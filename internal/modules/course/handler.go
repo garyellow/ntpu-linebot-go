@@ -261,7 +261,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			h.logger.WithModule(ModuleName).
 				WithField("intent", intent).
 				WithField("keyword", keyword).
-				InfoContext(ctx, "Dispatching course intent")
+				DebugContext(ctx, "Dispatching course intent")
 		}
 		return h.handleUnifiedCourseSearch(ctx, keyword), nil
 
@@ -274,7 +274,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			h.logger.WithModule(ModuleName).
 				WithField("intent", intent).
 				WithField("query", query).
-				InfoContext(ctx, "Dispatching course intent")
+				DebugContext(ctx, "Dispatching course intent")
 		}
 		return h.handleSmartSearch(ctx, query), nil
 
@@ -287,7 +287,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			h.logger.WithModule(ModuleName).
 				WithField("intent", intent).
 				WithField("uid", uid).
-				InfoContext(ctx, "Dispatching course intent")
+				DebugContext(ctx, "Dispatching course intent")
 		}
 		return h.handleCourseUIDQuery(ctx, uid), nil
 
@@ -300,7 +300,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			h.logger.WithModule(ModuleName).
 				WithField("intent", intent).
 				WithField("keyword", keyword).
-				InfoContext(ctx, "Dispatching course intent")
+				DebugContext(ctx, "Dispatching course intent")
 		}
 		return h.handleExtendedCourseSearch(ctx, keyword), nil
 
@@ -325,7 +325,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 				WithField("intent", intent).
 				WithField("year", year).
 				WithField("keyword", keyword).
-				InfoContext(ctx, "Dispatching course intent")
+				DebugContext(ctx, "Dispatching course intent")
 		}
 		return h.handleHistoricalCourseSearch(ctx, year, keyword), nil
 
@@ -357,7 +357,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
-	log.InfoContext(ctx, "Handling course message")
+	log.DebugContext(ctx, "Handling course message")
 
 	// Find matching pattern
 	matcher := h.findMatcher(text)
@@ -584,7 +584,7 @@ func (h *Handler) handleRegularPattern(ctx context.Context, text string, matches
 // HandlePostback handles postback events for the course module
 func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_api.MessageInterface {
 	log := h.logger.WithModule(ModuleName)
-	log.InfoContext(ctx, "Handling course postback")
+	log.DebugContext(ctx, "Handling course postback")
 
 	// Strip module prefix if present (registry passes original data)
 	data = strings.TrimPrefix(data, "course:")
@@ -595,7 +595,7 @@ func (h *Handler) HandlePostback(ctx context.Context, data string) []messaging_a
 		if len(parts) >= 2 {
 			teacherName := parts[1]
 			log.WithField("teacher_name", teacherName).
-				InfoContext(ctx, "Handling teacher courses postback")
+				DebugContext(ctx, "Handling teacher courses postback")
 			return h.handleTeacherCourseSearch(ctx, teacherName)
 		}
 	}
@@ -640,7 +640,7 @@ func (h *Handler) handleCourseUIDQuery(ctx context.Context, uid string) []messag
 	// Cache miss - scrape from website
 	h.metrics.RecordCacheMiss(ModuleName)
 	log.WithField("uid", uid).
-		InfoContext(ctx, "Course cache miss, scraping course")
+		DebugContext(ctx, "Course cache miss, scraping course")
 
 	course, err = ntpu.ScrapeCourseByUID(ctx, h.scraper, uid)
 	if err != nil {
@@ -701,7 +701,7 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 	courseNo = strings.ToUpper(courseNo)
 
 	log.WithField("course_no", courseNo).
-		InfoContext(ctx, "Handling course number query")
+		DebugContext(ctx, "Handling course number query")
 
 	// Get semesters to search from data-driven semester detection
 	searchYears, searchTerms := h.semesterCache.GetRecentSemesters()
@@ -732,7 +732,7 @@ func (h *Handler) handleCourseNoQuery(ctx context.Context, courseNo string) []me
 	// Cache miss - try scraping from each semester
 	h.metrics.RecordCacheMiss(ModuleName)
 	log.WithField("course_no", courseNo).
-		InfoContext(ctx, "Course cache miss, scraping by course number")
+		DebugContext(ctx, "Course cache miss, scraping by course number")
 
 	for i := range searchYears {
 		year := searchYears[i]
@@ -914,7 +914,7 @@ func (h *Handler) searchCoursesByKeyword(ctx context.Context, searchTerm string,
 	log.WithField("semester_type", semesterType).
 		WithField("search_term", searchTerm).
 		WithField("extended", extended).
-		InfoContext(ctx, "Handling course search")
+		DebugContext(ctx, "Handling course search")
 
 	var courses []storage.Course
 
@@ -1008,7 +1008,7 @@ func (h *Handler) searchCoursesByKeyword(ctx context.Context, searchTerm string,
 	// Step 3: Cache miss - Try scraping
 	log.WithField("search_term", searchTerm).
 		WithField("semester_type", semesterType).
-		InfoContext(ctx, "Course search cache miss, scraping")
+		DebugContext(ctx, "Course search cache miss, scraping")
 	h.metrics.RecordCacheMiss(ModuleName)
 
 	// Search courses from multiple semesters
@@ -1191,7 +1191,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 
 	log.WithField("year", year).
 		WithField("keyword", keyword).
-		InfoContext(ctx, "Handling historical course search")
+		DebugContext(ctx, "Handling historical course search")
 
 	// Check if the requested year is in the recent/active semesters (Hot Data).
 	// If so, we query the 'courses' table instead of 'historical_courses' to use the pre-warmed cache.
@@ -1311,7 +1311,7 @@ func (h *Handler) handleHistoricalCourseSearch(ctx context.Context, year int, ke
 	h.metrics.RecordCacheMiss(ModuleName)
 	log.WithField("year", year).
 		WithField("keyword", keyword).
-		InfoContext(ctx, "Historical course cache miss, scraping")
+		DebugContext(ctx, "Historical course cache miss, scraping")
 
 	// Use term=0 to query both semesters at once (more efficient)
 	// Strategy: Dual scrape (Parallel-ish) to catch both Course Title and Teacher Name matches
@@ -1889,7 +1889,7 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 //
 // Timeout hierarchy (nested within 60s webhook processing timeout):
 //   - SmartSearchTimeout: 30s total (detached context from HTTP request)
-//   - QueryExpander: 8s nested timeout within search context
+//   - QueryExpansionTimeout: optional LLM expansion budget within search context
 //   - Actual search: remainder of 30s after expansion completes
 //
 // Total operation is bounded by SmartSearchTimeout (30s), well within
@@ -1902,7 +1902,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 	bm25Enabled := h.bm25Index != nil && h.bm25Index.IsEnabled()
 
 	if !bm25Enabled {
-		log.InfoContext(ctx, "Smart search not enabled")
+		log.DebugContext(ctx, "Smart search not enabled")
 		h.metrics.RecordSearch("disabled", "skipped", time.Since(startTime).Seconds())
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 		return []messaging_api.MessageInterface{
@@ -1953,21 +1953,12 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 			}
 		}
 
-		expanded, err := h.queryExpander.Expand(searchCtx, query)
+		expansionCtx, cancelExpansion := context.WithTimeout(searchCtx, config.QueryExpansionTimeout)
+		expanded, err := h.queryExpander.Expand(expansionCtx, query)
+		cancelExpansion()
 		if err != nil {
-			log.WithError(err).WarnContext(searchCtx, "Query expansion failed, smart search aborted")
-			h.metrics.RecordSearch(searchType, "expansion_failed", time.Since(startTime).Seconds())
-			retryQRs := append([]lineutil.QuickReplyItem{lineutil.QuickReplyRetryAction("課程 " + query)}, lineutil.QuickReplyCourseNav(false)...)
-			return []messaging_api.MessageInterface{
-				lineutil.ErrorMessageWithQuickReply(
-					"智慧搜尋暫時無法使用\n\n建議改用精確搜尋\n• 課程 微積分\n• 課程 王小明",
-					sender,
-					"",
-					retryQRs...,
-				),
-			}
-		}
-		if expanded != query {
+			log.WithError(err).WarnContext(searchCtx, "Query expansion failed, continuing smart search with original query")
+		} else if expanded != query {
 			expandedQuery = expanded
 			log.WithFields(map[string]any{
 				"original": query,
@@ -1988,7 +1979,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 		"query_length":          len(query),
 		"expanded_query_length": len(expandedQuery),
 		"used_query_expander":   expandedQuery != query,
-	}).InfoContext(searchCtx, "Performing smart search")
+	}).DebugContext(searchCtx, "Performing smart search")
 
 	// Perform BM25 search
 	results, err := h.bm25Index.SearchCourses(searchCtx, expandedQuery, 10)
@@ -2008,8 +1999,9 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 	}
 
 	if len(results) == 0 {
-		log.InfoContext(searchCtx, "No smart search results found")
+		log.DebugContext(searchCtx, "No smart search results found")
 		h.metrics.RecordSearch(searchType, "no_results", time.Since(startTime).Seconds())
+		h.metrics.RecordSearchResults(searchType, len(results))
 		sender := lineutil.GetSender(senderName, h.stickerManager)
 
 		helpText := "🔍 未找到相關課程\n\n💡 建議嘗試\n• 換個描述方式或關鍵字\n• 使用精確搜尋：「課程 課名」\n\n👨‍🏫 查詢教師資訊？\n請使用：「聯絡 教師名」或「教授 教師名」"
@@ -2063,6 +2055,7 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 
 	// Record successful smart search metrics
 	h.metrics.RecordSearch(searchType, "success", time.Since(startTime).Seconds())
+	h.metrics.RecordSearchResults(searchType, len(results))
 
 	// Format response with confidence labels
 	return h.formatSmartSearchResponse(courses, results)

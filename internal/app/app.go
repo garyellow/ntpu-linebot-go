@@ -368,7 +368,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 
 	router.Use(gin.Recovery())
 	router.Use(securityHeadersMiddleware())
-	router.Use(loggingMiddleware(ctx, log))
+	router.Use(loggingMiddleware(ctx, log, m))
 
 	app := &Application{
 		cfg:            cfg,
@@ -843,10 +843,6 @@ func (a *Application) shutdown() error {
 		a.userLimiter.Stop()
 	}
 
-	if err := a.logger.Shutdown(shutdownCtx); err != nil {
-		a.logger.WithError(err).Warn("Logger shutdown timed out")
-	}
-
 	// Flush Sentry events
 	if internalSentry.IsEnabled() {
 		if !internalSentry.Flush(config.SentryFlushTimeout) {
@@ -855,6 +851,9 @@ func (a *Application) shutdown() error {
 	}
 
 	a.logger.Info("Shutdown complete")
+	if err := a.logger.Shutdown(shutdownCtx); err != nil {
+		a.logger.WithError(err).Warn("Logger shutdown timed out")
+	}
 	return nil
 }
 
@@ -960,10 +959,6 @@ func (a *Application) runDataCleanup(ctx context.Context) (bool, error) {
 		WithField("duration_ms", duration.Milliseconds()).
 		Info("Data cleanup completed")
 
-	if a.metrics != nil {
-		a.metrics.RecordJob("data_cleanup", "all", duration.Seconds())
-	}
-
 	if a.snapshotMgr != nil && isLeader {
 		if a.deltaLog != nil {
 			stats, err := a.deltaLog.MergeIntoDB(ctx, a.db)
@@ -989,7 +984,13 @@ func (a *Application) runDataCleanup(ctx context.Context) (bool, error) {
 	}
 
 	if cleanupErr != nil {
+		if a.metrics != nil {
+			a.metrics.RecordJobRun("data_cleanup", "all", "error", time.Since(startTime).Seconds())
+		}
 		return true, cleanupErr
+	}
+	if a.metrics != nil {
+		a.metrics.RecordJobRun("data_cleanup", "all", "success", time.Since(startTime).Seconds())
 	}
 	return true, nil
 }
@@ -1014,7 +1015,9 @@ func (a *Application) performStickerRefresh(ctx context.Context) {
 	refreshCtx, cancel := context.WithTimeout(ctx, config.StickerLoadTimeout)
 	defer cancel()
 
+	status := "success"
 	if err := a.stickerManager.LoadStickers(refreshCtx); err != nil {
+		status = "error"
 		a.logger.WithError(err).Error("Failed to load stickers")
 	} else {
 		count := a.stickerManager.Count()
@@ -1025,7 +1028,7 @@ func (a *Application) performStickerRefresh(ctx context.Context) {
 	}
 
 	if a.metrics != nil {
-		a.metrics.RecordJob("sticker_refresh", "all", time.Since(startTime).Seconds())
+		a.metrics.RecordJobRun("sticker_refresh", "all", status, time.Since(startTime).Seconds())
 	}
 }
 
@@ -1039,6 +1042,9 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) (bool,
 	if includeID && a.snapshotMgr != nil && a.snapshotReady.Load() {
 		a.logger.Info("Snapshot already loaded from R2, initial refresh not needed")
 		a.readinessState.MarkReady()
+		if a.metrics != nil {
+			a.metrics.RecordJobRun("refresh", "total", "skipped", time.Since(startTime).Seconds())
+		}
 		return false, true, nil
 	}
 
@@ -1050,12 +1056,18 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) (bool,
 		lockAcquired, lockErr = a.snapshotMgr.AcquireLeaderLock(warmupCtx)
 		if lockErr != nil {
 			a.logger.WithError(lockErr).Warn("Failed to acquire leader lock, skipping this run")
+			if a.metrics != nil {
+				a.metrics.RecordJobRun("refresh", "total", "error", time.Since(startTime).Seconds())
+			}
 			return false, false, lockErr
 		} else if !lockAcquired {
 			if includeID {
 				a.logger.Info("Another instance is leader for initial refresh, waiting for new snapshot via polling")
 			} else {
 				a.logger.Info("Another instance is leader for refresh, waiting for new snapshot via polling")
+			}
+			if a.metrics != nil {
+				a.metrics.RecordJobRun("refresh", "total", "skipped", time.Since(startTime).Seconds())
 			}
 			return false, false, nil
 		}
@@ -1083,6 +1095,9 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) (bool,
 
 	if err != nil {
 		a.logger.WithError(err).Error("Data refresh failed")
+		if a.metrics != nil {
+			a.metrics.RecordJobRun("refresh", "total", "error", time.Since(startTime).Seconds())
+		}
 		return true, false, err
 	}
 
@@ -1109,6 +1124,9 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) (bool,
 			stats, err := a.deltaLog.MergeIntoDB(warmupCtx, a.db)
 			if err != nil {
 				a.logger.WithError(err).Warn("Failed to merge delta logs before snapshot upload")
+				if a.metrics != nil {
+					a.metrics.RecordJobRun("refresh", "total", "error", time.Since(startTime).Seconds())
+				}
 				return true, false, err
 			}
 			a.logger.WithField("processed", stats.ObjectsProcessed).
@@ -1122,9 +1140,16 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) (bool,
 		etag, uploadErr := a.snapshotMgr.UploadSnapshot(warmupCtx, a.db)
 		if uploadErr != nil {
 			a.logger.WithError(uploadErr).Error("Failed to upload snapshot to R2")
+			if a.metrics != nil {
+				a.metrics.RecordJobRun("refresh", "total", "error", time.Since(startTime).Seconds())
+			}
 			return true, false, uploadErr
 		}
 		a.logger.WithField("etag", etag).Info("Snapshot uploaded to R2 successfully")
+	}
+
+	if a.metrics != nil {
+		a.metrics.RecordJobRun("refresh", "total", "success", time.Since(startTime).Seconds())
 	}
 
 	return true, includeID, nil
@@ -1393,7 +1418,7 @@ func securityHeadersMiddleware() gin.HandlerFunc {
 
 // loggingMiddleware logs HTTP requests with status-based log levels:
 // 5xx=Error, 4xx=Warn, 404=Debug, 3xx/2xx=Debug.
-func loggingMiddleware(baseCtx context.Context, log *logger.Logger) gin.HandlerFunc {
+func loggingMiddleware(baseCtx context.Context, log *logger.Logger, m *metrics.Metrics) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
@@ -1427,8 +1452,16 @@ func loggingMiddleware(baseCtx context.Context, log *logger.Logger) gin.HandlerF
 
 		duration := time.Since(start)
 		status := c.Writer.Status()
+		route := c.FullPath()
+		if route == "" {
+			route = "unmatched"
+		}
+		if m != nil {
+			m.RecordHTTPServerRequest(method, route, status, duration.Seconds())
+		}
 		entry := log.WithField("http_method", method).
 			WithField("http_path", path).
+			WithField("http_route", route).
 			WithField("http_status", status).
 			WithField("duration_ms", duration.Milliseconds()).
 			WithField("client_ip", c.ClientIP())

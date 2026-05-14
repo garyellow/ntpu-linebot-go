@@ -583,17 +583,23 @@ if len(data) > 300 {
 **關鍵指標**:
 ```
 # 請求量 (RED Method)
+ntpu_http_server_requests_total{method, route, status_code}
 ntpu_webhook_batch_total{status}
 ntpu_webhook_total{event_type, status}
+ntpu_line_reply_total{status}
 ntpu_scraper_total{module, status}
-ntpu_llm_total{provider, operation, status}
+ntpu_llm_total{provider, model, operation, status}
 ntpu_search_total{type, status}
+ntpu_job_total{job, module, status}
 
 # 延遲
+ntpu_http_server_request_duration_seconds{method, route, status_code}
 ntpu_webhook_duration_seconds{event_type}
+ntpu_line_reply_duration_seconds{status}
 ntpu_scraper_duration_seconds{module}
-ntpu_llm_duration_seconds{provider, operation}
+ntpu_llm_duration_seconds{provider, model, operation}
 ntpu_search_duration_seconds{type}
+ntpu_job_duration_seconds{job, module}
 
 # 快取 (USE Method)
 ntpu_cache_operations_total{module, result}  # result: hit, miss
@@ -601,12 +607,13 @@ ntpu_cache_size{module}
 
 # 其他
 ntpu_index_size{index}  # BM25 索引大小
+ntpu_search_results{type}
+ntpu_intent_total{module, intent, source}
 ntpu_rate_limiter_dropped_total{limiter}
 ntpu_rate_limiter_users
 ntpu_llm_rate_limiter_users
-ntpu_llm_fallback_total{from_provider, to_provider, operation}
-ntpu_llm_fallback_latency_seconds{from_provider, to_provider, operation}
-ntpu_job_duration_seconds{job, module}
+ntpu_llm_fallback_total{from_provider, from_model, to_provider, to_model, operation}
+ntpu_llm_cooldown_total{provider, model, kind, action}
 ```
 
 ### 2. 結構化日誌
@@ -633,11 +640,11 @@ ntpu_job_duration_seconds{job, module}
 **告警閾值**:
 ```yaml
 - alert: ScraperHighFailureRate
-  expr: rate(ntpu_scraper_total{status="error"}[5m]) > 0.3
+  expr: sum(rate(ntpu_scraper_total{status="error"}[5m])) / sum(rate(ntpu_scraper_total[5m])) > 0.3
   for: 3m
 
 - alert: WebhookHighLatency
-  expr: histogram_quantile(0.95, ntpu_webhook_duration_seconds_bucket) > 3
+  expr: histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le, event_type)) > 3
   for: 5m
 
 - alert: ServiceDown

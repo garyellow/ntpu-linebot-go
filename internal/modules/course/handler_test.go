@@ -841,39 +841,23 @@ func TestHandleSmartSearch_RateLimited(t *testing.T) {
 	}
 }
 
-func TestHandleSmartSearch_ExpansionFailed(t *testing.T) {
+func TestHandleSmartSearch_ExpansionFailedContinuesWithOriginalQuery(t *testing.T) {
 	t.Parallel()
 
 	expander := &mockQueryExpander{err: errors.New("expansion output not parseable from groq model my-model")}
 	h := setupTestHandlerWithSmartSearch(t, expander, nil)
 	ctx := context.Background()
 
-	messages := h.HandleMessage(ctx, "找課 微積分")
+	messages := h.HandleMessage(ctx, "找課 機器學習")
 
 	if len(messages) == 0 {
-		t.Fatal("Expected expansion-failed error message, got none")
+		t.Fatal("Expected smart-search response after expansion failure, got none")
 	}
 
-	// Verify the quick replies include a retry action (課程 微積分)
-	msg, ok := messages[0].(*messaging_api.TextMessageV2)
-	if !ok {
-		t.Fatalf("Expected TextMessageV2, got %T", messages[0])
-	}
-	if msg.QuickReply == nil || len(msg.QuickReply.Items) == 0 {
-		t.Fatal("Expected quick reply items on expansion-failed message")
-	}
-
-	hasRetry := false
-	for _, item := range msg.QuickReply.Items {
-		if action, ok := item.Action.(*messaging_api.MessageAction); ok {
-			if strings.Contains(action.Text, "課程 微積分") {
-				hasRetry = true
-				break
-			}
+	for _, message := range messages {
+		if msg, ok := message.(*messaging_api.TextMessageV2); ok && strings.Contains(msg.Text, "智慧搜尋暫時無法使用") {
+			t.Fatalf("Expansion failure should not abort smart search, got error text: %q", msg.Text)
 		}
-	}
-	if !hasRetry {
-		t.Error("Expected a retry quick-reply action containing '課程 微積分'")
 	}
 }
 

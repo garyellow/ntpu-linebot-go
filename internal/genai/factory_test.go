@@ -83,6 +83,9 @@ func TestDefaultLLMConfig(t *testing.T) {
 	if cfg.RetryConfig.MaxDelay != DefaultMaxRetryDelay {
 		t.Errorf("RetryConfig.MaxDelay = %v, want %v", cfg.RetryConfig.MaxDelay, DefaultMaxRetryDelay)
 	}
+	if cfg.RetryConfig.AttemptTimeout != DefaultLLMAttemptTimeout {
+		t.Errorf("RetryConfig.AttemptTimeout = %v, want %v", cfg.RetryConfig.AttemptTimeout, DefaultLLMAttemptTimeout)
+	}
 }
 
 func TestDefaultRetryConfig(t *testing.T) {
@@ -97,6 +100,9 @@ func TestDefaultRetryConfig(t *testing.T) {
 	}
 	if cfg.MaxDelay != DefaultMaxRetryDelay {
 		t.Errorf("MaxDelay = %v, want %v", cfg.MaxDelay, DefaultMaxRetryDelay)
+	}
+	if cfg.AttemptTimeout != DefaultLLMAttemptTimeout {
+		t.Errorf("AttemptTimeout = %v, want %v", cfg.AttemptTimeout, DefaultLLMAttemptTimeout)
 	}
 }
 
@@ -290,6 +296,54 @@ func TestCreateQueryExpander_NoProviders(t *testing.T) {
 	}
 	if expander != nil {
 		t.Error("CreateQueryExpander() should return nil when no providers configured")
+	}
+}
+
+func TestBuildModelChain_InterleavesProvidersByModelRank(t *testing.T) {
+	t.Parallel()
+
+	cfg := LLMConfig{
+		Providers: []Provider{ProviderGemini, ProviderGroq, ProviderCerebras},
+		Gemini: ProviderConfig{
+			APIKey:         "gemini-key",
+			ExpanderModels: []string{"gemini-a", "gemini-b"},
+		},
+		Groq: ProviderConfig{
+			APIKey:         "groq-key",
+			ExpanderModels: []string{"groq-a", "groq-b", "groq-c"},
+		},
+		Cerebras: ProviderConfig{
+			APIKey:         "cerebras-key",
+			ExpanderModels: []string{"cerebras-a"},
+		},
+		RetryConfig: DefaultRetryConfig(),
+	}
+
+	chain := buildModelChain(cfg, func(_ Provider, providerCfg *ProviderConfig) []string {
+		return providerCfg.ExpanderModels
+	})
+
+	want := []struct {
+		provider Provider
+		model    string
+	}{
+		{ProviderGemini, "gemini-a"},
+		{ProviderGroq, "groq-a"},
+		{ProviderCerebras, "cerebras-a"},
+		{ProviderGemini, "gemini-b"},
+		{ProviderGroq, "groq-b"},
+		{ProviderGroq, "groq-c"},
+	}
+
+	if len(chain) != len(want) {
+		t.Fatalf("len(chain) = %d, want %d", len(chain), len(want))
+	}
+	for i, wantExpander := range want {
+		got := chain[i]
+		if got.provider != wantExpander.provider || got.model != wantExpander.model {
+			t.Fatalf("chain[%d] = (%s, %s), want (%s, %s)",
+				i, got.provider, got.model, wantExpander.provider, wantExpander.model)
+		}
 	}
 }
 

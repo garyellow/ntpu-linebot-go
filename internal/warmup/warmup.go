@@ -230,11 +230,15 @@ func warmupProgramModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 
 // warmupIDModule warms student ID cache (sequential execution).
 // Scrapes undergraduate (prefix 4), master's (prefix 7), and PhD (prefix 8) students.
-func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, m *metrics.Metrics) error {
+func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, m *metrics.Metrics) (retErr error) {
 	startTime := time.Now()
 	defer func() {
 		if m != nil {
-			m.RecordJob("refresh", "id", time.Since(startTime).Seconds())
+			status := "success"
+			if retErr != nil {
+				status = "error"
+			}
+			m.RecordJobRun("refresh", "id", status, time.Since(startTime).Seconds())
 		}
 	}()
 
@@ -333,11 +337,15 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 }
 
 // warmupContactModule warms contact cache (allows partial success).
-func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics) error {
+func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics) (retErr error) {
 	startTime := time.Now()
 	defer func() {
 		if m != nil {
-			m.RecordJob("refresh", "contact", time.Since(startTime).Seconds())
+			status := "success"
+			if retErr != nil {
+				status = "error"
+			}
+			m.RecordJobRun("refresh", "contact", status, time.Since(startTime).Seconds())
 		}
 	}()
 
@@ -392,12 +400,16 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 // Probes actual data source (scraper) to find semesters with data.
 // Updates SemesterCache after successful warmup.
 // Returns courseProgramMap for syllabus warmup to use in dual-source fusion.
-func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics, semesterCache *course.SemesterCache) (courseProgramMap, error) {
-	programMap := make(courseProgramMap)
+func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Client, log *logger.Logger, stats *Stats, m *metrics.Metrics, semesterCache *course.SemesterCache) (result courseProgramMap, retErr error) {
+	result = make(courseProgramMap)
 	startTime := time.Now()
 	defer func() {
 		if m != nil {
-			m.RecordJob("refresh", "course", time.Since(startTime).Seconds())
+			status := "success"
+			if retErr != nil {
+				status = "error"
+			}
+			m.RecordJobRun("refresh", "course", status, time.Since(startTime).Seconds())
 		}
 	}()
 
@@ -406,12 +418,12 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 	// Probe semesters to find 4 with actual data
 	semesters, err := probeSemestersWithData(ctx, client, log)
 	if err != nil {
-		return programMap, fmt.Errorf("failed to probe semesters: %w", err)
+		return result, fmt.Errorf("failed to probe semesters: %w", err)
 	}
 
 	if len(semesters) == 0 {
 		log.Warn("No semesters with data found during probing")
-		return programMap, nil
+		return result, nil
 	}
 
 	// Each semester makes 4 requests (U/M/N/P education codes)
@@ -425,7 +437,7 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 	for _, sem := range semesters {
 		select {
 		case <-ctx.Done():
-			return programMap, fmt.Errorf("course module canceled: %w", ctx.Err())
+			return result, fmt.Errorf("course module canceled: %w", ctx.Err())
 		default:
 		}
 
@@ -444,7 +456,7 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 		// This enables accurate program names + correct required/elective types
 		for _, c := range courses {
 			if len(c.RawProgramReqs) > 0 {
-				programMap[c.UID] = c.RawProgramReqs
+				result[c.UID] = c.RawProgramReqs
 			}
 		}
 
@@ -471,7 +483,7 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 		log.WithField("year", sem.Year).
 			WithField("term", sem.Term).
 			WithField("count", len(courses)).
-			WithField("program_reqs_collected", len(programMap)).
+			WithField("program_reqs_collected", len(result)).
 			WithField("total_cached", stats.Courses.Load()).
 			Info("Courses cached for semester")
 	}
@@ -485,10 +497,10 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 
 	log.WithField("total_courses", stats.Courses.Load()).
 		WithField("semesters_processed", len(semesters)).
-		WithField("program_map_size", len(programMap)).
+		WithField("program_map_size", len(result)).
 		Info("Course module warmup completed")
 
-	return programMap, nil
+	return result, nil
 }
 
 // probeSemestersWithData probes the course system to find 4 semesters with actual data.
@@ -582,11 +594,15 @@ func formatSemesters(semesters []course.Semester) string {
 // Uses content hash for incremental updates - only re-scrapes changed syllabi
 // programMap provides raw program requirements from course list page for dual-source fusion
 // Optimization: Processes courses in batches to reduce peak memory usage
-func warmupSyllabusModule(ctx context.Context, db *storage.DB, client *scraper.Client, bm25Index *rag.BM25Index, log *logger.Logger, stats *Stats, m *metrics.Metrics, programMap courseProgramMap) error {
+func warmupSyllabusModule(ctx context.Context, db *storage.DB, client *scraper.Client, bm25Index *rag.BM25Index, log *logger.Logger, stats *Stats, m *metrics.Metrics, programMap courseProgramMap) (retErr error) {
 	startTime := time.Now()
 	defer func() {
 		if m != nil {
-			m.RecordJob("refresh", "syllabus", time.Since(startTime).Seconds())
+			status := "success"
+			if retErr != nil {
+				status = "error"
+			}
+			m.RecordJobRun("refresh", "syllabus", status, time.Since(startTime).Seconds())
 		}
 	}()
 

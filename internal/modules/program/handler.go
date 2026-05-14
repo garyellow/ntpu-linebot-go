@@ -165,7 +165,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 		if h.logger != nil {
 			h.logger.WithModule(ModuleName).
 				WithField("intent", IntentList).
-				InfoContext(ctx, "Dispatching program intent")
+				DebugContext(ctx, "Dispatching program intent")
 		}
 		return h.handleProgramList(ctx), nil
 
@@ -178,7 +178,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			h.logger.WithModule(ModuleName).
 				WithField("intent", IntentSearch).
 				WithField("query", query).
-				InfoContext(ctx, "Dispatching program intent")
+				DebugContext(ctx, "Dispatching program intent")
 		}
 		return h.handleProgramSearch(ctx, query), nil
 
@@ -191,7 +191,7 @@ func (h *Handler) DispatchIntent(ctx context.Context, intent string, params map[
 			h.logger.WithModule(ModuleName).
 				WithField("intent", IntentCourses).
 				WithField("program_name", programName).
-				InfoContext(ctx, "Dispatching program intent")
+				DebugContext(ctx, "Dispatching program intent")
 		}
 		return h.handleProgramCourses(ctx, programName), nil
 
@@ -223,7 +223,7 @@ func (h *Handler) HandleMessage(ctx context.Context, text string) []messaging_ap
 	log := h.logger.WithModule(ModuleName)
 	text = strings.TrimSpace(text)
 
-	log.InfoContext(ctx, "Handling program message")
+	log.DebugContext(ctx, "Handling program message")
 
 	// Find matching pattern
 	matcher := h.findMatcher(text)
@@ -344,7 +344,7 @@ func (h *Handler) handleProgramList(ctx context.Context) []messaging_api.Message
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	log.WithField("query_type", "list").
-		InfoContext(ctx, "Handling program query")
+		DebugContext(ctx, "Handling program query")
 
 	// Get recent 2 semesters for filtering statistics (data-driven)
 	var years, terms []int
@@ -398,7 +398,7 @@ func (h *Handler) handleProgramSearch(ctx context.Context, searchTerm string) []
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	log.WithField("search_term", searchTerm).
-		InfoContext(ctx, "Handling program search")
+		DebugContext(ctx, "Handling program search")
 
 	// Get recent 2 semesters for filtering statistics (data-driven)
 	var years, terms []int
@@ -482,7 +482,7 @@ func (h *Handler) handleProgramCourses(ctx context.Context, programName string) 
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	log.WithField("program_name", programName).
-		InfoContext(ctx, "Handling program courses query")
+		DebugContext(ctx, "Handling program courses query")
 
 	// Get recent 2 semesters from semester cache (data-driven)
 	var years, terms []int
@@ -561,7 +561,7 @@ func (h *Handler) handleCourseProgramsList(ctx context.Context, courseUID string
 	sender := lineutil.GetSender(senderName, h.stickerManager)
 
 	log.WithField("course_uid", courseUID).
-		InfoContext(ctx, "Handling course programs list")
+		DebugContext(ctx, "Handling course programs list")
 
 	// Get course info to display course name (not just UID)
 	course, err := h.db.GetCourseByUID(ctx, courseUID)
