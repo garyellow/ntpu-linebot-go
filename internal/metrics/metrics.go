@@ -412,7 +412,7 @@ func (m *Metrics) RecordLLM(provider, operation, status string, duration float64
 
 // RecordSearch records a search operation.
 // searchType: bm25, disabled
-// status: success, error, no_results, skipped, rate_limited, expansion_failed
+// status: success, error, no_results, skipped, rate_limited
 func (m *Metrics) RecordSearch(searchType, status string, duration float64) {
 	m.SearchTotal.WithLabelValues(searchType, status).Inc()
 	m.SearchDuration.WithLabelValues(searchType).Observe(duration)
@@ -488,8 +488,8 @@ func (m *Metrics) RecordLLMRequest(provider, operation, status string, duration 
 }
 
 // RecordLLMFallback records an LLM provider fallback event.
-// fromProvider: the primary provider that failed
-// toProvider: the fallback provider used
+// fromProvider: the provider that failed
+// toProvider: the provider that succeeded after fallback
 // operation: nlu, expander
 func (m *Metrics) RecordLLMFallback(fromProvider, toProvider, operation string) {
 	m.LLMFallbackTotal.WithLabelValues(fromProvider, toProvider, operation).Inc()

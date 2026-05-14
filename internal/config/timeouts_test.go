@@ -147,6 +147,7 @@ func TestSmartSearchTimeouts(t *testing.T) {
 		expected time.Duration
 	}{
 		{"SmartSearchTimeout", SmartSearchTimeout, 30 * time.Second},
+		{"QueryExpansionTimeout", QueryExpansionTimeout, 8 * time.Second},
 		{"ReadinessCheckTimeout", ReadinessCheckTimeout, 3 * time.Second},
 		{"ReadinessWarmupTimeout", ReadinessWarmupTimeout, 10 * time.Minute},
 	}
@@ -213,5 +214,11 @@ func TestTimeoutRelationships(t *testing.T) {
 	if SmartSearchTimeout >= WebhookProcessing {
 		t.Errorf("SmartSearchTimeout (%v) should be < WebhookProcessing (%v)",
 			SmartSearchTimeout, WebhookProcessing)
+	}
+
+	// Query expansion should leave enough budget for BM25 search and response formatting.
+	if QueryExpansionTimeout >= SmartSearchTimeout {
+		t.Errorf("QueryExpansionTimeout (%v) should be < SmartSearchTimeout (%v)",
+			QueryExpansionTimeout, SmartSearchTimeout)
 	}
 }

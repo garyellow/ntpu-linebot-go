@@ -7,9 +7,9 @@
 // - Groq/Cerebras: Uses github.com/openai/openai-go/v3 (OpenAI-compatible API)
 //
 // Fallback Strategy (3-layer):
-// 1. Model Retry: Same model retried with exponential backoff
-// 2. Model Chain: Next model in same provider's model list
-// 3. Provider Chain: Next provider in NTPU_LLM_PROVIDERS list
+// 1. Model Call: Each provider/model call is bounded by a per-attempt timeout
+// 2. Fast Fallback: Prefer the next configured provider/model over retrying the same one
+// 3. Last Resort Retry: Retry the same model only when no alternative remains
 package genai
 
 import (
@@ -104,7 +104,8 @@ type ParseResult struct {
 // Uses AWS-recommended Full Jitter exponential backoff.
 type RetryConfig struct {
 	// MaxAttempts is the maximum number of attempts (including initial).
-	// Default: 2 (1 initial + 1 retry)
+	// The fallback chain uses this only when no alternative model remains.
+	// Default: 2 (1 initial + 1 last-resort retry)
 	MaxAttempts int
 
 	// InitialDelay is the base delay before first retry.
@@ -114,6 +115,10 @@ type RetryConfig struct {
 	// MaxDelay is the maximum delay between retries.
 	// Default: 3s
 	MaxDelay time.Duration
+
+	// AttemptTimeout bounds a single provider/model call.
+	// Default: 5s
+	AttemptTimeout time.Duration
 }
 
 // ProviderConfig holds configuration for a single LLM provider.
@@ -137,7 +142,8 @@ type ProviderConfig struct {
 // LLMConfig holds configuration for all LLM providers.
 type LLMConfig struct {
 	// Providers is the ordered list of providers to try.
-	// Fallback happens in order: first provider's models, then second, etc.
+	// The factory interleaves providers by model rank, so each provider's first
+	// model is tried before any provider's second model.
 	// Default: ["gemini", "groq", "cerebras", "openai"] (only those with API keys)
 	Providers []Provider
 
@@ -196,6 +202,7 @@ const (
 	DefaultMaxRetryAttempts  = 2
 	DefaultInitialRetryDelay = 500 * time.Millisecond
 	DefaultMaxRetryDelay     = 3 * time.Second
+	DefaultLLMAttemptTimeout = 5 * time.Second
 )
 
 // HasAnyProvider returns true if at least one provider is configured.

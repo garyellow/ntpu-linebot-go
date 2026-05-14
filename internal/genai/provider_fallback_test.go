@@ -244,9 +244,39 @@ func TestFallbackIntentParser_Parse_Fallback(t *testing.T) {
 	if result == nil || result.Module != "fallback" {
 		t.Errorf("Parse() result = %v, want module=fallback", result)
 	}
-	// Primary should have been called MaxAttempts times before fallback
+	// Alternative models are preferred over retrying the same model.
+	if primaryCalls != 1 {
+		t.Errorf("primary called %d times, want 1", primaryCalls)
+	}
+}
+
+func TestFallbackIntentParser_Parse_RetriesOnlyAsLastResort(t *testing.T) {
+	t.Parallel()
+
+	primaryCalls := 0
+	primary := &mockIntentParser{
+		parseFunc: func(_ context.Context, _ string) (*ParseResult, error) {
+			primaryCalls++
+			return nil, errors.New("service unavailable")
+		},
+		provider: ProviderGemini,
+		enabled:  true,
+	}
+
+	cfg := RetryConfig{
+		MaxAttempts:    2,
+		InitialDelay:   time.Millisecond,
+		MaxDelay:       time.Millisecond,
+		AttemptTimeout: time.Second,
+	}
+	parser := NewFallbackIntentParser(cfg, primary)
+
+	_, err := parser.Parse(context.Background(), "test query")
+	if err == nil {
+		t.Fatal("Parse() error = nil, want exhausted retry error")
+	}
 	if primaryCalls != cfg.MaxAttempts {
-		t.Errorf("primary called %d times, want %d", primaryCalls, cfg.MaxAttempts)
+		t.Fatalf("primary called %d times, want %d", primaryCalls, cfg.MaxAttempts)
 	}
 }
 
@@ -457,6 +487,45 @@ func TestFallbackQueryExpander_Expand_PrimarySuccess(t *testing.T) {
 	}
 	if result != "test expanded" {
 		t.Errorf("Expand() = %q, want %q", result, "test expanded")
+	}
+}
+
+func TestFallbackQueryExpander_Expand_DoesNotRetryBeforeFallback(t *testing.T) {
+	t.Parallel()
+
+	primaryCalls := 0
+	primary := &mockQueryExpander{
+		expandFunc: func(_ context.Context, query string) (string, error) {
+			primaryCalls++
+			return query, errors.New("temporary 500 internal error")
+		},
+		provider: ProviderGemini,
+		model:    "gemini-a",
+	}
+	fallback := &mockQueryExpander{
+		expandFunc: func(_ context.Context, query string) (string, error) {
+			return query + " fallback", nil
+		},
+		provider: ProviderGroq,
+		model:    "groq-a",
+	}
+
+	cfg := RetryConfig{
+		MaxAttempts:  3,
+		InitialDelay: time.Millisecond,
+		MaxDelay:     time.Millisecond,
+	}
+	expander := NewFallbackQueryExpander(cfg, primary, fallback)
+
+	result, err := expander.Expand(context.Background(), "資料探勘")
+	if err != nil {
+		t.Fatalf("Expand() error = %v, want nil", err)
+	}
+	if primaryCalls != 1 {
+		t.Fatalf("primary calls = %d, want 1", primaryCalls)
+	}
+	if result != "資料探勘 fallback" {
+		t.Fatalf("Expand() = %q, want fallback result", result)
 	}
 }
 

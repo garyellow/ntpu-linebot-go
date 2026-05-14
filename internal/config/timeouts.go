@@ -107,15 +107,20 @@ const (
 // Smart search timeouts
 const (
 	// SmartSearchTimeout is the timeout for smart search operations.
-	// This includes BM25 search and Query Expansion (Gemini API call).
+	// This includes BM25 search and the optional query expansion step.
 	// Uses a detached context to prevent cancellation from request context
 	// (e.g., when LINE server closes connection after receiving 200 OK).
 	//
 	// Set to 30s because:
-	//   - Query Expansion API typically responds in 1-5s
+	//   - Query expansion has its own shorter budget below
 	//   - BM25 search is in-memory and very fast (<10ms)
 	//   - Should complete well within the 60s webhook timeout
 	SmartSearchTimeout = 30 * time.Second
+
+	// QueryExpansionTimeout bounds the optional LLM query expansion step.
+	// Smart search falls back to the original query if expansion exceeds this
+	// budget, so a slow provider chain cannot consume the whole search timeout.
+	QueryExpansionTimeout = 8 * time.Second
 
 	// ReadinessCheckTimeout is the timeout for readiness probe checks.
 	// Set to 3s to allow SQLite ping operations to complete while maintaining

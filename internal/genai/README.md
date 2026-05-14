@@ -7,14 +7,15 @@
 - **IntentParser**: NLU 意圖解析器（Function Calling 實作）
 - **QueryExpander**: 查詢擴展器（同義詞、縮寫、翻譯）
 - **Multi-Provider Fallback**: 自動故障轉移和重試機制
+- **Unified LLM Chain**: IntentParser 與 QueryExpander 共用 provider/model 切換邏輯；每次模型呼叫有 timeout，優先切換替代模型，沒有替代模型時才 retry
 
 ## 支援的 LLM 提供者
 
 | 提供者 | IntentParser 預設模型鏈 | QueryExpander 預設模型鏈 | 備註 |
 |--------|------------------------|----------------------------|------|
-| **Gemini** | gemini-3.1-pro-preview, gemini-2.5-pro, gemini-2.5-flash | gemini-3.1-pro-preview, gemini-2.5-pro, gemini-2.5-flash | Google AI Studio |
-| **Groq** | moonshotai/kimi-k2-instruct, openai/gpt-oss-120b, meta-llama/llama-4-maverick-17b-128e-instruct, llama-3.3-70b-versatile, qwen/qwen3-32b, meta-llama/llama-4-scout-17b-16e-instruct, openai/gpt-oss-20b | moonshotai/kimi-k2-instruct, qwen/qwen3-32b, meta-llama/llama-4-scout-17b-16e-instruct, openai/gpt-oss-120b, llama-3.3-70b-versatile, meta-llama/llama-4-maverick-17b-128e-instruct, openai/gpt-oss-20b | OpenAI-compatible |
-| **Cerebras** | gpt-oss-120b | gpt-oss-120b | OpenAI-compatible |
+| **Gemini** | gemma-4-31b-it, gemma-4-26b-a4b-it | gemma-4-31b-it, gemma-4-26b-a4b-it | Google AI Studio |
+| **Groq** | openai/gpt-oss-120b, openai/gpt-oss-20b, llama-3.3-70b-versatile, qwen/qwen3-32b, llama-3.1-8b-instant | openai/gpt-oss-120b, openai/gpt-oss-20b, llama-3.3-70b-versatile, qwen/qwen3-32b, llama-3.1-8b-instant | OpenAI-compatible |
+| **Cerebras** | gpt-oss-120b, llama3.1-8b | gpt-oss-120b, llama3.1-8b | OpenAI-compatible |
 | **OpenAI-Compatible** | (自訂) | (自訂) | 支援 Ollama, LM Studio, vLLM 等 |
 
 ## 檔案結構
@@ -23,7 +24,8 @@
 internal/genai/
 ├── types.go              # 共享類型定義 (IntentParser, QueryExpander interfaces)
 ├── errors.go             # 錯誤分類和重試判斷
-├── retry.go              # AWS Full Jitter 重試邏輯
+├── retry.go              # AWS Full Jitter 重試輔助
+├── chain.go              # 共用 LLM provider/model chain runner
 ├── gemini_intent.go      # Gemini IntentParser 實作
 ├── gemini_expander.go    # Gemini QueryExpander 實作
 ├── openai_intent.go      # OpenAI-compatible IntentParser 實作 (Groq/Cerebras)
@@ -43,16 +45,18 @@ internal/genai/
 ┌─────────────────────────────────────────────────┐
 │  FallbackIntentParser / FallbackQueryExpander   │
 ├─────────────────────────────────────────────────┤
-│  1. 主要提供者重試 (Full Jitter Backoff)          │
-│     - 429/5xx → 重試 (最多 2 次)                 │
-│     - 400/401/403 → 直接失敗                     │
+│  1. 共用 LLM chain runner                         │
+│     - 單次 provider/model 呼叫 timeout: 5s        │
+│     - 有替代模型時優先 fallback，不重試同模型       │
+│     - 沒有替代模型時才用 Full Jitter retry         │
+│     - 400/422 → 直接失敗；401/403/404 → fallback │
 │                                                 │
-│  2. 提供者故障轉移                                │
-│     - 主要提供者失敗 → 備援提供者                  │
+│  2. 模型順位交錯                                  │
+│     - 各 provider 第一順位模型先試，再進第二順位     │
 │     - 記錄 metrics (ntpu_llm_fallback_total)    │
 │                                                 │
 │  3. 優雅降級 (QueryExpander only)                │
-│     - 全部失敗 → 返回原始查詢                      │
+│     - 全部失敗 → 課程搜尋使用原始查詢繼續 BM25       │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -174,12 +178,15 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 
 ### 重試策略 (AWS Full Jitter)
 
+所有 LLM 呼叫都走同一個 chain runner。暫時性錯誤（408/429/5xx/網路逾時）會先切換到下一個 provider/model；只有當沒有替代模型可用時，才對同一個模型使用 Full Jitter retry。這避免單一慢模型吃掉整個互動延遲預算，也保留單一供應商部署時的最後重試能力。
+
 ```
 重試延遲 = random(0, min(cap, base * 2^attempt))
 
-- base: 2 秒
-- cap: 60 秒
-- MaxRetries: 2
+- base: 500ms
+- cap: 3 秒
+- per-attempt timeout: 5 秒
+- MaxAttempts: 2 (僅最後模型/無替代模型時)
 ```
 
 ### 錯誤分類
@@ -194,9 +201,10 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 
 ### 故障轉移流程
 
-1. **Primary Provider Retry**: 主要提供者內部重試 (最多 2 次)
-2. **Cross-Provider Fallback**: 主要失敗後切換到備援提供者
-3. **Graceful Degradation**: 全部失敗時，QueryExpander 返回原始查詢
+1. **Model Rank Interleave**: 依 `NTPU_LLM_PROVIDERS` 順序先嘗試各 provider 的第一順位模型，再嘗試第二順位模型
+2. **Fast Fallback**: 有替代模型時，暫時性錯誤直接切換到下一個 provider/model
+3. **Last-Resort Retry**: 沒有替代模型時，才對同模型進行最多 2 次嘗試
+4. **Graceful Degradation**: QueryExpander 全部失敗時，課程智慧搜尋會記錄錯誤並使用原始查詢繼續 BM25 搜尋
 
 ## 配置
 
@@ -227,12 +235,12 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 
 | 變數名稱 | 預設值 |
 |---------|--------|
-| `NTPU_GEMINI_INTENT_MODELS` | gemini-3.1-pro-preview,gemini-2.5-pro,gemini-2.5-flash |
-| `NTPU_GEMINI_EXPANDER_MODELS` | gemini-3.1-pro-preview,gemini-2.5-pro,gemini-2.5-flash |
-| `NTPU_GROQ_INTENT_MODELS` | openai/gpt-oss-120b,llama-3.3-70b-versatile,qwen/qwen3-32b,openai/gpt-oss-20b,llama-3.1-8b-instant |
-| `NTPU_GROQ_EXPANDER_MODELS` | openai/gpt-oss-120b,qwen/qwen3-32b,openai/gpt-oss-20b,llama-3.3-70b-versatile,llama-3.1-8b-instant |
-| `NTPU_CEREBRAS_INTENT_MODELS` | zai-glm-4.7,gpt-oss-120b,qwen-3-235b-a22b-instruct-2507,llama3.1-8b |
-| `NTPU_CEREBRAS_EXPANDER_MODELS` | qwen-3-235b-a22b-instruct-2507,zai-glm-4.7,gpt-oss-120b,llama3.1-8b |
+| `NTPU_GEMINI_INTENT_MODELS` | gemma-4-31b-it,gemma-4-26b-a4b-it |
+| `NTPU_GEMINI_EXPANDER_MODELS` | gemma-4-31b-it,gemma-4-26b-a4b-it |
+| `NTPU_GROQ_INTENT_MODELS` | openai/gpt-oss-120b,openai/gpt-oss-20b,llama-3.3-70b-versatile,qwen/qwen3-32b,llama-3.1-8b-instant |
+| `NTPU_GROQ_EXPANDER_MODELS` | openai/gpt-oss-120b,openai/gpt-oss-20b,llama-3.3-70b-versatile,qwen/qwen3-32b,llama-3.1-8b-instant |
+| `NTPU_CEREBRAS_INTENT_MODELS` | gpt-oss-120b,llama3.1-8b |
+| `NTPU_CEREBRAS_EXPANDER_MODELS` | gpt-oss-120b,llama3.1-8b |
 | `NTPU_OPENAI_INTENT_MODELS` | (無預設值) |
 | `NTPU_OPENAI_EXPANDER_MODELS` | (無預設值) |
 

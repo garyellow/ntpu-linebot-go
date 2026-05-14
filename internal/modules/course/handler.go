@@ -1889,7 +1889,7 @@ func (h *Handler) formatCourseListResponseWithOptions(courses []storage.Course, 
 //
 // Timeout hierarchy (nested within 60s webhook processing timeout):
 //   - SmartSearchTimeout: 30s total (detached context from HTTP request)
-//   - QueryExpander: 8s nested timeout within search context
+//   - QueryExpansionTimeout: optional LLM expansion budget within search context
 //   - Actual search: remainder of 30s after expansion completes
 //
 // Total operation is bounded by SmartSearchTimeout (30s), well within
@@ -1953,21 +1953,12 @@ func (h *Handler) handleSmartSearch(ctx context.Context, query string) []messagi
 			}
 		}
 
-		expanded, err := h.queryExpander.Expand(searchCtx, query)
+		expansionCtx, cancelExpansion := context.WithTimeout(searchCtx, config.QueryExpansionTimeout)
+		expanded, err := h.queryExpander.Expand(expansionCtx, query)
+		cancelExpansion()
 		if err != nil {
-			log.WithError(err).WarnContext(searchCtx, "Query expansion failed, smart search aborted")
-			h.metrics.RecordSearch(searchType, "expansion_failed", time.Since(startTime).Seconds())
-			retryQRs := append([]lineutil.QuickReplyItem{lineutil.QuickReplyRetryAction("課程 " + query)}, lineutil.QuickReplyCourseNav(false)...)
-			return []messaging_api.MessageInterface{
-				lineutil.ErrorMessageWithQuickReply(
-					"智慧搜尋暫時無法使用\n\n建議改用精確搜尋\n• 課程 微積分\n• 課程 王小明",
-					sender,
-					"",
-					retryQRs...,
-				),
-			}
-		}
-		if expanded != query {
+			log.WithError(err).WarnContext(searchCtx, "Query expansion failed, continuing smart search with original query")
+		} else if expanded != query {
 			expandedQuery = expanded
 			log.WithFields(map[string]any{
 				"original": query,

@@ -698,12 +698,12 @@ func (p *Processor) handleWithNLU(ctx context.Context, text string, source webho
 
 	if err != nil {
 		p.logger.WithError(err).WarnContext(ctx, "NLU intent parsing failed")
-		// Metrics are recorded by FallbackIntentParser
+		// Metrics are recorded by the genai fallback chain.
 		return p.getHelpMessage(FallbackNLUFailed), nil
 	}
 
 	if result == nil {
-		// Metrics are recorded by FallbackIntentParser
+		// Metrics are recorded by the genai fallback chain.
 		return p.getHelpMessage(FallbackNLUFailed), nil
 	}
 
@@ -711,7 +711,7 @@ func (p *Processor) handleWithNLU(ctx context.Context, text string, source webho
 		WithField("intent", result.Intent).
 		WithField("params", result.Params).
 		InfoContext(ctx, "NLU intent parsed")
-	// Metrics are recorded by FallbackIntentParser
+	// Metrics are recorded by the genai fallback chain.
 
 	return p.dispatchIntent(ctx, result)
 }

@@ -1,12 +1,10 @@
 // Package genai provides integration with LLM APIs (Gemini, Groq, and Cerebras).
-// This file contains the fallback wrapper for cross-provider failover.
+// This file contains public fallback wrappers for intent parsing and query expansion.
 package genai
 
 import (
 	"context"
 	"errors"
-	"fmt"
-	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -14,433 +12,151 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/metrics"
 )
 
-// FallbackIntentParser wraps a list of IntentParsers.
-// It implements multi-layer fallback:
-// 1. Model retry with backoff (same model)
-// 2. Sequential fallback through the provided list of models/providers
-// 3. Graceful degradation (return error if all fail)
+// FallbackIntentParser routes NLU parsing across the configured LLM model chain.
 type FallbackIntentParser struct {
-	parsers     []IntentParser
-	retryConfig RetryConfig
-	cooldowns   *modelCooldownStore
+	chain *fallbackChain[*ParseResult]
 }
 
-// NewFallbackIntentParser creates a new fallback-enabled intent parser.
-// It tries parsers in the order they are provided.
+// NewFallbackIntentParser creates a fallback-enabled intent parser.
 func NewFallbackIntentParser(cfg RetryConfig, parsers ...IntentParser) *FallbackIntentParser {
 	return newFallbackIntentParserWithCooldowns(cfg, globalModelCooldownStore, parsers...)
 }
 
 func newFallbackIntentParserWithCooldowns(cfg RetryConfig, cooldowns *modelCooldownStore, parsers ...IntentParser) *FallbackIntentParser {
-	// Filter out nil parsers
-	activeParsers := make([]IntentParser, 0, len(parsers))
-	for _, p := range parsers {
-		if p != nil {
-			activeParsers = append(activeParsers, p)
-		}
-	}
-	return &FallbackIntentParser{
-		parsers:     activeParsers,
-		retryConfig: cfg,
-		cooldowns:   cooldowns,
-	}
-}
-
-// Parse tries the parsers in order with retry, then falls back if needed.
-func (f *FallbackIntentParser) Parse(ctx context.Context, text string) (*ParseResult, error) {
-	if f == nil || len(f.parsers) == 0 {
-		return nil, errors.New("intent parser not configured")
-	}
-
-	var lastErr error
-	var lastAttemptedProvider Provider
-
-	for i, parser := range f.parsers {
-		start := time.Now()
-		provider := parser.Provider()
-		model := parser.Model()
-
-		if cooldown, cooling := f.cooldowns.Get(provider, model); cooling && f.hasAvailableIntentParser(i+1) {
-			slog.DebugContext(ctx, "Skipping cooled-down intent parser",
-				"provider", provider,
-				"model", model,
-				"cooldown_kind", cooldown.Kind,
-				"cooldown_remaining_ms", cooldown.Remaining(time.Now()).Milliseconds())
-			recordCooldownEvent(provider, cooldown.Kind, "skipped")
-			continue
-		}
-
-		// Try current parser with retry
-		result, err := f.parseWithRetry(ctx, parser, text)
-		if err == nil {
-			recordIntentSuccess(provider, start)
-			// Record provider-level fallback only when the provider actually changes
-			// from the last attempted (not skipped) provider.
-			if lastAttemptedProvider != "" && lastAttemptedProvider != provider {
-				recordFallback(lastAttemptedProvider, provider, "nlu")
-			}
-			return result, nil
-		}
-
-		lastErr = err
-		if cooldown, applied := applyCooldown(f.cooldowns, provider, model, err); applied {
-			slog.InfoContext(ctx, "Applied model cooldown after intent parser rate limit",
-				"provider", provider,
-				"model", model,
-				"cooldown_kind", cooldown.Kind,
-				"cooldown_remaining_ms", cooldown.Remaining(time.Now()).Milliseconds())
-			recordCooldownEvent(provider, cooldown.Kind, "applied")
-		}
-		lastAttemptedProvider = provider
-		action := ClassifyError(err)
-
-		slog.WarnContext(ctx, "Intent parser failed",
-			"provider", provider,
-			"model", model,
-			"index", i,
-			"error", err,
-			"action", action,
-			"duration_ms", time.Since(start).Milliseconds())
-
-		// If error is not recoverable or no more fallbacks, record error and stop
-		if action == ActionFail || i == len(f.parsers)-1 {
-			recordIntentError(provider, err)
-			if i == len(f.parsers)-1 && len(f.parsers) > 1 {
-				return nil, fmt.Errorf("all %d parsers failed, last error: %w", len(f.parsers), lastErr)
-			}
-			return nil, lastErr
-		}
-
-		// Falling back to next parser
-		slog.DebugContext(ctx, "Falling back to next intent parser",
-			"from_index", i,
-			"from_provider", provider,
-			"to_index", i+1,
-			"to_provider", f.parsers[i+1].Provider())
-	}
-
-	// Defensive fallback: loop above is expected to return on all paths
-	return nil, fmt.Errorf("all intent parsers failed: %w", lastErr)
-}
-
-func (f *FallbackIntentParser) hasAvailableIntentParser(start int) bool {
-	if f == nil {
-		return false
-	}
-	for _, parser := range f.parsers[start:] {
+	steps := make([]chainStep[*ParseResult], 0, len(parsers))
+	for _, parser := range parsers {
 		if parser == nil {
 			continue
 		}
-		if _, cooling := f.cooldowns.Get(parser.Provider(), parser.Model()); !cooling {
-			return true
-		}
+		p := parser
+		steps = append(steps, chainStep[*ParseResult]{
+			endpoint: p,
+			call:     p.Parse,
+		})
 	}
-	return false
+
+	return &FallbackIntentParser{
+		chain: newFallbackChain(chainPolicy{
+			operation:      operationNLU,
+			retryConfig:    cfg,
+			attemptTimeout: cfg.AttemptTimeout,
+		}, cooldowns, steps),
+	}
 }
 
-// parseWithRetry attempts parsing with retry logic.
-func (f *FallbackIntentParser) parseWithRetry(ctx context.Context, parser IntentParser, text string) (*ParseResult, error) {
-	var lastErr error
-
-	for attempt := range f.retryConfig.MaxAttempts {
-		// Check context before attempting
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-
-		result, err := parser.Parse(ctx, text)
-		if err == nil {
-			return result, nil
-		}
-
-		lastErr = err
-		action := ClassifyError(err)
-
-		// Don't retry if error is not retryable
-		if action != ActionRetry {
-			return nil, err
-		}
-
-		// Last attempt, don't sleep
-		if attempt == f.retryConfig.MaxAttempts-1 {
-			break
-		}
-
-		// Calculate backoff with jitter
-		backoff := CalculateBackoff(attempt+1, f.retryConfig.InitialDelay, f.retryConfig.MaxDelay)
-
-		// Check remaining time budget with actual backoff
-		if !HasSufficientBudget(ctx, backoff) {
-			// Insufficient time remaining, return last error
-			return nil, fmt.Errorf("timeout during retry: %w", lastErr)
-		}
-
-		slog.DebugContext(ctx, "Retrying intent parse",
-			"provider", parser.Provider(),
-			"attempt", attempt+1,
-			"backoff_ms", backoff.Milliseconds(),
-			"error", err)
-
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(backoff):
-		}
+// Parse analyzes text and returns the first successful parsed intent.
+func (f *FallbackIntentParser) Parse(ctx context.Context, text string) (*ParseResult, error) {
+	if f == nil || !f.chain.isConfigured() {
+		return nil, errors.New("intent parser not configured")
 	}
-
-	return nil, lastErr
+	return f.chain.run(ctx, text)
 }
 
 // IsEnabled returns true if at least one parser is enabled.
 func (f *FallbackIntentParser) IsEnabled() bool {
-	if f == nil {
+	if f == nil || !f.chain.isConfigured() {
 		return false
 	}
-	for _, p := range f.parsers {
-		if p != nil && p.IsEnabled() {
+	for _, step := range f.chain.steps {
+		parser, ok := step.endpoint.(IntentParser)
+		if ok && parser.IsEnabled() {
 			return true
 		}
 	}
 	return false
 }
 
-// Provider returns the provider type of the current/first parser.
+// Provider returns the provider type of the first configured model.
 func (f *FallbackIntentParser) Provider() Provider {
-	if f == nil || len(f.parsers) == 0 {
+	if f == nil {
 		return ""
 	}
-	return f.parsers[0].Provider()
+	return f.chain.provider()
 }
 
-// Model returns the model name of the current/first parser.
+// Model returns the model name of the first configured model.
 func (f *FallbackIntentParser) Model() string {
-	if f == nil || len(f.parsers) == 0 {
+	if f == nil {
 		return ""
 	}
-	return f.parsers[0].Model()
+	return f.chain.model()
 }
 
-// Close closes all parsers.
+// Close closes all parser clients.
 func (f *FallbackIntentParser) Close() error {
 	if f == nil {
 		return nil
 	}
-
-	var errs []error
-	for _, p := range f.parsers {
-		if p != nil {
-			if err := p.Close(); err != nil {
-				errs = append(errs, err)
-			}
-		}
-	}
-
-	if len(errs) > 0 {
-		return fmt.Errorf("close errors: %v", errs)
-	}
-	return nil
+	return f.chain.close()
 }
 
-// FallbackQueryExpander wraps a list of QueryExpanders.
+// FallbackQueryExpander routes query expansion across the configured LLM model chain.
 type FallbackQueryExpander struct {
-	expanders   []QueryExpander
-	retryConfig RetryConfig
-	cooldowns   *modelCooldownStore
+	chain *fallbackChain[string]
 }
 
-// NewFallbackQueryExpander creates a new fallback-enabled query expander.
+// NewFallbackQueryExpander creates a fallback-enabled query expander.
 func NewFallbackQueryExpander(cfg RetryConfig, expanders ...QueryExpander) *FallbackQueryExpander {
 	return newFallbackQueryExpanderWithCooldowns(cfg, globalModelCooldownStore, expanders...)
 }
 
 func newFallbackQueryExpanderWithCooldowns(cfg RetryConfig, cooldowns *modelCooldownStore, expanders ...QueryExpander) *FallbackQueryExpander {
-	activeExpanders := make([]QueryExpander, 0, len(expanders))
-	for _, e := range expanders {
-		if e != nil {
-			activeExpanders = append(activeExpanders, e)
-		}
-	}
-	return &FallbackQueryExpander{
-		expanders:   activeExpanders,
-		retryConfig: cfg,
-		cooldowns:   cooldowns,
-	}
-}
-
-// Expand tries the expanders in order with retry, then falls back if needed.
-// On complete failure, returns an error so the caller can handle it explicitly.
-func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (string, error) {
-	if f == nil || len(f.expanders) == 0 {
-		return query, nil // feature disabled, not a failure
-	}
-
-	var lastAttemptedProvider Provider
-
-	for i, expander := range f.expanders {
-		start := time.Now()
-		provider := expander.Provider()
-		model := expander.Model()
-
-		if cooldown, cooling := f.cooldowns.Get(provider, model); cooling && f.hasAvailableQueryExpander(i+1) {
-			slog.DebugContext(ctx, "Skipping cooled-down query expander",
-				"provider", provider,
-				"model", model,
-				"cooldown_kind", cooldown.Kind,
-				"cooldown_remaining_ms", cooldown.Remaining(time.Now()).Milliseconds())
-			recordCooldownEvent(provider, cooldown.Kind, "skipped")
-			continue
-		}
-
-		// Try current expander with retry
-		result, err := f.expandWithRetry(ctx, expander, query)
-		if err == nil {
-			recordExpanderSuccess(provider, start)
-			// Record provider-level fallback only when the provider actually changes
-			// from the last attempted (not skipped) provider.
-			if lastAttemptedProvider != "" && lastAttemptedProvider != provider {
-				recordFallback(lastAttemptedProvider, provider, "expander")
-			}
-			return result, nil
-		}
-
-		// Check if we should fallback
-		if cooldown, applied := applyCooldown(f.cooldowns, provider, model, err); applied {
-			slog.InfoContext(ctx, "Applied model cooldown after query expander rate limit",
-				"provider", provider,
-				"model", model,
-				"cooldown_kind", cooldown.Kind,
-				"cooldown_remaining_ms", cooldown.Remaining(time.Now()).Milliseconds())
-			recordCooldownEvent(provider, cooldown.Kind, "applied")
-		}
-		lastAttemptedProvider = provider
-		action := ClassifyError(err)
-		slog.WarnContext(ctx, "Query expander failed",
-			"provider", provider,
-			"model", model,
-			"index", i,
-			"error", err,
-			"action", action,
-			"duration_ms", time.Since(start).Milliseconds())
-
-		// If error is not recoverable or no more fallbacks, propagate error to caller
-		if action == ActionFail || i == len(f.expanders)-1 {
-			recordExpanderError(provider, err)
-			return query, err
-		}
-
-		// Falling back to next expander
-		slog.DebugContext(ctx, "Falling back to next query expander",
-			"from_index", i,
-			"from_provider", provider,
-			"to_index", i+1,
-			"to_provider", f.expanders[i+1].Provider())
-	}
-
-	// unreachable: loop always returns via ActionFail or last-expander check above
-	return query, fmt.Errorf("all %d query expanders failed", len(f.expanders))
-}
-
-func (f *FallbackQueryExpander) hasAvailableQueryExpander(start int) bool {
-	if f == nil {
-		return false
-	}
-	for _, expander := range f.expanders[start:] {
+	steps := make([]chainStep[string], 0, len(expanders))
+	for _, expander := range expanders {
 		if expander == nil {
 			continue
 		}
-		if _, cooling := f.cooldowns.Get(expander.Provider(), expander.Model()); !cooling {
-			return true
-		}
-	}
-	return false
-}
-
-// expandWithRetry attempts expansion with retry logic.
-func (f *FallbackQueryExpander) expandWithRetry(ctx context.Context, expander QueryExpander, query string) (string, error) {
-	var lastErr error
-
-	for attempt := range f.retryConfig.MaxAttempts {
-		if ctx.Err() != nil {
-			return query, ctx.Err()
-		}
-
-		result, err := expander.Expand(ctx, query)
-		if err == nil {
-			return result, nil
-		}
-
-		lastErr = err
-		action := ClassifyError(err)
-
-		if action != ActionRetry {
-			return query, err
-		}
-
-		if attempt == f.retryConfig.MaxAttempts-1 {
-			break
-		}
-
-		backoff := CalculateBackoff(attempt+1, f.retryConfig.InitialDelay, f.retryConfig.MaxDelay)
-
-		// Check if we have sufficient timeout budget for this backoff
-		if !HasSufficientBudget(ctx, backoff) {
-			return query, fmt.Errorf("timeout during retry: %w", lastErr)
-		}
-
-		slog.DebugContext(ctx, "Retrying query expansion",
-			"provider", expander.Provider(),
-			"attempt", attempt+1,
-			"backoff_ms", backoff.Milliseconds(),
-			"error", err)
-
-		select {
-		case <-ctx.Done():
-			return query, ctx.Err()
-		case <-time.After(backoff):
-		}
+		e := expander
+		steps = append(steps, chainStep[string]{
+			endpoint: e,
+			call:     e.Expand,
+		})
 	}
 
-	return query, lastErr
+	return &FallbackQueryExpander{
+		chain: newFallbackChain(chainPolicy{
+			operation:      operationExpander,
+			retryConfig:    cfg,
+			attemptTimeout: cfg.AttemptTimeout,
+		}, cooldowns, steps),
+	}
 }
 
-// Provider returns the provider type of the current/first expander.
+// Expand expands a query. If the feature is disabled, the original query is returned.
+func (f *FallbackQueryExpander) Expand(ctx context.Context, query string) (string, error) {
+	if f == nil || !f.chain.isConfigured() {
+		return query, nil
+	}
+	result, err := f.chain.run(ctx, query)
+	if err != nil {
+		return query, err
+	}
+	return result, nil
+}
+
+// Provider returns the provider type of the first configured model.
 func (f *FallbackQueryExpander) Provider() Provider {
-	if f == nil || len(f.expanders) == 0 {
+	if f == nil {
 		return ""
 	}
-	return f.expanders[0].Provider()
+	return f.chain.provider()
 }
 
-// Model returns the model name of the current/first expander.
+// Model returns the model name of the first configured model.
 func (f *FallbackQueryExpander) Model() string {
-	if f == nil || len(f.expanders) == 0 {
+	if f == nil {
 		return ""
 	}
-	return f.expanders[0].Model()
+	return f.chain.model()
 }
 
-// Close closes all expanders.
+// Close closes all expander clients.
 func (f *FallbackQueryExpander) Close() error {
 	if f == nil {
 		return nil
 	}
-
-	var errs []error
-	for _, e := range f.expanders {
-		if e != nil {
-			if err := e.Close(); err != nil {
-				errs = append(errs, err)
-			}
-		}
-	}
-
-	if len(errs) > 0 {
-		return fmt.Errorf("close errors: %v", errs)
-	}
-	return nil
+	return f.chain.close()
 }
-
-// Helper functions for metrics recording
 
 func recordCooldownEvent(provider Provider, kind RateLimitKind, action string) {
 	if metrics.LLMCooldownTotal == nil {
@@ -449,36 +165,19 @@ func recordCooldownEvent(provider Provider, kind RateLimitKind, action string) {
 	metrics.LLMCooldownTotal.WithLabelValues(string(provider), string(kind), action).Inc()
 }
 
-func recordIntentSuccess(provider Provider, start time.Time) {
+func recordLLMSuccess(provider Provider, operation string, start time.Time) {
 	if metrics.LLMTotal == nil || metrics.LLMDuration == nil {
 		return
 	}
-	metrics.LLMTotal.WithLabelValues(string(provider), "nlu", "success").Inc()
-	metrics.LLMDuration.WithLabelValues(string(provider), "nlu").Observe(time.Since(start).Seconds())
+	metrics.LLMTotal.WithLabelValues(string(provider), operation, "success").Inc()
+	metrics.LLMDuration.WithLabelValues(string(provider), operation).Observe(time.Since(start).Seconds())
 }
 
-func recordIntentError(provider Provider, err error) {
+func recordLLMError(provider Provider, operation string, err error) {
 	if metrics.LLMTotal == nil {
 		return
 	}
-	errType := classifyErrorType(err)
-	metrics.LLMTotal.WithLabelValues(string(provider), "nlu", errType).Inc()
-}
-
-func recordExpanderSuccess(provider Provider, start time.Time) {
-	if metrics.LLMTotal == nil || metrics.LLMDuration == nil {
-		return
-	}
-	metrics.LLMTotal.WithLabelValues(string(provider), "expander", "success").Inc()
-	metrics.LLMDuration.WithLabelValues(string(provider), "expander").Observe(time.Since(start).Seconds())
-}
-
-func recordExpanderError(provider Provider, err error) {
-	if metrics.LLMTotal == nil {
-		return
-	}
-	errType := classifyErrorType(err)
-	metrics.LLMTotal.WithLabelValues(string(provider), "expander", errType).Inc()
+	metrics.LLMTotal.WithLabelValues(string(provider), operation, classifyErrorType(err)).Inc()
 }
 
 func recordFallback(fromProvider, toProvider Provider, operation string) {
@@ -496,7 +195,6 @@ func classifyErrorType(err error) string {
 	if err == nil {
 		return "success"
 	}
-
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "timeout"
 	}
@@ -516,6 +214,8 @@ func classifyErrorType(err error) string {
 			return "server_error"
 		case llmErr.StatusCode == http.StatusUnauthorized || llmErr.StatusCode == http.StatusForbidden:
 			return "auth_error"
+		case llmErr.StatusCode == http.StatusNotFound:
+			return "model_not_found"
 		case llmErr.StatusCode == http.StatusBadRequest:
 			return "invalid_request"
 		}
@@ -524,7 +224,6 @@ func classifyErrorType(err error) string {
 	action := ClassifyError(err)
 	switch action {
 	case ActionFallback:
-		// Distinguish the three reasons that all produce ActionFallback.
 		errStr := strings.ToLower(err.Error())
 		if containsAny(errStr, "401", "unauthorized", "unauthenticated", "invalid api key", "invalid_api_key",
 			"403", "forbidden", "permission denied") {

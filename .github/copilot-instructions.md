@@ -446,13 +446,13 @@ handleUnmatchedMessage()
 │ Has @Bot → remove│                   │
 │ mention & process│                   │
 └─────────────────┴───────────────────┘
-     ↓
-FallbackIntentParser.Parse()
-     ↓
-┌─ Primary Provider ─┐  ┌─ Fallback Provider ─┐
-│ Gemini/Groq/       │→│ Groq/Cerebras/       │
-│ Cerebras (retry)   │  │ Gemini (on failure)  │
-└────────────────────┴──────────────────────────┘
+    ↓
+  genai fallback chain
+    ↓
+  ┌─ Model rank 1 ─────┐  ┌─ Model rank 2 ─────┐
+  │ Gemini/Groq/       │→│ Gemini/Groq/       │
+  │ Cerebras first     │  │ Cerebras fallback  │
+  └────────────────────┴──────────────────────────┘
      ↓
 dispatchIntent() → Route to Handler
      ↓ (failure)
@@ -461,7 +461,7 @@ Fallback → getHelpMessage() + Warning Log
 
 **Key Features**:
 - **Multi-Provider Support**: Gemini, Groq, and Cerebras with automatic failover
-- **Three-layer Fallback**: Model retry → Model chain fallback → Provider fallback → Graceful degradation
+- **Unified Fallback Chain**: IntentParser and QueryExpander share provider/model switching; try each provider's first-ranked model before second-ranked models, retry same model only when no alternative remains
 - **OpenAI v3 SDK**: Unified OpenAI-compatible implementation for Groq/Cerebras via custom BaseURL
 - Function Calling (AUTO mode): Model chooses function call or text response
 - 9 intent functions: `course_search`, `course_smart`, `course_uid`, `id_search`, `id_student_id`, `id_department`, `contact_search`, `contact_emergency`, `help`
@@ -471,15 +471,14 @@ Fallback → getHelpMessage() + Warning Log
 **Implementation Pattern**:
 - `genai.IntentParser`: Interface for NLU parsing (implemented by Gemini and OpenAI-compatible)
 - `genai.QueryExpander`: Interface for query expansion (implemented by Gemini and OpenAI-compatible)
-- `genai.FallbackIntentParser`: Cross-provider failover wrapper
-- `genai.FallbackQueryExpander`: Cross-provider failover wrapper
+- `genai.FallbackIntentParser` / `genai.FallbackQueryExpander`: Thin wrappers over the shared LLM fallback chain
 - `genai.CreateIntentParser()`: Factory function with provider selection (default: `["gemini", "groq", "cerebras"]`)
 - `genai.ParseResult`: Module, Intent, Params, ClarificationText, FunctionName
 
 **Default Models**:
-- Gemini: `gemini-3.1-pro-preview` (intent), `gemini-3.1-pro-preview` (expander), with `gemini-2.5-pro` / `gemini-2.5-flash` fallbacks
-- Groq: `moonshotai/kimi-k2-instruct` (primary), intent chain: `openai/gpt-oss-120b` → `meta-llama/llama-4-maverick-17b-128e-instruct` → `llama-3.3-70b-versatile` → `qwen/qwen3-32b` → `meta-llama/llama-4-scout-17b-16e-instruct` → `openai/gpt-oss-20b`; expander chain: `moonshotai/kimi-k2-instruct` → `qwen/qwen3-32b` → `meta-llama/llama-4-scout-17b-16e-instruct` → `openai/gpt-oss-120b` → `llama-3.3-70b-versatile` → `meta-llama/llama-4-maverick-17b-128e-instruct` → `openai/gpt-oss-20b`
-- Cerebras: intent `gpt-oss-120b`; expander `gpt-oss-120b`
+- Gemini: `gemma-4-31b-it` → `gemma-4-26b-a4b-it`
+- Groq: `openai/gpt-oss-120b` → `openai/gpt-oss-20b` → `llama-3.3-70b-versatile` → `qwen/qwen3-32b` → `llama-3.1-8b-instant`
+- Cerebras: `gpt-oss-120b` → `llama3.1-8b`
 
 ## Syllabus Module
 

@@ -8,47 +8,26 @@ import (
 )
 
 // CreateIntentParser creates an IntentParser based on the provided configuration.
-// It returns a FallbackIntentParser that handles model-to-model and provider-to-provider fallback.
-//
-// Provider chain logic (3-layer fallback):
-//  1. For each provider in cfg.Providers order:
-//     - Each model in provider's IntentModels is tried
-//     - Each model has retry logic (configured in RetryConfig)
-//  2. Providers without API keys are skipped
-//  3. Returns nil if no providers/models are configured.
+// It returns nil if no providers/models are configured.
 func CreateIntentParser(ctx context.Context, cfg LLMConfig) (IntentParser, error) {
 	parsers := []IntentParser{}
-
-	// Iterate through providers in configured order
-	for _, provider := range cfg.Providers {
-		if !cfg.HasProvider(provider) {
-			continue
-		}
-
-		providerCfg := cfg.GetProviderConfig(provider)
-		if providerCfg == nil {
-			continue
-		}
-
-		// Get models for this provider (use defaults if not configured)
+	for _, spec := range buildModelChain(cfg, func(provider Provider, providerCfg *ProviderConfig) []string {
 		models := providerCfg.IntentModels
 		if len(models) == 0 {
 			models = getDefaultIntentModels(provider)
 		}
-
-		// Create parsers for each model
-		for _, model := range models {
-			p, err := createIntentParserForProvider(ctx, provider, providerCfg, model)
-			if err != nil {
-				slog.WarnContext(ctx, "Failed to create intent parser",
-					"provider", provider,
-					"model", model,
-					"error", err)
-				continue
-			}
-			if p != nil {
-				parsers = append(parsers, p)
-			}
+		return models
+	}) {
+		p, err := createIntentParserForProvider(ctx, spec.provider, spec.providerCfg, spec.model)
+		if err != nil {
+			slog.WarnContext(ctx, "Failed to create intent parser",
+				"provider", spec.provider,
+				"model", spec.model,
+				"error", err)
+			continue
+		}
+		if p != nil {
+			parsers = append(parsers, p)
 		}
 	}
 
@@ -83,40 +62,26 @@ func createIntentParserForProvider(ctx context.Context, provider Provider, cfg *
 }
 
 // CreateQueryExpander creates a QueryExpander based on the provided configuration.
-// Similar to CreateIntentParser, it handles model-to-model and provider-to-provider fallback.
+// It returns nil if no providers/models are configured.
 func CreateQueryExpander(ctx context.Context, cfg LLMConfig) (QueryExpander, error) {
 	expanders := []QueryExpander{}
-
-	// Iterate through providers in configured order
-	for _, provider := range cfg.Providers {
-		if !cfg.HasProvider(provider) {
-			continue
-		}
-
-		providerCfg := cfg.GetProviderConfig(provider)
-		if providerCfg == nil {
-			continue
-		}
-
-		// Get models for this provider (use defaults if not configured)
+	for _, spec := range buildModelChain(cfg, func(provider Provider, providerCfg *ProviderConfig) []string {
 		models := providerCfg.ExpanderModels
 		if len(models) == 0 {
 			models = getDefaultExpanderModels(provider)
 		}
-
-		// Create expanders for each model
-		for _, model := range models {
-			e, err := createExpanderForProvider(ctx, provider, providerCfg, model)
-			if err != nil {
-				slog.WarnContext(ctx, "Failed to create query expander",
-					"provider", provider,
-					"model", model,
-					"error", err)
-				continue
-			}
-			if e != nil {
-				expanders = append(expanders, e)
-			}
+		return models
+	}) {
+		e, err := createExpanderForProvider(ctx, spec.provider, spec.providerCfg, spec.model)
+		if err != nil {
+			slog.WarnContext(ctx, "Failed to create query expander",
+				"provider", spec.provider,
+				"model", spec.model,
+				"error", err)
+			continue
+		}
+		if e != nil {
+			expanders = append(expanders, e)
 		}
 	}
 
@@ -131,6 +96,62 @@ func CreateQueryExpander(ctx context.Context, cfg LLMConfig) (QueryExpander, err
 		"chainSize", len(expanders))
 
 	return NewFallbackQueryExpander(cfg.RetryConfig, expanders...), nil
+}
+
+type modelSpec struct {
+	provider    Provider
+	providerCfg *ProviderConfig
+	model       string
+}
+
+type providerModelSet struct {
+	provider    Provider
+	providerCfg *ProviderConfig
+	models      []string
+}
+
+func buildModelChain(cfg LLMConfig, selectModels func(Provider, *ProviderConfig) []string) []modelSpec {
+	providers := make([]providerModelSet, 0, len(cfg.Providers))
+	for _, provider := range cfg.Providers {
+		if !cfg.HasProvider(provider) {
+			continue
+		}
+		providerCfg := cfg.GetProviderConfig(provider)
+		if providerCfg == nil {
+			continue
+		}
+		models := selectModels(provider, providerCfg)
+		if len(models) == 0 {
+			continue
+		}
+		providers = append(providers, providerModelSet{
+			provider:    provider,
+			providerCfg: providerCfg,
+			models:      models,
+		})
+	}
+
+	maxModels := 0
+	for _, provider := range providers {
+		if len(provider.models) > maxModels {
+			maxModels = len(provider.models)
+		}
+	}
+
+	chain := make([]modelSpec, 0)
+	for modelIndex := range maxModels {
+		for _, provider := range providers {
+			if modelIndex >= len(provider.models) {
+				continue
+			}
+			chain = append(chain, modelSpec{
+				provider:    provider.provider,
+				providerCfg: provider.providerCfg,
+				model:       provider.models[modelIndex],
+			})
+		}
+	}
+	return chain
 }
 
 // createExpanderForProvider creates a QueryExpander for a specific provider.
@@ -207,8 +228,9 @@ func DefaultLLMConfig() LLMConfig {
 // DefaultRetryConfig returns the default retry configuration.
 func DefaultRetryConfig() RetryConfig {
 	return RetryConfig{
-		MaxAttempts:  DefaultMaxRetryAttempts,
-		InitialDelay: DefaultInitialRetryDelay,
-		MaxDelay:     DefaultMaxRetryDelay,
+		MaxAttempts:    DefaultMaxRetryAttempts,
+		InitialDelay:   DefaultInitialRetryDelay,
+		MaxDelay:       DefaultMaxRetryDelay,
+		AttemptTimeout: DefaultLLMAttemptTimeout,
 	}
 }
