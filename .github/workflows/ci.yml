@@ -10,6 +10,7 @@ on:
       - 'go.mod'
       - 'go.sum'
       - 'Dockerfile'
+      - 'Dockerfile.alpine'
       - '.github/workflows/*.yml'
   pull_request:
     branches:
@@ -154,12 +155,10 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Run Vulnerability Check
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          $HOME/go/bin/govulncheck ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
       - name: Run Security Scanner
-        uses: securego/gosec@v2.25.0
+        uses: securego/gosec@v2.26.1
         with:
           args: '-no-fail -exclude-generated -fmt sarif -out gosec-results.sarif ./...'
 
@@ -221,8 +220,24 @@ jobs:
             BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
             VCS_REF=${{ github.sha }}
 
+      - name: Build Alpine Image (Validation Only)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.alpine
+          push: false
+          platforms: linux/amd64
+          cache-from: |
+            type=gha,scope=ci-pr
+            type=gha,scope=ci-pr-alpine
+          cache-to: type=gha,mode=max,scope=ci-pr-alpine
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+            VCS_REF=${{ github.sha }}
+
       - name: Scan Image
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}
           format: 'sarif'
