@@ -640,11 +640,11 @@ ntpu_llm_cooldown_total{provider, model, kind, action}
 **告警閾值**:
 ```yaml
 - alert: ScraperHighFailureRate
-    expr: sum(rate(ntpu_scraper_total{status="error"}[5m])) / sum(rate(ntpu_scraper_total[5m])) > 0.3
+  expr: sum(rate(ntpu_scraper_total{status="error"}[5m])) / sum(rate(ntpu_scraper_total[5m])) > 0.3
   for: 3m
 
 - alert: WebhookHighLatency
-    expr: histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le, event_type)) > 3
+  expr: histogram_quantile(0.95, sum(rate(ntpu_webhook_duration_seconds_bucket[5m])) by (le, event_type)) > 3
   for: 5m
 
 - alert: ServiceDown

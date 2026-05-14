@@ -264,7 +264,7 @@ func New(registry *prometheus.Registry) *Metrics {
 			// provider: gemini, groq, cerebras, openai
 			// model: configured provider model name
 			// operation: nlu (intent parsing), expander (query expansion)
-			// status: success, timeout, canceled, rate_limit, quota_exhausted, server_error, auth_error, model_not_found, invalid_request, error
+			// status: success, timeout, canceled, rate_limit, quota_exhausted, server_error, transient_error, auth_error, model_not_found, invalid_request, error
 			[]string{"provider", "model", "operation", "status"},
 		),
 
@@ -494,8 +494,9 @@ func (m *Metrics) SetCacheSize(module string, size int) {
 
 // RecordLLM records an LLM API request.
 // provider: gemini, groq, cerebras
+// model: configured provider model name
 // operation: nlu (intent parsing), expander (query expansion)
-// status: success, error, rate_limit, quota_exhausted
+// status: success, timeout, canceled, rate_limit, quota_exhausted, server_error, transient_error, auth_error, model_not_found, invalid_request, error
 func (m *Metrics) RecordLLM(provider, model, operation, status string, duration float64) {
 	m.LLMTotal.WithLabelValues(provider, model, operation, status).Inc()
 	m.LLMDuration.WithLabelValues(provider, model, operation).Observe(duration)
@@ -557,9 +558,16 @@ func (m *Metrics) SetLLMRateLimiterUsers(count int) {
 // ============================================
 
 // RecordJob records a successful background job execution.
+//
 // Deprecated: prefer RecordJobRun with an explicit status.
 func (m *Metrics) RecordJob(job, module string, duration float64) {
 	m.RecordJobRun(job, module, "success", duration)
+}
+
+// RecordLineReplySkipped records a skipped LINE reply outcome (no API call made).
+// Use this for skipped_empty_token and skipped_invalid_token statuses.
+func (m *Metrics) RecordLineReplySkipped(status string) {
+	m.LineReplyTotal.WithLabelValues(status).Inc()
 }
 
 // RecordJobRun records a background job execution.

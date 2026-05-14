@@ -189,7 +189,6 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 	h.metrics.RecordWebhook(eventType, status, durationSeconds)
 
 	if len(messages) > 0 && err == nil {
-		replyStatus = "pending"
 		// LINE API restriction: max messages per reply
 		if len(messages) > h.maxMessagesPerReply {
 			log.WithField("message_count", len(messages)).
@@ -208,11 +207,11 @@ func (h *Handler) processEvent(ctx context.Context, event webhook.EventInterface
 		replyToken := h.getReplyToken(event)
 		if replyToken == "" {
 			replyStatus = "skipped_empty_token"
-			h.metrics.RecordLineReply(replyStatus, 0)
+			h.metrics.RecordLineReplySkipped(replyStatus)
 			log.DebugContext(ctx, "Empty reply token, skipping reply")
 		} else if len(replyToken) < h.minReplyTokenLength {
 			replyStatus = "skipped_invalid_token"
-			h.metrics.RecordLineReply(replyStatus, 0)
+			h.metrics.RecordLineReplySkipped(replyStatus)
 			log.DebugContext(ctx, "Invalid reply token format")
 		} else {
 			// Check global rate limit

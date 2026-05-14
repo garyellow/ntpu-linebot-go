@@ -99,12 +99,10 @@ func (c *fallbackChain[T]) run(ctx context.Context, input string) (T, error) {
 		start := time.Now()
 		result, err := c.runStep(ctx, i, step, input)
 		if err == nil {
-			recordLLMSuccess(provider, model, c.operation(), start)
 			return result, nil
 		}
 
 		lastErr = err
-		recordLLMError(provider, model, c.operation(), err, start)
 		if cooldown, applied := applyCooldown(c.cooldowns, provider, model, err); applied {
 			slog.InfoContext(ctx, "Applied model cooldown after LLM failure",
 				"operation", c.operation(),
@@ -155,18 +153,21 @@ func (c *fallbackChain[T]) runStep(ctx context.Context, index int, step chainSte
 		maxAttempts = 1
 	}
 
-	for attempt := 0; attempt < maxAttempts; attempt++ {
+	for attempt := range maxAttempts {
 		if ctx.Err() != nil {
 			return zero, ctx.Err()
 		}
 
+		attemptStart := time.Now()
 		attemptCtx, cancel := context.WithTimeout(ctx, c.policy.attemptTimeout)
 		result, err := step.call(attemptCtx, input)
 		cancel()
 		if err == nil {
+			recordLLMSuccess(step.endpoint.Provider(), step.endpoint.Model(), c.operation(), attemptStart)
 			return result, nil
 		}
 
+		recordLLMError(step.endpoint.Provider(), step.endpoint.Model(), c.operation(), err, attemptStart)
 		lastErr = err
 		if ClassifyError(err) != ActionRetry {
 			return zero, err

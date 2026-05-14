@@ -234,7 +234,7 @@ func warmupIDModule(ctx context.Context, db *storage.DB, client *scraper.Client,
 	startTime := time.Now()
 	defer func() {
 		if m != nil {
-			m.RecordJob("refresh", "id", time.Since(startTime).Seconds())
+			m.RecordJobRun("refresh", "id", "success", time.Since(startTime).Seconds())
 		}
 	}()
 
@@ -337,7 +337,7 @@ func warmupContactModule(ctx context.Context, db *storage.DB, client *scraper.Cl
 	startTime := time.Now()
 	defer func() {
 		if m != nil {
-			m.RecordJob("refresh", "contact", time.Since(startTime).Seconds())
+			m.RecordJobRun("refresh", "contact", "success", time.Since(startTime).Seconds())
 		}
 	}()
 
@@ -397,7 +397,7 @@ func warmupCourseModule(ctx context.Context, db *storage.DB, client *scraper.Cli
 	startTime := time.Now()
 	defer func() {
 		if m != nil {
-			m.RecordJob("refresh", "course", time.Since(startTime).Seconds())
+			m.RecordJobRun("refresh", "course", "success", time.Since(startTime).Seconds())
 		}
 	}()
 
@@ -586,7 +586,7 @@ func warmupSyllabusModule(ctx context.Context, db *storage.DB, client *scraper.C
 	startTime := time.Now()
 	defer func() {
 		if m != nil {
-			m.RecordJob("refresh", "syllabus", time.Since(startTime).Seconds())
+			m.RecordJobRun("refresh", "syllabus", "success", time.Since(startTime).Seconds())
 		}
 	}()
 
