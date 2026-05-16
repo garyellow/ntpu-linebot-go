@@ -650,7 +650,6 @@ func warmupSyllabusModule(ctx context.Context, db *storage.DB, client *scraper.C
 	var newSyllabi []*storage.Syllabus
 	var touchedSyllabi []string
 
-processLoop:
 	for _, sem := range semesters {
 		offset := 0
 		for {
@@ -658,7 +657,7 @@ processLoop:
 			case <-ctx.Done():
 				log.WithField("processed", processedCount).
 					Info("Syllabus warmup interrupted")
-				break processLoop
+				return fmt.Errorf("syllabus module canceled: %w", ctx.Err())
 			default:
 			}
 
@@ -675,6 +674,14 @@ processLoop:
 
 			// Process current batch
 			for _, course := range courses {
+				select {
+				case <-ctx.Done():
+					log.WithField("processed", processedCount).
+						Info("Syllabus warmup interrupted")
+					return fmt.Errorf("syllabus module canceled: %w", ctx.Err())
+				default:
+				}
+
 				processedCount++
 
 				// Skip courses without detail URL

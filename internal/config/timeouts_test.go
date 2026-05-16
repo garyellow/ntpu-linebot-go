@@ -89,10 +89,10 @@ func TestDatabaseTimeouts(t *testing.T) {
 	}
 }
 
-// TestR2Timeouts verifies R2-related timeout constants
-func TestR2Timeouts(t *testing.T) {
-	if R2RequestTimeout != 60*time.Second {
-		t.Errorf("R2RequestTimeout = %v, want %v", R2RequestTimeout, 60*time.Second)
+// TestS3Timeouts verifies S3-related timeout constants.
+func TestS3Timeouts(t *testing.T) {
+	if S3RequestTimeout != 60*time.Second {
+		t.Errorf("S3RequestTimeout = %v, want %v", S3RequestTimeout, 60*time.Second)
 	}
 }
 

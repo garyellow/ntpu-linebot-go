@@ -30,9 +30,9 @@ import (
 	"github.com/garyellow/ntpu-linebot-go/internal/modules/id"
 	"github.com/garyellow/ntpu-linebot-go/internal/modules/program"
 	"github.com/garyellow/ntpu-linebot-go/internal/modules/usage"
-	"github.com/garyellow/ntpu-linebot-go/internal/r2client"
 	"github.com/garyellow/ntpu-linebot-go/internal/rag"
 	"github.com/garyellow/ntpu-linebot-go/internal/ratelimit"
+	"github.com/garyellow/ntpu-linebot-go/internal/s3client"
 	"github.com/garyellow/ntpu-linebot-go/internal/scraper"
 	internalSentry "github.com/garyellow/ntpu-linebot-go/internal/sentry"
 	"github.com/garyellow/ntpu-linebot-go/internal/session"
@@ -54,11 +54,11 @@ type Application struct {
 	cfg            *config.Config
 	logger         *logger.Logger
 	db             *storage.DB
-	hotSwapDB      *storage.HotSwapDB // Used when R2 is enabled
-	snapshotMgr    *snapshot.Manager  // R2 snapshot manager (nil if R2 disabled)
+	hotSwapDB      *storage.HotSwapDB // Used when S3 snapshot sync is enabled
+	snapshotMgr    *snapshot.Manager  // S3 snapshot manager (nil if disabled)
 	snapshotReady  *atomic.Bool       // True if a snapshot was successfully downloaded/applied
-	deltaLog       *delta.R2Log       // R2 delta log (nil if R2 disabled)
-	scheduleStore  *maintenance.R2ScheduleStore
+	deltaLog       *delta.S3Log       // S3 delta log (nil if disabled)
+	scheduleStore  *maintenance.S3ScheduleStore
 	metrics        *metrics.Metrics
 	registry       *prometheus.Registry
 	scraperClient  *scraper.Client
@@ -101,7 +101,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	// Log status of Optional Features
 	log.WithField("sentry", cfg.IsSentryEnabled()).
 		WithField("betterstack", cfg.IsBetterStackEnabled()).
-		WithField("r2_snapshot", cfg.IsR2Enabled()).
+		WithField("s3_snapshot", cfg.IsS3Enabled()).
 		WithField("llm_features", cfg.IsLLMEnabled()).
 		WithField("metrics_auth", cfg.IsMetricsAuthEnabled()).
 		Info("Feature status")
@@ -116,8 +116,8 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	if !cfg.IsBetterStackEnabled() && cfg.BetterStackToken != "" {
 		log.Warn("Better Stack token provided but NTPU_BETTERSTACK_ENABLED=false, Better Stack is disabled")
 	}
-	if !cfg.IsR2Enabled() && (cfg.R2AccountID != "" || cfg.R2AccessKeyID != "" || cfg.R2SecretKey != "" || cfg.R2BucketName != "") {
-		log.Warn("R2 credentials provided but NTPU_R2_ENABLED=false, R2 snapshot sync is disabled")
+	if !cfg.IsS3Enabled() && (cfg.S3EndpointURL != "" || cfg.S3AccessKeyID != "" || cfg.S3SecretKey != "" || cfg.S3BucketName != "") {
+		log.Warn("S3 credentials provided but NTPU_S3_ENABLED=false, S3 snapshot sync is disabled")
 	}
 	if !cfg.IsMetricsAuthEnabled() && cfg.MetricsPassword != "" {
 		log.Warn("Metrics password provided but NTPU_METRICS_AUTH_ENABLED=false, metrics auth is disabled")
@@ -151,35 +151,35 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		}
 	}
 
-	// 3. Database & R2 Initialization
+	// 3. Database & S3-compatible Snapshot Initialization
 	var db *storage.DB
 	var hotSwapDB *storage.HotSwapDB
 	var snapshotMgr *snapshot.Manager
-	var deltaLog *delta.R2Log
-	var scheduleStore *maintenance.R2ScheduleStore
+	var deltaLog *delta.S3Log
+	var scheduleStore *maintenance.S3ScheduleStore
 	useLocalDB := true // Flag to track if we should use local DB
 
 	snapshotReady := &atomic.Bool{}
-	if cfg.IsR2Enabled() {
-		// R2 mode: try to download snapshot for fast startup
-		log.Info("R2 snapshot sync enabled, downloading latest snapshot")
+	if cfg.IsS3Enabled() {
+		log.Info("S3 snapshot sync enabled, downloading latest snapshot")
 
-		r2Client, r2Err := r2client.New(ctx, r2client.Config{
-			Endpoint:    cfg.R2Endpoint(),
-			AccessKeyID: cfg.R2AccessKeyID,
-			SecretKey:   cfg.R2SecretKey,
-			BucketName:  cfg.R2BucketName,
+		objectClient, clientErr := s3client.New(ctx, s3client.Config{
+			Endpoint:    cfg.S3Endpoint(),
+			Region:      cfg.S3Region,
+			AccessKeyID: cfg.S3AccessKeyID,
+			SecretKey:   cfg.S3SecretKey,
+			BucketName:  cfg.S3BucketName,
 		})
-		if r2Err != nil {
-			log.WithError(r2Err).Warn("R2 client initialization failed, falling back to local database")
+		if clientErr != nil {
+			log.WithError(clientErr).Warn("S3 client initialization failed, falling back to local database")
 		} else {
-			snapshotMgr = snapshot.New(r2Client, snapshot.Config{
-				SnapshotKey:    cfg.R2SnapshotKey,
-				LockKey:        cfg.R2LockKey,
-				LockTTL:        cfg.R2LockTTL,
-				PollInterval:   cfg.R2SnapshotPollInterval,
+			snapshotMgr = snapshot.New(objectClient, snapshot.Config{
+				SnapshotKey:    cfg.S3SnapshotKey,
+				LockKey:        cfg.S3LockKey,
+				LockTTL:        cfg.S3LockTTL,
+				PollInterval:   cfg.S3SnapshotPollInterval,
 				TempDir:        cfg.DataDir,
-				RequestTimeout: config.R2RequestTimeout,
+				RequestTimeout: config.S3RequestTimeout,
 			})
 
 			// Default to local database path; may be replaced by snapshot download
@@ -189,12 +189,12 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 			snapshotPath, etag, dlErr := snapshotMgr.DownloadSnapshot(ctx, cfg.DataDir)
 			if dlErr != nil {
 				if errors.Is(dlErr, snapshot.ErrNotFound) {
-					log.Info("No R2 snapshot found, starting with local database")
+					log.Info("No S3 snapshot found, starting with local database")
 				} else {
-					log.WithError(dlErr).Warn("R2 snapshot download failed, starting with local database")
+					log.WithError(dlErr).Warn("S3 snapshot download failed, starting with local database")
 				}
 			} else {
-				log.WithField("etag", etag).Info("Downloaded snapshot from R2")
+				log.WithField("etag", etag).Info("Downloaded snapshot from S3")
 				dbPath = snapshotPath
 				snapshotReady.Store(true)
 			}
@@ -210,17 +210,17 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 				useLocalDB = false
 				log.WithField("path", dbPath).
 					WithField("cache_ttl", cfg.CacheTTL).
-					WithField("db_mode", "r2_snapshot").
+					WithField("db_mode", "s3_snapshot").
 					Info("Database connected")
 
 				var deltaErr error
-				deltaLog, deltaErr = delta.NewR2Log(r2Client, cfg.R2DeltaPrefix, instanceID)
+				deltaLog, deltaErr = delta.NewS3Log(objectClient, cfg.S3DeltaPrefix, instanceID)
 				if deltaErr != nil {
 					log.WithError(deltaErr).Warn("Delta log initialization failed, missed results will not be preserved")
 				}
 
 				var scheduleErr error
-				scheduleStore, scheduleErr = maintenance.NewR2ScheduleStore(r2Client, cfg.R2ScheduleKey, config.R2RequestTimeout)
+				scheduleStore, scheduleErr = maintenance.NewS3ScheduleStore(objectClient, cfg.S3ScheduleKey, config.S3RequestTimeout)
 				if scheduleErr != nil {
 					log.WithError(scheduleErr).Warn("Schedule store initialization failed, maintenance will fall back to local scheduling")
 				}
@@ -228,7 +228,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		}
 	}
 
-	// Fallback to local database if R2 is disabled or failed
+	// Fallback to local database if S3 snapshot sync is disabled or failed
 	if useLocalDB {
 		var dbErr error
 		db, dbErr = storage.New(ctx, cfg.SQLitePath(), cfg.CacheTTL)
@@ -819,13 +819,13 @@ func (a *Application) shutdown() error {
 		}
 	}
 
-	// Stop R2 snapshot polling if enabled
+	// Stop S3 snapshot polling if enabled
 	if a.snapshotMgr != nil {
 		a.snapshotMgr.StopPolling()
-		a.logger.Info("Stopped R2 snapshot polling")
+		a.logger.Info("Stopped S3 snapshot polling")
 	}
 
-	// Close database (use HotSwapDB if R2 is enabled)
+	// Close database (use HotSwapDB if S3 snapshot sync is enabled)
 	if a.hotSwapDB != nil {
 		if err := a.hotSwapDB.Close(shutdownCtx); err != nil {
 			a.logger.WithError(err).WithField("component", "hotswap_database").Error("Component close error")
@@ -863,22 +863,26 @@ func (a *Application) runDataCleanup(ctx context.Context) (bool, error) {
 	startTime := time.Now()
 	a.logger.Info("Starting data cleanup")
 
+	workCtx := ctx
 	isLeader := true
 	var lockAcquired bool
 	if a.snapshotMgr != nil {
 		var lockErr error
 		lockAcquired, lockErr = a.snapshotMgr.AcquireLeaderLock(ctx)
 		if lockErr != nil {
-			a.logger.WithError(lockErr).Warn("Failed to acquire leader lock for cleanup, skipping this run")
+			a.logger.WithError(lockErr).Warn("Failed to acquire leader lease for cleanup, skipping this run")
 			return false, lockErr
 		} else if !lockAcquired {
 			a.logger.Info("Another instance is leader for cleanup, skipping")
 			return false, nil
 		}
+		workCtx = a.snapshotMgr.LeaderContext(ctx)
 		if lockAcquired {
 			defer func() {
-				if err := a.snapshotMgr.ReleaseLeaderLock(ctx); err != nil {
-					a.logger.WithError(err).Warn("Failed to release leader lock")
+				releaseCtx, releaseCancel := context.WithTimeout(context.Background(), config.S3RequestTimeout)
+				defer releaseCancel()
+				if err := a.snapshotMgr.ReleaseLeaderLock(releaseCtx); err != nil {
+					a.logger.WithError(err).Warn("Failed to release leader lease")
 				}
 			}()
 		}
@@ -887,42 +891,42 @@ func (a *Application) runDataCleanup(ctx context.Context) (bool, error) {
 	var totalDeleted int64
 	var cleanupErr error
 
-	if deleted, err := a.db.DeleteExpiredContacts(ctx, a.cfg.CacheTTL); err != nil {
+	if deleted, err := a.db.DeleteExpiredContacts(workCtx, a.cfg.CacheTTL); err != nil {
 		a.logger.WithError(err).Error("Failed to cleanup expired contacts")
 		cleanupErr = errors.Join(cleanupErr, err)
 	} else {
 		totalDeleted += deleted
 	}
 
-	if deleted, err := a.db.DeleteExpiredCourses(ctx, a.cfg.CacheTTL); err != nil {
+	if deleted, err := a.db.DeleteExpiredCourses(workCtx, a.cfg.CacheTTL); err != nil {
 		a.logger.WithError(err).Error("Failed to cleanup expired courses")
 		cleanupErr = errors.Join(cleanupErr, err)
 	} else {
 		totalDeleted += deleted
 	}
 
-	if deleted, err := a.db.DeleteExpiredHistoricalCourses(ctx, a.cfg.CacheTTL); err != nil {
+	if deleted, err := a.db.DeleteExpiredHistoricalCourses(workCtx, a.cfg.CacheTTL); err != nil {
 		a.logger.WithError(err).Error("Failed to cleanup expired historical courses")
 		cleanupErr = errors.Join(cleanupErr, err)
 	} else {
 		totalDeleted += deleted
 	}
 
-	if deleted, err := a.db.DeleteExpiredCoursePrograms(ctx, a.cfg.CacheTTL); err != nil {
+	if deleted, err := a.db.DeleteExpiredCoursePrograms(workCtx, a.cfg.CacheTTL); err != nil {
 		a.logger.WithError(err).Error("Failed to cleanup expired course programs")
 		cleanupErr = errors.Join(cleanupErr, err)
 	} else {
 		totalDeleted += deleted
 	}
 
-	if deleted, err := a.db.DeleteExpiredPrograms(ctx, a.cfg.CacheTTL); err != nil {
+	if deleted, err := a.db.DeleteExpiredPrograms(workCtx, a.cfg.CacheTTL); err != nil {
 		a.logger.WithError(err).Error("Failed to cleanup expired programs")
 		cleanupErr = errors.Join(cleanupErr, err)
 	} else {
 		totalDeleted += deleted
 	}
 
-	if deleted, err := a.db.DeleteExpiredSyllabi(ctx, a.cfg.CacheTTL); err != nil {
+	if deleted, err := a.db.DeleteExpiredSyllabi(workCtx, a.cfg.CacheTTL); err != nil {
 		a.logger.WithError(err).Error("Failed to cleanup expired syllabi")
 		cleanupErr = errors.Join(cleanupErr, err)
 	} else {
@@ -931,7 +935,7 @@ func (a *Application) runDataCleanup(ctx context.Context) (bool, error) {
 
 	// Prune syllabus token cache rows whose content_hash no longer matches the
 	// current syllabi row (content changed since last tokenization).
-	if deleted, err := a.db.DeleteStaleSyllabusTokens(ctx); err != nil {
+	if deleted, err := a.db.DeleteStaleSyllabusTokens(workCtx); err != nil {
 		a.logger.WithError(err).Error("Failed to cleanup stale syllabus tokens")
 		cleanupErr = errors.Join(cleanupErr, err)
 	} else {
@@ -941,15 +945,15 @@ func (a *Application) runDataCleanup(ctx context.Context) (bool, error) {
 		}
 	}
 
-	if _, err := a.db.Writer().ExecContext(ctx, "VACUUM"); err != nil {
+	if _, err := a.db.Writer().ExecContext(workCtx, "VACUUM"); err != nil {
 		a.logger.WithError(err).Warn("Failed to VACUUM database")
 		cleanupErr = errors.Join(cleanupErr, err)
 	}
-	if _, err := a.db.Writer().ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+	if _, err := a.db.Writer().ExecContext(workCtx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
 		a.logger.WithError(err).Warn("Failed to checkpoint WAL after VACUUM")
 		cleanupErr = errors.Join(cleanupErr, err)
 	}
-	if _, err := a.db.Writer().ExecContext(ctx, "PRAGMA optimize"); err != nil {
+	if _, err := a.db.Writer().ExecContext(workCtx, "PRAGMA optimize"); err != nil {
 		a.logger.WithError(err).Warn("Failed to optimize database")
 		cleanupErr = errors.Join(cleanupErr, err)
 	}
@@ -960,26 +964,50 @@ func (a *Application) runDataCleanup(ctx context.Context) (bool, error) {
 		Info("Data cleanup completed")
 
 	if a.snapshotMgr != nil && isLeader {
-		if a.deltaLog != nil {
-			stats, err := a.deltaLog.MergeIntoDB(ctx, a.db)
-			if err != nil {
-				a.logger.WithError(err).Warn("Failed to merge delta logs before cleanup snapshot upload")
-				cleanupErr = errors.Join(cleanupErr, err)
-			} else {
-				a.logger.WithField("processed", stats.ObjectsProcessed).
-					WithField("merged", stats.ObjectsMerged).
-					WithField("skipped", stats.ObjectsSkipped).
-					Info("Delta logs merged before cleanup snapshot upload")
-			}
-		}
-
-		a.logger.Info("Uploading cleanup snapshot to R2")
-		etag, uploadErr := a.snapshotMgr.UploadSnapshot(ctx, a.db)
-		if uploadErr != nil {
-			a.logger.WithError(uploadErr).Error("Failed to upload cleanup snapshot to R2")
-			cleanupErr = errors.Join(cleanupErr, uploadErr)
+		if err := a.ensureLeaderLease(workCtx, "cleanup snapshot upload"); err != nil {
+			cleanupErr = errors.Join(cleanupErr, err)
 		} else {
-			a.logger.WithField("etag", etag).Info("Cleanup snapshot uploaded to R2 successfully")
+			var mergeStats delta.MergeStats
+
+			if a.deltaLog != nil {
+				stats, err := a.deltaLog.MergeIntoDB(workCtx, a.db)
+				if err != nil {
+					a.logger.WithError(err).Warn("Failed to merge delta logs before cleanup snapshot upload")
+					cleanupErr = errors.Join(cleanupErr, err)
+				} else {
+					mergeStats = stats
+					a.logger.WithField("processed", stats.ObjectsProcessed).
+						WithField("merged", stats.ObjectsMerged).
+						WithField("skipped", stats.ObjectsSkipped).
+						Info("Delta logs merged before cleanup snapshot upload")
+				}
+			}
+
+			if cleanupErr == nil {
+				if err := a.ensureLeaderLease(workCtx, "cleanup snapshot upload"); err != nil {
+					cleanupErr = errors.Join(cleanupErr, err)
+				} else {
+					a.logger.Info("Uploading cleanup snapshot to S3")
+					etag, uploadErr := a.snapshotMgr.UploadSnapshot(workCtx, a.db)
+					if uploadErr != nil {
+						a.logger.WithError(uploadErr).Error("Failed to upload cleanup snapshot to S3")
+						cleanupErr = errors.Join(cleanupErr, uploadErr)
+					} else {
+						a.logger.WithField("etag", etag).Info("Cleanup snapshot uploaded to S3 successfully")
+						if a.deltaLog != nil && len(mergeStats.MergedKeys) > 0 {
+							deleted, err := a.deltaLog.DeleteMerged(workCtx, mergeStats)
+							if err != nil {
+								a.logger.WithError(err).
+									WithField("deleted", deleted).
+									WithField("merged", len(mergeStats.MergedKeys)).
+									Warn("Failed to delete some merged delta logs after cleanup snapshot upload")
+							} else {
+								a.logger.WithField("deleted", deleted).Info("Merged delta logs deleted after cleanup snapshot upload")
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -1040,7 +1068,7 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) (bool,
 	defer cancel()
 
 	if includeID && a.snapshotMgr != nil && a.snapshotReady.Load() {
-		a.logger.Info("Snapshot already loaded from R2, initial refresh not needed")
+		a.logger.Info("Snapshot already loaded from S3, initial refresh not needed")
 		a.readinessState.MarkReady()
 		if a.metrics != nil {
 			a.metrics.RecordJobRun("refresh", "total", "skipped", time.Since(startTime).Seconds())
@@ -1048,14 +1076,16 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) (bool,
 		return false, true, nil
 	}
 
-	// R2 distributed lock: only one instance should run refresh at a time
+	// S3 leader lease: only one instance should run refresh at a time.
+	// The work context is canceled if lease renewal fails while scraping.
+	workCtx := warmupCtx
 	isLeader := true
 	var lockAcquired bool
 	if a.snapshotMgr != nil {
 		var lockErr error
 		lockAcquired, lockErr = a.snapshotMgr.AcquireLeaderLock(warmupCtx)
 		if lockErr != nil {
-			a.logger.WithError(lockErr).Warn("Failed to acquire leader lock, skipping this run")
+			a.logger.WithError(lockErr).Warn("Failed to acquire leader lease, skipping this run")
 			if a.metrics != nil {
 				a.metrics.RecordJobRun("refresh", "total", "error", time.Since(startTime).Seconds())
 			}
@@ -1066,17 +1096,24 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) (bool,
 			} else {
 				a.logger.Info("Another instance is leader for refresh, waiting for new snapshot via polling")
 			}
+			if a.snapshotReady.Load() && !a.readinessState.WarmupCompleted() {
+				a.readinessState.MarkReady()
+				a.logger.Info("Snapshot already loaded from S3, service marked ready while waiting for leader refresh")
+			}
 			if a.metrics != nil {
 				a.metrics.RecordJobRun("refresh", "total", "skipped", time.Since(startTime).Seconds())
 			}
 			return false, false, nil
 		}
 
-		a.logger.Info("Acquired leader lock, this instance will run refresh")
+		a.logger.Info("Acquired leader lease, this instance will run refresh")
+		workCtx = a.snapshotMgr.LeaderContext(warmupCtx)
 		if lockAcquired {
 			defer func() {
-				if err := a.snapshotMgr.ReleaseLeaderLock(warmupCtx); err != nil {
-					a.logger.WithError(err).Warn("Failed to release leader lock")
+				releaseCtx, releaseCancel := context.WithTimeout(context.Background(), config.S3RequestTimeout)
+				defer releaseCancel()
+				if err := a.snapshotMgr.ReleaseLeaderLock(releaseCtx); err != nil {
+					a.logger.WithError(err).Warn("Failed to release leader lease")
 				}
 			}()
 		}
@@ -1091,7 +1128,7 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) (bool,
 		SemesterCache: a.semesterCache,
 	}
 
-	stats, err := warmup.Run(warmupCtx, a.db, a.scraperClient, a.logger, opts)
+	stats, err := warmup.Run(workCtx, a.db, a.scraperClient, a.logger, opts)
 
 	if err != nil {
 		a.logger.WithError(err).Error("Data refresh failed")
@@ -1118,10 +1155,18 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) (bool,
 		a.logger.WithField("doc_count", a.bm25Index.Count()).Info("BM25 smart search enabled")
 	}
 
-	// R2: Leader merges delta logs then uploads new snapshot after successful refresh
+	// S3: Leader merges delta logs then uploads new snapshot after successful refresh
 	if a.snapshotMgr != nil && isLeader {
+		if err := a.ensureLeaderLease(workCtx, "refresh snapshot upload"); err != nil {
+			if a.metrics != nil {
+				a.metrics.RecordJobRun("refresh", "total", "error", time.Since(startTime).Seconds())
+			}
+			return true, false, err
+		}
+
+		var mergeStats delta.MergeStats
 		if a.deltaLog != nil {
-			stats, err := a.deltaLog.MergeIntoDB(warmupCtx, a.db)
+			stats, err := a.deltaLog.MergeIntoDB(workCtx, a.db)
 			if err != nil {
 				a.logger.WithError(err).Warn("Failed to merge delta logs before snapshot upload")
 				if a.metrics != nil {
@@ -1129,23 +1174,43 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) (bool,
 				}
 				return true, false, err
 			}
+			mergeStats = stats
 			a.logger.WithField("processed", stats.ObjectsProcessed).
 				WithField("merged", stats.ObjectsMerged).
 				WithField("skipped", stats.ObjectsSkipped).
 				Info("Delta logs merged before snapshot upload")
 		}
 
-		a.logger.Info("Uploading new snapshot to R2")
+		if err := a.ensureLeaderLease(workCtx, "refresh snapshot upload"); err != nil {
+			if a.metrics != nil {
+				a.metrics.RecordJobRun("refresh", "total", "error", time.Since(startTime).Seconds())
+			}
+			return true, false, err
+		}
 
-		etag, uploadErr := a.snapshotMgr.UploadSnapshot(warmupCtx, a.db)
+		a.logger.Info("Uploading new snapshot to S3")
+
+		etag, uploadErr := a.snapshotMgr.UploadSnapshot(workCtx, a.db)
 		if uploadErr != nil {
-			a.logger.WithError(uploadErr).Error("Failed to upload snapshot to R2")
+			a.logger.WithError(uploadErr).Error("Failed to upload snapshot to S3")
 			if a.metrics != nil {
 				a.metrics.RecordJobRun("refresh", "total", "error", time.Since(startTime).Seconds())
 			}
 			return true, false, uploadErr
 		}
-		a.logger.WithField("etag", etag).Info("Snapshot uploaded to R2 successfully")
+		a.logger.WithField("etag", etag).Info("Snapshot uploaded to S3 successfully")
+
+		if a.deltaLog != nil && len(mergeStats.MergedKeys) > 0 {
+			deleted, err := a.deltaLog.DeleteMerged(workCtx, mergeStats)
+			if err != nil {
+				a.logger.WithError(err).
+					WithField("deleted", deleted).
+					WithField("merged", len(mergeStats.MergedKeys)).
+					Warn("Failed to delete some merged delta logs after snapshot upload")
+			} else {
+				a.logger.WithField("deleted", deleted).Info("Merged delta logs deleted after snapshot upload")
+			}
+		}
 	}
 
 	if a.metrics != nil {
@@ -1155,10 +1220,24 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) (bool,
 	return true, includeID, nil
 }
 
+func (a *Application) ensureLeaderLease(ctx context.Context, operation string) error {
+	if a.snapshotMgr == nil {
+		return nil
+	}
+	renewed, err := a.snapshotMgr.RenewLeaderLock(ctx)
+	if err != nil {
+		return fmt.Errorf("%s: renew leader lease: %w", operation, err)
+	}
+	if !renewed {
+		return fmt.Errorf("%s: leader lease lost", operation)
+	}
+	return nil
+}
+
 // maintenanceLoop coordinates refresh/cleanup based on shared schedule state.
 // Startup behavior: executes initial refresh immediately if due (or snapshot missing).
 // Readiness is marked only after initial refresh completes (or grace period elapses).
-// Tasks are executed when due time is reached based on last execution timestamp from R2/local state.
+// Tasks are executed when due time is reached based on last execution timestamp from S3/local state.
 func (a *Application) maintenanceLoop(ctx context.Context) {
 	a.logger.Debug("Maintenance scheduler started")
 	defer a.logger.Debug("Maintenance scheduler stopped")

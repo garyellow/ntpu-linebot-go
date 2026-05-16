@@ -30,20 +30,23 @@ docker compose up -d
 - `NTPU_GROQ_API_KEY` - Groq API
 - `NTPU_CEREBRAS_API_KEY` - Cerebras API
 
-### 可選項目（R2 快照同步）
+### 可選項目（S3-compatible 快照同步）
 
-多節點部署建議啟用 `NTPU_R2_ENABLED=true`，啟動時會自動下載最新 SQLite 快照並進行同步：
+多節點部署建議啟用 `NTPU_S3_ENABLED=true`，啟動時會自動下載最新 SQLite 快照並進行同步。端點可以是 AWS S3、MinIO、Ceph RGW，或其他支援必要 S3 API 的物件儲存：
 
-- `NTPU_R2_ACCOUNT_ID` - Cloudflare Account ID
-- `NTPU_R2_ACCESS_KEY_ID` - R2 Access Key ID
-- `NTPU_R2_SECRET_ACCESS_KEY` - R2 Secret Access Key
-- `NTPU_R2_BUCKET_NAME` - R2 Bucket
-- `NTPU_R2_SNAPSHOT_KEY` - 快照物件 key（預設：snapshots/cache.db.zst）
-- `NTPU_R2_LOCK_KEY` - 分散式鎖 key（預設：locks/leader.json）
-- `NTPU_R2_LOCK_TTL` - 鎖 TTL（預設：1h）
-- `NTPU_R2_SNAPSHOT_POLL_INTERVAL` - follower 輪詢快照更新間隔（預設：15m）
-- `NTPU_R2_DELTA_PREFIX` - cache miss delta log 前綴（預設：deltas）
-- `NTPU_R2_SCHEDULE_KEY` - 刷新/清理排程狀態 key（預設：schedules/maintenance.json）
+- `NTPU_S3_ENDPOINT` - S3-compatible endpoint（例如 `https://s3.ap-northeast-1.amazonaws.com`、`http://localhost:9000`、`https://<rgw-host>`）
+- `NTPU_S3_REGION` - S3 signing region（AWS S3 填 bucket region；MinIO/Ceph RGW 常見為 `us-east-1` 或服務指定值）
+- `NTPU_S3_ACCESS_KEY_ID` - S3-compatible Access Key ID
+- `NTPU_S3_SECRET_ACCESS_KEY` - S3-compatible Secret Access Key
+- `NTPU_S3_BUCKET_NAME` - S3-compatible Bucket
+- `NTPU_S3_SNAPSHOT_KEY` - 快照物件 key（預設：snapshots/cache.db.zst）
+- `NTPU_S3_LOCK_KEY` - leader lease lock key（預設：locks/leader.json）
+- `NTPU_S3_LOCK_TTL` - leader lease TTL（預設：1h）
+- `NTPU_S3_SNAPSHOT_POLL_INTERVAL` - follower 輪詢快照更新間隔（預設：15m）
+- `NTPU_S3_DELTA_PREFIX` - cache miss delta log 前綴（預設：deltas）
+- `NTPU_S3_SCHEDULE_KEY` - 刷新/清理排程狀態 key（預設：schedules/maintenance.json）
+
+同步流程把 refresh/cleanup 視為需要互斥的工作：leader lease lock 會避免多個節點同時執行全量爬蟲，且 lease 續約失敗時會取消正在執行的工作。使用者 cache miss 不會等待全域鎖，任一節點可小範圍即時補資料，結果會寫入 append-only delta log，並在下一次 leader snapshot 收斂。底層使用標準 HTTP/S3 條件請求作為 CAS primitive：快照上傳與共享排程狀態會用 `PutObject` + `If-Match` / `If-None-Match` 防止 lost update；已合併 delta log 會保留到新快照成功上傳後才刪除，避免部署中斷時遺失資料。所選 S3-compatible 服務必須支援 `HeadObject`、`GetObject`、`ListObjectsV2`、`DeleteObject`，以及 `PutObject` 條件寫入。
 
 ### 可選項目（背景任務排程）
 
@@ -52,7 +55,7 @@ docker compose up -d
 - `NTPU_WARMUP_WAIT` - 是否等待首次 warmup 完成才接受 webhook（預設：false）
 - `NTPU_WARMUP_GRACE_PERIOD` - Warmup 就緒寬限期（預設：10m）
 
-> 未啟用 R2 時，排程狀態不會共享，僅在單一節點本地執行。
+> 未啟用 S3 snapshot sync 時，排程狀態不會共享，僅在單一節點本地執行。
 
 ### Docker Compose 設定
 

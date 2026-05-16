@@ -1,4 +1,4 @@
-// Package delta provides R2-backed delta log recording and merging.
+// Package delta provides S3-backed delta log recording and merging.
 package delta
 
 import (
@@ -7,12 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/garyellow/ntpu-linebot-go/internal/r2client"
 	"github.com/garyellow/ntpu-linebot-go/internal/storage"
 	"github.com/google/uuid"
 )
@@ -30,6 +30,7 @@ type MergeStats struct {
 	ObjectsProcessed int
 	ObjectsMerged    int
 	ObjectsSkipped   int
+	MergedKeys       []string
 }
 
 // Entry represents a single append-only delta log record.
@@ -47,17 +48,24 @@ const (
 	EntryTypeHistoricalCourses = "historical_courses"
 )
 
-// R2Log writes and merges delta logs stored in R2.
-type R2Log struct {
-	client     *r2client.Client
+// S3Log writes and merges delta logs stored in S3-compatible storage.
+type S3Log struct {
+	client     s3LogClient
 	prefix     string
 	instanceID string
 }
 
-// NewR2Log creates a new R2 delta log helper.
-func NewR2Log(client *r2client.Client, prefix, instanceID string) (*R2Log, error) {
+type s3LogClient interface {
+	Download(ctx context.Context, key string) (io.ReadCloser, string, error)
+	ListObjects(ctx context.Context, prefix string) ([]string, error)
+	Upload(ctx context.Context, key string, body io.Reader, contentType string) (string, error)
+	DeleteObject(ctx context.Context, key string) error
+}
+
+// NewS3Log creates a new S3 delta log helper.
+func NewS3Log(client s3LogClient, prefix, instanceID string) (*S3Log, error) {
 	if client == nil {
-		return nil, errors.New("delta: r2 client is required")
+		return nil, errors.New("delta: s3 client is required")
 	}
 	prefix = normalizePrefix(prefix)
 	if prefix == "" {
@@ -66,11 +74,11 @@ func NewR2Log(client *r2client.Client, prefix, instanceID string) (*R2Log, error
 	if instanceID == "" {
 		instanceID = "unknown"
 	}
-	return &R2Log{client: client, prefix: prefix, instanceID: instanceID}, nil
+	return &S3Log{client: client, prefix: prefix, instanceID: instanceID}, nil
 }
 
 // RecordStudents appends scraped students to the delta log.
-func (l *R2Log) RecordStudents(ctx context.Context, students []*storage.Student) error {
+func (l *S3Log) RecordStudents(ctx context.Context, students []*storage.Student) error {
 	if len(students) == 0 {
 		return nil
 	}
@@ -78,7 +86,7 @@ func (l *R2Log) RecordStudents(ctx context.Context, students []*storage.Student)
 }
 
 // RecordContacts appends scraped contacts to the delta log.
-func (l *R2Log) RecordContacts(ctx context.Context, contacts []*storage.Contact) error {
+func (l *S3Log) RecordContacts(ctx context.Context, contacts []*storage.Contact) error {
 	if len(contacts) == 0 {
 		return nil
 	}
@@ -86,7 +94,7 @@ func (l *R2Log) RecordContacts(ctx context.Context, contacts []*storage.Contact)
 }
 
 // RecordCourses appends scraped courses to the delta log.
-func (l *R2Log) RecordCourses(ctx context.Context, courses []*storage.Course) error {
+func (l *S3Log) RecordCourses(ctx context.Context, courses []*storage.Course) error {
 	if len(courses) == 0 {
 		return nil
 	}
@@ -94,7 +102,7 @@ func (l *R2Log) RecordCourses(ctx context.Context, courses []*storage.Course) er
 }
 
 // RecordHistoricalCourses appends scraped historical courses to the delta log.
-func (l *R2Log) RecordHistoricalCourses(ctx context.Context, courses []*storage.Course) error {
+func (l *S3Log) RecordHistoricalCourses(ctx context.Context, courses []*storage.Course) error {
 	if len(courses) == 0 {
 		return nil
 	}
@@ -102,7 +110,7 @@ func (l *R2Log) RecordHistoricalCourses(ctx context.Context, courses []*storage.
 }
 
 // MergeIntoDB applies all pending delta logs into the database.
-func (l *R2Log) MergeIntoDB(ctx context.Context, db *storage.DB) (MergeStats, error) {
+func (l *S3Log) MergeIntoDB(ctx context.Context, db *storage.DB) (MergeStats, error) {
 	keys, err := l.client.ListObjects(ctx, l.objectPrefix())
 	if err != nil {
 		return MergeStats{}, fmt.Errorf("delta: list objects: %w", err)
@@ -125,9 +133,26 @@ func (l *R2Log) MergeIntoDB(ctx context.Context, db *storage.DB) (MergeStats, er
 			continue
 		}
 		stats.ObjectsMerged++
+		stats.MergedKeys = append(stats.MergedKeys, key)
 	}
 
 	return stats, nil
+}
+
+// DeleteMerged removes delta log objects after a snapshot containing their data
+// has been uploaded successfully. Keeping deletion separate from MergeIntoDB
+// preserves deltas when snapshot upload fails or the leader lease is lost.
+func (l *S3Log) DeleteMerged(ctx context.Context, stats MergeStats) (int, error) {
+	var deleted int
+	var joinedErr error
+	for _, key := range stats.MergedKeys {
+		if err := l.client.DeleteObject(ctx, key); err != nil {
+			joinedErr = errors.Join(joinedErr, fmt.Errorf("delete entry %s: %w", key, err))
+			continue
+		}
+		deleted++
+	}
+	return deleted, joinedErr
 }
 
 func parseDeltaTimestamp(key string) (int64, bool) {
@@ -149,7 +174,7 @@ func parseInt64(value string) (int64, error) {
 	return n, err
 }
 
-func (l *R2Log) mergeObject(ctx context.Context, db *storage.DB, key string) error {
+func (l *S3Log) mergeObject(ctx context.Context, db *storage.DB, key string) error {
 	body, _, err := l.client.Download(ctx, key)
 	if err != nil {
 		return fmt.Errorf("download %s: %w", key, err)
@@ -166,10 +191,6 @@ func (l *R2Log) mergeObject(ctx context.Context, db *storage.DB, key string) err
 
 	if err := applyEntry(ctx, db, entry); err != nil {
 		return fmt.Errorf("apply entry %s: %w", key, err)
-	}
-
-	if err := l.client.DeleteObject(ctx, key); err != nil {
-		return fmt.Errorf("delete entry %s: %w", key, err)
 	}
 
 	return nil
@@ -238,7 +259,7 @@ func applyEntry(ctx context.Context, db *storage.DB, entry Entry) error {
 	}
 }
 
-func (l *R2Log) record(ctx context.Context, entryType string, payload any) error {
+func (l *S3Log) record(ctx context.Context, entryType string, payload any) error {
 	payloadData, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("delta: marshal payload: %w", err)
@@ -261,11 +282,11 @@ func (l *R2Log) record(ctx context.Context, entryType string, payload any) error
 	return nil
 }
 
-func (l *R2Log) objectPrefix() string {
+func (l *S3Log) objectPrefix() string {
 	return l.prefix + "/"
 }
 
-func (l *R2Log) objectKey() string {
+func (l *S3Log) objectKey() string {
 	return fmt.Sprintf("%s/%s/%d-%s.json", l.prefix, l.instanceID, time.Now().UnixNano(), uuid.NewString())
 }
 

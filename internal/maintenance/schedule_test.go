@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garyellow/ntpu-linebot-go/internal/r2client"
+	"github.com/garyellow/ntpu-linebot-go/internal/s3client"
 )
 
-type fakeR2Client struct {
+type fakes3client struct {
 	mu              sync.Mutex
 	exists          bool
 	etagCounter     int
@@ -31,7 +31,7 @@ type fakeR2Client struct {
 	putIfMatchErr   error
 }
 
-func (f *fakeR2Client) Download(ctx context.Context, _ string) (io.ReadCloser, string, error) {
+func (f *fakes3client) Download(ctx context.Context, _ string) (io.ReadCloser, string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -52,12 +52,12 @@ func (f *fakeR2Client) Download(ctx context.Context, _ string) (io.ReadCloser, s
 		return nil, "", f.downloadErr
 	}
 	if !f.exists {
-		return nil, "", r2client.ErrNotFound
+		return nil, "", s3client.ErrNotFound
 	}
 	return io.NopCloser(bytes.NewReader(f.body)), f.etag, nil
 }
 
-func (f *fakeR2Client) PutObjectIfNotExists(_ context.Context, _ string, body io.Reader, contentType string) (bool, string, error) {
+func (f *fakes3client) PutObjectIfNotExists(_ context.Context, _ string, body io.Reader, contentType string) (bool, string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -86,7 +86,7 @@ func (f *fakeR2Client) PutObjectIfNotExists(_ context.Context, _ string, body io
 	return true, f.etag, nil
 }
 
-func (f *fakeR2Client) PutObjectIfMatch(_ context.Context, _ string, body io.Reader, etag string, contentType string) (bool, string, error) {
+func (f *fakes3client) PutObjectIfMatch(_ context.Context, _ string, body io.Reader, etag string, contentType string) (bool, string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -127,24 +127,24 @@ func TestStateJSONRoundTrip(t *testing.T) {
 	}
 }
 
-func TestNewR2ScheduleStoreValidation(t *testing.T) {
+func TestNewS3ScheduleStoreValidation(t *testing.T) {
 	t.Parallel()
 
-	if _, err := NewR2ScheduleStore(nil, "key", time.Second); err == nil {
+	if _, err := NewS3ScheduleStore(nil, "key", time.Second); err == nil {
 		t.Fatal("expected error for nil client")
 	}
-	if _, err := NewR2ScheduleStore(&fakeR2Client{}, "", time.Second); err == nil {
+	if _, err := NewS3ScheduleStore(&fakes3client{}, "", time.Second); err == nil {
 		t.Fatal("expected error for empty key")
 	}
 }
 
-func TestR2ScheduleStoreLoadNotFound(t *testing.T) {
+func TestS3ScheduleStoreLoadNotFound(t *testing.T) {
 	t.Parallel()
 
-	client := &fakeR2Client{}
-	store, err := NewR2ScheduleStore(client, "schedule.json", time.Second)
+	client := &fakes3client{}
+	store, err := NewS3ScheduleStore(client, "schedule.json", time.Second)
 	if err != nil {
-		t.Fatalf("NewR2ScheduleStore failed: %v", err)
+		t.Fatalf("NewS3ScheduleStore failed: %v", err)
 	}
 
 	state, etag, exists, err := store.Load(context.Background())
@@ -162,13 +162,13 @@ func TestR2ScheduleStoreLoadNotFound(t *testing.T) {
 	}
 }
 
-func TestR2ScheduleStoreEnsureRace(t *testing.T) {
+func TestS3ScheduleStoreEnsureRace(t *testing.T) {
 	t.Parallel()
 
-	client := &fakeR2Client{forceCreateRace: true}
-	store, err := NewR2ScheduleStore(client, "schedule.json", time.Second)
+	client := &fakes3client{forceCreateRace: true}
+	store, err := NewS3ScheduleStore(client, "schedule.json", time.Second)
 	if err != nil {
-		t.Fatalf("NewR2ScheduleStore failed: %v", err)
+		t.Fatalf("NewS3ScheduleStore failed: %v", err)
 	}
 
 	state, etag, err := store.Ensure(context.Background())
@@ -183,10 +183,10 @@ func TestR2ScheduleStoreEnsureRace(t *testing.T) {
 	}
 }
 
-func TestR2ScheduleStoreUpdateWithRetry(t *testing.T) {
+func TestS3ScheduleStoreUpdateWithRetry(t *testing.T) {
 	t.Parallel()
 
-	client := &fakeR2Client{exists: true, etag: "etag-1", matchFailCount: 1}
+	client := &fakes3client{exists: true, etag: "etag-1", matchFailCount: 1}
 	initial := State{LastRefresh: 10, LastCleanup: 20, UpdatedAt: 30}
 	data, err := json.Marshal(initial)
 	if err != nil {
@@ -194,9 +194,9 @@ func TestR2ScheduleStoreUpdateWithRetry(t *testing.T) {
 	}
 	client.body = data
 
-	store, err := NewR2ScheduleStore(client, "schedule.json", time.Second)
+	store, err := NewS3ScheduleStore(client, "schedule.json", time.Second)
 	if err != nil {
-		t.Fatalf("NewR2ScheduleStore failed: %v", err)
+		t.Fatalf("NewS3ScheduleStore failed: %v", err)
 	}
 
 	err = store.Update(context.Background(), func(s *State) {
@@ -218,17 +218,17 @@ func TestR2ScheduleStoreUpdateWithRetry(t *testing.T) {
 	}
 }
 
-func TestR2ScheduleStoreWithTimeout(t *testing.T) {
+func TestS3ScheduleStoreWithTimeout(t *testing.T) {
 	t.Parallel()
 
 	var sawDeadline bool
-	store, err := NewR2ScheduleStore(&fakeR2Client{
+	store, err := NewS3ScheduleStore(&fakes3client{
 		downloadCtxHook: func(ctx context.Context) {
 			_, sawDeadline = ctx.Deadline()
 		},
 	}, "schedule.json", time.Millisecond)
 	if err != nil {
-		t.Fatalf("NewR2ScheduleStore failed: %v", err)
+		t.Fatalf("NewS3ScheduleStore failed: %v", err)
 	}
 
 	if _, _, _, err := store.Load(context.Background()); err != nil {
@@ -239,11 +239,11 @@ func TestR2ScheduleStoreWithTimeout(t *testing.T) {
 	}
 
 	sawDeadline = false
-	storeNoTimeout, err := NewR2ScheduleStore(&fakeR2Client{}, "schedule.json", 0)
+	storeNoTimeout, err := NewS3ScheduleStore(&fakes3client{}, "schedule.json", 0)
 	if err != nil {
-		t.Fatalf("NewR2ScheduleStore failed: %v", err)
+		t.Fatalf("NewS3ScheduleStore failed: %v", err)
 	}
-	storeNoTimeout.client = &fakeR2Client{
+	storeNoTimeout.client = &fakes3client{
 		downloadCtxHook: func(ctx context.Context) {
 			_, sawDeadline = ctx.Deadline()
 		},
@@ -256,19 +256,19 @@ func TestR2ScheduleStoreWithTimeout(t *testing.T) {
 	}
 }
 
-func TestR2ScheduleStoreLoadRetriesTransientErrors(t *testing.T) {
+func TestS3ScheduleStoreLoadRetriesTransientErrors(t *testing.T) {
 	t.Parallel()
 
-	client := &fakeR2Client{
+	client := &fakes3client{
 		downloadErrs: []error{
 			errors.New("boom-1"),
 			errors.New("boom-2"),
 			errors.New("boom-3"),
 		},
 	}
-	store, err := NewR2ScheduleStore(client, "schedule.json", time.Second)
+	store, err := NewS3ScheduleStore(client, "schedule.json", time.Second)
 	if err != nil {
-		t.Fatalf("NewR2ScheduleStore failed: %v", err)
+		t.Fatalf("NewS3ScheduleStore failed: %v", err)
 	}
 
 	_, _, _, err = store.Load(context.Background())
@@ -280,15 +280,15 @@ func TestR2ScheduleStoreLoadRetriesTransientErrors(t *testing.T) {
 	}
 }
 
-func TestR2ScheduleStoreLoadDoesNotRetryContextCanceled(t *testing.T) {
+func TestS3ScheduleStoreLoadDoesNotRetryContextCanceled(t *testing.T) {
 	t.Parallel()
 
-	client := &fakeR2Client{
+	client := &fakes3client{
 		downloadErrs: []error{context.Canceled},
 	}
-	store, err := NewR2ScheduleStore(client, "schedule.json", time.Second)
+	store, err := NewS3ScheduleStore(client, "schedule.json", time.Second)
 	if err != nil {
-		t.Fatalf("NewR2ScheduleStore failed: %v", err)
+		t.Fatalf("NewS3ScheduleStore failed: %v", err)
 	}
 
 	_, _, _, err = store.Load(context.Background())
@@ -300,19 +300,19 @@ func TestR2ScheduleStoreLoadDoesNotRetryContextCanceled(t *testing.T) {
 	}
 }
 
-func TestR2ScheduleStoreLoadStopsOnCanceledContextDuringBackoff(t *testing.T) {
+func TestS3ScheduleStoreLoadStopsOnCanceledContextDuringBackoff(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	client := &fakeR2Client{
+	client := &fakes3client{
 		downloadErrs: []error{errors.New("temporary")},
 		downloadHook: func() {
 			cancel()
 		},
 	}
-	store, err := NewR2ScheduleStore(client, "schedule.json", time.Second)
+	store, err := NewS3ScheduleStore(client, "schedule.json", time.Second)
 	if err != nil {
-		t.Fatalf("NewR2ScheduleStore failed: %v", err)
+		t.Fatalf("NewS3ScheduleStore failed: %v", err)
 	}
 
 	_, _, _, err = store.Load(ctx)

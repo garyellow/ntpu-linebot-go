@@ -38,7 +38,7 @@ services:
       - NTPU_LLM_RATE_DAILY=${NTPU_LLM_RATE_DAILY:-180}
       - NTPU_LLM_RATE_REFILL=${NTPU_LLM_RATE_REFILL:-30}
 
-      # Maintenance scheduling (shared across instances when R2 enabled)
+      # Maintenance scheduling (shared across instances when S3 snapshot sync is enabled)
       - NTPU_WARMUP_GRACE_PERIOD=${NTPU_WARMUP_GRACE_PERIOD:-10m}
       - NTPU_WARMUP_WAIT=${NTPU_WARMUP_WAIT:-false}
       - NTPU_MAINTENANCE_REFRESH_INTERVAL=${NTPU_MAINTENANCE_REFRESH_INTERVAL:-24h}
@@ -83,18 +83,19 @@ services:
       - NTPU_METRICS_PASSWORD=${NTPU_METRICS_PASSWORD:-}
       - NTPU_METRICS_USERNAME=${NTPU_METRICS_USERNAME:-prometheus}
 
-      # R2 snapshot
-      - NTPU_R2_ENABLED=${NTPU_R2_ENABLED:-false}
-      - NTPU_R2_ACCOUNT_ID=${NTPU_R2_ACCOUNT_ID:-}
-      - NTPU_R2_ACCESS_KEY_ID=${NTPU_R2_ACCESS_KEY_ID:-}
-      - NTPU_R2_SECRET_ACCESS_KEY=${NTPU_R2_SECRET_ACCESS_KEY:-}
-      - NTPU_R2_BUCKET_NAME=${NTPU_R2_BUCKET_NAME:-}
-      - NTPU_R2_SNAPSHOT_KEY=${NTPU_R2_SNAPSHOT_KEY:-snapshots/cache.db.zst}
-      - NTPU_R2_LOCK_KEY=${NTPU_R2_LOCK_KEY:-locks/leader.json}
-      - NTPU_R2_LOCK_TTL=${NTPU_R2_LOCK_TTL:-1h}
-      - NTPU_R2_SNAPSHOT_POLL_INTERVAL=${NTPU_R2_SNAPSHOT_POLL_INTERVAL:-15m}
-      - NTPU_R2_DELTA_PREFIX=${NTPU_R2_DELTA_PREFIX:-deltas}
-      - NTPU_R2_SCHEDULE_KEY=${NTPU_R2_SCHEDULE_KEY:-schedules/maintenance.json}
+      # S3-compatible snapshot sync
+      - NTPU_S3_ENABLED=${NTPU_S3_ENABLED:-false}
+      - NTPU_S3_ENDPOINT=${NTPU_S3_ENDPOINT:-}
+      - NTPU_S3_REGION=${NTPU_S3_REGION:-us-east-1}
+      - NTPU_S3_ACCESS_KEY_ID=${NTPU_S3_ACCESS_KEY_ID:-}
+      - NTPU_S3_SECRET_ACCESS_KEY=${NTPU_S3_SECRET_ACCESS_KEY:-}
+      - NTPU_S3_BUCKET_NAME=${NTPU_S3_BUCKET_NAME:-}
+      - NTPU_S3_SNAPSHOT_KEY=${NTPU_S3_SNAPSHOT_KEY:-snapshots/cache.db.zst}
+      - NTPU_S3_LOCK_KEY=${NTPU_S3_LOCK_KEY:-locks/leader.json}
+      - NTPU_S3_LOCK_TTL=${NTPU_S3_LOCK_TTL:-1h}
+      - NTPU_S3_SNAPSHOT_POLL_INTERVAL=${NTPU_S3_SNAPSHOT_POLL_INTERVAL:-15m}
+      - NTPU_S3_DELTA_PREFIX=${NTPU_S3_DELTA_PREFIX:-deltas}
+      - NTPU_S3_SCHEDULE_KEY=${NTPU_S3_SCHEDULE_KEY:-schedules/maintenance.json}
     deploy:
       resources:
         limits:
