@@ -439,6 +439,9 @@ func (c *Config) Validate() error {
 	if c.WarmupMaxWait < 0 {
 		errs = append(errs, fmt.Errorf("NTPU_WARMUP_MAX_WAIT cannot be negative, got %v", c.WarmupMaxWait))
 	}
+	if c.WaitForWarmup && c.WarmupMaxWait == 0 {
+		errs = append(errs, errors.New("NTPU_WARMUP_MAX_WAIT must be set to a positive duration when NTPU_WARMUP_WAIT=true (e.g. NTPU_WARMUP_MAX_WAIT=30m); without a limit, /webhook and /readyz will stay 503 forever if warmup hangs"))
+	}
 
 	if len(errs) > 0 {
 		return errors.Join(errs...)

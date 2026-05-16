@@ -138,6 +138,25 @@ func TestValidate(t *testing.T) {
 			wantErr:     true,
 			errContains: "NTPU_SCRAPER_MAX_RETRIES",
 		},
+		{
+			name: "WaitForWarmup=true with WarmupMaxWait=0 is rejected",
+			cfg: &Config{
+				LineChannelToken:           "token",
+				LineChannelSecret:          "secret",
+				Port:                       "10000",
+				DataDir:                    "/data",
+				CacheTTL:                   168 * time.Hour,
+				ScraperTimeout:             60 * time.Second,
+				ScraperMaxRetries:          3,
+				WaitForWarmup:              true,
+				WarmupMaxWait:              0,
+				MaintenanceRefreshInterval: 12 * time.Hour,
+				MaintenanceCleanupInterval: 24 * time.Hour,
+				Bot:                        newTestBotConfig(),
+			},
+			wantErr:     true,
+			errContains: "NTPU_WARMUP_MAX_WAIT",
+		},
 		// S3-compatible snapshot tests
 		{
 			name: "S3 enabled but missing access key",
