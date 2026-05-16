@@ -34,8 +34,12 @@ const (
 	EnvLLMRateDaily   = "NTPU_LLM_RATE_DAILY"
 
 	// Maintenance Scheduling
-	EnvWarmupWait                 = "NTPU_WARMUP_WAIT"
-	EnvWarmupMaxWait              = "NTPU_WARMUP_MAX_WAIT"
+	EnvWarmupWait    = "NTPU_WARMUP_WAIT"
+	EnvWarmupMaxWait = "NTPU_WARMUP_MAX_WAIT"
+	// EnvWarmupGracePeriod is the deprecated predecessor of EnvWarmupMaxWait.
+	// It is kept here solely to detect legacy deployments and emit a deprecation warning.
+	// Removed from documentation; only checked during config load.
+	EnvWarmupGracePeriod          = "NTPU_WARMUP_GRACE_PERIOD"
 	EnvMaintenanceRefreshInterval = "NTPU_MAINTENANCE_REFRESH_INTERVAL"
 	EnvMaintenanceCleanupInterval = "NTPU_MAINTENANCE_CLEANUP_INTERVAL"
 

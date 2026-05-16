@@ -139,7 +139,7 @@ func TestValidate(t *testing.T) {
 			errContains: "NTPU_SCRAPER_MAX_RETRIES",
 		},
 		{
-			name: "WaitForWarmup=true with WarmupMaxWait=0 is rejected",
+			name: "WaitForWarmup=true with WarmupMaxWait=0 is valid (waits indefinitely)",
 			cfg: &Config{
 				LineChannelToken:           "token",
 				LineChannelSecret:          "secret",
@@ -154,8 +154,7 @@ func TestValidate(t *testing.T) {
 				MaintenanceCleanupInterval: 24 * time.Hour,
 				Bot:                        newTestBotConfig(),
 			},
-			wantErr:     true,
-			errContains: "NTPU_WARMUP_MAX_WAIT",
+			wantErr: false,
 		},
 		// S3-compatible snapshot tests
 		{

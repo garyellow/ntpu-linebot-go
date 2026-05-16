@@ -96,6 +96,11 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	// via ContextHandler in package-level slog.*Context() calls.
 	slog.SetDefault(log.Logger)
 
+	// Emit deprecation warnings for renamed/removed environment variables.
+	for _, w := range cfg.DeprecationWarnings {
+		log.Warn(w)
+	}
+
 	log.Info("Initializing application")
 
 	// Log status of Optional Features
@@ -642,7 +647,7 @@ func (a *Application) readinessCheck(c *gin.Context) {
 			Debug("Readiness check: refresh in progress")
 		progress := gin.H{"elapsed_seconds": status.ElapsedSeconds}
 		if status.MaxWaitSeconds > 0 {
-			progress["timeout_seconds"] = status.MaxWaitSeconds
+			progress["max_wait_seconds"] = status.MaxWaitSeconds
 		}
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"status":   "not ready",
