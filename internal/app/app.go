@@ -642,7 +642,7 @@ func (a *Application) readinessCheck(c *gin.Context) {
 			Debug("Readiness check: refresh in progress")
 		progress := gin.H{"elapsed_seconds": status.ElapsedSeconds}
 		if status.MaxWaitSeconds > 0 {
-			progress["max_wait_seconds"] = status.MaxWaitSeconds
+			progress["timeout_seconds"] = status.MaxWaitSeconds
 		}
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"status":   "not ready",

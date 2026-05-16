@@ -53,7 +53,8 @@ type Config struct {
 	// NTPU_WARMUP_WAIT: if true, reject /webhook until warmup is ready (default: false)
 	// NTPU_WARMUP_MAX_WAIT: max duration to wait for warmup; 0 = wait indefinitely.
 	//   Governs /readyz (always) and /webhook (when NTPU_WARMUP_WAIT=true) — both stay 503 until
-	//   warmup completes or this duration elapses. (default: 0)
+	//   warmup completes or this duration elapses. (default: 10m)
+	//   Deprecated alias: NTPU_WARMUP_GRACE_PERIOD (honoured with a startup warning)
 	// NTPU_MAINTENANCE_REFRESH_INTERVAL: refresh interval (default: 24h)
 	// NTPU_MAINTENANCE_CLEANUP_INTERVAL: cleanup interval (default: 24h)
 	WaitForWarmup              bool          // If true, reject /webhook until warmup is ready
@@ -224,8 +225,8 @@ func Load() (*Config, error) {
 		},
 
 		// Maintenance Scheduling
-		WaitForWarmup:              getBoolEnv(EnvWarmupWait, false),
-		WarmupMaxWait:              getDurationEnv(EnvWarmupMaxWait, 0),
+		WaitForWarmup: getBoolEnv(EnvWarmupWait, false),
+		WarmupMaxWait: loadWarmupMaxWait(),
 		MaintenanceRefreshInterval: getDurationEnv(EnvMaintenanceRefreshInterval, MaintenanceRefreshIntervalDefault),
 		MaintenanceCleanupInterval: getDurationEnv(EnvMaintenanceCleanupInterval, MaintenanceCleanupIntervalDefault),
 
@@ -580,6 +581,25 @@ func getProvidersEnv(key string, defaultValue []string) []string {
 		return defaultValue
 	}
 	return result
+}
+
+// loadWarmupMaxWait reads NTPU_WARMUP_MAX_WAIT, falling back to the deprecated
+// NTPU_WARMUP_GRACE_PERIOD for a smooth upgrade migration.
+// Default: 10m (matches the previous NTPU_WARMUP_GRACE_PERIOD default, safe for production).
+func loadWarmupMaxWait() time.Duration {
+	if v := os.Getenv(EnvWarmupMaxWait); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+	}
+	// Backward compat: honour deprecated NTPU_WARMUP_GRACE_PERIOD with a startup warning.
+	if v := os.Getenv("NTPU_WARMUP_GRACE_PERIOD"); v != "" {
+		_, _ = fmt.Fprintln(os.Stderr, "[WARN] config: NTPU_WARMUP_GRACE_PERIOD is deprecated; rename it to NTPU_WARMUP_MAX_WAIT")
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+	}
+	return 10 * time.Minute // safe default: matches previous NTPU_WARMUP_GRACE_PERIOD default
 }
 
 // getDefaultDataDir returns platform-specific default data directory

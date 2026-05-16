@@ -85,12 +85,12 @@ GET /readyz
   "reason": "data refresh in progress",
   "progress": {
     "elapsed_seconds": 125,
-    "max_wait_seconds": 1800
+    "timeout_seconds": 1800
   }
 }
 ```
 
-> 注意：`max_wait_seconds` 欄位只在 `NTPU_WARMUP_MAX_WAIT` 設定為非零值時才會出現（預設為 `0`，欄位省略）。
+> 注意：`timeout_seconds` 欄位只在 `NTPU_WARMUP_MAX_WAIT` 設定為非零值時才會出現（預設為 `10m`，欄位值為 600）。
 
 **檢查項目**:
 - ✅ 資料庫連線（Ping 測試）

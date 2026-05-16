@@ -20,7 +20,7 @@ type ReadinessStatus struct {
 	Ready          bool   `json:"ready"`
 	Reason         string `json:"reason,omitempty"`
 	ElapsedSeconds int    `json:"elapsed_seconds,omitempty"`
-	MaxWaitSeconds int    `json:"max_wait_seconds,omitempty"`
+	MaxWaitSeconds int    `json:"timeout_seconds,omitempty"` // JSON key kept as timeout_seconds for API backward compat
 }
 
 // NewReadinessState creates a new ReadinessState with the given max-wait duration.
