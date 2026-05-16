@@ -61,9 +61,13 @@ func (db *DB) SaveStudentsBatch(ctx context.Context, students []*Student) error 
 	`
 
 	start := time.Now()
-	cachedAt := time.Now().Unix()
+	now := time.Now().Unix()
 	err := db.ExecBatchContext(ctx, query, func(stmt *sql.Stmt) error {
 		for _, student := range students {
+			cachedAt := student.CachedAt
+			if cachedAt == 0 {
+				cachedAt = now
+			}
 			if _, err := stmt.ExecContext(ctx, student.ID, student.Name, student.Department, student.Year, cachedAt); err != nil {
 				slog.ErrorContext(ctx, "Failed to save student in batch",
 					"student_id", student.ID,
@@ -327,9 +331,13 @@ func (db *DB) SaveContactsBatch(ctx context.Context, contacts []*Contact) error 
 			cached_at = excluded.cached_at
 	`
 
-	cachedAt := time.Now().Unix()
+	now := time.Now().Unix()
 	return db.ExecBatchContext(ctx, query, func(stmt *sql.Stmt) error {
 		for _, contact := range contacts {
+			cachedAt := contact.CachedAt
+			if cachedAt == 0 {
+				cachedAt = now
+			}
 			_, err := stmt.ExecContext(ctx,
 				contact.UID,
 				contact.Type,
@@ -679,9 +687,14 @@ func (db *DB) SaveCoursesBatch(ctx context.Context, courses []*Course) error {
 			cached_at = excluded.cached_at
 	`
 
-	cachedAt := time.Now().Unix()
+	now := time.Now().Unix()
 	return db.ExecBatchContext(ctx, query, func(stmt *sql.Stmt) error {
 		for _, course := range courses {
+			cachedAt := course.CachedAt
+			if cachedAt == 0 {
+				cachedAt = now
+			}
+
 			teachersJSON, err := json.Marshal(course.Teachers)
 			if err != nil {
 				return fmt.Errorf("failed to marshal teachers for course %s: %w", course.UID, err)
@@ -1215,9 +1228,14 @@ func (db *DB) SaveHistoricalCoursesBatch(ctx context.Context, courses []*Course)
 			cached_at = excluded.cached_at
 	`
 
-	cachedAt := time.Now().Unix()
+	now := time.Now().Unix()
 	return db.ExecBatchContext(ctx, query, func(stmt *sql.Stmt) error {
 		for _, course := range courses {
+			cachedAt := course.CachedAt
+			if cachedAt == 0 {
+				cachedAt = now
+			}
+
 			teachersJSON, err := json.Marshal(course.Teachers)
 			if err != nil {
 				return fmt.Errorf("failed to marshal teachers for course %s: %w", course.UID, err)

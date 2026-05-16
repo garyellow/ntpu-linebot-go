@@ -10,7 +10,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/garyellow/ntpu-linebot-go/internal/r2client"
+	"github.com/garyellow/ntpu-linebot-go/internal/s3client"
 )
 
 // State stores the last successful run timestamps.
@@ -20,33 +20,33 @@ type State struct {
 	UpdatedAt   int64 `json:"updated_at"`
 }
 
-type r2ScheduleClient interface {
+type s3ScheduleClient interface {
 	Download(ctx context.Context, key string) (io.ReadCloser, string, error)
 	PutObjectIfNotExists(ctx context.Context, key string, body io.Reader, contentType string) (bool, string, error)
 	PutObjectIfMatch(ctx context.Context, key string, body io.Reader, etag string, contentType string) (bool, string, error)
 }
 
-// R2ScheduleStore persists maintenance state in R2.
-type R2ScheduleStore struct {
-	client         r2ScheduleClient
+// S3ScheduleStore persists maintenance state in S3-compatible storage.
+type S3ScheduleStore struct {
+	client         s3ScheduleClient
 	key            string
 	requestTimeout time.Duration
 }
 
-// NewR2ScheduleStore creates a new schedule store.
-func NewR2ScheduleStore(client r2ScheduleClient, key string, requestTimeout time.Duration) (*R2ScheduleStore, error) {
+// NewS3ScheduleStore creates a new schedule store.
+func NewS3ScheduleStore(client s3ScheduleClient, key string, requestTimeout time.Duration) (*S3ScheduleStore, error) {
 	if client == nil {
-		return nil, errors.New("maintenance: r2 client is required")
+		return nil, errors.New("maintenance: s3 client is required")
 	}
 	if key == "" {
 		return nil, errors.New("maintenance: schedule key is required")
 	}
-	return &R2ScheduleStore{client: client, key: key, requestTimeout: requestTimeout}, nil
+	return &S3ScheduleStore{client: client, key: key, requestTimeout: requestTimeout}, nil
 }
 
 // Load returns the current state and ETag. exists=false when the object is missing.
 // Retries transient errors up to 3 times; context cancellation is not retried.
-func (s *R2ScheduleStore) Load(ctx context.Context) (State, string, bool, error) {
+func (s *S3ScheduleStore) Load(ctx context.Context) (State, string, bool, error) {
 	const maxRetries = 3
 	var lastErr error
 
@@ -78,7 +78,7 @@ func (s *R2ScheduleStore) Load(ctx context.Context) (State, string, bool, error)
 }
 
 // loadOnce performs a single load attempt.
-func (s *R2ScheduleStore) loadOnce(ctx context.Context) (State, string, bool, error) {
+func (s *S3ScheduleStore) loadOnce(ctx context.Context) (State, string, bool, error) {
 	readCtx := ctx
 	cancel := func() {}
 	if s.requestTimeout > 0 {
@@ -87,7 +87,7 @@ func (s *R2ScheduleStore) loadOnce(ctx context.Context) (State, string, bool, er
 	body, etag, err := s.client.Download(readCtx, s.key)
 	if err != nil {
 		cancel()
-		if errors.Is(err, r2client.ErrNotFound) {
+		if errors.Is(err, s3client.ErrNotFound) {
 			return State{}, "", false, nil
 		}
 		return State{}, "", false, fmt.Errorf("maintenance: download state: %w", err)
@@ -107,7 +107,7 @@ func (s *R2ScheduleStore) loadOnce(ctx context.Context) (State, string, bool, er
 }
 
 // Ensure returns the state and ETag, creating the object if needed.
-func (s *R2ScheduleStore) Ensure(ctx context.Context) (State, string, error) {
+func (s *S3ScheduleStore) Ensure(ctx context.Context) (State, string, error) {
 	state, etag, exists, err := s.Load(ctx)
 	if err != nil {
 		return State{}, "", err
@@ -147,8 +147,9 @@ func (s *R2ScheduleStore) Ensure(ctx context.Context) (State, string, error) {
 	return state, etag, nil
 }
 
-// Update applies an update with optimistic concurrency (ETag compare-and-swap).
-func (s *R2ScheduleStore) Update(ctx context.Context, updater func(*State)) error {
+// Update applies an ETag compare-and-swap update to the shared schedule state.
+// This CAS guard is separate from the leader lease used for refresh/cleanup work.
+func (s *S3ScheduleStore) Update(ctx context.Context, updater func(*State)) error {
 	for range 3 {
 		state, etag, err := s.Ensure(ctx)
 		if err != nil {

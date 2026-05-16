@@ -85,21 +85,22 @@ type Config struct {
 	OpenAIIntentModels   []string
 	OpenAIExpanderModels []string
 
-	// 2. R2 Snapshot Sync (Distributed Warmup)
-	// Flag: NTPU_R2_ENABLED
+	// 2. S3-Compatible Snapshot Sync (Distributed Warmup)
+	// Flag: NTPU_S3_ENABLED
 	// Enables distributed snapshot synchronization for multi-node deployments.
-	// Polling interval is configured via NTPU_R2_SNAPSHOT_POLL_INTERVAL (default: 15m)
-	R2Enabled              bool
-	R2AccountID            string        // Cloudflare Account ID
-	R2AccessKeyID          string        // R2 Access Key ID
-	R2SecretKey            string        // R2 Secret Access Key
-	R2BucketName           string        // R2 Bucket name
-	R2SnapshotKey          string        // Object key for snapshot (default: snapshots/cache.db.zst)
-	R2LockKey              string        // Object key for distributed lock (default: locks/leader.json)
-	R2LockTTL              time.Duration // TTL for distributed lock (default: 1h)
-	R2SnapshotPollInterval time.Duration // Interval for polling R2 snapshots (default: 15m)
-	R2DeltaPrefix          string        // Prefix for delta logs (default: deltas)
-	R2ScheduleKey          string        // Object key for maintenance schedule state (default: schedules/maintenance.json)
+	// Polling interval is configured via NTPU_S3_SNAPSHOT_POLL_INTERVAL (default: 15m)
+	S3Enabled              bool
+	S3EndpointURL          string        // S3-compatible endpoint URL
+	S3Region               string        // S3 signing region (default: us-east-1)
+	S3AccessKeyID          string        // S3-compatible access key ID
+	S3SecretKey            string        // S3-compatible secret access key
+	S3BucketName           string        // S3-compatible bucket name
+	S3SnapshotKey          string        // Object key for snapshot (default: snapshots/cache.db.zst)
+	S3LockKey              string        // Object key for leader lease lock (default: locks/leader.json)
+	S3LockTTL              time.Duration // TTL for leader lease lock (default: 1h)
+	S3SnapshotPollInterval time.Duration // Interval for polling S3 snapshots (default: 15m)
+	S3DeltaPrefix          string        // Prefix for delta logs (default: deltas)
+	S3ScheduleKey          string        // Object key for maintenance schedule state (default: schedules/maintenance.json)
 
 	// 3. Sentry Error Tracking
 	// Flag: NTPU_SENTRY_ENABLED
@@ -243,18 +244,19 @@ func Load() (*Config, error) {
 		OpenAIIntentModels:     getModelsEnv(EnvOpenAIIntentModels),
 		OpenAIExpanderModels:   getModelsEnv(EnvOpenAIExpanderModels),
 
-		// 2. R2 Snapshot Storage
-		R2Enabled:              getBoolEnv(EnvR2Enabled, false),
-		R2AccountID:            getEnv(EnvR2AccountID, ""),
-		R2AccessKeyID:          getEnv(EnvR2AccessKeyID, ""),
-		R2SecretKey:            getEnv(EnvR2SecretAccessKey, ""),
-		R2BucketName:           getEnv(EnvR2BucketName, ""),
-		R2SnapshotKey:          getEnv(EnvR2SnapshotKey, "snapshots/cache.db.zst"),
-		R2LockKey:              getEnv(EnvR2LockKey, "locks/leader.json"),
-		R2LockTTL:              getDurationEnv(EnvR2LockTTL, time.Hour),
-		R2SnapshotPollInterval: getDurationEnv(EnvR2SnapshotPollInterval, R2SnapshotPollIntervalDefault),
-		R2DeltaPrefix:          getEnv(EnvR2DeltaPrefix, "deltas"),
-		R2ScheduleKey:          getEnv(EnvR2ScheduleKey, "schedules/maintenance.json"),
+		// 2. S3-Compatible Snapshot Storage
+		S3Enabled:              getBoolEnv(EnvS3Enabled, false),
+		S3EndpointURL:          getEnv(EnvS3Endpoint, ""),
+		S3Region:               getEnv(EnvS3Region, "us-east-1"),
+		S3AccessKeyID:          getEnv(EnvS3AccessKeyID, ""),
+		S3SecretKey:            getEnv(EnvS3SecretAccessKey, ""),
+		S3BucketName:           getEnv(EnvS3BucketName, ""),
+		S3SnapshotKey:          getEnv(EnvS3SnapshotKey, "snapshots/cache.db.zst"),
+		S3LockKey:              getEnv(EnvS3LockKey, "locks/leader.json"),
+		S3LockTTL:              getDurationEnv(EnvS3LockTTL, time.Hour),
+		S3SnapshotPollInterval: getDurationEnv(EnvS3SnapshotPollInterval, S3SnapshotPollIntervalDefault),
+		S3DeltaPrefix:          getEnv(EnvS3DeltaPrefix, "deltas"),
+		S3ScheduleKey:          getEnv(EnvS3ScheduleKey, "schedules/maintenance.json"),
 
 		// 3. Sentry Error Tracking
 		SentryEnabled:          getBoolEnv(EnvSentryEnabled, false),
@@ -358,37 +360,43 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	// 2. R2 Validation (only if enabled)
-	if c.IsR2Enabled() {
-		if c.R2AccountID == "" {
-			errs = append(errs, errors.New("NTPU_R2_ACCOUNT_ID is required when NTPU_R2_ENABLED=true"))
+	// 2. S3-Compatible Validation (only if enabled)
+	if c.IsS3Enabled() {
+		if c.S3EndpointURL == "" {
+			errs = append(errs, errors.New("NTPU_S3_ENDPOINT is required when NTPU_S3_ENABLED=true"))
 		}
-		if c.R2AccessKeyID == "" {
-			errs = append(errs, errors.New("NTPU_R2_ACCESS_KEY_ID is required when NTPU_R2_ENABLED=true"))
+		if c.S3EndpointURL != "" && !strings.HasPrefix(c.S3EndpointURL, "http://") && !strings.HasPrefix(c.S3EndpointURL, "https://") {
+			errs = append(errs, fmt.Errorf("NTPU_S3_ENDPOINT must start with http:// or https://, got %q", c.S3EndpointURL))
 		}
-		if c.R2SecretKey == "" {
-			errs = append(errs, errors.New("NTPU_R2_SECRET_ACCESS_KEY is required when NTPU_R2_ENABLED=true"))
+		if c.S3Region == "" {
+			errs = append(errs, errors.New("NTPU_S3_REGION must not be empty when NTPU_S3_ENABLED=true"))
 		}
-		if c.R2BucketName == "" {
-			errs = append(errs, errors.New("NTPU_R2_BUCKET_NAME is required when NTPU_R2_ENABLED=true"))
+		if c.S3AccessKeyID == "" {
+			errs = append(errs, errors.New("NTPU_S3_ACCESS_KEY_ID is required when NTPU_S3_ENABLED=true"))
 		}
-		if c.R2SnapshotKey == "" {
-			errs = append(errs, errors.New("NTPU_R2_SNAPSHOT_KEY must not be empty when NTPU_R2_ENABLED=true"))
+		if c.S3SecretKey == "" {
+			errs = append(errs, errors.New("NTPU_S3_SECRET_ACCESS_KEY is required when NTPU_S3_ENABLED=true"))
 		}
-		if c.R2LockKey == "" {
-			errs = append(errs, errors.New("NTPU_R2_LOCK_KEY must not be empty when NTPU_R2_ENABLED=true"))
+		if c.S3BucketName == "" {
+			errs = append(errs, errors.New("NTPU_S3_BUCKET_NAME is required when NTPU_S3_ENABLED=true"))
 		}
-		if c.R2LockTTL <= 0 {
-			errs = append(errs, fmt.Errorf("NTPU_R2_LOCK_TTL must be positive, got %v", c.R2LockTTL))
+		if c.S3SnapshotKey == "" {
+			errs = append(errs, errors.New("NTPU_S3_SNAPSHOT_KEY must not be empty when NTPU_S3_ENABLED=true"))
 		}
-		if c.R2SnapshotPollInterval <= 0 {
-			errs = append(errs, fmt.Errorf("NTPU_R2_SNAPSHOT_POLL_INTERVAL must be positive, got %v", c.R2SnapshotPollInterval))
+		if c.S3LockKey == "" {
+			errs = append(errs, errors.New("NTPU_S3_LOCK_KEY must not be empty when NTPU_S3_ENABLED=true"))
 		}
-		if c.R2DeltaPrefix == "" {
-			errs = append(errs, errors.New("NTPU_R2_DELTA_PREFIX must not be empty when NTPU_R2_ENABLED=true"))
+		if c.S3LockTTL < S3LockMinimumTTL {
+			errs = append(errs, fmt.Errorf("NTPU_S3_LOCK_TTL must be at least %v, got %v", S3LockMinimumTTL, c.S3LockTTL))
 		}
-		if c.R2ScheduleKey == "" {
-			errs = append(errs, errors.New("NTPU_R2_SCHEDULE_KEY must not be empty when NTPU_R2_ENABLED=true"))
+		if c.S3SnapshotPollInterval <= 0 {
+			errs = append(errs, fmt.Errorf("NTPU_S3_SNAPSHOT_POLL_INTERVAL must be positive, got %v", c.S3SnapshotPollInterval))
+		}
+		if c.S3DeltaPrefix == "" {
+			errs = append(errs, errors.New("NTPU_S3_DELTA_PREFIX must not be empty when NTPU_S3_ENABLED=true"))
+		}
+		if c.S3ScheduleKey == "" {
+			errs = append(errs, errors.New("NTPU_S3_SCHEDULE_KEY must not be empty when NTPU_S3_ENABLED=true"))
 		}
 	}
 
@@ -445,9 +453,9 @@ func (c *Config) IsLLMEnabled() bool {
 	return c.LLMEnabled
 }
 
-// IsR2Enabled returns true if R2 snapshot storage is enabled.
-func (c *Config) IsR2Enabled() bool {
-	return c.R2Enabled
+// IsS3Enabled returns true if S3-compatible snapshot storage is enabled.
+func (c *Config) IsS3Enabled() bool {
+	return c.S3Enabled
 }
 
 // IsSentryEnabled returns true if Sentry error tracking is enabled.
@@ -582,10 +590,7 @@ func (c *Config) SQLitePath() string {
 	return filepath.Join(c.DataDir, "cache.db")
 }
 
-// R2Endpoint returns the R2 S3-compatible endpoint URL.
-func (c *Config) R2Endpoint() string {
-	if c.R2AccountID == "" {
-		return ""
-	}
-	return "https://" + c.R2AccountID + ".r2.cloudflarestorage.com"
+// S3Endpoint returns the configured S3-compatible endpoint URL.
+func (c *Config) S3Endpoint() string {
+	return c.S3EndpointURL
 }

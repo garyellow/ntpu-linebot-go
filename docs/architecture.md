@@ -197,35 +197,56 @@ User Query → Bot Module → Repository Layer
                         Return to User
 ```
 
-#### 3. R2 快照同步（可選）
+#### 3. S3-compatible 快照同步（可選）
 
 > 目的：多節點部署時，避免重複刷新任務，並確保資料庫一致。
 
 ```
 Startup (all nodes)
-    └─ Download latest snapshot from R2 → Open DB
+    └─ Download latest snapshot from S3-compatible storage → Open DB
 
 Cache Miss (any node)
-    └─ Scrape → Append delta log (R2)
+    └─ Scrape → Append delta log (S3-compatible storage)
 
 Refresh/Cleanup Task (leader only)
-    └─ Acquire R2 lock → Refresh/Cleanup → Merge delta logs → Upload snapshot
+    └─ Acquire leader lease → Refresh/Cleanup → Renew lease → Merge delta logs
+         → Renew lease → Conditional snapshot upload → Delete merged delta logs
 
 Follower Nodes
     └─ Poll snapshot ETag → Download → Hot-swap DB
 ```
 
-- **Leader election**：使用 R2 物件條件寫入（ETag）實作分散式鎖。
+- **必要相容性**：物件儲存端點必須支援 `HeadObject`、`GetObject`、`ListObjectsV2`、`DeleteObject`，以及 `PutObject` 搭配 `If-Match` / `If-None-Match`。這些是 HTTP/S3 條件請求；同步流程不依賴 Object Lock、Versioning、Lifecycle、conditional delete、廠商專有 header 或其他廠商專有功能。
+- **鎖定模型**：refresh/cleanup 是悲觀式互斥工作，使用 leader lease lock 避免多個節點同時爬蟲；物件更新則使用 `If-Match` / `If-None-Match` 條件寫入作為 CAS primitive，避免 lost update。
+- **Leader lease**：建立 lease 使用 `If-None-Match:*`，steal/renew/release 使用 `If-Match:<etag>` 做 compare-and-swap。條件寫入失敗（例如 HTTP 409/412）代表其他 writer 贏得競態，會被視為正常 lost race。
+- **Lease 驗證與取消**：leader 在合併 delta log 前與上傳快照前都會重新 renew lease；背景續約若失敗或 lease 遺失，會取消正在執行的 refresh/cleanup context，避免舊 leader 繼續爬蟲或上傳快照。
+- **Fencing 邊界**：S3-compatible storage 無法一致提供單調遞增 fencing token；本系統改用「寫入前 renew leader lease」加上「快照物件 ETag CAS」做邊界防護。若 lease 已被偷走，renew 會失敗並取消工作；若快照已被其他 leader 更新，snapshot upload 會因 ETag 不符失敗。
+- **Lock release**：釋放 lease 不是無條件刪除 object，而是用目前 ETag CAS 更新為已過期狀態，避免 read-then-delete 的 TOCTOU 競態刪到新 owner 的 lease。
+- **Snapshot fencing**：快照上傳本身也使用條件寫入；已有快照時用 `If-Match:<etag>`，尚無快照時用 `If-None-Match:*`，避免任何非預期雙寫覆蓋新快照。
 - **啟動鎖判斷**：若啟動成功載入快照，直接服務且等待輪詢更新；無快照時才進入 leader 競爭與首次刷新。
 - **首次刷新**：若啟動成功載入快照則略過；無快照時由 leader 執行。
 - **Hot-swap**：新快照下載後，透過 HotSwapDB 安全切換。
-- **Delta Log**：cache miss 的抓取結果以 append-only 形式寫入 R2，leader 合併後再上傳快照。
-- **啟用條件**：`NTPU_R2_ENABLED=true` 並提供 R2 憑證與 bucket。
+- **Delta Log**：cache miss 的抓取結果以 append-only 形式寫入 S3-compatible storage，leader 合併後先保留 delta object，只有在包含這些 delta 的快照成功上傳後才刪除。
+- **即時 cache miss 不搶 leader lease**：使用者查詢缺資料時，任一節點可做小範圍即時爬取，避免為每次查詢等待全域鎖；結果會先寫 local DB 並 append delta log，下一次 leader snapshot 會收斂到所有節點。全量 refresh、cleanup、syllabus refresh 才是 leader-only 工作。
+- **條件刪除相容性**：不同 S3-compatible 服務對 conditional delete 支援不一致；因此 lock release 採用 `PutObject` 條件更新為過期狀態，而不是依賴條件刪除。
+- **啟用條件**：`NTPU_S3_ENABLED=true`，並提供 `NTPU_S3_ENDPOINT` / `NTPU_S3_REGION` / `NTPU_S3_ACCESS_KEY_ID` / `NTPU_S3_SECRET_ACCESS_KEY` / `NTPU_S3_BUCKET_NAME`。
 - **快照格式**：SQLite 快照以 zstd 壓縮（.zst），下載後先落地暫存檔，再原子替換。
 - **連線關閉延遲**：Hot-swap 後會延遲關閉舊連線，降低中斷風險。
-- **請求超時**：每個 R2 操作有固定 timeout，避免輪詢或啟動長時間卡住。
-- **注意事項**：多容器請避免共享同一個 SQLite 檔案，請使用 R2 快照同步。
+- **Provider 設定**：AWS S3 endpoint 可用 `https://s3.<region>.amazonaws.com`；MinIO/Ceph RGW 依部署端點設定，常見 region 為 `us-east-1`；其他 S3-compatible provider 依實際 endpoint 和 signing region 設定。不同 provider 的條件寫入支援可能隨版本或設定不同，部署前需用同一組 conditional write 行為驗證。
+- **請求超時**：每個 S3 操作有固定 timeout，避免輪詢或啟動長時間卡住。
+- **注意事項**：多容器請避免共享同一個 SQLite 檔案，請使用 S3-compatible 快照同步。
 - **WAL 維護**：VACUUM 後需執行 wal_checkpoint(TRUNCATE)，並建議搭配 optimize，確保 WAL 空間回收。
+
+資料更新路徑整理：
+
+| 路徑 | 觸發者 | 是否 leader-only | 更新內容 | 收斂方式 |
+| --- | --- | --- | --- | --- |
+| 啟動快照下載 | 所有節點 | 否 | 下載最新 SQLite snapshot | ETag poll + HotSwapDB |
+| 定期 refresh | leader | 是 | contacts、courses、programs、syllabi，首次可含 students | lease renew + snapshot ETag CAS |
+| 定期 cleanup | leader | 是 | TTL 資料清理、VACUUM、token cleanup | lease renew + snapshot ETag CAS |
+| 使用者 cache miss | 任一節點 | 否 | student/course/contact/historical course 小範圍補資料 | local DB + append-only delta log |
+| 學程查詢 | 任一節點 | 否 | 讀取 cached programs/course_programs | 等下一次 leader refresh 更新 |
+| sticker 載入 | 各節點啟動 | 否 | 本地 sticker cache | 不進 delta log，隨 snapshot/本地 DB 保存 |
 
 ## Logging 政策（生產環境）
 

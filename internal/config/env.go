@@ -60,18 +60,19 @@ const (
 	EnvOpenAIIntentModels   = "NTPU_OPENAI_INTENT_MODELS"
 	EnvOpenAIExpanderModels = "NTPU_OPENAI_EXPANDER_MODELS"
 
-	// R2 Snapshot Feature
-	EnvR2Enabled              = "NTPU_R2_ENABLED"
-	EnvR2AccountID            = "NTPU_R2_ACCOUNT_ID"
-	EnvR2AccessKeyID          = "NTPU_R2_ACCESS_KEY_ID"
-	EnvR2SecretAccessKey      = "NTPU_R2_SECRET_ACCESS_KEY"
-	EnvR2BucketName           = "NTPU_R2_BUCKET_NAME"
-	EnvR2SnapshotKey          = "NTPU_R2_SNAPSHOT_KEY"
-	EnvR2LockKey              = "NTPU_R2_LOCK_KEY"
-	EnvR2LockTTL              = "NTPU_R2_LOCK_TTL"
-	EnvR2SnapshotPollInterval = "NTPU_R2_SNAPSHOT_POLL_INTERVAL"
-	EnvR2DeltaPrefix          = "NTPU_R2_DELTA_PREFIX"
-	EnvR2ScheduleKey          = "NTPU_R2_SCHEDULE_KEY"
+	// S3-Compatible Snapshot Feature
+	EnvS3Enabled              = "NTPU_S3_ENABLED"
+	EnvS3Endpoint             = "NTPU_S3_ENDPOINT"
+	EnvS3Region               = "NTPU_S3_REGION"
+	EnvS3AccessKeyID          = "NTPU_S3_ACCESS_KEY_ID"
+	EnvS3SecretAccessKey      = "NTPU_S3_SECRET_ACCESS_KEY"
+	EnvS3BucketName           = "NTPU_S3_BUCKET_NAME"
+	EnvS3SnapshotKey          = "NTPU_S3_SNAPSHOT_KEY"
+	EnvS3LockKey              = "NTPU_S3_LOCK_KEY"
+	EnvS3LockTTL              = "NTPU_S3_LOCK_TTL"
+	EnvS3SnapshotPollInterval = "NTPU_S3_SNAPSHOT_POLL_INTERVAL"
+	EnvS3DeltaPrefix          = "NTPU_S3_DELTA_PREFIX"
+	EnvS3ScheduleKey          = "NTPU_S3_SCHEDULE_KEY"
 
 	// Sentry Feature
 	EnvSentryEnabled          = "NTPU_SENTRY_ENABLED"

@@ -290,22 +290,31 @@ task compose:up
 
 如果你是單機或簡單部署，這些都不是必填；如果你要長期營運、觀察錯誤或集中收 log，再啟用即可。
 
-#### 多節點與 R2 快照同步
+#### 多節點與 S3-compatible 快照同步
 
-若你是多節點或多容器部署，建議啟用 R2 快照同步：
+若你是多節點或多容器部署，建議啟用 S3-compatible 快照同步：
 
-- `NTPU_R2_ENABLED=true`
-- `NTPU_R2_ACCOUNT_ID`
-- `NTPU_R2_ACCESS_KEY_ID`
-- `NTPU_R2_SECRET_ACCESS_KEY`
-- `NTPU_R2_BUCKET_NAME`
+- `NTPU_S3_ENABLED=true`
+- `NTPU_S3_ENDPOINT`
+- `NTPU_S3_REGION`
+- `NTPU_S3_ACCESS_KEY_ID`
+- `NTPU_S3_SECRET_ACCESS_KEY`
+- `NTPU_S3_BUCKET_NAME`
+
+常見 endpoint 設定：AWS S3 使用 `https://s3.<region>.amazonaws.com` 並填 bucket region；MinIO 常見為 `http://localhost:9000` 並使用 `us-east-1` 或部署指定 region；Ceph RGW 與其他 S3-compatible provider 依實際 endpoint 和 signing region 設定。
+
+相容性需求：端點需支援 `HeadObject`、`GetObject`、`ListObjectsV2`、`DeleteObject`，以及 `PutObject` 搭配 `If-Match` / `If-None-Match` 條件寫入。全量爬蟲 refresh/cleanup 採用 leader lease lock 做悲觀式互斥；使用者 cache miss 則允許任一節點小範圍即時補資料，並用 append-only delta log 在下一次 leader snapshot 收斂。快照與排程狀態透過 ETag CAS 避免 lost update。
 
 啟用後會有這些效果：
 
 - 啟動時可先下載 SQLite 快照，減少冷啟動刷新時間
-- 多節點可共享刷新進度與清理排程
+- 多節點可共享刷新進度與清理排程，並透過 leader lease 避免重複刷新
+- lease 續約失敗時會取消正在執行的 refresh/cleanup，避免失去 leader 身分後繼續爬蟲或上傳
+- 快照與排程狀態透過 ETag 條件寫入避免 lost update
 - follower 可輪詢新快照並熱切換資料
-- 不建議多容器直接共用同一個 SQLite 檔案，較建議透過 R2 同步
+- cache miss 結果會先寫入 append-only delta log，leader 成功上傳新快照後才刪除已合併 delta
+- 不依賴 Object Lock、Versioning、Lifecycle、conditional delete 或單一供應商專有 header
+- 不建議多容器直接共用同一個 SQLite 檔案，較建議透過 S3-compatible 物件儲存同步
 
 #### 多點部署識別
 
@@ -318,9 +327,10 @@ task compose:up
 
 #### 更多環境變數與細節
 
-更完整的設定請看：
+完整環境變數說明（含預設值與限制）請見 [docs/configuration.md](docs/configuration.md)。
 
 - [環境變數範例](.env.example)
+- [環境變數參考](docs/configuration.md)
 - [Docker Compose 說明](deployments/README.md)
 - [API 文件](docs/API.md)
 - [架構說明](docs/architecture.md)
@@ -330,6 +340,7 @@ task compose:up
 ### 文件索引
 
 - [環境變數範例](.env.example)
+- [環境變數參考](docs/configuration.md)
 - [Docker Compose 說明](deployments/README.md)
 - [API 文件](docs/API.md)
 - [架構說明](docs/architecture.md)

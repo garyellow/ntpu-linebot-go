@@ -18,7 +18,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/klauspost/compress v1.18.6
 	github.com/line/line-bot-sdk-go/v8 v8.20.0
-	github.com/openai/openai-go/v3 v3.35.0
+	github.com/openai/openai-go/v3 v3.36.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/samber/slog-betterstack v1.4.4
 	github.com/stretchr/testify v1.11.1
@@ -113,7 +113,7 @@ require (
 	google.golang.org/genproto v0.0.0-20260511170946-3700d4141b60 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260511170946-3700d4141b60 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260511170946-3700d4141b60 // indirect
-	google.golang.org/grpc v1.81.0 // indirect
+	google.golang.org/grpc v1.81.1 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/gc/v3 v3.1.3 // indirect

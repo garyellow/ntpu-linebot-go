@@ -56,10 +56,15 @@ const (
 	HotSwapCloseGracePeriod = 5 * time.Second
 )
 
-// R2 timeouts
+// S3-compatible object storage timeouts
 const (
-	// R2RequestTimeout is the timeout for a single R2 request.
-	R2RequestTimeout = 60 * time.Second
+	// S3RequestTimeout is the timeout for a single S3 request.
+	S3RequestTimeout = 60 * time.Second
+
+	// S3LockMinimumTTL is the minimum safe TTL for the leader lease.
+	// The renew loop runs at TTL/3 with a 10s minimum interval, so values below
+	// 30s can expire before the first renewal attempt.
+	S3LockMinimumTTL = 30 * time.Second
 )
 
 // Background job intervals
@@ -70,8 +75,8 @@ const (
 	// MaintenanceCleanupIntervalDefault is the default interval for cleanup tasks.
 	MaintenanceCleanupIntervalDefault = 24 * time.Hour
 
-	// R2SnapshotPollIntervalDefault is the default interval for polling R2 snapshots.
-	R2SnapshotPollIntervalDefault = 15 * time.Minute
+	// S3SnapshotPollIntervalDefault is the default interval for polling S3 snapshots.
+	S3SnapshotPollIntervalDefault = 15 * time.Minute
 
 	// MetricsUpdateInterval is how often cache size metrics are updated.
 	MetricsUpdateInterval = 5 * time.Minute

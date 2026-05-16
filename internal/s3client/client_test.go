@@ -1,27 +1,33 @@
-package r2client
+package s3client
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/aws/smithy-go"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
-func TestLockInfo_JSON(t *testing.T) {
+func TestLeaseInfo_JSON(t *testing.T) {
 	t.Parallel()
 
-	info := LockInfo{
+	info := LeaseInfo{
 		Owner:     "test-owner-123",
 		ExpiresAt: time.Date(2025, 1, 20, 10, 30, 0, 0, time.UTC),
 	}
 
 	data := `{"owner":"test-owner-123","expires_at":"2025-01-20T10:30:00Z"}`
-	var parsed LockInfo
+	var parsed LeaseInfo
 	if err := json.Unmarshal([]byte(data), &parsed); err != nil {
 		t.Fatalf("Failed to parse JSON: %v", err)
 	}
@@ -43,7 +49,7 @@ func TestCompressDecompress(t *testing.T) {
 	decompressedPath := filepath.Join(tmpDir, "decompressed.txt")
 
 	// Create test data
-	testData := strings.Repeat("Hello, R2 Snapshot Compression Test! ", 1000)
+	testData := strings.Repeat("Hello, S3 Snapshot Compression Test! ", 1000)
 	if err := os.WriteFile(srcPath, []byte(testData), 0o644); err != nil {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
@@ -167,17 +173,215 @@ func TestDecompressStream_Error(t *testing.T) {
 	}
 }
 
-func TestDistributedLock_NewGeneratesUniqueID(t *testing.T) {
+func TestLeaseLock_NewGeneratesUniqueID(t *testing.T) {
 	t.Parallel()
 
-	// This test verifies that NewDistributedLock generates unique owner IDs
-	// We can't test actual locking without a real R2 connection
+	// This test verifies that lease locks use unique owner IDs.
+	// We can't test actual locking without a real S3-compatible endpoint
 
-	lock1 := &DistributedLock{ownerID: "id1"}
-	lock2 := &DistributedLock{ownerID: "id2"}
+	lock1 := &LeaseLock{ownerID: "id1"}
+	lock2 := &LeaseLock{ownerID: "id2"}
 
 	if lock1.OwnerID() == lock2.OwnerID() {
 		t.Error("Expected different owner IDs for different locks")
+	}
+}
+
+type fakeLockClient struct {
+	exists      bool
+	etagCounter int
+	etag        string
+	body        []byte
+}
+
+func (f *fakeLockClient) Download(_ context.Context, _ string) (io.ReadCloser, string, error) {
+	if !f.exists {
+		return nil, "", ErrNotFound
+	}
+	return io.NopCloser(bytes.NewReader(f.body)), f.etag, nil
+}
+
+func (f *fakeLockClient) PutObjectIfNotExists(_ context.Context, _ string, body io.Reader, _ string) (bool, string, error) {
+	if f.exists {
+		return false, "", nil
+	}
+	data, _ := io.ReadAll(body)
+	f.body = data
+	f.exists = true
+	f.etagCounter++
+	f.etag = fmt.Sprintf("etag-%d", f.etagCounter)
+	return true, f.etag, nil
+}
+
+func (f *fakeLockClient) PutObjectIfMatch(_ context.Context, _ string, body io.Reader, etag string, _ string) (bool, string, error) {
+	if !f.exists || etag != f.etag {
+		return false, "", nil
+	}
+	data, _ := io.ReadAll(body)
+	f.body = data
+	f.etagCounter++
+	f.etag = fmt.Sprintf("etag-%d", f.etagCounter)
+	return true, f.etag, nil
+}
+
+type createRaceLockClient struct {
+	fakeLockClient
+	createCalls int
+}
+
+func (f *createRaceLockClient) Download(_ context.Context, _ string) (io.ReadCloser, string, error) {
+	return nil, "", ErrNotFound
+}
+
+func (f *createRaceLockClient) PutObjectIfNotExists(ctx context.Context, _ string, body io.Reader, _ string) (bool, string, error) {
+	f.createCalls++
+	if f.createCalls == 1 {
+		return false, "", nil
+	}
+	return f.fakeLockClient.PutObjectIfNotExists(ctx, "", body, "")
+}
+
+func (f *createRaceLockClient) PutObjectIfMatch(_ context.Context, _ string, _ io.Reader, _ string, _ string) (bool, string, error) {
+	return false, "", errors.New("PutObjectIfMatch should not be called")
+}
+
+func TestLeaseLockAcquireCreatesWhenLeaseDisappearsDuringRace(t *testing.T) {
+	t.Parallel()
+
+	client := &createRaceLockClient{}
+	lock := &LeaseLock{
+		client:  client,
+		key:     "locks/leader.json",
+		ttl:     time.Hour,
+		ownerID: "owner-1",
+	}
+
+	acquired, err := lock.Acquire(context.Background())
+	if err != nil {
+		t.Fatalf("Acquire failed: %v", err)
+	}
+	if !acquired {
+		t.Fatal("expected lock to be acquired")
+	}
+	if lock.etag == "" {
+		t.Fatal("expected acquired lock etag to be set")
+	}
+	if client.createCalls != 2 {
+		t.Fatalf("create calls = %d, want 2", client.createCalls)
+	}
+}
+
+func TestIsConditionalConflictRecognizesConditionalRequestConflict(t *testing.T) {
+	t.Parallel()
+
+	err := &smithy.GenericAPIError{Code: "ConditionalRequestConflict", Message: "conditional request conflict"}
+	if !isConditionalConflict(err) {
+		t.Fatal("expected ConditionalRequestConflict to be treated as a conditional conflict")
+	}
+}
+
+func TestIsConditionalConflictDoesNotTreatGeneric409AsConditional(t *testing.T) {
+	t.Parallel()
+
+	err := &smithy.GenericAPIError{Code: "Conflict", Message: "bucket is not in a valid state"}
+	if isConditionalConflict(err) {
+		t.Fatal("expected generic 409-style conflicts to remain real errors")
+	}
+}
+
+func TestIsConditionalConflictRecognizesRawHTTP409(t *testing.T) {
+	t.Parallel()
+
+	err := rawHTTPError(http.StatusConflict)
+	if !isConditionalConflict(err) {
+		t.Fatal("expected raw HTTP 409 to be treated as a conditional conflict")
+	}
+}
+
+func TestIsConditionalConflictRecognizesRawHTTP412(t *testing.T) {
+	t.Parallel()
+
+	err := rawHTTPError(http.StatusPreconditionFailed)
+	if !isConditionalConflict(err) {
+		t.Fatal("expected raw HTTP 412 to be treated as a conditional conflict")
+	}
+}
+
+func TestIsNotFoundRecognizesRawHTTP404(t *testing.T) {
+	t.Parallel()
+
+	err := rawHTTPError(http.StatusNotFound)
+	if !isNotFound(err) {
+		t.Fatal("expected raw HTTP 404 to be treated as not found")
+	}
+}
+
+func rawHTTPError(statusCode int) error {
+	return &smithyhttp.ResponseError{Response: &smithyhttp.Response{Response: &http.Response{StatusCode: statusCode}}}
+}
+
+func TestLeaseLockReleaseMarksExpiredWithCAS(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeLockClient{
+		exists:      true,
+		etagCounter: 1,
+		etag:        "etag-1",
+	}
+	lock := &LeaseLock{
+		client:  client,
+		key:     "locks/leader.json",
+		ttl:     time.Hour,
+		ownerID: "owner-1",
+		etag:    "etag-1",
+	}
+
+	if err := lock.Release(context.Background()); err != nil {
+		t.Fatalf("Release failed: %v", err)
+	}
+	if lock.etag != "" {
+		t.Fatalf("expected lock etag to be cleared, got %q", lock.etag)
+	}
+
+	var info LeaseInfo
+	if err := json.Unmarshal(client.body, &info); err != nil {
+		t.Fatalf("unmarshal lock body: %v", err)
+	}
+	if info.Owner != "owner-1" {
+		t.Fatalf("owner = %q, want owner-1", info.Owner)
+	}
+	if !info.ExpiresAt.Equal(time.Unix(0, 0).UTC()) {
+		t.Fatalf("ExpiresAt = %v, want unix epoch", info.ExpiresAt)
+	}
+}
+
+func TestLeaseLockReleaseDoesNotModifyStolenLease(t *testing.T) {
+	t.Parallel()
+
+	current := LeaseInfo{Owner: "owner-2", ExpiresAt: time.Now().UTC().Add(time.Hour)}
+	body, err := json.Marshal(current)
+	if err != nil {
+		t.Fatalf("marshal lock info: %v", err)
+	}
+	client := &fakeLockClient{
+		exists:      true,
+		etagCounter: 2,
+		etag:        "etag-2",
+		body:        body,
+	}
+	lock := &LeaseLock{
+		client:  client,
+		key:     "locks/leader.json",
+		ttl:     time.Hour,
+		ownerID: "owner-1",
+		etag:    "etag-1",
+	}
+
+	if err := lock.Release(context.Background()); err != nil {
+		t.Fatalf("Release failed: %v", err)
+	}
+	if string(client.body) != string(body) {
+		t.Fatalf("stolen lock was modified: got %s want %s", client.body, body)
 	}
 }
 
@@ -193,7 +397,7 @@ func TestConfig_Validation(t *testing.T) {
 		{
 			name: "valid config",
 			cfg: Config{
-				Endpoint:    "https://account.r2.cloudflarestorage.com",
+				Endpoint:    "https://s3.example.com",
 				AccessKeyID: "access-key",
 				SecretKey:   "secret-key",
 				BucketName:  "my-bucket",
@@ -212,7 +416,7 @@ func TestConfig_Validation(t *testing.T) {
 		{
 			name: "missing access key",
 			cfg: Config{
-				Endpoint:   "https://account.r2.cloudflarestorage.com",
+				Endpoint:   "https://s3.example.com",
 				SecretKey:  "secret-key",
 				BucketName: "my-bucket",
 			},
@@ -221,7 +425,7 @@ func TestConfig_Validation(t *testing.T) {
 		{
 			name: "missing secret key",
 			cfg: Config{
-				Endpoint:    "https://account.r2.cloudflarestorage.com",
+				Endpoint:    "https://s3.example.com",
 				AccessKeyID: "access-key",
 				BucketName:  "my-bucket",
 			},
@@ -230,7 +434,7 @@ func TestConfig_Validation(t *testing.T) {
 		{
 			name: "missing bucket",
 			cfg: Config{
-				Endpoint:    "https://account.r2.cloudflarestorage.com",
+				Endpoint:    "https://s3.example.com",
 				AccessKeyID: "access-key",
 				SecretKey:   "secret-key",
 			},
