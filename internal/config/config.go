@@ -51,11 +51,13 @@ type Config struct {
 
 	// Maintenance Scheduling
 	// NTPU_WARMUP_WAIT: if true, reject /webhook until warmup is ready (default: false)
-	// NTPU_WARMUP_MAX_WAIT: max time to block /webhook waiting for warmup; 0 = wait indefinitely (default: 0)
+	// NTPU_WARMUP_MAX_WAIT: max duration to wait for warmup; 0 = wait indefinitely.
+	//   Governs /readyz (always) and /webhook (when NTPU_WARMUP_WAIT=true) — both stay 503 until
+	//   warmup completes or this duration elapses. (default: 0)
 	// NTPU_MAINTENANCE_REFRESH_INTERVAL: refresh interval (default: 24h)
 	// NTPU_MAINTENANCE_CLEANUP_INTERVAL: cleanup interval (default: 24h)
 	WaitForWarmup              bool          // If true, reject /webhook until warmup is ready
-	WarmupMaxWait              time.Duration // Max time to block /webhook waiting for warmup; 0 = wait indefinitely
+	WarmupMaxWait              time.Duration // Max warmup wait; 0 = indefinitely. Governs /readyz (always) and /webhook (if WaitForWarmup)
 	MaintenanceRefreshInterval time.Duration // Interval for refresh tasks
 	MaintenanceCleanupInterval time.Duration // Interval for cleanup tasks
 

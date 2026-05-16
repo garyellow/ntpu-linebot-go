@@ -78,17 +78,19 @@ GET /readyz
 }
 ```
 
-**Response** (503 Service Unavailable - Data Refresh in Progress):
+**Response** (503 Service Unavailable - Data Refresh in Progress, with `NTPU_WARMUP_MAX_WAIT` configured):
 ```json
 {
   "status": "not ready",
   "reason": "data refresh in progress",
   "progress": {
     "elapsed_seconds": 125,
-    "max_wait_seconds": 600
+    "max_wait_seconds": 1800
   }
 }
 ```
+
+> 注意：`max_wait_seconds` 欄位只在 `NTPU_WARMUP_MAX_WAIT` 設定為非零值時才會出現（預設為 `0`，欄位省略）。
 
 **檢查項目**:
 - ✅ 資料庫連線（Ping 測試）
@@ -112,8 +114,9 @@ GET /readyz
 >
 > **環境變數 `NTPU_WARMUP_MAX_WAIT`**:
 > - 預設 `0`（無限等待）
-> - 設定後（如 `30m`）：超過此時間後，即使 warmup 仍在進行，/webhook 也會停止回 503
-> - 注意：warmup 任務本身**不會被中斷**，仍在背景繼續執行；此設定僅控制 /webhook 阻擋的時限
+> - 同時控制 `/readyz`（無論 `NTPU_WARMUP_WAIT` 設定為何）與 `/webhook`（當 `NTPU_WARMUP_WAIT=true` 時）
+> - 設定後（如 `30m`）：超過此時間後，即使 warmup 仍在進行，/readyz 與 /webhook 也會停止回 503
+> - 注意：warmup 任務本身**不會被中斷**，仍在背景繼續執行；此設定僅控制阻擋的時限
 
 ---
 
