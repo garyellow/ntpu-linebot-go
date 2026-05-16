@@ -327,9 +327,10 @@ task compose:up
 
 #### 更多環境變數與細節
 
-更完整的設定請看：
+完整環境變數說明（含預設值與限制）請見 [docs/configuration.md](docs/configuration.md)。
 
 - [環境變數範例](.env.example)
+- [環境變數參考](docs/configuration.md)
 - [Docker Compose 說明](deployments/README.md)
 - [API 文件](docs/API.md)
 - [架構說明](docs/architecture.md)
@@ -339,6 +340,7 @@ task compose:up
 ### 文件索引
 
 - [環境變數範例](.env.example)
+- [環境變數參考](docs/configuration.md)
 - [Docker Compose 說明](deployments/README.md)
 - [API 文件](docs/API.md)
 - [架構說明](docs/architecture.md)

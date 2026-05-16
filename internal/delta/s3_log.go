@@ -197,6 +197,8 @@ func (l *S3Log) mergeObject(ctx context.Context, db *storage.DB, key string) err
 }
 
 func applyEntry(ctx context.Context, db *storage.DB, entry Entry) error {
+	cachedAt := entryCachedAt(entry)
+
 	switch entry.Type {
 	case EntryTypeStudents:
 		var students []storage.Student
@@ -208,6 +210,7 @@ func applyEntry(ctx context.Context, db *storage.DB, entry Entry) error {
 		}
 		ptrs := make([]*storage.Student, len(students))
 		for i := range students {
+			students[i].CachedAt = cachedAt
 			ptrs[i] = &students[i]
 		}
 		return db.SaveStudentsBatch(ctx, ptrs)
@@ -222,6 +225,7 @@ func applyEntry(ctx context.Context, db *storage.DB, entry Entry) error {
 		}
 		ptrs := make([]*storage.Contact, len(contacts))
 		for i := range contacts {
+			contacts[i].CachedAt = cachedAt
 			ptrs[i] = &contacts[i]
 		}
 		return db.SaveContactsBatch(ctx, ptrs)
@@ -236,6 +240,7 @@ func applyEntry(ctx context.Context, db *storage.DB, entry Entry) error {
 		}
 		ptrs := make([]*storage.Course, len(courses))
 		for i := range courses {
+			courses[i].CachedAt = cachedAt
 			ptrs[i] = &courses[i]
 		}
 		return db.SaveCoursesBatch(ctx, ptrs)
@@ -250,6 +255,7 @@ func applyEntry(ctx context.Context, db *storage.DB, entry Entry) error {
 		}
 		ptrs := make([]*storage.Course, len(courses))
 		for i := range courses {
+			courses[i].CachedAt = cachedAt
 			ptrs[i] = &courses[i]
 		}
 		return db.SaveHistoricalCoursesBatch(ctx, ptrs)
@@ -257,6 +263,13 @@ func applyEntry(ctx context.Context, db *storage.DB, entry Entry) error {
 	default:
 		return fmt.Errorf("unknown entry type: %s", entry.Type)
 	}
+}
+
+func entryCachedAt(entry Entry) int64 {
+	if entry.CreatedAt > 0 {
+		return entry.CreatedAt
+	}
+	return time.Now().UTC().Unix()
 }
 
 func (l *S3Log) record(ctx context.Context, entryType string, payload any) error {

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/google/uuid"
 	"github.com/klauspost/compress/zstd"
 )
@@ -282,6 +284,19 @@ func isConditionalConflict(err error) bool {
 		switch apiErr.ErrorCode() {
 		case "PreconditionFailed", "ConditionalRequestConflict":
 			return true
+		default:
+			// A known API error code that is not conditional; do not fall through
+			// to the HTTP status check (avoids misclassifying non-conditional 409s).
+			return false
+		}
+	}
+	// No decodable API error: fall back to raw HTTP status for S3-compatible
+	// services that return 409/412 without a structured error body.
+	var respErr *smithyhttp.ResponseError
+	if errors.As(err, &respErr) {
+		switch respErr.HTTPStatusCode() {
+		case http.StatusConflict, http.StatusPreconditionFailed:
+			return true
 		}
 	}
 	return false
@@ -302,6 +317,12 @@ func isNotFound(err error) bool {
 		case "NoSuchKey", "NotFound", "404":
 			return true
 		}
+	}
+	// Fall back to raw HTTP status for S3-compatible services that return
+	// HTTP 404 without a structured error body.
+	var respErr *smithyhttp.ResponseError
+	if errors.As(err, &respErr) && respErr.HTTPStatusCode() == http.StatusNotFound {
+		return true
 	}
 	return false
 }

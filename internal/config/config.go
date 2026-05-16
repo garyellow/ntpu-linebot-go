@@ -386,8 +386,8 @@ func (c *Config) Validate() error {
 		if c.S3LockKey == "" {
 			errs = append(errs, errors.New("NTPU_S3_LOCK_KEY must not be empty when NTPU_S3_ENABLED=true"))
 		}
-		if c.S3LockTTL <= 0 {
-			errs = append(errs, fmt.Errorf("NTPU_S3_LOCK_TTL must be positive, got %v", c.S3LockTTL))
+		if c.S3LockTTL < S3LockMinimumTTL {
+			errs = append(errs, fmt.Errorf("NTPU_S3_LOCK_TTL must be at least %v, got %v", S3LockMinimumTTL, c.S3LockTTL))
 		}
 		if c.S3SnapshotPollInterval <= 0 {
 			errs = append(errs, fmt.Errorf("NTPU_S3_SNAPSHOT_POLL_INTERVAL must be positive, got %v", c.S3SnapshotPollInterval))

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/aws/smithy-go"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
 func TestLeaseInfo_JSON(t *testing.T) {
@@ -285,6 +287,37 @@ func TestIsConditionalConflictDoesNotTreatGeneric409AsConditional(t *testing.T) 
 	if isConditionalConflict(err) {
 		t.Fatal("expected generic 409-style conflicts to remain real errors")
 	}
+}
+
+func TestIsConditionalConflictRecognizesRawHTTP409(t *testing.T) {
+	t.Parallel()
+
+	err := rawHTTPError(http.StatusConflict)
+	if !isConditionalConflict(err) {
+		t.Fatal("expected raw HTTP 409 to be treated as a conditional conflict")
+	}
+}
+
+func TestIsConditionalConflictRecognizesRawHTTP412(t *testing.T) {
+	t.Parallel()
+
+	err := rawHTTPError(http.StatusPreconditionFailed)
+	if !isConditionalConflict(err) {
+		t.Fatal("expected raw HTTP 412 to be treated as a conditional conflict")
+	}
+}
+
+func TestIsNotFoundRecognizesRawHTTP404(t *testing.T) {
+	t.Parallel()
+
+	err := rawHTTPError(http.StatusNotFound)
+	if !isNotFound(err) {
+		t.Fatal("expected raw HTTP 404 to be treated as not found")
+	}
+}
+
+func rawHTTPError(statusCode int) error {
+	return &smithyhttp.ResponseError{Response: &smithyhttp.Response{Response: &http.Response{StatusCode: statusCode}}}
 }
 
 func TestLeaseLockReleaseMarksExpiredWithCAS(t *testing.T) {

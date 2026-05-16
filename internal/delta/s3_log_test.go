@@ -154,6 +154,47 @@ func TestDeleteMergedReturnsPartialErrors(t *testing.T) {
 	}
 }
 
+func TestMergeIntoDBPreservesEntryCreatedAtForTTL(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db, err := storage.New(ctx, filepath.Join(t.TempDir(), "delta-ttl.db"), time.Hour)
+	if err != nil {
+		t.Fatalf("storage.New failed: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close(context.Background()) })
+
+	key := "deltas/instance-1/100-contacts.json"
+	client := &fakeDeltaClient{objects: map[string][]byte{
+		key: marshalEntry(t, Entry{
+			Type:      EntryTypeContacts,
+			CreatedAt: time.Now().Add(-2 * time.Hour).UTC().Unix(),
+			Payload: mustMarshalRaw(t, []storage.Contact{{
+				UID:  "contact-1",
+				Type: "individual",
+				Name: "過期聯絡人",
+			}}),
+		}),
+	}}
+
+	log, err := NewS3Log(client, "deltas", "instance-1")
+	if err != nil {
+		t.Fatalf("NewS3Log failed: %v", err)
+	}
+
+	if _, err := log.MergeIntoDB(ctx, db); err != nil {
+		t.Fatalf("MergeIntoDB failed: %v", err)
+	}
+
+	contact, err := db.GetContactByUID(ctx, "contact-1")
+	if err != nil {
+		t.Fatalf("GetContactByUID failed: %v", err)
+	}
+	if contact != nil {
+		t.Fatalf("expected stale delta contact to remain expired, got %+v", contact)
+	}
+}
+
 func setupDeltaTestDB(t *testing.T) *storage.DB {
 	t.Helper()
 

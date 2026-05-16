@@ -60,6 +60,11 @@ const (
 const (
 	// S3RequestTimeout is the timeout for a single S3 request.
 	S3RequestTimeout = 60 * time.Second
+
+	// S3LockMinimumTTL is the minimum safe TTL for the leader lease.
+	// The renew loop runs at TTL/3 with a 10s minimum interval, so values below
+	// 30s can expire before the first renewal attempt.
+	S3LockMinimumTTL = 30 * time.Second
 )
 
 // Background job intervals

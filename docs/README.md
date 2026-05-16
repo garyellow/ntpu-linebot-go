@@ -30,6 +30,7 @@ NTPU LineBot Go 專案文件導覽。
 
 ## 🔧 部署與維護
 
+- [configuration.md](configuration.md) - 完整環境變數參考
 - [deployments/](../deployments/README.md) - Docker Compose 部署
 - [workflows/](../.github/workflows/README.md) - GitHub Actions CI/CD
 - [architecture.md](architecture.md#3-s3-compatible-%E5%BF%AB%E7%85%A7%E5%90%8C%E6%AD%A5%EF%BC%88%E5%8F%AF%E9%81%B8%EF%BC%89) - S3-compatible 快照同步（可選）
@@ -42,6 +43,7 @@ NTPU LineBot Go 專案文件導覽。
 |------|----------|
 | **使用 Bot** | [README.md](../README.md#-立即使用) |
 | **自行部署** | [README.md](../README.md#%EF%B8%8F-自架部署) |
+| **環境變數設定** | [configuration.md](configuration.md) |
 | **了解架構** | [architecture.md](architecture.md) |
 | **開發新功能** | [bot/README.md](../internal/bot/README.md#開發指南) |
 | **設定 NLU** | [genai/README.md](../internal/genai/README.md#配置) |
