@@ -85,7 +85,7 @@ GET /readyz
   "reason": "data refresh in progress",
   "progress": {
     "elapsed_seconds": 125,
-    "timeout_seconds": 600
+    "max_wait_seconds": 600
   }
 }
 ```
@@ -110,10 +110,10 @@ GET /readyz
 > - `true`：/webhook 會在 warmup 未完成時回 503（LINE 會自動重試）
 > - `false`（預設）：/webhook 立即接受流量
 >
-> **環境變數 `NTPU_WARMUP_GRACE_PERIOD`**:
-> - 預設 `10m`（10 分鐘）
-> - 超過此時間後，/readyz 會回 Ready，即使 warmup 仍在進行
-> - 若 `NTPU_WARMUP_WAIT=true`，/webhook 也會在此時間後停止回 503
+> **環境變數 `NTPU_WARMUP_MAX_WAIT`**:
+> - 預設 `0`（無限等待）
+> - 設定後（如 `30m`）：超過此時間後，即使 warmup 仍在進行，/webhook 也會停止回 503
+> - 注意：warmup 任務本身**不會被中斷**，仍在背景繼續執行；此設定僅控制 /webhook 阻擋的時限
 
 ---
 

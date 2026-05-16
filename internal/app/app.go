@@ -85,7 +85,7 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 		Version:             version,
 	})
 
-	readinessState := warmup.NewReadinessState(cfg.WarmupGracePeriod)
+	readinessState := warmup.NewReadinessState(cfg.WarmupMaxWait)
 	host, _ := os.Hostname()
 	serverName, instanceID := resolveServerIdentity(cfg, host, time.Now)
 	log = log.WithField("service", "ntpu-linebot-go")
@@ -638,14 +638,14 @@ func (a *Application) readinessCheck(c *gin.Context) {
 	if !a.readinessState.IsReady() {
 		status := a.readinessState.Status()
 		a.logger.WithField("elapsed_seconds", status.ElapsedSeconds).
-			WithField("timeout_seconds", status.TimeoutSeconds).
+			WithField("max_wait_seconds", status.MaxWaitSeconds).
 			Debug("Readiness check: refresh in progress")
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"status": "not ready",
 			"reason": status.Reason,
 			"progress": gin.H{
-				"elapsed_seconds": status.ElapsedSeconds,
-				"timeout_seconds": status.TimeoutSeconds,
+				"elapsed_seconds":  status.ElapsedSeconds,
+				"max_wait_seconds": status.MaxWaitSeconds,
 			},
 		})
 		return

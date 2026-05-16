@@ -138,25 +138,6 @@ func TestValidate(t *testing.T) {
 			wantErr:     true,
 			errContains: "NTPU_SCRAPER_MAX_RETRIES",
 		},
-		{
-			name: "Warmup grace period must be positive",
-			cfg: &Config{
-				LineChannelToken:           "token",
-				LineChannelSecret:          "secret",
-				Port:                       "10000",
-				DataDir:                    "/data",
-				CacheTTL:                   168 * time.Hour,
-				ScraperTimeout:             60 * time.Second,
-				ScraperMaxRetries:          3,
-				WaitForWarmup:              true,
-				WarmupGracePeriod:          0,
-				MaintenanceRefreshInterval: 12 * time.Hour,
-				MaintenanceCleanupInterval: 24 * time.Hour,
-				Bot:                        newTestBotConfig(),
-			},
-			wantErr:     true,
-			errContains: "NTPU_WARMUP_GRACE_PERIOD",
-		},
 		// S3-compatible snapshot tests
 		{
 			name: "S3 enabled but missing access key",
@@ -622,9 +603,6 @@ func TestValidate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if tt.cfg.WarmupGracePeriod == 0 && tt.errContains != "NTPU_WARMUP_GRACE_PERIOD" {
-				tt.cfg.WarmupGracePeriod = 10 * time.Minute
-			}
 			err := tt.cfg.Validate()
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)

@@ -131,12 +131,6 @@ const (
 	// Set to 3s to allow SQLite ping operations to complete while maintaining
 	// fast probe responses for Kubernetes orchestration.
 	ReadinessCheckTimeout = 3 * time.Second
-
-	// ReadinessWarmupTimeout is the default grace period for initial warmup.
-	// This is the default value for the NTPU_WARMUP_GRACE_PERIOD environment variable.
-	// After this duration, readiness will return OK even if warmup is still running.
-	// Set to 10 minutes based on typical warmup duration (contact + course: ~2-5 min).
-	ReadinessWarmupTimeout = 10 * time.Minute
 )
 
 // Session timeouts

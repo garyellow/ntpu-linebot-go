@@ -51,11 +51,11 @@ type Config struct {
 
 	// Maintenance Scheduling
 	// NTPU_WARMUP_WAIT: if true, reject /webhook until warmup is ready (default: false)
-	// NTPU_WARMUP_GRACE_PERIOD: readiness grace period for initial warmup (default: 10m)
+	// NTPU_WARMUP_MAX_WAIT: max time to block /webhook waiting for warmup; 0 = wait indefinitely (default: 0)
 	// NTPU_MAINTENANCE_REFRESH_INTERVAL: refresh interval (default: 24h)
 	// NTPU_MAINTENANCE_CLEANUP_INTERVAL: cleanup interval (default: 24h)
 	WaitForWarmup              bool          // If true, reject /webhook until warmup is ready
-	WarmupGracePeriod          time.Duration // Readiness grace period for initial warmup
+	WarmupMaxWait              time.Duration // Max time to block /webhook waiting for warmup; 0 = wait indefinitely
 	MaintenanceRefreshInterval time.Duration // Interval for refresh tasks
 	MaintenanceCleanupInterval time.Duration // Interval for cleanup tasks
 
@@ -223,7 +223,7 @@ func Load() (*Config, error) {
 
 		// Maintenance Scheduling
 		WaitForWarmup:              getBoolEnv(EnvWarmupWait, false),
-		WarmupGracePeriod:          getDurationEnv(EnvWarmupGracePeriod, 10*time.Minute),
+		WarmupMaxWait:              getDurationEnv(EnvWarmupMaxWait, 0),
 		MaintenanceRefreshInterval: getDurationEnv(EnvMaintenanceRefreshInterval, MaintenanceRefreshIntervalDefault),
 		MaintenanceCleanupInterval: getDurationEnv(EnvMaintenanceCleanupInterval, MaintenanceCleanupIntervalDefault),
 
@@ -434,8 +434,8 @@ func (c *Config) Validate() error {
 	if c.ScraperMaxRetries < 0 {
 		errs = append(errs, fmt.Errorf("NTPU_SCRAPER_MAX_RETRIES cannot be negative, got %d", c.ScraperMaxRetries))
 	}
-	if c.WarmupGracePeriod <= 0 {
-		errs = append(errs, fmt.Errorf("NTPU_WARMUP_GRACE_PERIOD must be positive, got %v", c.WarmupGracePeriod))
+	if c.WarmupMaxWait < 0 {
+		errs = append(errs, fmt.Errorf("NTPU_WARMUP_MAX_WAIT cannot be negative, got %v", c.WarmupMaxWait))
 	}
 
 	if len(errs) > 0 {

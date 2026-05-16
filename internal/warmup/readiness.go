@@ -6,13 +6,13 @@ import (
 )
 
 // ReadinessState manages service readiness state for initial startup warmup.
-// It tracks whether the first warmup has completed or if the timeout has elapsed.
+// It tracks whether the first warmup has completed or if the max-wait has elapsed.
 // Thread-safe for concurrent reads after initialization. The ready field uses
-// atomic operations; startTime and timeout are immutable after construction.
+// atomic operations; startTime and maxWait are immutable after construction.
 type ReadinessState struct {
 	ready     atomic.Bool
 	startTime time.Time     // Immutable after construction
-	timeout   time.Duration // Immutable after construction
+	maxWait   time.Duration // Immutable after construction; 0 = wait indefinitely
 }
 
 // ReadinessStatus contains the current readiness state for API responses.
@@ -20,30 +20,32 @@ type ReadinessStatus struct {
 	Ready          bool   `json:"ready"`
 	Reason         string `json:"reason,omitempty"`
 	ElapsedSeconds int    `json:"elapsed_seconds,omitempty"`
-	TimeoutSeconds int    `json:"timeout_seconds,omitempty"`
+	MaxWaitSeconds int    `json:"max_wait_seconds,omitempty"`
 }
 
-// NewReadinessState creates a new ReadinessState with the specified timeout.
+// NewReadinessState creates a new ReadinessState with the given max-wait duration.
 // The state starts as not ready and becomes ready when:
 // 1. MarkReady() is called (warmup completed), OR
-// 2. The timeout duration has elapsed since creation
-func NewReadinessState(timeout time.Duration) *ReadinessState {
+// 2. maxWait > 0 and that duration has elapsed (fallback; warmup continues in background)
+// A maxWait of 0 means wait indefinitely — only MarkReady() can unblock.
+func NewReadinessState(maxWait time.Duration) *ReadinessState {
 	return &ReadinessState{
 		startTime: time.Now(),
-		timeout:   timeout,
+		maxWait:   maxWait,
 	}
 }
 
 // IsReady returns true if the service is ready to accept traffic.
 // Ready conditions:
 // 1. MarkReady() has been called (warmup completed), OR
-// 2. The timeout duration has elapsed (graceful degradation)
+// 2. maxWait > 0 and that duration has elapsed (fallback degradation)
+// If maxWait == 0, only MarkReady() can make this return true.
 func (s *ReadinessState) IsReady() bool {
 	if s.ready.Load() {
 		return true
 	}
-	// Check timeout
-	if time.Since(s.startTime) >= s.timeout {
+	// maxWait == 0 means wait indefinitely — never auto-ready via timeout
+	if s.maxWait > 0 && time.Since(s.startTime) >= s.maxWait {
 		return true
 	}
 	return false
@@ -63,14 +65,14 @@ func (s *ReadinessState) Status() ReadinessStatus {
 	status := ReadinessStatus{
 		Ready:          isReady,
 		ElapsedSeconds: int(elapsed.Seconds()),
-		TimeoutSeconds: int(s.timeout.Seconds()),
+		MaxWaitSeconds: int(s.maxWait.Seconds()), // 0 = no limit; omitted from JSON via omitempty
 	}
 
 	if !isReady {
 		status.Reason = "data refresh in progress"
 	} else if !s.ready.Load() {
-		// Ready due to timeout, not warmup completion
-		status.Reason = "timeout reached (refresh may still be running)"
+		// Ready due to max-wait elapsed, not warmup completion
+		status.Reason = "max wait reached (refresh may still be running)"
 	}
 
 	return status

@@ -35,7 +35,7 @@ const (
 
 	// Maintenance Scheduling
 	EnvWarmupWait                 = "NTPU_WARMUP_WAIT"
-	EnvWarmupGracePeriod          = "NTPU_WARMUP_GRACE_PERIOD"
+	EnvWarmupMaxWait              = "NTPU_WARMUP_MAX_WAIT"
 	EnvMaintenanceRefreshInterval = "NTPU_MAINTENANCE_REFRESH_INTERVAL"
 	EnvMaintenanceCleanupInterval = "NTPU_MAINTENANCE_CLEANUP_INTERVAL"
 

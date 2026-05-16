@@ -149,7 +149,6 @@ func TestSmartSearchTimeouts(t *testing.T) {
 		{"SmartSearchTimeout", SmartSearchTimeout, 30 * time.Second},
 		{"QueryExpansionTimeout", QueryExpansionTimeout, 8 * time.Second},
 		{"ReadinessCheckTimeout", ReadinessCheckTimeout, 3 * time.Second},
-		{"ReadinessWarmupTimeout", ReadinessWarmupTimeout, 10 * time.Minute},
 	}
 
 	for _, tt := range tests {
