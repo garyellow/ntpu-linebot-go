@@ -332,17 +332,23 @@ func (m *Manager) RenewLeaderLock(ctx context.Context) (bool, error) {
 	return renewed, err
 }
 
-// LeaderContext returns the active leader lease context.
-// It is canceled when the lease is released or a renew attempt fails, allowing
-// long-running refresh/cleanup work to stop instead of continuing as a stale leader.
-func (m *Manager) LeaderContext(parent context.Context) context.Context {
+// LeaderContext returns a context tied to both the caller and the active leader lease.
+// It is canceled when the parent is canceled, when the lease is released, or when
+// a renew attempt fails, so long-running work cannot continue as a stale leader.
+func (m *Manager) LeaderContext(parent context.Context) (context.Context, context.CancelFunc) {
 	m.leaderMu.Lock()
 	leaderCtx := m.leaderCtx
 	m.leaderMu.Unlock()
 	if leaderCtx == nil {
-		return parent
+		return parent, func() {}
 	}
-	return leaderCtx
+
+	ctx, cancel := context.WithCancel(parent)
+	stop := context.AfterFunc(leaderCtx, cancel)
+	return ctx, func() {
+		stop()
+		cancel()
+	}
 }
 
 // StartPolling starts background polling for new snapshots.

@@ -876,15 +876,17 @@ func (a *Application) runDataCleanup(ctx context.Context) (bool, error) {
 			a.logger.Info("Another instance is leader for cleanup, skipping")
 			return false, nil
 		}
-		workCtx = a.snapshotMgr.LeaderContext(ctx)
+		var workCancel context.CancelFunc
+		workCtx, workCancel = a.snapshotMgr.LeaderContext(ctx)
+		defer workCancel()
 		if lockAcquired {
-			defer func() {
-				releaseCtx, releaseCancel := context.WithTimeout(context.Background(), config.S3RequestTimeout)
+			defer func(ctx context.Context) {
+				releaseCtx, releaseCancel := context.WithTimeout(context.WithoutCancel(ctx), config.S3RequestTimeout)
 				defer releaseCancel()
 				if err := a.snapshotMgr.ReleaseLeaderLock(releaseCtx); err != nil {
 					a.logger.WithError(err).Warn("Failed to release leader lease")
 				}
-			}()
+			}(ctx)
 		}
 	}
 
@@ -1107,15 +1109,17 @@ func (a *Application) runDataRefresh(ctx context.Context, includeID bool) (bool,
 		}
 
 		a.logger.Info("Acquired leader lease, this instance will run refresh")
-		workCtx = a.snapshotMgr.LeaderContext(warmupCtx)
+		var workCancel context.CancelFunc
+		workCtx, workCancel = a.snapshotMgr.LeaderContext(warmupCtx)
+		defer workCancel()
 		if lockAcquired {
-			defer func() {
-				releaseCtx, releaseCancel := context.WithTimeout(context.Background(), config.S3RequestTimeout)
+			defer func(ctx context.Context) {
+				releaseCtx, releaseCancel := context.WithTimeout(context.WithoutCancel(ctx), config.S3RequestTimeout)
 				defer releaseCancel()
 				if err := a.snapshotMgr.ReleaseLeaderLock(releaseCtx); err != nil {
 					a.logger.WithError(err).Warn("Failed to release leader lease")
 				}
-			}()
+			}(warmupCtx)
 		}
 	}
 

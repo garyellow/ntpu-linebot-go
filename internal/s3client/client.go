@@ -21,7 +21,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
-	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/google/uuid"
 	"github.com/klauspost/compress/zstd"
 )
@@ -285,14 +284,7 @@ func isConditionalConflict(err error) bool {
 			return true
 		}
 	}
-	var respErr *smithyhttp.ResponseError
-	if errors.As(err, &respErr) {
-		switch respErr.HTTPStatusCode() {
-		case 409, 412:
-			return true
-		}
-	}
-	return strings.Contains(err.Error(), "PreconditionFailed") || strings.Contains(err.Error(), "ConditionalRequestConflict")
+	return false
 }
 
 func isNotFound(err error) bool {
@@ -310,10 +302,6 @@ func isNotFound(err error) bool {
 		case "NoSuchKey", "NotFound", "404":
 			return true
 		}
-	}
-	var respErr *smithyhttp.ResponseError
-	if errors.As(err, &respErr) && respErr.HTTPStatusCode() == 404 {
-		return true
 	}
 	return false
 }

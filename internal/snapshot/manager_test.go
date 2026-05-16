@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/garyellow/ntpu-linebot-go/internal/s3client"
 )
@@ -114,20 +115,40 @@ func TestUploadSnapshotObjectReturnsPreconditionFailed(t *testing.T) {
 	}
 }
 
-func TestLeaderContextReturnsActiveLeaseContext(t *testing.T) {
+func TestLeaderContextCombinesParentAndLeaseCancellation(t *testing.T) {
 	t.Parallel()
 
-	parent := context.Background()
-	leaderCtx, cancel := context.WithCancel(parent)
-	defer cancel()
+	parent, parentCancel := context.WithCancel(context.Background())
+	defer parentCancel()
+	leaderCtx, leaderCancel := context.WithCancel(context.Background())
+	defer leaderCancel()
 
 	manager := &Manager{leaderCtx: leaderCtx}
-	if got := manager.LeaderContext(parent); got != leaderCtx {
-		t.Fatal("expected active leader context")
+	got, gotCancel := manager.LeaderContext(parent)
+	defer gotCancel()
+
+	parentCancel()
+	select {
+	case <-got.Done():
+	case <-time.After(time.Second):
+		t.Fatal("expected derived context to be canceled by parent")
 	}
 
+	parent = context.Background()
+	got, gotCancel = manager.LeaderContext(parent)
+	leaderCancel()
+	select {
+	case <-got.Done():
+	case <-time.After(time.Second):
+		gotCancel()
+		t.Fatal("expected derived context to be canceled by leader lease")
+	}
+	gotCancel()
+
 	manager.leaderCtx = nil
-	if got := manager.LeaderContext(parent); got != parent {
+	got, gotCancel = manager.LeaderContext(parent)
+	defer gotCancel()
+	if got != parent {
 		t.Fatal("expected parent context when no leader lease is active")
 	}
 }

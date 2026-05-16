@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -230,16 +231,16 @@ func (f *createRaceLockClient) Download(_ context.Context, _ string) (io.ReadClo
 	return nil, "", ErrNotFound
 }
 
-func (f *createRaceLockClient) PutObjectIfNotExists(_ context.Context, _ string, body io.Reader, _ string) (bool, string, error) {
+func (f *createRaceLockClient) PutObjectIfNotExists(ctx context.Context, _ string, body io.Reader, _ string) (bool, string, error) {
 	f.createCalls++
 	if f.createCalls == 1 {
 		return false, "", nil
 	}
-	return f.fakeLockClient.PutObjectIfNotExists(context.Background(), "", body, "")
+	return f.fakeLockClient.PutObjectIfNotExists(ctx, "", body, "")
 }
 
 func (f *createRaceLockClient) PutObjectIfMatch(_ context.Context, _ string, _ io.Reader, _ string, _ string) (bool, string, error) {
-	return false, "", fmt.Errorf("PutObjectIfMatch should not be called")
+	return false, "", errors.New("PutObjectIfMatch should not be called")
 }
 
 func TestLeaseLockAcquireCreatesWhenLeaseDisappearsDuringRace(t *testing.T) {
@@ -274,6 +275,15 @@ func TestIsConditionalConflictRecognizesConditionalRequestConflict(t *testing.T)
 	err := &smithy.GenericAPIError{Code: "ConditionalRequestConflict", Message: "conditional request conflict"}
 	if !isConditionalConflict(err) {
 		t.Fatal("expected ConditionalRequestConflict to be treated as a conditional conflict")
+	}
+}
+
+func TestIsConditionalConflictDoesNotTreatGeneric409AsConditional(t *testing.T) {
+	t.Parallel()
+
+	err := &smithy.GenericAPIError{Code: "Conflict", Message: "bucket is not in a valid state"}
+	if isConditionalConflict(err) {
+		t.Fatal("expected generic 409-style conflicts to remain real errors")
 	}
 }
 
