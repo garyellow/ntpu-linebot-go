@@ -58,7 +58,7 @@ All limits use token-bucket algorithm unless noted.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NTPU_WARMUP_WAIT` | `false` | Block `/webhook` until warmup completes (useful when S3 snapshot sync is enabled) |
-| `NTPU_WARMUP_GRACE_PERIOD` | `10m` | How long readiness probe stays green while warmup is running |
+| `NTPU_WARMUP_MAX_WAIT` | `0` | Max duration to wait for warmup; `0` = wait indefinitely. Governs both `/readyz` (always) and `/webhook` (when `NTPU_WARMUP_WAIT=true`) — both stay 503 until warmup completes or this duration elapses. Warmup always continues in background. |
 | `NTPU_MAINTENANCE_REFRESH_INTERVAL` | `24h` | Interval between contact/course/program refresh jobs |
 | `NTPU_MAINTENANCE_CLEANUP_INTERVAL` | `24h` | Interval between expired-cache cleanup jobs |
 

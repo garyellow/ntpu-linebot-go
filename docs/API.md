@@ -18,7 +18,7 @@
 
 ### 1.1 Liveness Probe (存活探測)
 
-**Kubernetes Liveness Probe** - 檢查進程是否存活且能回應 HTTP 請求。**不檢查外部依賴**（資料庫、快取等）以避免級連失敗。
+檢查進程是否存活且能回應 HTTP 請求。**不檢查外部依賴**（資料庫、快取等）以避免級連失敗。
 
 ```http
 GET /livez
@@ -32,10 +32,9 @@ GET /livez
 ```
 
 **用途**:
-- Kubernetes/Docker liveness probe
 - **最輕量級檢查**：僅確認進程能回應 HTTP
-- **不檢查依賴服務**：避免資料庫暫時不可用導致 Pod 重啟
-- **失敗行為**: Kubernetes **重啟 Pod**
+- **不檢查依賴服務**：避免資料庫暫時不可用而觸發重啟
+- **失敗行為**: 重啟容器
 
 **何時失敗**:
 - 進程崩潰或死鎖
@@ -45,7 +44,7 @@ GET /livez
 
 ### 1.2 Readiness Probe (就緒探測)
 
-**Kubernetes Readiness Probe** - 檢查服務是否準備好接收流量（完整依賴檢查）。包含資料庫連線、快取狀態、功能可用性。
+檢查服務是否準備好接收流量（完整依賴檢查）。包含資料庫連線、快取狀態、功能可用性。
 
 ```http
 GET /readyz
@@ -78,17 +77,19 @@ GET /readyz
 }
 ```
 
-**Response** (503 Service Unavailable - Data Refresh in Progress):
+**Response** (503 Service Unavailable - Data Refresh in Progress, with `NTPU_WARMUP_MAX_WAIT` configured):
 ```json
 {
   "status": "not ready",
   "reason": "data refresh in progress",
   "progress": {
     "elapsed_seconds": 125,
-    "timeout_seconds": 600
+    "max_wait_seconds": 1800
   }
 }
 ```
+
+> 注意：`max_wait_seconds` 欄位只在 `NTPU_WARMUP_MAX_WAIT` 設定為非零值時才會出現（預設為 `0`，欄位省略）。
 
 **檢查項目**:
 - ✅ 資料庫連線（Ping 測試）
@@ -96,24 +97,25 @@ GET /readyz
 - ✅ 功能啟用狀態（BM25, NLU, Query Expansion）
 
 **用途**:
-- Kubernetes readiness probe
 - 確認服務完全就緒後才接收流量
 - **檢查超時**: 3 秒（config.ReadinessCheckTimeout）
-- **失敗行為**: Kubernetes **暫時移除流量**（不重啟 Pod）
+- **失敗行為**: 暫停接收流量（不重啟容器）
 
 **何時失敗**:
 - 資料庫無法連線
-- 初次啟動資料刷新尚未完成（且仍在 Grace Period 內）
+- 初次啟動資料刷新尚未完成（warmup 仍在進行中）
 - 依賴服務暫時不可用
 
 > **環境變數 `NTPU_WARMUP_WAIT`**:
 > - `true`：/webhook 會在 warmup 未完成時回 503（LINE 會自動重試）
 > - `false`（預設）：/webhook 立即接受流量
 >
-> **環境變數 `NTPU_WARMUP_GRACE_PERIOD`**:
-> - 預設 `10m`（10 分鐘）
-> - 超過此時間後，/readyz 會回 Ready，即使 warmup 仍在進行
-> - 若 `NTPU_WARMUP_WAIT=true`，/webhook 也會在此時間後停止回 503
+> **環境變數 `NTPU_WARMUP_MAX_WAIT`**:
+> - 預設 `0`（等到 warmup 真正完成，最誠實的設定）
+> - 同時控制 `/readyz`（無論 `NTPU_WARMUP_WAIT` 設定為何）與 `/webhook`（當 `NTPU_WARMUP_WAIT=true` 時）
+> - 非零值（如 `30m`）：escape hatch — 超過此時間後即使 warmup 仍在進行，/readyz 與 /webhook 也會停止回 503
+> - 注意：warmup 任務本身**不會被中斷**，仍在背景繼續執行；此設定僅控制阻擋的時限
+> - Docker Compose：容器若因 warmup 掛住，Docker healthcheck (`/livez`) 將觸發重啟；設定 `NTPU_WARMUP_MAX_WAIT` 通常不需要
 
 ---
 
@@ -487,7 +489,7 @@ LINE Webhook **必須**使用 HTTPS：
 
 **Global Level**:
 ```
-100 requests/second (LINE API limit: 100 rps)
+100 requests/second
 ```
 
 **Per-User Level (Webhook)**:

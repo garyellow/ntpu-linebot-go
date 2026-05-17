@@ -387,7 +387,7 @@ task compose:up       # Start Docker Compose deployment (bot only)
 - **Data**: `NTPU_DATA_DIR` (default: `./data` on Windows, `/data` on Linux/Mac), `NTPU_CACHE_TTL`
 - **Scraper**: `NTPU_SCRAPER_TIMEOUT`, `NTPU_SCRAPER_MAX_RETRIES`
 - **Rate Limits**: `NTPU_USER_RATE_BURST`, `NTPU_USER_RATE_REFILL`, `NTPU_LLM_RATE_BURST`, `NTPU_LLM_RATE_REFILL`, `NTPU_LLM_RATE_DAILY`, `NTPU_GLOBAL_RATE_RPS`
-- **Startup**: `NTPU_WARMUP_WAIT` (default: `false`, gates /webhook only), `NTPU_WARMUP_GRACE_PERIOD` (default: `10m`, readiness grace period)
+- **Startup**: `NTPU_WARMUP_WAIT` (default: `false`, gates /webhook only), `NTPU_WARMUP_MAX_WAIT` (default: `0` = wait indefinitely; governs both /readyz (always) and /webhook (when NTPU_WARMUP_WAIT=true); set e.g. `30m` as escape hatch — both stop 503 after that duration even if warmup is still running)
 - **Intervals**: `NTPU_MAINTENANCE_REFRESH_INTERVAL`, `NTPU_MAINTENANCE_CLEANUP_INTERVAL`, `NTPU_S3_SNAPSHOT_POLL_INTERVAL`
 - **Metrics**: `NTPU_METRICS_AUTH_ENABLED`, `NTPU_METRICS_USERNAME`, `NTPU_METRICS_PASSWORD`
 
