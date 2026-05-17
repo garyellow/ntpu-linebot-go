@@ -58,7 +58,6 @@ type Config struct {
 	// NTPU_MAINTENANCE_CLEANUP_INTERVAL: cleanup interval (default: 24h)
 	WaitForWarmup              bool          // If true, reject /webhook until warmup is ready
 	WarmupMaxWait              time.Duration // Max warmup wait; 0 = wait indefinitely (recommended). Governs /readyz (always) and /webhook (if WaitForWarmup). Non-zero is an escape hatch.
-	DeprecationWarnings        []string      // Warnings for deprecated configuration (e.g. renamed env vars); logged at startup
 	MaintenanceRefreshInterval time.Duration // Interval for refresh tasks
 	MaintenanceCleanupInterval time.Duration // Interval for cleanup tasks
 
@@ -278,18 +277,6 @@ func Load() (*Config, error) {
 		MetricsAuthEnabled: getBoolEnv(EnvMetricsAuthEnabled, false),
 		MetricsUsername:    getEnv(EnvMetricsUsername, "prometheus"),
 		MetricsPassword:    getEnv(EnvMetricsPassword, ""),
-	}
-
-	// Detect deprecated NTPU_WARMUP_GRACE_PERIOD and migrate its value if the new
-	// NTPU_WARMUP_MAX_WAIT is not explicitly set, then warn at startup.
-	if oldVal := os.Getenv(EnvWarmupGracePeriod); oldVal != "" {
-		cfg.DeprecationWarnings = append(cfg.DeprecationWarnings,
-			"NTPU_WARMUP_GRACE_PERIOD is deprecated and has been renamed to NTPU_WARMUP_MAX_WAIT; please update your configuration")
-		if os.Getenv(EnvWarmupMaxWait) == "" {
-			if d, err := time.ParseDuration(oldVal); err == nil {
-				cfg.WarmupMaxWait = d
-			}
-		}
 	}
 
 	// Validate configuration

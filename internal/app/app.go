@@ -96,11 +96,6 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Application, error) {
 	// via ContextHandler in package-level slog.*Context() calls.
 	slog.SetDefault(log.Logger)
 
-	// Emit deprecation warnings for renamed/removed environment variables.
-	for _, w := range cfg.DeprecationWarnings {
-		log.Warn(w)
-	}
-
 	log.Info("Initializing application")
 
 	// Log status of Optional Features
