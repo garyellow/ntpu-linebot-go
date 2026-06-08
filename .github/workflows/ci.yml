@@ -158,7 +158,7 @@ jobs:
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
       - name: Run Security Scanner
-        uses: securego/gosec@v2.26.1
+        uses: securego/gosec@v2.27.1
         with:
           args: '-no-fail -exclude-generated -fmt sarif -out gosec-results.sarif ./...'
 
