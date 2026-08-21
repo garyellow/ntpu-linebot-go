@@ -80,24 +80,24 @@ Set `NTPU_LLM_ENABLED=true` and provide at least one API key to enable NLU inten
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NTPU_GEMINI_API_KEY` | — | Google AI Studio API key |
-| `NTPU_GEMINI_INTENT_MODELS` | `gemma-4-31b-it,gemma-4-26b-a4b-it` | Ordered model list for intent parsing |
-| `NTPU_GEMINI_EXPANDER_MODELS` | `gemma-4-31b-it,gemma-4-26b-a4b-it` | Ordered model list for query expansion |
+| `NTPU_GEMINI_INTENT_MODELS` | `gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemma-4-31b-it,gemma-4-26b-a4b-it` | Ordered model list for intent parsing |
+| `NTPU_GEMINI_EXPANDER_MODELS` | `gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemma-4-31b-it,gemma-4-26b-a4b-it` | Ordered model list for query expansion |
 
 ### Groq
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NTPU_GROQ_API_KEY` | — | Groq API key |
-| `NTPU_GROQ_INTENT_MODELS` | `openai/gpt-oss-120b,openai/gpt-oss-20b,llama-3.3-70b-versatile,qwen/qwen3-32b,llama-3.1-8b-instant` | Ordered model list |
-| `NTPU_GROQ_EXPANDER_MODELS` | `openai/gpt-oss-120b,openai/gpt-oss-20b,llama-3.3-70b-versatile,qwen/qwen3-32b,llama-3.1-8b-instant` | Ordered model list |
+| `NTPU_GROQ_INTENT_MODELS` | `qwen/qwen3.6-27b,openai/gpt-oss-120b,openai/gpt-oss-20b` | Ordered model list |
+| `NTPU_GROQ_EXPANDER_MODELS` | `qwen/qwen3.6-27b,openai/gpt-oss-120b,openai/gpt-oss-20b` | Ordered model list |
 
 ### Cerebras
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NTPU_CEREBRAS_API_KEY` | — | Cerebras API key |
-| `NTPU_CEREBRAS_INTENT_MODELS` | `gpt-oss-120b,llama3.1-8b` | Ordered model list |
-| `NTPU_CEREBRAS_EXPANDER_MODELS` | `gpt-oss-120b,llama3.1-8b` | Ordered model list |
+| `NTPU_CEREBRAS_INTENT_MODELS` | `gemma-4-31b,gpt-oss-120b` | Ordered model list |
+| `NTPU_CEREBRAS_EXPANDER_MODELS` | `gemma-4-31b,gpt-oss-120b` | Ordered model list |
 
 ### OpenAI-Compatible (self-hosted / custom)
 

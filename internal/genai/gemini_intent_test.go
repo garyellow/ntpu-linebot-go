@@ -181,6 +181,8 @@ func TestGeminiThinkingConfig(t *testing.T) {
 		{"gemini-2.5-flash-latest", false, &budget0, ""},
 		{"gemini-2.5-pro", false, &budget512, ""},
 		{"gemini-2.5-pro-preview", false, &budget512, ""},
+		{"gemini-3.1-flash-lite", false, nil, genai.ThinkingLevelLow},
+		{"gemini-3.5-flash-lite", false, nil, genai.ThinkingLevelLow},
 		{"gemini-3.1-pro-preview", false, nil, genai.ThinkingLevelLow},
 		{"GEMINI-2.5-FLASH", false, &budget0, ""}, // case-insensitive
 		// Legacy/unrecognized models must return nil to avoid unsupported API fields.

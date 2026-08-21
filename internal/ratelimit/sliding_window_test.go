@@ -61,10 +61,8 @@ func TestSlidingWindowCounter_WeightedCount(t *testing.T) {
 	t.Parallel()
 	// Logic verification:
 	// Window 100ms, Limit 10.
-	// T=0: consume 10.
-	// Sleep 150ms -> 1.5 windows passed.
-	// Current window start shifted by 100ms.
-	// Elapsed in current window = 50ms.
+	// Previous window consumed 10.
+	// Current window started 50ms ago.
 	// Overlap = (100 - 50) / 100 = 0.5.
 	// Effective = curr(0) + prev(10) * 0.5 = 5.
 	// Available = 10 - 5 = 5.
@@ -72,12 +70,11 @@ func TestSlidingWindowCounter_WeightedCount(t *testing.T) {
 	window := 100 * time.Millisecond
 	swc := NewSlidingWindowCounter(10, window)
 
-	for i := 0; i < 10; i++ {
-		swc.Allow()
-	}
-
-	// Sleep 1.5 windows
-	time.Sleep(150 * time.Millisecond)
+	swc.mu.Lock()
+	swc.prevCount = 10
+	swc.currCount = 0
+	swc.currWindowStart = time.Now().Add(-50 * time.Millisecond)
+	swc.mu.Unlock()
 
 	remaining := swc.GetRemaining()
 	// Allow small tolerance for timing variations

@@ -13,9 +13,9 @@
 
 | 提供者 | IntentParser 預設模型鏈 | QueryExpander 預設模型鏈 | 備註 |
 |--------|------------------------|----------------------------|------|
-| **Gemini** | gemma-4-31b-it, gemma-4-26b-a4b-it | gemma-4-31b-it, gemma-4-26b-a4b-it | Google AI Studio |
-| **Groq** | openai/gpt-oss-120b, openai/gpt-oss-20b, llama-3.3-70b-versatile, qwen/qwen3-32b, llama-3.1-8b-instant | openai/gpt-oss-120b, openai/gpt-oss-20b, llama-3.3-70b-versatile, qwen/qwen3-32b, llama-3.1-8b-instant | OpenAI-compatible |
-| **Cerebras** | gpt-oss-120b, llama3.1-8b | gpt-oss-120b, llama3.1-8b | OpenAI-compatible |
+| **Gemini** | gemini-3.5-flash-lite, gemini-3.1-flash-lite, gemma-4-31b-it, gemma-4-26b-a4b-it | gemini-3.5-flash-lite, gemini-3.1-flash-lite, gemma-4-31b-it, gemma-4-26b-a4b-it | Google AI Studio |
+| **Groq** | qwen/qwen3.6-27b, openai/gpt-oss-120b, openai/gpt-oss-20b | qwen/qwen3.6-27b, openai/gpt-oss-120b, openai/gpt-oss-20b | OpenAI-compatible |
+| **Cerebras** | gemma-4-31b, gpt-oss-120b | gemma-4-31b, gpt-oss-120b | OpenAI-compatible |
 | **OpenAI-Compatible** | (自訂) | (自訂) | 支援 Ollama, LM Studio, vLLM 等 |
 
 ## 檔案結構
@@ -235,12 +235,12 @@ expanded, err := expander.Expand(ctx, "我想學 AWS")
 
 | 變數名稱 | 預設值 |
 |---------|--------|
-| `NTPU_GEMINI_INTENT_MODELS` | gemma-4-31b-it,gemma-4-26b-a4b-it |
-| `NTPU_GEMINI_EXPANDER_MODELS` | gemma-4-31b-it,gemma-4-26b-a4b-it |
-| `NTPU_GROQ_INTENT_MODELS` | openai/gpt-oss-120b,openai/gpt-oss-20b,llama-3.3-70b-versatile,qwen/qwen3-32b,llama-3.1-8b-instant |
-| `NTPU_GROQ_EXPANDER_MODELS` | openai/gpt-oss-120b,openai/gpt-oss-20b,llama-3.3-70b-versatile,qwen/qwen3-32b,llama-3.1-8b-instant |
-| `NTPU_CEREBRAS_INTENT_MODELS` | gpt-oss-120b,llama3.1-8b |
-| `NTPU_CEREBRAS_EXPANDER_MODELS` | gpt-oss-120b,llama3.1-8b |
+| `NTPU_GEMINI_INTENT_MODELS` | gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemma-4-31b-it,gemma-4-26b-a4b-it |
+| `NTPU_GEMINI_EXPANDER_MODELS` | gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemma-4-31b-it,gemma-4-26b-a4b-it |
+| `NTPU_GROQ_INTENT_MODELS` | qwen/qwen3.6-27b,openai/gpt-oss-120b,openai/gpt-oss-20b |
+| `NTPU_GROQ_EXPANDER_MODELS` | qwen/qwen3.6-27b,openai/gpt-oss-120b,openai/gpt-oss-20b |
+| `NTPU_CEREBRAS_INTENT_MODELS` | gemma-4-31b,gpt-oss-120b |
+| `NTPU_CEREBRAS_EXPANDER_MODELS` | gemma-4-31b,gpt-oss-120b |
 | `NTPU_OPENAI_INTENT_MODELS` | (無預設值) |
 | `NTPU_OPENAI_EXPANDER_MODELS` | (無預設值) |
 

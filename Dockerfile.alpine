@@ -1,7 +1,7 @@
 # Alpine variant for scenarios where distroless is not supported
 # This image includes a shell and package manager for debugging
 
-FROM --platform=$BUILDPLATFORM golang:1.26.3-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.0-alpine3.24 AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -36,7 +36,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 
 RUN mkdir -p /data-dir
 
-FROM alpine:3.23
+FROM alpine:3.24
 
 ARG VERSION=dev
 ARG BUILD_DATE
