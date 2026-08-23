@@ -19,7 +19,7 @@ func TestNewOpenAIQueryExpander_NilWithEmptyKey(t *testing.T) {
 func TestNewOpenAIQueryExpander_ValidKey(t *testing.T) {
 	t.Parallel()
 	// Test with mock API key (won't make actual API calls)
-	expander, err := newOpenAIQueryExpander(context.Background(), ProviderGroq, "test-api-key", "llama-3.1-8b-instant", "")
+	expander, err := newOpenAIQueryExpander(context.Background(), ProviderGroq, "test-api-key", "openai/gpt-oss-20b", "")
 	if err != nil {
 		t.Fatalf("Expected no error for valid config, got: %v", err)
 	}
@@ -30,8 +30,8 @@ func TestNewOpenAIQueryExpander_ValidKey(t *testing.T) {
 	if expander.provider != ProviderGroq {
 		t.Errorf("Expected provider %v, got %v", ProviderGroq, expander.provider)
 	}
-	if expander.model != "llama-3.1-8b-instant" {
-		t.Errorf("Expected model llama-3.1-8b-instant, got %v", expander.model)
+	if expander.model != "openai/gpt-oss-20b" {
+		t.Errorf("Expected model openai/gpt-oss-20b, got %v", expander.model)
 	}
 }
 

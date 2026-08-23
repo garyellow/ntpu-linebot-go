@@ -527,7 +527,7 @@ go func() {
 
 **並行執行模組**:
 ```go
-// Refresh 模組使用 WaitGroup 並行執行 (Go 1.26)
+// Refresh 模組使用 WaitGroup 並行執行
 var wg sync.WaitGroup
 for _, module := range modules {
     wg.Go(func() {
@@ -696,7 +696,7 @@ go run ./cmd/server
 | 變體 | Base Image | 適用場景 |
 |------|------------|----------|
 | **Distroless（預設）** | `gcr.io/distroless/static-debian13` | 生產環境（最小攻擊面） |
-| **Alpine** | `alpine:3.23` | 需要 shell/debug 的特殊場景 |
+| **Alpine** | `alpine:3.24` | 需要 shell/debug 的特殊場景 |
 
 ```bash
 # Distroless（推薦）

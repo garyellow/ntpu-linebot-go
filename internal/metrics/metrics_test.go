@@ -230,10 +230,10 @@ func TestRecordLLM(t *testing.T) {
 		status    string
 		duration  float64
 	}{
-		{"gemini", "gemma-4-31b-it", "nlu", "success", 0.5},
-		{"gemini", "gemma-4-31b-it", "nlu", "error", 1.0},
+		{"gemini", "gemini-3.5-flash-lite", "nlu", "success", 0.5},
+		{"gemini", "gemini-3.5-flash-lite", "nlu", "error", 1.0},
 		{"groq", "openai/gpt-oss-120b", "nlu", "rate_limit", 2.0},
-		{"gemini", "gemma-4-31b-it", "expander", "success", 0.8},
+		{"gemini", "gemini-3.5-flash-lite", "expander", "success", 0.8},
 	}
 
 	for _, tc := range testCases {
@@ -389,7 +389,7 @@ func TestRecordLLMRequest(t *testing.T) {
 	m := New(registry)
 
 	// RecordLLMRequest is an alias for RecordLLM with provider
-	m.RecordLLMRequest("gemini", "gemma-4-31b-it", "nlu", "success", 0.5)
+	m.RecordLLMRequest("gemini", "gemini-3.5-flash-lite", "nlu", "success", 0.5)
 	m.RecordLLMRequest("groq", "openai/gpt-oss-120b", "nlu", "error", 1.0)
 }
 
@@ -399,8 +399,8 @@ func TestRecordLLMFallback(t *testing.T) {
 	m := New(registry)
 
 	// RecordLLMFallback records provider fallback events
-	m.RecordLLMFallback("gemini", "gemma-4-31b-it", "groq", "openai/gpt-oss-120b", "nlu")
-	m.RecordLLMFallback("groq", "openai/gpt-oss-120b", "gemini", "gemma-4-26b-a4b-it", "expander")
+	m.RecordLLMFallback("gemini", "gemini-3.5-flash-lite", "groq", "openai/gpt-oss-20b", "nlu")
+	m.RecordLLMFallback("groq", "openai/gpt-oss-20b", "gemini", "gemini-3.5-flash-lite", "expander")
 }
 
 func TestMetricNamesRegisteredAfterUse(t *testing.T) {
@@ -415,9 +415,9 @@ func TestMetricNamesRegisteredAfterUse(t *testing.T) {
 	m.RecordScraper("course", "success", 1.5)
 	m.RecordCacheHit("course")
 	m.SetCacheSize("courses", 100)
-	m.RecordLLM("gemini", "gemma-4-31b-it", "nlu", "success", 0.5)
-	m.RecordLLMFallback("gemini", "gemma-4-31b-it", "groq", "openai/gpt-oss-120b", "nlu")
-	m.LLMCooldownTotal.WithLabelValues("gemini", "gemma-4-31b-it", "burst", "applied").Inc()
+	m.RecordLLM("gemini", "gemini-3.5-flash-lite", "nlu", "success", 0.5)
+	m.RecordLLMFallback("gemini", "gemini-3.5-flash-lite", "groq", "openai/gpt-oss-20b", "nlu")
+	m.LLMCooldownTotal.WithLabelValues("gemini", "gemini-3.5-flash-lite", "burst", "applied").Inc()
 	m.RecordSearch("bm25", "success", 0.05)
 	m.RecordSearchResults("bm25", 3)
 	m.SetIndexSize("bm25", 1000)

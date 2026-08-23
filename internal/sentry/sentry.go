@@ -73,7 +73,6 @@ func Initialize(cfg Config) error {
 		EnableTracing:    cfg.TracesSampleRate > 0,
 		Debug:            cfg.Debug,
 		AttachStacktrace: true,
-		SendDefaultPII:   false,
 		IgnoreErrors:     defaultIgnoreErrors(),
 		BeforeSend:       scrubEvent,
 	}

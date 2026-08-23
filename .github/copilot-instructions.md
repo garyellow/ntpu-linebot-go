@@ -477,9 +477,9 @@ Fallback → getHelpMessage() + Warning Log
 - `genai.ParseResult`: Module, Intent, Params, ClarificationText, FunctionName
 
 **Default Models**:
-- Gemini: `gemma-4-31b-it` → `gemma-4-26b-a4b-it`
-- Groq: `openai/gpt-oss-120b` → `openai/gpt-oss-20b` → `llama-3.3-70b-versatile` → `qwen/qwen3-32b` → `llama-3.1-8b-instant`
-- Cerebras: `gpt-oss-120b` → `llama3.1-8b`
+- Gemini: `gemini-3.5-flash-lite` → `gemini-3.1-flash-lite` → `gemma-4-31b-it` → `gemma-4-26b-a4b-it`
+- Groq: `qwen/qwen3.6-27b` → `openai/gpt-oss-120b` → `openai/gpt-oss-20b`
+- Cerebras: `gemma-4-31b` → `gpt-oss-120b`
 
 ## Syllabus Module
 

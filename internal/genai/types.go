@@ -167,31 +167,30 @@ type LLMConfig struct {
 // First element is primary model, subsequent elements are fallbacks.
 var (
 	// DefaultGeminiIntentModels is the default model chain for Gemini intent parsing.
-	// Using Gemma 4 models (gemma-4-31b-it, gemma-4-26b-a4b-it) which support
-	// confirmed function calling and are suitable defaults for intent parsing.
-	DefaultGeminiIntentModels = []string{"gemma-4-31b-it", "gemma-4-26b-a4b-it"}
+	// Keep the strongest and most consistently available Gemini Flash-Lite options first,
+	// then fall back to the Gemma 4 family when needed.
+	DefaultGeminiIntentModels = []string{"gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemma-4-31b-it", "gemma-4-26b-a4b-it"}
 
 	// DefaultGeminiExpanderModels is the default model chain for Gemini query expansion.
-	DefaultGeminiExpanderModels = []string{"gemma-4-31b-it", "gemma-4-26b-a4b-it"}
+	DefaultGeminiExpanderModels = []string{"gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemma-4-31b-it", "gemma-4-26b-a4b-it"}
 
 	// DefaultGroqIntentModels is the default model chain for Groq intent parsing.
-	// Ordered by reasoning quality; all selected models support max_completion_tokens >= 32768.
-	// Removed: llama-4-scout (max 8192), compound/compound-mini (no tool calling support),
-	//          kimi-k2-instruct and llama-4-maverick (404 model_not_found).
-	DefaultGroqIntentModels = []string{"openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.3-70b-versatile", "qwen/qwen3-32b", "llama-3.1-8b-instant"}
+	// Keep the strongest supported model first for the same usage budget, and prefer the
+	// more broadly available GPT-OSS stack ahead of the smaller 20B model.
+	// Removed: deprecated Llama/Qwen variants and unsupported model IDs.
+	DefaultGroqIntentModels = []string{"qwen/qwen3.6-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"}
 
 	// DefaultGroqExpanderModels is the default model chain for Groq query expansion.
 	// Same model selection rationale as intent models.
-	DefaultGroqExpanderModels = []string{"openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.3-70b-versatile", "qwen/qwen3-32b", "llama-3.1-8b-instant"}
+	DefaultGroqExpanderModels = []string{"qwen/qwen3.6-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"}
 
 	// DefaultCerebrasIntentModels is the default model chain for Cerebras intent parsing.
-	// gpt-oss-120b is the primary production model; llama3.1-8b as fallback if key lacks gpt-oss-120b access.
-	// NOTE: zai-glm-4.7 and qwen-3-235b-a22b-instruct-2507 appear in /v1/models but
-	//       return 404 on actual inference calls (tool-call endpoint unavailable).
-	DefaultCerebrasIntentModels = []string{"gpt-oss-120b", "llama3.1-8b"}
+	// Gemma 4 31B is the higher-quality default on Cerebras while GPT-OSS 120B remains
+	// the stable fallback when the Gemma route is unavailable or rate-limited.
+	DefaultCerebrasIntentModels = []string{"gemma-4-31b", "gpt-oss-120b"}
 
 	// DefaultCerebrasExpanderModels is the default model chain for Cerebras query expansion.
-	DefaultCerebrasExpanderModels = []string{"gpt-oss-120b", "llama3.1-8b"}
+	DefaultCerebrasExpanderModels = []string{"gemma-4-31b", "gpt-oss-120b"}
 
 	// DefaultProviders is the default provider order for fallback.
 	DefaultProviders = []Provider{ProviderGemini, ProviderGroq, ProviderCerebras, ProviderOpenAI}

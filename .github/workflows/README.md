@@ -37,7 +37,7 @@ validate (快速驗證)
 - `docker`: Docker image 構建、推送、Trivy 掃描（依賴所有上述 jobs）
 
 **Cache 策略**:
-- Go modules 和 build cache 由 `setup-go@v6` 自動處理
+- Go modules 和 build cache 由 `setup-go@v7` 自動處理
 - Docker 使用 `type=gha` cache，範圍限定在 branch
 
 ---
@@ -80,7 +80,7 @@ validate (快速驗證)
 
 ### ✅ Go 項目
 - 使用 `go-version-file` 而非硬編碼版本
-- `setup-go@v6` 的 `cache: true` 自動處理依賴和構建緩存
+- `setup-go@v7` 的 `cache: true` 自動處理依賴和構建緩存
 - `go mod verify` 驗證依賴完整性（防止供應鏈攻擊）
 - 使用 `-short` flag 跳過網路測試（確保 CI 穩定、快速）
 - 覆蓋率支援本地顯示（不上傳第三方）
@@ -90,7 +90,7 @@ validate (快速驗證)
 - Branch-specific cache scope（`ci-pr` / `release`）避免衝突
 - Docker metadata action 自動產生語義化標籤
 - 單平台構建在 CI（快速），多平台在 release（完整）
-- 使用最新的 actions：checkout@v6, setup-go@v6
+- 使用 action 主版號追蹤更新：checkout@v7, setup-go@v7
 
 ### ✅ Workflow 設計
 - 使用 `concurrency` 避免重複執行浪費資源

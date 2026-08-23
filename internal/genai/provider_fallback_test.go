@@ -82,7 +82,7 @@ func (m *mockQueryExpander) Close() error {
 func TestFallbackIntentParser_Parse_SkipsCooledModelWhenAlternativeExists(t *testing.T) {
 	t.Parallel()
 	store := newModelCooldownStore()
-	store.Set(ProviderGemini, "gemma-4-31b-it", RateLimitBurst, time.Minute, "test cooldown")
+	store.Set(ProviderGemini, "gemini-3.5-flash-lite", RateLimitBurst, time.Minute, "test cooldown")
 
 	primaryCalls := 0
 	primary := &mockIntentParser{
@@ -91,7 +91,7 @@ func TestFallbackIntentParser_Parse_SkipsCooledModelWhenAlternativeExists(t *tes
 			return &ParseResult{Module: "primary"}, nil
 		},
 		provider: ProviderGemini,
-		model:    "gemma-4-31b-it",
+		model:    "gemini-3.5-flash-lite",
 		enabled:  true,
 	}
 	fallback := &mockIntentParser{
@@ -119,7 +119,7 @@ func TestFallbackIntentParser_Parse_SkipsCooledModelWhenAlternativeExists(t *tes
 func TestFallbackIntentParser_Parse_CooledModelIsStillTriedAsLastResort(t *testing.T) {
 	t.Parallel()
 	store := newModelCooldownStore()
-	store.Set(ProviderGemini, "gemma-4-31b-it", RateLimitBurst, time.Minute, "test cooldown")
+	store.Set(ProviderGemini, "gemini-3.5-flash-lite", RateLimitBurst, time.Minute, "test cooldown")
 
 	primaryCalls := 0
 	primary := &mockIntentParser{
@@ -128,7 +128,7 @@ func TestFallbackIntentParser_Parse_CooledModelIsStillTriedAsLastResort(t *testi
 			return &ParseResult{Module: "primary"}, nil
 		},
 		provider: ProviderGemini,
-		model:    "gemma-4-31b-it",
+		model:    "gemini-3.5-flash-lite",
 		enabled:  true,
 	}
 
@@ -166,7 +166,7 @@ func TestFallbackIntentParser_Parse_AppliesCooldownOn429(t *testing.T) {
 			return &ParseResult{Module: "fallback"}, nil
 		},
 		provider: ProviderGemini,
-		model:    "gemma-4-31b-it",
+		model:    "gemini-3.5-flash-lite",
 		enabled:  true,
 	}
 
@@ -578,7 +578,7 @@ func TestFallbackQueryExpander_Expand_NilExpander(t *testing.T) {
 func TestFallbackQueryExpander_Expand_SkipsCooledModelWhenAlternativeExists(t *testing.T) {
 	t.Parallel()
 	store := newModelCooldownStore()
-	store.Set(ProviderGemini, "gemma-4-31b-it", RateLimitBurst, time.Minute, "test cooldown")
+	store.Set(ProviderGemini, "gemini-3.5-flash-lite", RateLimitBurst, time.Minute, "test cooldown")
 
 	primaryCalls := 0
 	primary := &mockQueryExpander{
@@ -587,7 +587,7 @@ func TestFallbackQueryExpander_Expand_SkipsCooledModelWhenAlternativeExists(t *t
 			return query + " primary", nil
 		},
 		provider: ProviderGemini,
-		model:    "gemma-4-31b-it",
+		model:    "gemini-3.5-flash-lite",
 	}
 	fallback := &mockQueryExpander{
 		expandFunc: func(_ context.Context, query string) (string, error) {

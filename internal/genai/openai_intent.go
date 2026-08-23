@@ -305,7 +305,7 @@ func (p *openaiIntentParser) Close() error {
 // (intent classification, keyword extraction) that do not benefit from deep reasoning.
 //
 //   - Groq gpt-oss-120b/20b:  reasoning_effort "low"  (default is "medium")
-//   - Groq qwen/qwen3-32b:   reasoning_effort "none" (disable thinking entirely)
+//   - Groq qwen/qwen3.x:     reasoning_effort "none" (disable thinking entirely)
 //   - Cerebras gpt-oss-120b: reasoning_effort "low"  (default is "medium")
 func openaiReasoningOpts(provider Provider, model string) []option.RequestOption {
 	var opts []option.RequestOption
@@ -317,7 +317,7 @@ func openaiReasoningOpts(provider Provider, model string) []option.RequestOption
 			// gpt-oss-120b/20b on Groq: default "medium" effort; "low" is sufficient.
 			opts = append(opts, option.WithJSONSet("reasoning_effort", "low"))
 		case strings.Contains(lower, "qwen3") || strings.Contains(lower, "qwen-3"):
-			// Qwen3 thinking models (e.g., "qwen/qwen3-32b", "qwen-3-32b"):
+			// Qwen3 thinking models (e.g., "qwen/qwen3.6-27b", "qwen/qwen3-32b"):
 			// disable reasoning entirely (cheaper and faster).
 			opts = append(opts, option.WithJSONSet("reasoning_effort", "none"))
 		}
