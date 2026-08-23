@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![服務狀態](https://img.shields.io/uptimerobot/status/m802132556-5a95fc71d4f9260bdcd036db?logo=line&logoColor=white)](https://ntpubot-status.garyellow.app/)
+[![服務狀態](https://img.shields.io/uptimerobot/status/m802132556-5a95fc71d4f9260bdcd036db?logo=line&logoColor=white)](https://ntpubot-status.garyellow.dev/)
 [![CI](https://img.shields.io/github/actions/workflow/status/garyellow/ntpu-linebot-go/ci.yml?branch=main&label=CI&logo=github)](https://github.com/garyellow/ntpu-linebot-go/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/garyellow/ntpu-linebot-go)](https://goreportcard.com/report/github.com/garyellow/ntpu-linebot-go)
 [![Go Reference](https://pkg.go.dev/badge/github.com/garyellow/ntpu-linebot-go.svg)](https://pkg.go.dev/github.com/garyellow/ntpu-linebot-go)
@@ -40,7 +40,7 @@ LINE ID：[ @148wrcch ](https://line.me/R/ti/p/@148wrcch)
 
 相關連結：
 
-- [服務狀態頁](https://ntpubot-status.garyellow.app/)
+- [服務狀態頁](https://ntpubot-status.garyellow.dev/)
 - [問題回報 / 功能建議](https://github.com/garyellow/ntpu-linebot-go/issues/new/choose)
 - [Go 套件文件](https://pkg.go.dev/github.com/garyellow/ntpu-linebot-go)
 
