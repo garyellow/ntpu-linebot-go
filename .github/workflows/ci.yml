@@ -132,7 +132,7 @@ jobs:
       - name: Run Linter
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.13.1
+          version: v2.15.0
           args: --timeout=5m
 
   # Security scans (parallel with test/build/lint)
@@ -159,7 +159,7 @@ jobs:
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
       - name: Run Security Scanner
-        uses: securego/gosec@v2.28.0
+        uses: securego/gosec@v2.29.0
         with:
           args: '-no-fail -exclude-generated -fmt sarif -out gosec-results.sarif ./...'
 

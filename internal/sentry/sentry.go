@@ -100,9 +100,10 @@ func Flush(timeout time.Duration) bool {
 	return sentry.Flush(timeout)
 }
 
-// IsEnabled returns true if Sentry is initialized and active.
+// IsEnabled returns true if Sentry is initialized and the current client is active.
 func IsEnabled() bool {
-	return sentry.CurrentHub().Client() != nil
+	client := sentry.CurrentHub().Client()
+	return client != nil && client.IsEnabled()
 }
 
 // CaptureExceptionWithContext captures an error with context information.
