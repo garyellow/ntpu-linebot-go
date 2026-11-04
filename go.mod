@@ -18,7 +18,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/klauspost/compress v1.20.3
 	github.com/line/line-bot-sdk-go/v8 v8.23.0
-	github.com/openai/openai-go/v3 v3.86.0
+	github.com/openai/openai-go/v3 v3.91.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/samber/slog-betterstack v1.4.4
 	github.com/stretchr/testify v1.12.1
